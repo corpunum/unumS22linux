@@ -8,3 +8,18 @@ builds/**
 *.tar.md5
 *.img
 *.zip
+
+# nested repos (cloned sources, not submodules)
+/lineage/android_device_samsung_r0s/
+/lineage/android_device_samsung_s5e9925-common/
+/lineage/android_kernel_samsung_s5e9925/
+/tools/avb/
+/tools/mkbootimg/
+/tools/samloader/
+
+# large binary artifacts (kept on disk, not in git)
+lineage/build-*/unpacked/
+lineage/build-*/*.img
+evidence/**/*.img
+evidence/**/*.bin
+rollback/**/*.bin
