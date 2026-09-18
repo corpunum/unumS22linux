@@ -60,3 +60,30 @@ Native Recovery V2 (Phase 10) MUST insmod at minimum, in order:
 This must be verified against actual `.ko` dependency graphs (`modinfo`) once we have
 the FYI3 stock kernel modules or build our own — do not assume this order is complete,
 treat it as EXPECTED not PROVEN until tested.
+
+## UPDATE 2026-09-18 — PROVEN, not just expected
+
+Downloaded and unpacked the official current LineageOS r0s recovery.img
+(build 20260915, SHA256 `b5bf01c4a47091eb95078fc69b133b44c2b453b31c23433594c5b605e3747b5`,
+verified against LineageOS's own published manifest). Findings:
+
+1. `lib/modules/modules.load` inside the ACTUAL shipping recovery ramdisk is byte-for-byte
+   the same list/order as `r0s.load` from the device tree source (only difference: the
+   ramdisk copy has no `.ko` suffix per line, matching kernel's expected format for
+   `LoadKernelModules()`). This is now PROVEN from the real binary artifact, not inferred
+   from source alone.
+2. All 324 `.ko` files, including `phy-exynos-usbdrd-super.ko`, `dwc3-exynos-usb.ko`,
+   `usb_notify_layer.ko`, `usb_notifier.ko`, are physically present at `lib/modules/` in
+   the recovery ramdisk.
+3. Recovery's `/init` is a real symlink to `/system/bin/init` — the actual AOSP init
+   binary (2.4MB, present in ramdisk), which calls `LoadKernelModules()` automatically at
+   early boot, reading `/lib/modules/modules.load` in file order and cross-referencing
+   `modules.dep` for dependencies. No custom rc script is needed to trigger this — it's
+   built into init's first-stage boot sequence.
+
+Conclusion upgraded from EXPECTED to PROVEN: the previous native recovery attempt's static
+BusyBox `/init` had no equivalent module-loading step, so USB (and display, and touch)
+hardware was never brought up, regardless of how correct the ConfigFS gadget setup script
+was. This is the root cause of "no USB device enumerated" — not the recovery image
+container format, header version, or DTB/DTBO packaging, all of which independently
+checked out correct.
