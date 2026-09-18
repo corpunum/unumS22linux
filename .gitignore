@@ -1,0 +1,10 @@
+# firmware blobs / large binaries - never commit
+stock/**/*.img
+stock/**/*.tar*
+stock/**/*.md5
+lineage/**/*.img
+builds/**
+*.tar
+*.tar.md5
+*.img
+*.zip
