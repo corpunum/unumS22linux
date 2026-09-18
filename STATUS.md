@@ -1,15 +1,37 @@
 # S22 Native Linux Project — STATUS
 
-Last updated: 2026-09-18 (session 2)
+Last updated: 2026-09-18 (session 3)
 
 ## Objective
 Native Linux (no Android userspace) → Arch Linux ARM → Wayland → Hyprland → Omarchy
 on Samsung Galaxy S22 (SM-S901B/DS, Exynos 2200, codename r0s).
 
+## MAJOR MILESTONE REACHED — Phase 7/8 complete
+
+The current official LineageOS recovery.img was flashed to RECOVERY and successfully
+BOOTED on this exact phone, with USB, display (DSI panel, 1080x2340@120Hz), and touch
+all confirmed working, plus a rooted ADB shell. Full details and captured evidence in
+`evidence/lineage_recovery_boot/MILESTONE.md`. This is the known-good recovery
+"trampoline" the project plan calls for — USB/display/touch/module-loading are now all
+independently proven to work on this hardware via a non-stock kernel/ramdisk.
+
+An incident occurred and was fully resolved during this test: a raw MISC/BCB write
+(used to force boot-to-recovery without physical buttons) failed Samsung's own
+`SECURE CHECK FAIL: (MISC)` bootloader integrity check and temporarily left the phone
+unable to boot. Fixed by reflashing the byte-exact factory `misc.bin` extracted from the
+already-downloaded FYI3 stock firmware package — no data loss, phone fully recovered.
+See MILESTONE.md for the full incident writeup and lesson learned (MISC is a
+Samsung-protected partition on this platform; always extract+preserve the factory
+misc.bin before writing custom BCB data to it, and note the factory default command is
+`boot-skiprecovery`, not zero/empty).
+
 ## Current phase
-All pre-flash research/build blockers CLOSED. Rollback route READY. Recovery comparison
-COMPLETE. NOT yet at any physical flash — nothing has been written to the phone.
-Waiting at a FLASH GATE for explicit approval (see bottom of this file).
+All pre-flash research/build blockers CLOSED. Rollback route READY and validated (used
+for real during the MISC incident above). Recovery comparison COMPLETE. Phase 7/8
+control-boot test COMPLETE and SUCCESSFUL. Phone currently sitting in LineageOS recovery
+with a live root ADB shell — decide next: continue evidence-gathering, or reboot back to
+normal Android (which will self-heal RECOVERY back to stock via vendor_flash_recovery,
+ending this test cleanly with a fully working phone).
 
 ## Verified device state (2026-09-18, re-verified independently, see evidence/)
 - Model: SM-S901B, device r0s

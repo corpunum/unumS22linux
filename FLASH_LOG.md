@@ -44,4 +44,29 @@ Path: `~/s22-linux/lineage/build-20260915/`, build date 2026-09-15, verified aga
 LineageOS's own published SHA256 manifest (see docs/RECOVERY_COMPARISON.md).
 
 ## Flash history
-(none yet — this section will be appended to before and after any real flash)
+
+### 2026-09-18 — Phase 7/8 control-boot test — SUCCESS (with one recovered incident)
+
+1. **RECOVERY** ← `lineage/build-20260915/recovery.img` (100,663,296 bytes,
+   SHA256 `b5bf01c4a47091eb95078fc69b133b44c2b453b31c23433594c5b605e3747b5`) — flashed
+   successfully via `samloader flash -p RECOVERY`, confirmed by device response
+   "RECOVERY flash successful".
+2. **MISC** ← `rollback/misc/bcb_boot_recovery.bin` (2048 bytes, raw `boot-recovery`
+   BCB command, rest zeroed) — Odin protocol reported "MISC flash successful", but the
+   phone's own bootloader secure/integrity check on MISC content FAILED
+   (`SECURE CHECK FAIL: (MISC)`), leaving the phone unable to boot normally
+   (`DN_FAIL_SECURE_CHECK_FAIL` → recovery-style "Can't load Android system" screen).
+3. **RECOVERY INCIDENT FIX**: **MISC** ← `stock/FYI3/extracted/misc.bin` (520,976 bytes,
+   exact factory content from the FYI3 AP tar, SHA256
+   `97be48ca24a7b307987b750726b7116467a4745ae9d650c9bec882c21c9713b`) — flashed via
+   `samloader flash -p MISC`, passed the secure check immediately, phone rebooted
+   normally — straight into the already-flashed LineageOS RECOVERY (the factory MISC's
+   default command happened to still get us there since RECOVERY itself was untouched
+   by the incident/fix).
+4. Result: LineageOS recovery (build 20260915) booted successfully with full graphics,
+   USB, and touch. Enabled ADB via the recovery's own Advanced menu, got a rooted shell,
+   captured evidence (see evidence/lineage_recovery_boot/).
+
+No further partitions touched. Phone was never in a state requiring PIT/EFS/BL/SBL
+intervention — the incident was fully contained to MISC and resolved with data already
+in hand.

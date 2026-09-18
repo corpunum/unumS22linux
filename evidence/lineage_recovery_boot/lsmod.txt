@@ -1,0 +1,325 @@
+Module                  Size  Used by
+qrtr_mhi               20480  0 
+cfg80211              983040  0 
+rainbow_prince         53248  0 
+snd_soc_samsung_slif    61440  0 
+snd_soc_dp_dma         24576  0 
+snd_soc_s3c_dma        16384  0 
+snd_soc_cs40l26        28672  0 
+snd_soc_cs35l41_i2c    69632  0 
+snd_soc_cirrus_amp     69632  2 rainbow_prince,snd_soc_cs35l41_i2c
+snd_soc_wm_adsp        73728  2 snd_soc_cs35l41_i2c,snd_soc_cirrus_amp
+p9320_charger         126976  0 
+s2miw04_charger       122880  0 
+sb_mfc                 16384  2 p9320_charger,s2miw04_charger
+nfc_sec_nxp           221184  0 
+sec_direct_charger     53248  0 
+max77705_fuelgauge     53248  0 
+isg6320                40960  0 
+stm_ts_spi            679936  0 
+mstdrv                 20480  0 
+input_cs40l26_i2c     122880  1 snd_soc_cs40l26
+repeater_tusb2e11_module    16384  0 
+pca9481_charger        69632  0 
+hall_ic                20480  0 
+hall_ic_notifier       16384  2 isg6320,hall_ic
+qbt2000_spidev         20480  0 
+mesh                   24576  0 
+sec_vibrator_inputff_module    45056  1 input_cs40l26_i2c
+stk                    73728  0 
+tsl2510               131072  0 
+flicker_test           16384  2 stk,tsl2510
+dropdump              278528  0 
+abc_hub                16384  0 
+sec_debug_sched_report    20480  0 
+sec_debug_hardlockup_info    16384  0 
+sec_debug_sched_info    16384  0 
+sec_debug_dtask        16384  0 [permanent]
+sec_debug_wdd_info     16384  0 [permanent]
+sec_debug_reset_reason    16384  0 [permanent]
+sec_debug_hw_param     16384  0 [permanent]
+sec_debug_dprm         16384  0 
+sec_debug_test         57344  0 
+sec_debug              20480  0 [permanent]
+mcd_panel_s6e3fac_rainbow_r0  2142208  0 
+cl_dsp                 24576  2 snd_soc_cs40l26,input_cs40l26_i2c
+vibrator_vib_info      16384  0 
+max77705_charger       57344  0 
+pdic_max77705         180224  1 max77705_charger
+spu_verify             16384  4 p9320_charger,s2miw04_charger,stm_ts_spi,pdic_max77705
+mfd_max77705          143360  35 max77705_fuelgauge,max77705_charger,pdic_max77705
+sec_battery           405504  7 p9320_charger,s2miw04_charger,sb_mfc,sec_direct_charger,max77705_fuelgauge,pca9481_charger,max77705_charger
+sb_core                32768  2 sec_direct_charger,sec_battery
+sec_pd                 20480  3 sec_direct_charger,pca9481_charger,sec_battery,[permanent]
+sec_argos              24576  0 
+sec_bootstat           16384  0 [permanent]
+sec_crash_key_user     16384  0 
+sec_crash_key          16384  0 
+sec_reboot             24576  2 sec_debug_test,sec_debug
+sec_wakeup_cpu_allocator    20480  0 
+sec_thermistor         16384  0 
+sec_pm_debug           16384  0 
+npu                  1736704  0 
+s2mps25_adc            16384  0 
+nanohub               380928  1 isg6320
+sensors_core           24576  4 isg6320,stk,tsl2510,nanohub
+hid_waltop             16384  0 
+hid_zydacron           20480  0 
+hid_zpff               16384  0 
+hid_twinhan            20480  0 
+hid_topseed            20480  0 
+hid_tivo               20480  0 
+hid_tmff               16384  0 
+hid_gaff               20480  0 
+hid_sunplus            20480  0 
+hid_speedlink          16384  0 
+hid_sjoy               20480  0 
+hid_saitek             16384  0 
+hid_primax             16384  0 
+hid_petalynx           20480  0 
+hid_pl                 20480  0 
+hid_ortek              16384  0 
+hid_ntrig              28672  0 
+hid_monterey           20480  0 
+hid_lcpower            20480  0 
+hid_keytouch           16384  0 
+hid_kensington         16384  0 
+hid_holtekff           16384  0 
+hid_holtek_mouse       16384  0 
+hid_holtek_kbd         16384  0 
+hid_gyration           20480  0 
+hid_ezkey              16384  0 
+hid_emsff              20480  0 
+hid_dr                 20480  0 
+hid_cypress            20480  0 
+hid_chicony            20480  0 
+hid_cherry             20480  0 
+hid_belkin             20480  0 
+hid_axff               20480  0 
+hid_a4tech             20480  0 
+fmp_core               20480  0 
+exynos_dsufreq         20480  0 
+btpower                32768  0 
+softdog                20480  0 
+sec_debug_softdog      16384  1 softdog
+sec_debug_stacktrace    20480  2 sec_debug_sched_info,sec_debug_softdog
+exynos_amb_control     20480  0 
+gpu_cooling            28672  0 [permanent]
+scaler                126976  0 
+smfc                   65536  0 
+mcfrc                  49152  0 [permanent]
+jsqz                   32768  0 
+is_device_eeprom       16384  0 [permanent]
+is_flash_s2mpb02_i2c    20480  0 [permanent]
+is_actuator_ak737x     28672  0 [permanent]
+is_cis_imx374          73728  0 [permanent]
+is_cis_gn3            458752  0 [permanent]
+is_cis_2ld            425984  0 [permanent]
+is_cis_2la             73728  0 [permanent]
+is_cis_3k1             73728  0 [permanent]
+is_cis_3j1             81920  0 [permanent]
+exynos_mfc           1314816  0 
+gdc                   131072  1 exynos_mfc,[permanent]
+tsmux                  77824  1 exynos_mfc
+fimc_is              8609792  10 is_device_eeprom,is_flash_s2mpb02_i2c,is_actuator_ak737x,is_cis_imx374,is_cis_gn3,is_cis_2ld,is_cis_2la,is_cis_3k1,is_cis_3j1,gdc
+leds_s2mpb02           24576  3 flicker_test,is_flash_s2mpb02_i2c,fimc_is
+votf                  106496  2 gdc,fimc_is
+camerapp               20480  2 gdc,votf
+pablo_smc              16384  1 fimc_is
+videobuf2_dma_sg       28672  5 scaler,smfc,exynos_mfc,gdc,fimc_is
+i3c_hci_exynos         57344  0 
+i2c_dev                24576  0 
+rtc_s2mps25            24576  1 
+sec_ts                 45056  0 
+acpm_mfd_bus           16384  0 
+kbtab                  16384  0 
+hanwang                16384  0 
+gtco                   16384  0 
+aiptek                 28672  0 
+acecad                 16384  0 
+s2mps25_key            20480  0 
+sec_hard_reset_hook    20480  2 sec_reboot,s2mps25_key
+sec_key_notifier       24576  3 sec_crash_key_user,sec_crash_key,sec_hard_reset_hook
+usb_notifier           20480  0 
+usbserial              49152  0 
+usb_f_conn_gadget      32768  0 
+usb_f_dm1              16384  0 
+usblp                  28672  0 
+xhci_exynos            45056  0 
+cdc_mbim               20480  0 
+cdc_wdm                28672  1 cdc_mbim
+smsc95xx               45056  0 
+smsc75xx               45056  0 
+cnss_prealloc          16384  0 
+cnss_nl                20480  0 
+cnss2                 327680  0 
+wlan_firmware_service    69632  1 cnss2,[permanent]
+cnss_plat_ipc_qmi_svc    24576  1 cnss2
+cnss_utils             28672  1 cnss2
+smsc                   20480  0 
+spi_s3c64xx            45056  1 stm_ts_spi
+spidev                 24576  0 
+scsi_srpmb             20480  0 
+ufs_exynos_core       204800  1 scsi_srpmb
+dma_buf_container      24576  1 fimc_is,[permanent]
+tuihw                  28672  0 
+tuihw_inf              24576  3 stm_ts_spi,hall_ic,tuihw
+sec_common_fn         270336  2 stm_ts_spi,tuihw
+tzdev                 131072  3 mstdrv,tuihw,tuihw_inf,[permanent]
+zram                   69632  0 
+mcd_panel_samsung_drv    94208  0 
+mcd_panel_samsung_helper    16384  1 mcd_panel_samsung_drv
+exynos_drm           1011712  5 snd_soc_dp_dma,scaler,tuihw,mcd_panel_samsung_drv
+samsung_dma_heap      212992  27 
+dp_ext_func            94208  1 exynos_drm
+repeater               36864  2 exynos_mfc,exynos_drm
+mcd_panel             454656  5 mcd_panel_s6e3fac_rainbow_r0,nanohub,sec_common_fn,mcd_panel_samsung_helper,exynos_drm
+i2c_exynos5            45056  0 
+dev_ril_bridge         20480  3 fimc_is,cnss_utils,mcd_panel
+sec_input_notifier     16384  2 stm_ts_spi,mcd_panel
+samsung_secure_iova    16384  2 exynos_mfc,samsung_dma_heap
+samsung_iommu          49152  33 
+samsung_iommu_group    16384  0 
+exyswd_rng             16384  0 
+exynos_tty             90112  1 btpower
+s2mpm07_regulator      24576  0 
+s2mpb03                24576  0 
+s2mpb02_regulator      20480  0 
+s2mpb02_mfd            20480  2 leds_s2mpb02,s2mpb02_regulator
+exynos_mif_profiler    16384  0 [permanent]
+exynos_gpu_profiler    16384  0 [permanent]
+exynos_cpu_profiler    24576  0 [permanent]
+exynos_main_profiler    45056  4 exynos_drm,exynos_mif_profiler,exynos_gpu_profiler,exynos_cpu_profiler,[permanent]
+exynos_profiler_fn     28672  3 exynos_mif_profiler,exynos_gpu_profiler,exynos_cpu_profiler
+hdcp2                  86016  1 exynos_drm
+secmem                 20480  0 
+exynos_ppmpu           16384  0 
+exynos_tzasc           16384  0 
+exynos_seclog          16384  0 
+exynos_sdm             16384  0 [permanent]
+exynos_cm              28672  0 
+exynos_seh             20480  1 exynos_cm,[permanent]
+exynos_ssp             28672  0 
+exynos_bcm            102400  0 
+gnssif                 69632  0 
+gnss_mbox              28672  1 gnssif
+cpif                  385024  0 
+exynos_cpif_iommu      32768  1 cpif,[permanent]
+hook                   16384  1 cpif
+direct_dm              40960  1 cpif
+usb_f_dm               28672  1 direct_dm
+cpif_page              20480  1 cpif
+mcu_ipc                40960  2 cpif,direct_dm
+xperf                  90112  1 exynos_drm
+exynos_afm             32768  1 xperf
+s2mps26_regulator      53248  5 exynos_afm
+s2mps25_regulator      73728  20 sec_pm_debug,s2mps25_key,exynos_afm
+exynos_ufcc            32768  1 xperf
+exynos_acme            49152  3 sec_bootstat,exynos_dsufreq,tzdev
+sec_pm_cpufreq         16384  2 rtc_s2mps25,exynos_acme
+exynos_devfreq         57344  4 npu,exynos_drm,exynos_mif_profiler,xperf
+exynos_wow             24576  1 exynos_devfreq
+sgpu                 4247552  6 gpu_cooling,exynos_drm,exynos_gpu_profiler,exynos_cpu_profiler,exynos_main_profiler,xperf
+hwmon                  40960  1 sgpu
+gpu_sched              49152  1 sgpu
+s2mps25_mfd            28672  37 rtc_s2mps25,s2mps25_regulator
+exynos_bts             36864  8 npu,scaler,exynos_mfc,fimc_is,exynos_drm,exynos_main_profiler,cpif,sgpu,[permanent]
+exynos_btsops9925      28672  1 exynos_bts
+exynos_thermal        110592  10 sec_bootstat,exynos_amb_control,gpu_cooling,exynos_mfc,fimc_is,exynos_profiler_fn,xperf,exynos_acme,exynos_devfreq,sgpu
+freq_qos_tracer        16384  12 npu,fimc_is,ufs_exynos_core,exynos_main_profiler,cpif,xperf,exynos_afm,exynos_ufcc,exynos_acme,sec_pm_cpufreq,sgpu,exynos_thermal
+exynos_cpuhp           16384  1 exynos_amb_control
+exynos_mcinfo          20480  2 exynos_amb_control,exynos_thermal,[permanent]
+exynos_dm              28672  4 exynos_dsufreq,exynos_main_profiler,exynos_acme,exynos_devfreq
+exynos_pm              24576  0 [permanent]
+usi_v2                 20480  0 
+plugin_dbg             16384  0 
+exynos_pd_dbg          20480  0 [permanent]
+exynos_ssld            16384  0 
+ehld                   28672  1 sec_debug_hardlockup_info
+exynos_adv_tracer_s2d    16384  0 
+hardlockup_watchdog    20480  3 sec_debug_hardlockup_info,sec_debug,ehld
+exynos_ecc_handler     20480  0 
+debug_snapshot_qd      20480  0 
+debug_snapshot_sfrdump    20480  0 
+exynos_pd              16384  4 exynos_drm,exynos_bcm,exynos_devfreq,debug_snapshot_sfrdump
+dwc3_exynos_usb        73728  5 usb_notifier,xhci_exynos,exynos_drm,exynos_pm,exynos_pd
+exynos_usb_audio_offloading    32768  2 xhci_exynos,dwc3_exynos_usb
+usb_f_ss_mon_gadget    28672  1 dwc3_exynos_usb
+snd_soc_samsung_vts   167936  2 snd_soc_samsung_slif,exynos_pd
+snd_soc_samsung_vts_mailbox    32768  1 snd_soc_samsung_vts
+snd_soc_samsung_abox  4141056  7 rainbow_prince,snd_soc_samsung_slif,cpif,exynos_devfreq,exynos_thermal,exynos_pd,exynos_usb_audio_offloading
+imgloader              16384  6 npu,nanohub,exynos_mfc,sgpu,snd_soc_samsung_vts,snd_soc_samsung_abox,[permanent]
+sysevent               32768  4 nanohub,exynos_mfc,snd_soc_samsung_vts,snd_soc_samsung_abox,[permanent]
+sysevent_notif         16384  2 exynos_mfc,sysevent
+sec_audio_sysfs        40960  2 snd_soc_cirrus_amp,snd_soc_samsung_abox
+shm_ipc                28672  3 cpif,direct_dm,snd_soc_samsung_abox
+cpif_memlogger         16384  5 cpif,direct_dm,cpif_page,mcu_ipc,shm_ipc
+memlogger              61440  24 npu,nanohub,is_flash_s2mpb02_i2c,is_actuator_ak737x,is_cis_imx374,is_cis_gn3,is_cis_2ld,is_cis_2la,is_cis_3k1,is_cis_3j1,exynos_mfc,fimc_is,ufs_exynos_core,mcd_panel_samsung_drv,exynos_drm,samsung_dma_heap,cpif,direct_dm,cpif_page,mcu_ipc,snd_soc_samsung_vts,snd_soc_samsung_abox,shm_ipc,cpif_memlogger,[permanent]
+exynos_sci             49152  9 npu,exynos_amb_control,exynos_mfc,fimc_is,exynos_mif_profiler,exynos_main_profiler,cpif,sgpu,snd_soc_samsung_abox,[permanent]
+sec_audio_debug        32768  1 snd_soc_samsung_abox
+snd_soc_samsung_abox_gic    28672  1 snd_soc_samsung_abox
+if_cb_manager          20480  2 pdic_max77705,dwc3_exynos_usb
+usb_typec_manager      36864  8 isg6320,pdic_max77705,sec_battery,usb_notifier,sec_common_fn,exynos_drm,dwc3_exynos_usb,usb_f_ss_mon_gadget
+abc                    65536  15 rainbow_prince,sec_direct_charger,input_cs40l26_i2c,sec_vibrator_inputff_module,abc_hub,mcd_panel_s6e3fac_rainbow_r0,pdic_max77705,sec_battery,sec_reboot,npu,fimc_is,ufs_exynos_core,mcd_panel,sgpu,usb_typec_manager
+vbus_notifier          16384  6 stm_ts_spi,pdic_max77705,sec_battery,usb_notifier,sec_common_fn,usb_typec_manager
+pdic_notifier_module    45056  2 pdic_max77705,usb_typec_manager
+debug_snapshot_debug_kinfo    16384  0 
+qmi_helpers            28672  3 cnss2,wlan_firmware_service,cnss_plat_ipc_qmi_svc
+qrtr                   36864  13 qrtr_mhi
+ns                     32768  1 qrtr
+samsung_dma            20480  2 snd_soc_dp_dma,spi_s3c64xx
+pl330                  49152  1 samsung_dma
+clk_exynos_audss       20480  0 
+fb                     98304  2 exynos_drm,mcd_panel
+pcie_exynos_rc        110592  2 fimc_is,cnss2
+pcie_exynos_dbg        20480  1 pcie_exynos_rc
+pcie_exynosS5E9925_rc_cal    49152  1 pcie_exynos_rc
+exynos_pcie_iommu      32768  1 pcie_exynos_rc,[permanent]
+exynos_itmon           49152  13 nanohub,scaler,exynos_mfc,fimc_is,exynos_drm,exynos_cm,exynos_bcm,gnssif,cpif,exynos_pd,snd_soc_samsung_vts,snd_soc_samsung_abox,pcie_exynos_rc
+pwm_samsung            24576  0 
+pinctrl_samsung_s2mpm07    24576  0 
+s2mpm07_mfd            16384  2 s2mpm07_regulator,pinctrl_samsung_s2mpm07
+pinctrl_samsung_s2mps26    24576  4 
+s2mps26_mfd            24576  3 s2mps26_regulator,s2mps25_mfd,pinctrl_samsung_s2mps26
+pmic_class             20480  6 s2mpm07_regulator,s2mpb03,s2mpb02_regulator,s2mps26_regulator,s2mps25_regulator,s2mps26_mfd,[permanent]
+phy_exynos_usbdrd_super    86016  7 usb_notifier,xhci_exynos,exynos_pd,dwc3_exynos_usb
+usb_repeater_module    16384  2 repeater_tusb2e11_module,phy_exynos_usbdrd_super
+phy_exynos_mipi        36864  5 
+phy_exynos_mipi_dsim    16384  1 
+mhi                   131072  2 qrtr_mhi,cnss2
+irq_gic_v3_vh          20480  0 [permanent]
+ssg                    32768  0 
+blk_sec_stats          20480  1 ssg
+lzo_rle                16384  0 
+lzo                    16384  0 
+zsmalloc               36864  1 zram
+sec_mpam               16384  0 
+sec_mpam_sysfs         20480  1 sec_mpam
+exynos_cpupm           36864  18 btpower,xhci_exynos,spi_s3c64xx,ufs_exynos_core,exynos_drm,i2c_exynos5,exynos_tty,exynos_ssp,exynos_bcm,exynos_ufcc,exynos_dm,ehld,exynos_adv_tracer_s2d,exynos_pd,dwc3_exynos_usb,pcie_exynos_rc,pwm_samsung,sec_mpam_sysfs
+pinctrl_samsung_core    57344  125 exynos_pm,exynos_cpupm
+exynos_flexpmu_dbg     28672  2 exynos_pm,exynos_cpupm,[permanent]
+common_muic            32768  5 pdic_max77705,sec_battery,usb_notifier,usb_typec_manager,exynos_cpupm
+switch_class           20480  4 snd_soc_dp_dma,exynos_drm,pdic_notifier_module,common_muic
+usb_notify_layer      122880  11 sec_vibrator_inputff_module,max77705_charger,pdic_max77705,mfd_max77705,usb_notifier,dwc3_exynos_usb,exynos_usb_audio_offloading,usb_f_ss_mon_gadget,usb_typec_manager,pdic_notifier_module,common_muic
+sec_class              20480  18 hall_ic,mesh,abc_hub,sec_debug_hw_param,sb_core,sec_bootstat,sec_thermistor,sec_pm_debug,rtc_s2mps25,ufs_exynos_core,sec_common_fn,s2mps26_regulator,s2mps25_regulator,sec_pm_cpufreq,exynos_thermal,abc,pdic_notifier_module,common_muic,[permanent]
+ems                   430080  9 fimc_is,exynos_main_profiler,xperf,exynos_ufcc,exynos_acme,exynos_devfreq,sgpu,exynos_thermal,exynos_cpupm
+sec_debug_mode         16384  5 sec_debug,sec_crash_key_user,sec_crash_key,ufs_exynos_core,sec_audio_debug
+s3c2410_wdt            40960  2 sec_debug_wdd_info,[permanent]
+exynos_mct_v2          24576  1 sec_bootstat
+clk_exynos             45056  0 
+cmupmucal            1912832  22 sec_debug_hw_param,nanohub,exynos_dsufreq,exynos_cpu_profiler,exynos_profiler_fn,exynos_bcm,gnssif,cpif,xperf,exynos_acme,exynos_devfreq,sgpu,exynos_bts,exynos_thermal,exynos_dm,exynos_pm,debug_snapshot_sfrdump,exynos_pd,exynos_sci,exynos_cpupm,ems,clk_exynos,[permanent]
+exynos_adv_tracer      28672  5 exynos_bcm,ehld,exynos_adv_tracer_s2d,exynos_itmon,cmupmucal
+exynos_pd_el3          16384  1 cmupmucal
+exynos_el2             16384  0 
+exynos_s2mpu           28672  9 npu,nanohub,exynos_mfc,gnssif,sgpu,snd_soc_samsung_vts,snd_soc_samsung_abox,imgloader,exynos_pd_el3
+exynos_pm_qos         262144  27 sec_debug_test,sec_argos,npu,exynos_amb_control,scaler,smfc,mcfrc,exynos_mfc,gdc,fimc_is,cnss2,ufs_exynos_core,exynos_drm,exynos_mif_profiler,exynos_main_profiler,cpif,xperf,sec_pm_cpufreq,exynos_devfreq,sgpu,exynos_bts,exynos_thermal,dwc3_exynos_usb,snd_soc_samsung_abox,pcie_exynos_rc,cmupmucal,exynos_s2mpu,[permanent]
+exynos_acpm            49152  16 nfc_sec_nxp,s2mps25_adc,cnss2,s2mpm07_regulator,cpif,s2mps26_regulator,s2mps25_regulator,exynos_devfreq,s2mps25_mfd,exynos_thermal,exynos_dm,plugin_dbg,exynos_sci,s2mpm07_mfd,s2mps26_mfd,cmupmucal
+cmu_ewf                20480  2 fimc_is,cmupmucal
+ect_parser             61440  8 exynos_dsufreq,gpu_cooling,cpif,exynos_acme,exynos_devfreq,exynos_thermal,ems,cmupmucal
+sec_debug_extra_info    45056  14 sec_debug_hardlockup_info,sec_debug_reset_reason,sec_debug_hw_param,sec_debug_test,sec_battery,exynos_mfc,rtc_s2mps25,exynos_drm,samsung_iommu,s2mps25_regulator,exynos_pd,sec_audio_debug,exynos_itmon,cmupmucal,[permanent]
+sec_debug_base_early    20480  4 sec_debug_wdd_info,sec_debug_dprm,sec_debug,sec_debug_extra_info
+dss                   217088  54 sec_debug_sched_report,sec_debug_hardlockup_info,sec_debug_sched_info,sec_debug_dtask,sec_debug_test,sec_bootstat,sec_reboot,npu,nanohub,exynos_dsufreq,exynos_mfc,fimc_is,camerapp,exynos_drm,exynos_sdm,exynos_cm,exynos_bcm,gnssif,cpif,exynos_cpif_iommu,exynos_afm,exynos_acme,exynos_devfreq,sgpu,exynos_thermal,exynos_cpuhp,exynos_dm,ehld,exynos_adv_tracer_s2d,exynos_ecc_handler,debug_snapshot_qd,debug_snapshot_sfrdump,snd_soc_samsung_vts,snd_soc_samsung_abox,shm_ipc,exynos_sci,exynos_itmon,exynos_cpupm,sec_debug_mode,s3c2410_wdt,clk_exynos,cmupmucal,exynos_adv_tracer,exynos_el2,exynos_s2mpu,exynos_acpm,cmu_ewf,sec_debug_base_early
+exynos_pmu_if          20480  15 sec_debug_test,sec_debug,fimc_is,ufs_exynos_core,gnssif,cpif,exynos_pm,exynos_adv_tracer_s2d,snd_soc_samsung_vts,snd_soc_samsung_abox,phy_exynos_mipi_dsim,exynos_cpupm,s3c2410_wdt,cmupmucal,dss
+sec_debug_dprt         20480  1 sec_debug_base_early
+exynos_reboot          16384  4 sec_debug_test,sec_reboot,s2mps25_regulator,exynos_acpm
+exynos_chipid_v2       24576  8 sec_debug_hw_param,npu,ufs_exynos_core,exynos_drm,gnssif,sgpu,cmupmucal,exynos_reboot

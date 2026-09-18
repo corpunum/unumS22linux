@@ -1,0 +1,50 @@
+add device 1: /dev/input/event4
+  name:     "certify_hall"
+  events:
+    SW  (0005): SW_FRONT_PROXIMITY   
+  input props:
+    <none>
+add device 2: /dev/input/event9
+  name:     "grip_sensor"
+  events:
+    REL (0002): REL_X                 REL_MISC             
+  input props:
+    <none>
+add device 3: /dev/input/event2
+  name:     "meta_event"
+  events:
+    REL (0002): REL_HWHEEL            REL_DIAL             
+  input props:
+    <none>
+add device 4: /dev/input/event5
+  name:     "hall"
+  events:
+    SW  (0005): SW_LID               
+  input props:
+    <none>
+add device 5: /dev/input/event1
+  name:     "sec-pmic-key"
+  events:
+    KEY (0001): KEY_VOLUMEDOWN        KEY_POWER            
+  input props:
+    <none>
+add device 6: /dev/input/event8
+  name:     "sec_touchproximity"
+  events:
+    ABS (0003): 003e                  : value 255, min 0, max -1, fuzz 0, flat 0, resolution 0
+  input props:
+    INPUT_PROP_DIRECT
+add device 7: /dev/input/event0
+  name:     "gpio_keys"
+  events:
+    KEY (0001): KEY_VOLUMEUP         
+  input props:
+    <none>
+add device 8: /dev/input/event3
+  name:     "als_rear"
+  events:
+    REL (0002): REL_X                 REL_Y                 REL_Z                 REL_RX               
+                REL_RY                REL_RZ                REL_MISC             
+    ABS (0003): ABS_X                 : value 0, min 0, max 0, fuzz 0, flat 0, resolution 0
+                ABS_Y                 : value 0, min 0, max 0, fuzz 0, flat 0, resolution 0
+                ABS_Z                 : value 0, min 0, max 0, fuzz 0, flat 0, resolution 0
