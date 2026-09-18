@@ -1,0 +1,24 @@
+=== WiFi ===
+dummy0
+erspan0
+gre0
+gretap0
+ifb0
+ifb1
+ip6_vti0
+ip6gre0
+ip6tnl0
+ip_vti0
+lo
+rmnet0
+rmnet1
+rmnet2
+rmnet3
+rmnet4
+rmnet5
+rmnet6
+rmnet7
+sit0
+tunl0
+umts_dm0
+/system/bin/sh: iw: inaccessible or not found

@@ -1,0 +1,6 @@
+=== pstore dir ===
+/system/bin/sh: su: inaccessible or not found
+=== without su ===
+ls: /sys/fs/pstore/: Permission denied
+=== last_kmsg ===
+ls: /proc/last_kmsg: Permission denied

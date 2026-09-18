@@ -1,0 +1,142 @@
+=== Storage / block devices ===
+total 0
+drwxr-xr-x  5 root root     1600 2026-09-18 18:31 .
+drwxr-xr-x 14 root root     7220 2026-09-18 18:31 ..
+drwxr-xr-x  2 root root      880 2026-09-18 18:31 by-name
+brw-------  1 root root   7,   0 2026-09-18 18:31 loop0
+brw-------  1 root root   7,   8 2026-09-18 18:31 loop1
+brw-------  1 root root   7,  80 2026-09-18 18:31 loop10
+brw-------  1 root root   7,  88 2026-09-18 18:31 loop11
+brw-------  1 root root   7,  96 2026-09-18 18:31 loop12
+brw-------  1 root root   7, 104 2026-09-18 18:31 loop13
+brw-------  1 root root   7, 112 2026-09-18 18:31 loop14
+brw-------  1 root root   7, 120 2026-09-18 18:31 loop15
+brw-------  1 root root   7,  16 2026-09-18 18:31 loop2
+brw-------  1 root root   7,  24 2026-09-18 18:31 loop3
+brw-------  1 root root   7,  32 2026-09-18 18:31 loop4
+brw-------  1 root root   7,  40 2026-09-18 18:31 loop5
+brw-------  1 root root   7,  48 2026-09-18 18:31 loop6
+brw-------  1 root root   7,  56 2026-09-18 18:31 loop7
+brw-------  1 root root   7,  64 2026-09-18 18:31 loop8
+brw-------  1 root root   7,  72 2026-09-18 18:31 loop9
+drwxr-xr-x  3 root root       60 2026-09-18 18:31 platform
+brw-------  1 root root   1,   0 2026-09-18 18:31 ram0
+brw-------  1 root root   1,   1 2026-09-18 18:31 ram1
+brw-------  1 root root   1,  10 2026-09-18 18:31 ram10
+brw-------  1 root root   1,  11 2026-09-18 18:31 ram11
+brw-------  1 root root   1,  12 2026-09-18 18:31 ram12
+brw-------  1 root root   1,  13 2026-09-18 18:31 ram13
+brw-------  1 root root   1,  14 2026-09-18 18:31 ram14
+brw-------  1 root root   1,  15 2026-09-18 18:31 ram15
+brw-------  1 root root   1,   2 2026-09-18 18:31 ram2
+brw-------  1 root root   1,   3 2026-09-18 18:31 ram3
+brw-------  1 root root   1,   4 2026-09-18 18:31 ram4
+brw-------  1 root root   1,   5 2026-09-18 18:31 ram5
+brw-------  1 root root   1,   6 2026-09-18 18:31 ram6
+brw-------  1 root root   1,   7 2026-09-18 18:31 ram7
+brw-------  1 root root   1,   8 2026-09-18 18:31 ram8
+brw-------  1 root root   1,   9 2026-09-18 18:31 ram9
+brw-------  1 root root   8,   0 2026-09-18 18:31 sda
+brw-------  1 root root   8,   1 2026-09-18 18:31 sda1
+brw-------  1 root root   8,  10 2026-09-18 18:31 sda10
+brw-------  1 root root   8,  11 2026-09-18 18:31 sda11
+brw-------  1 root root   8,  12 2026-09-18 18:31 sda12
+brw-------  1 root root   8,  13 2026-09-18 18:31 sda13
+brw-------  1 root root   8,  14 2026-09-18 18:31 sda14
+brw-------  1 root root   8,  15 2026-09-18 18:31 sda15
+brw-------  1 root root 259,   0 2026-09-18 18:31 sda16
+brw-------  1 root root 259,   1 2026-09-18 18:31 sda17
+brw-------  1 root root 259,   2 2026-09-18 18:31 sda18
+brw-------  1 root root 259,   3 2026-09-18 18:31 sda19
+brw-------  1 root root   8,   2 2026-09-18 18:31 sda2
+brw-------  1 root root 259,   4 2026-09-18 18:31 sda20
+brw-------  1 root root 259,   5 2026-09-18 18:36 sda21
+brw-------  1 root root 259,   6 2026-09-18 18:31 sda22
+brw-------  1 root root 259,   7 2026-09-18 18:31 sda23
+brw-------  1 root root 259,   8 2026-09-18 18:31 sda24
+brw-------  1 root root 259,   9 2026-09-18 18:31 sda25
+brw-------  1 root root 259,  10 2026-09-18 18:31 sda26
+brw-------  1 root root 259,  11 2026-09-18 18:31 sda27
+brw-------  1 root root 259,  12 2026-09-18 18:31 sda28
+brw-------  1 root root 259,  13 2026-09-18 18:31 sda29
+brw-------  1 root root   8,   3 2026-09-18 18:31 sda3
+brw-------  1 root root 259,  14 2026-09-18 18:31 sda30
+brw-------  1 root root 259,  15 2026-09-18 18:31 sda31
+brw-------  1 root root 259,  16 2026-09-18 18:31 sda32
+brw-------  1 root root 259,  17 2026-09-18 18:36 sda33
+brw-------  1 root root 259,  18 2026-09-18 18:31 sda34
+brw-------  1 root root 259,  19 2026-09-18 18:31 sda35
+brw-------  1 root root 259,  20 2026-09-18 18:31 sda36
+brw-------  1 root root   8,   4 2026-09-18 18:31 sda4
+brw-------  1 root root   8,   5 2026-09-18 18:31 sda5
+brw-------  1 root root   8,   6 2026-09-18 18:31 sda6
+brw-------  1 root root   8,   7 2026-09-18 18:31 sda7
+brw-------  1 root root   8,   8 2026-09-18 18:31 sda8
+brw-------  1 root root   8,   9 2026-09-18 18:31 sda9
+brw-------  1 root root   8,  16 2026-09-18 18:31 sdb
+brw-------  1 root root   8,  32 2026-09-18 18:31 sdc
+brw-------  1 root root   8,  48 2026-09-18 18:31 sdd
+brw-------  1 root root   8,  49 2026-09-18 18:31 sdd1
+brw-------  1 root root   8,  64 2026-09-18 18:31 sde
+drwxr-xr-x  2 root root       40 2026-09-18 18:31 volmgr
+brw-------  1 root root 253,   0 2026-09-18 18:31 zram0
+major minor  #blocks  name
+
+   1        0       8192 ram0
+   1        1       8192 ram1
+   1        2       8192 ram2
+   1        3       8192 ram3
+   1        4       8192 ram4
+   1        5       8192 ram5
+   1        6       8192 ram6
+   1        7       8192 ram7
+   1        8       8192 ram8
+   1        9       8192 ram9
+   1       10       8192 ram10
+   1       11       8192 ram11
+   1       12       8192 ram12
+   1       13       8192 ram13
+   1       14       8192 ram14
+   1       15       8192 ram15
+   8        0  124932096 sda
+   8        1      16384 sda1
+   8        2      16384 sda2
+   8        3       4096 sda3
+   8        4       8192 sda4
+   8        5       8192 sda5
+   8        6       8192 sda6
+   8        7        512 sda7
+   8        8      40960 sda8
+   8        9       3072 sda9
+   8       10       2048 sda10
+   8       11       4096 sda11
+   8       12       8192 sda12
+   8       13         64 sda13
+   8       14      65536 sda14
+   8       15      32768 sda15
+ 259        0      98304 sda16
+ 259        1      81920 sda17
+ 259        2       7680 sda18
+ 259        3       1024 sda19
+ 259        4        512 sda20
+ 259        5       1024 sda21
+ 259        6      53248 sda22
+ 259        7      16384 sda23
+ 259        8         64 sda24
+ 259        9         64 sda25
+ 259       10      32768 sda26
+ 259       11          4 sda27
+ 259       12     131072 sda28
+ 259       13        316 sda29
+ 259       14   11468800 sda30
+ 259       15    1433600 sda31
+ 259       16      30720 sda32
+ 259       17     614400 sda33
+ 259       18      51200 sda34
+ 259       19      51200 sda35
+ 259       20  110628864 sda36
+   8       16       4096 sdb
+   8       32       4096 sdc
+   8       48       8192 sdd
+   8       49       6144 sdd1
+   8       64      20480 sde

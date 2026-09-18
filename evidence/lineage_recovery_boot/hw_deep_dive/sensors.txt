@@ -1,0 +1,124 @@
+=== Sensors (IIO) ===
+iio:device0
+iio:device1
+iio:device10
+iio:device11
+iio:device12
+iio:device13
+iio:device14
+iio:device15
+iio:device16
+iio:device17
+iio:device18
+iio:device19
+iio:device2
+iio:device20
+iio:device21
+iio:device22
+iio:device23
+iio:device24
+iio:device25
+iio:device26
+iio:device27
+iio:device28
+iio:device29
+iio:device3
+iio:device30
+iio:device31
+iio:device32
+iio:device33
+iio:device34
+iio:device35
+iio:device36
+iio:device37
+iio:device38
+iio:device39
+iio:device4
+iio:device40
+iio:device5
+iio:device6
+iio:device7
+iio:device8
+iio:device9
+-- iio:device0 --
+accelerometer_sensor
+-- iio:device1 --
+geomagnetic_sensor
+-- iio:device10 --
+proximity_sensor
+-- iio:device11 --
+proximity_alert_sensor
+-- iio:device12 --
+proximity_raw
+-- iio:device13 --
+rotation_vector_sensor
+-- iio:device14 --
+game_rotation_vector
+-- iio:device15 --
+sig_motion_sensor
+-- iio:device16 --
+step_det_sensor
+-- iio:device17 --
+step_cnt_sensor
+-- iio:device18 --
+tilt_detector
+-- iio:device19 --
+pickup_gesture
+-- iio:device2 --
+uncal_geomagnetic_sensor
+-- iio:device20 --
+scontext_iio
+-- iio:device21 --
+light_cct_sensor
+-- iio:device22 --
+thermistor_sensor
+-- iio:device23 --
+proximity_pocket
+-- iio:device24 --
+uncal_accel_sensor
+-- iio:device25 --
+meta_event
+-- iio:device26 --
+wake_up_motion
+-- iio:device27 --
+move_detector
+-- iio:device28 --
+call_gesture
+-- iio:device29 --
+uncal_light_sensor
+-- iio:device3 --
+gyro_sensor
+-- iio:device30 --
+pocket_mode
+-- iio:device31 --
+led_cover_event
+-- iio:device32 --
+tap_tracker
+-- iio:device33 --
+shake_tracker
+-- iio:device34 --
+light_seamless
+-- iio:device35 --
+autorotation
+-- iio:device36 --
+flip_cover_detector
+-- iio:device37 --
+sarbackoffmotion
+-- iio:device38 --
+sequential_step
+-- iio:device39 --
+file_manager
+-- iio:device4 --
+uncal_gyro_sensor
+-- iio:device40 --
+s2mps25-gpadc
+-- iio:device5 --
+interrupt_gyro_sensor
+-- iio:device6 --
+pressure_sensor
+-- iio:device7 --
+light_sensor
+-- iio:device8 --
+light_ir_sensor
+-- iio:device9 --
+light_flicker_sensor

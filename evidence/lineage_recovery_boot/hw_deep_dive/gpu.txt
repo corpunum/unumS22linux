@@ -1,0 +1,3 @@
+=== GPU ===
+DRIVER=exynos-drm
+MODALIAS=platform:exynos-drm

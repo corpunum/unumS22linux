@@ -1,0 +1,14 @@
+=== Battery/power ===
+100
+ac
+battery
+max77705-charger
+max77705-fuelgauge
+max77705-otg
+mfc-charger
+otg
+pca9481-charger
+pogo
+sec-direct-charger
+usb
+wireless

@@ -1,0 +1,2 @@
+=== Bluetooth ===
+crw-------  1 root        root        503,   0 2026-09-18 18:31 btpower
