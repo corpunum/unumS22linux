@@ -99,3 +99,61 @@ official Lineage recovery, so no distinction from stock behavior). No physical d
 one fully-recovered incident (MISC secure-check failure, documented in
 evidence/lineage_recovery_boot/MILESTONE.md and FLASH_LOG.md). All artifacts, builds,
 and full firmware/toolchain preserved on disk under ~/s22-linux/ for continuation.
+
+## Update — later same session, cross-model consultation round 2
+
+Consulted local Qwen (via raw llama.cpp API) twice with generous token budgets (3000,
+then 6000) - both times it got stuck in unbounded reasoning loops re-deriving Android
+boot architecture from scratch and never produced a final answer (finish_reason:
+"length" both times, zero actual content). Not useful in that mode.
+
+Routed the same question through **OpenUnum's own `chat` CLI** instead (same underlying
+Qwen model, but with OpenUnum's multi-turn agentic/self-critique orchestration around
+it) - this converged to an actual, coherent, structured answer on the second internal
+iteration. Key points from that answer:
+- Ruled out `sec_debug` as the gate (post-hoc logger only)
+- Candidate: a hardware watchdog armed late in kernel init, before `/init` runs; a
+  substitute `/init` that never reaches whatever "disarm point" real AOSP init hits
+  gets silently reset
+- Confirmed (matches our own reasoning): symlink-vs-regular-file is irrelevant to
+  `execve` - pathwalk resolves symlinks before the ELF loader ever sees the file
+- `panic=20` interpretation: reset at ~20s → genuine kernel panic → our program DID
+  exec and die (userspace problem). Reset at a different/unchanged time → kernel never
+  panicked at all → external/hardware watchdog fired before our code ever ran
+- **New concrete experiment** (not yet tried before this suggestion): don't just swap
+  `/init` for a different program - make `/init` a trivial wrapper that does ONE benign
+  thing (write to kmsg) then chain-`execve()`s the REAL, unmodified AOSP init kept at a
+  fresh path (`/real_init`). If this ALSO crash-loops, it proves the kernel/watchdog
+  reacts to anything running before real init, independent of program identity/content.
+
+Manually found (not from AI consultation - just reading the actual working ramdisk's
+own init.rc files) a second concrete candidate: `init.recovery.s5e9925.rc` explicitly
+starts `service watchdogd /system/bin/watchdogd 10 20` very early - a REAL userspace
+daemon (confirmed present as a dynamically-linked ELF at `/system/bin/watchdogd`) whose
+entire job is petting a 30-second hardware watchdog every 10 seconds. None of our
+custom `/init` replacements have ever started this. Caveat: V8 already loaded the
+KERNEL DRIVER (`s3c2410_wdt.ko`) that auto-refreshes the same underlying watchdog once
+loaded, and crashed identically anyway - so this exact theory already took one hit,
+but `watchdogd` might be a distinct/additional mechanism worth testing cleanly.
+
+## Two new builds ready for next session (NOT flashed - user was away from device)
+
+- **V13** (`native_recovery_v13.img`, SHA256
+  `798d327fae2ce04bb9b95bff1c0156430642a17542228a50af0b32d8af278e5`): full working
+  ramdisk tree, `/init` = static C binary that forks+execs the real
+  `/system/bin/watchdogd 10 20` first, then does the same fsync'd cache logging as V12.
+  cmdline includes `panic=20 initcall_debug ignore_loglevel loglevel=8`.
+
+- **V14** (`native_recovery_v14.img`, SHA256
+  `6daf0910621ef10c6e909f3788d5681a69ecc1c0edd03e3d698dd5f086897d8`) - **recommended to
+  try first**: full working ramdisk tree, real AOSP init preserved at `/real_init`,
+  `/init` = a ~15-line wrapper that mounts devtmpfs, writes one line to `/dev/kmsg`,
+  then `execl("/real_init", "/init", NULL)`. Same `panic=20` cmdline. This is the
+  cleanest possible test of "does anything running before real init break things,
+  independent of what it does."
+
+Recommended order: flash V14 first (most informative, cheapest to interpret). If it
+boots fine, the mystery is specifically about REPLACING what real init does, not about
+"anything running first" - try V13 next. If V14 crash-loops, that's a major new finding
+in itself (points squarely at a watchdog/hardware mechanism keyed on early execution
+timing, not program identity) and would make V13 lower priority.
