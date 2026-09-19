@@ -645,3 +645,112 @@ V16 (disambiguator) then V20, is an open question for the user.
 Nothing has been flashed to the phone. It remains on the known-good LineageOS
 recovery boot, reachable via root ADB, throughout all of rounds 7-8 and the
 V20 build.
+
+### Round 9 (Opus, on V20) + the switch to an Astra-only loop (rounds 1-4, V21-V24)
+
+The user asked for one more round on V20, then mid-flight redirected: drop
+Opus from the loop entirely and run 4 consecutive Astra-only review/fix
+cycles instead. Round 9 (Opus, already launched before the redirect) still
+completed and its still-relevant findings were folded into V21/V22 rather
+than discarded: watchdog-arm logging (F-6), early-syscall errno logging
+(F-7), `g_cache_ok`/`g_kmsg_fd` as `volatile sig_atomic_t` (F-9), and
+installing signal handlers after kmsg opens instead of before (F-10). Its
+other findings (cmdline truncation, cache-mount/logging-flag conflation,
+signal-handler safety) were superseded by Astra's own round-1 findings on
+the same file, which arrived independently and covered the same bugs with
+its own live proof.
+
+**None of the 4 Astra-only rounds converged. Every single round found real,
+previously-missed bugs - including two occasions where a fix from the prior
+round turned out to only narrow a race rather than close it.** Builds:
+
+- **V21 (`cinit10.c`)**, from round 1 on V20: fixed a 3-buffer truncation
+  chain that defeated the entire point of the V20 cmdline dump (a 32-byte
+  `logf_uptime` buffer, then a 160-byte early-log cap, both smaller than the
+  live 3329-byte cmdline); `log_line()`/`flush_early_log()` not handling
+  short writes; the boot counter's read/write/rename calls being completely
+  unchecked and non-atomic (reproduced a real corruption path); `g_cache_ok`
+  conflating logging-health with mount-ownership (a log-write failure
+  skipped the pre-reboot unmount entirely); the fatal-signal handler calling
+  `snprintf` with floating-point formatting (not async-signal-safe) and
+  relying on `raise()`, which the kernel doesn't guarantee terminates a
+  global-init task; and `wait_for_partition()`'s match only checking the
+  trailing boundary, so searching for `"da33"` falsely matched inside
+  `"sda33"`.
+- **V22 (`cinit11.c`)**, from round 2 on V21: the counter validation still
+  permitted destructive resets on any I/O error (not just a missing file)
+  and an integer-overflow path; the boot-attempt banner still landed after
+  its own attempt's early lines despite being queued first, because
+  `flush_early_log()` walks the queue forward from index 0 - fixed by
+  writing the banner directly to the file before the flush, not just
+  queuing it first; the fatal handler's writes still used a single raw
+  `write()` with no short-write handling; a failed `umount()` incorrectly
+  cleared mount-ownership tracking; and a real signal-delivery race
+  immediately after a successful `umount()` could still write into the
+  now-detached ramdisk (proven live by timing a `SIGABRT` exactly there).
+  Also folded in the surviving Opus round-9 findings listed above.
+- **V23 (`cinit12.c`)**, from round 3 on V22 (first attempt hit a transient
+  model-capacity error and was retried cleanly): the counter's read loop
+  treated a real I/O error identically to normal EOF, so a read that
+  returned some valid digits then failed with `EIO` was silently trusted;
+  the 7-digit counter cap validated the stored value but not the
+  *incremented* candidate, so `9999999` produced an unrepresentable
+  `10000000` that the very next boot would then permanently reject; two new
+  diagnostic lines exceeded the 160-byte early-log cap and got silently
+  truncated; the watchdog options-file write's return value was discarded,
+  so a real write failure still logged a false success; and `modprobe()`'s
+  forked child inherited PID1's fatal-signal handlers until `exec()`
+  replaced them, so a crash in that pre-exec window produced a fabricated
+  "PID1 dying" record from a process that was never PID1.
+- **V24 (`cinit13.c`)**, from round 4 on V23 (the last of the 4 planned
+  rounds): **two of V23's own fixes were proven incomplete, not wrong** -
+  resetting the child's signal dispositions one-by-one narrows but cannot
+  atomically close the window before every reset executes, so a fault
+  landing in that gap still produced the same false "PID1 dying" record
+  (properly fixed this time by having the handler check real process
+  identity via `getpid()` against a `g_pid1_pid` recorded at startup -
+  correct regardless of any timing, not just narrower); and `g_cache_ok`
+  was set *after* `close(fd)` in the banner-write path, leaving a shorter
+  version of the same evidence-loss gap round 2's fix closed for the
+  longer flush window. Also fixed: a failed options-file write could leave
+  a malformed fragment that `modprobe-small` would still forward to the
+  kernel's parameter parser, potentially aborting the module load entirely
+  rather than falling back to the compiled default as claimed; the
+  `/proc/cmdline` read loop had the identical read-error-vs-EOF conflation
+  already fixed in the counter code; and the fatal handler's hand-assembled
+  version tag was discovered to still literally spell out `'v','2','2'`
+  from V20 - built character-by-character rather than as a matchable string
+  literal, so none of the `sed`-based version bumps across V21-V23 ever
+  touched it, meaning every fatal record from three consecutive builds
+  mislabeled its own version.
+
+Every fix across all 4 rounds was empirically re-verified against the live
+phone before moving to the next round, using the same technique Astra
+pioneered in round 6 of the earlier Opus loop: compiling the actual changed
+function out of the real source via a wrapper `#include`, pushing it to the
+phone, and running it against real `/proc`, `/sys`, and file-I/O conditions
+(including deliberately fabricated files, real disk-space limits, and real
+signal timing) rather than trusting static review alone.
+
+`native_recovery_v24.img`, SHA256
+`32a4e4821f2bec49229dbb277aa440eff76d519fd0afa2022e637fcbc8434fd0`, exactly
+100,663,296 bytes. Verified post-build: unpacked image's `/init` is
+byte-identical to `cinit13` source; module directory layout unchanged (324
+`.ko` files in the versioned dir only, zero flat copies).
+
+**V24 is the current head of the diagnostic-build lineage, but the review
+loop has explicitly NOT converged.** This is not a subjective judgment call -
+it is a direct, repeated empirical result: all 4 of the Astra-only rounds the
+user asked for found genuine bugs, and the most recent round found that two
+of the previous round's own fixes only narrowed races rather than closing
+them. There is no evidence in this project's history that a 5th round would
+be the first to find nothing. Whether to run further rounds, accept V24 as
+"good enough for a diagnostic build whose job is to produce a trustworthy
+log rather than be bug-free," or proceed toward flashing V16 (the cheap
+disambiguator, unaffected by any of this) followed by V24 the next time the
+user is physically at the phone, is an open decision for the user - this
+project has deliberately not made that call unilaterally at any point.
+
+Nothing has been flashed to the phone. It remains on the known-good LineageOS
+recovery boot, reachable via root ADB, throughout all of rounds 9 and the
+4-round Astra-only loop and the V21-V24 builds.
