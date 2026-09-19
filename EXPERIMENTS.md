@@ -784,3 +784,130 @@ residuals that remain unfixed. What to capture immediately after the
 attempt: physical reset timing (does it match ~45s?), then reboot back into
 LineageOS recovery and pull `/cache/v24_log.txt` and `/cache/v24_boot_count.txt`
 via root ADB before doing anything else.
+
+### First real flash of a diagnostic build (V24) - inconclusive, but the biggest new information in the whole project
+
+V24 was flashed to RECOVERY and tested on the real device for the first
+time. Visually, it looked identical to every prior build: Samsung logo,
+resetting, three times, before the phone fell back into Download Mode. This
+looked like the same unbroken crash-loop pattern all 24 builds have shown.
+
+**It wasn't.** The phone's own persistent bootloader log
+(`/proc/boot_reset`, the `BORE` history) records the actual boot-mode
+selection for every power transition with real timestamps, and reading it
+after the fact told a completely different story than what was visually
+observed:
+
+| Time | Record | Mode |
+|---|---|---|
+| 17:43:01 | 505 | DOWNLOAD (V24 flash begins) |
+| 17:51:52 | 506 | **NORMAL** |
+| 17:52:00 | 507 | **NORMAL** |
+| 17:52:12 | 508 | **NORMAL** |
+| 17:52:30 | 509 | **RECOVERY**, software-triggered (`REBOOTMODE4`, not a button combo) |
+| 17:52:49 | 510 | DOWNLOAD, manual button reset |
+| 17:55:45 | 511 | RECOVERY selected by key - the current, working LineageOS boot |
+
+**The three visually-observed "reboots" were NORMAL Android boots, not
+RECOVERY-partition boots at all** - V24 was never running during them. The
+phone's own boot-loop-protection logic automatically switched to RECOVERY
+mode after the third failed normal boot (`REBOOTMODE4` is a
+software-requested mode switch, not a key combo), and *that* is the one and
+only time V24 actually got to run. It ran for approximately **19 seconds**
+(17:52:30 to 17:52:49) before a manual button-press forced a reset into
+Download Mode - interrupting it mid-run, not observing it crash on its own.
+19 seconds is nowhere near instant, and nowhere near the 45s timing-oracle
+deadline either - it's squarely in the range where the early boot sequence
+(tmpfs/mknod, console/kmsg setup, cmdline dump, dss+watchdog modprobe)
+would plausibly still be running.
+
+**Conclusion: today's flash attempt did not actually test whether V24
+crash-loops. It was interrupted before we found out.** The 24-build "every
+custom init fails identically and near-instantly" narrative was built on
+this same kind of visual-observation-without-a-persistent-log methodology
+for every single prior build. This does not retroactively prove any of
+those earlier attempts also secretly ran longer than observed - the deep
+first-principles review that surfaced this (see below) rates it as the
+single most likely explanation for *today's* specific confusion, not a
+provenance claim about V10-V23.
+
+### Separately: a real packaging bug found and fixed - V19 through V24 had wrong boot-image headers
+
+The same first-principles review (a dedicated, environment-hardened xhigh
+Astra session - the first two attempts at this crashed on unrelated tooling
+issues: Codex's own workspace-snapshot step choking on the 23GB `stock/`
+firmware directory, then a self-inflicted bug where markdown backticks in
+the prompt were interpreted as live shell command substitution by the
+invoking script) found a second, independent, real bug: starting at V19,
+every build's boot image header has had load addresses double what the
+known-working LineageOS reference uses, and was missing the OS
+version/patch-level fields entirely.
+
+```
+                     reference        V19-V24 (before fix)
+kernel load addr     0x10008000       0x20008000
+ramdisk load addr    0x11000000       0x21000000
+tags load addr       0x10000100       0x20000100
+dtb load addr        0x11f00000       0x21f00000
+os version           16.0.0           (missing)
+os patch level       2026-09          (missing)
+```
+
+Root cause: `mkbootimg.py` computes each load address as `base + offset`,
+default `base=0x10000000`. Every build script since V19 passed the
+already-absolute reference addresses (`0x10008000` etc.) as the *offset*
+arguments without also passing `--base 0x00000000`, silently doubling every
+address. This went undetected for 6 builds because every verification in
+this log checked kernel/dtb/recovery_dtbo *payload* byte-equality, never
+the header fields themselves - a real gap in the verification methodology,
+not just a build-script typo.
+
+Whether this alone could cause a crash-loop is unclear - the review noted
+the live kernel reports its actual ramdisk address as `0x85100000`
+regardless of what the header says, suggesting Samsung's bootloader
+relocates/reinterprets these fields rather than using them literally. But
+it's a confirmed, real, unintended difference from the reference that
+should not have been present, and removing it removes a variable before
+the next attempt.
+
+**Fixed and rebuilt as `native_recovery_v24b.img`** (same `cinit13.c`
+source, byte-identical `/init` confirmed via `cmp` - only the packaging
+changed): added `--base 0x00000000 --os_version 16.0.0 --os_patch_level
+2026-09` to the `mkbootimg` invocation. Post-build header now matches the
+reference exactly in every field. SHA256
+`5e58e5e5e8511c54fc197da523189db8a6fe8e92f01d66616562891d79395db2`, exactly
+100,663,296 bytes.
+
+### Explicit recommendation from the review: do not build another PID1 logic revision
+
+The review's own conclusion, worth stating plainly: 24 iterations of
+PID1-level logic fixes have not moved this forward, and the evidence does
+not support treating this as a kernel-rejects-every-replacement-init
+problem. The next flash should not be "V25 with more init fixes" - it
+should be a repeat of the *exact same* V24b, this time letting it run
+uninterrupted for at least 45-60 seconds once it's actually in RECOVERY
+mode (confirmed via `/proc/boot_reset` immediately after, the same way
+today's confusion was resolved) before touching any buttons, so the
+question "does V24 actually crash on its own" finally gets a real answer.
+
+Other hypotheses the review substantially weakened with concrete on-device
+evidence rather than reasoning alone: static-ELF/CPU/libc-startup
+incompatibility (ruled out - the exact V10 and V24 `/init` binaries were
+extracted from their boot images and run under native ptrace-instrumented
+execution on the real device, reaching `main()` correctly); CPIO/LZ4
+packaging defects (ruled out - direct binary audit of the image-contained
+archives found no format defects, and V11's historical archive serves as a
+same-toolchain control); pre-policy SELinux/IMA/per-file-signature
+enforcement (ruled out via kernel source - SELinux access decisions are
+granted before policy load, which happens after first-stage init runs, so
+no such check could gate the very first exec); recovery-specific AVB
+rollback/hash-tree mismatch (ruled out - both reference and V24 verify
+correctly with matching algorithm/rollback-index/hash-descriptor
+structure). The strongest remaining open hypothesis, unresolved either way:
+missing early hardware/watchdog handoff, based on a separate observation
+that several much older historical RECOVERY-mode boot-reset records are
+spaced 80-86 seconds apart - matching this device's 80-second watchdog
+timeout almost exactly.
+
+Nothing has been flashed since V24b was built. The phone is on the
+known-good LineageOS recovery boot, reachable via root ADB.
