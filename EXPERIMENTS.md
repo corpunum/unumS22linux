@@ -500,3 +500,148 @@ question for the user rather than assumed either way.
 Nothing has been flashed to the phone. It remains on the known-good LineageOS
 recovery boot, reachable via root ADB, throughout all of rounds 5-6 and the V19
 build.
+
+### Rounds 7-8 (Opus fresh review, then Astra independent re-derivation) - two
+long-held project assumptions overturned, four new significant bugs found
+
+The user asked for "another round" on V19 (`cinit8.c`). Round 7 (Opus, given
+zero hints that V19 was "already reviewed" beyond the file itself and told to
+actively hunt for anything new rather than confirm prior fixes) found several
+things no earlier round caught, two of which contradict facts this project had
+treated as established for many rounds. Round 8 (Astra) independently
+re-derived every claim from kernel source and live ADB evidence rather than
+trusting Opus's report, refining several findings and adding four of its own.
+
+**Two "known facts" turned out to be wrong:**
+
+- **`tmr_atboot` is not 0 by default in the way that mattered.** The compiled
+  default genuinely is 0, but `/proc/cmdline` on live boot shows the
+  bootloader passes `s3c2410_wdt.tmr_atboot=1`. Stock AOSP boot therefore
+  starts the watchdog per the bootloader's instruction. This build's busybox
+  (`CONFIG_MODPROBE_SMALL`, no `CONFIG_FEATURE_CMDLINE_MODULE_OPTIONS`) never
+  reads `/proc/cmdline` at all, so every prior custom-init build silently
+  probed the watchdog with the opposite policy from stock - a genuine,
+  previously invisible divergence between custom and AOSP boot. Opus's first
+  proposed fix (pass `tmr_atboot=1` as an `execl()` argument) does not
+  actually work with this busybox - Astra traced `modprobe-small.c` and
+  confirmed extra argv is discarded; the only mechanism it honors is an
+  `/etc/modules/<name>` options file (`modprobe-small.c:723-728`).
+- **`/dev/console` returns ENODEV on this real device.** Confirmed live:
+  `echo hi > /dev/console` → "No such device"; `/proc/consoles` has exactly
+  one entry, `dss-1`, which has no `.device` callback (traced in
+  `debug-snapshot.c` and `printk.c`). Every build back to V17 unconditionally
+  logged "console wired" / "console+kmsg fds fixed" regardless of whether the
+  open actually succeeded - that claim was false on every single prior run.
+
+**Four new significant findings (Astra, N1-N4):**
+
+- **N1 - the "t=45s deadline" was never actually enforced.** `modprobe()`'s
+  `waitpid()` poll loop had no time cap, so a hung child could block the
+  entire boot sequence indefinitely; `mount()`/`sync()` are also unbounded
+  blocking calls with nothing capping them. Reaching the final log line
+  proves execution got there eventually, not that it happened at a
+  predictable time - undermining part of the timing-oracle's value as
+  originally designed.
+- **N2 - `sec_debug.ko` (the module that writes `PANIC_INFORM`/
+  `UPLOAD_CAUSE_KERNEL_PANIC` on a real kernel panic) is not in this build's
+  module closure.** So `/proc/cmdline`'s `reset_reason` field is useful
+  context about the *previous* boot but not a proven panic classifier for a
+  crash produced by *this* program specifically.
+- **N3 - `CONFIG_S3C2410_SHUTDOWN_REBOOT=y` rearms a separate 30s watchdog**
+  on any `reboot()`-triggered `device_shutdown()`, independent of whether
+  this program ever opened `/dev/watchdog` itself. A stall between calling
+  `reboot()` and PSCI actually taking over could produce a watchdog reset
+  that looks identical to "PSCI restart" in the log but isn't.
+- **N4 - a `waitpid()` failure's `errno` could be clobbered** before it was
+  logged, since `module_present()` (which does its own `open()`/`read()`
+  calls) ran in between the failure and the `snprintf()` that reported it.
+
+**Also refined/corrected via round 8's independent re-derivation:**
+Opus's "opening `/dev/watchdog` disables the kernel's own auto-ping" theory
+(F2) was itself wrong in its mechanism - this driver never sets
+`WDOG_HW_RUNNING`, so there never was a kernel-side pre-open feeder to
+disable - but userspace petting genuinely is the only thing keeping the SoC
+alive once opened, and several blocking operations (ext4 mount, log fsync,
+`sync()`) never pet, which is real and unchanged. D7 (fatal-signal handlers)
+was confirmed useful only for PID1's own synchronous faults, not for kernel
+panics, watchdog bites, or PMIC resets - a real but narrower win than first
+framed. L1's claim of a fully "clean PSCI-only" handler chain was corrected:
+`exynos-reboot.ko` is pulled in transitively by three of the modprobed
+modules and does overwrite `pm_power_off`, though PSCI still wins the
+*restart* handler race (verified priority 129 vs exynos-reboot's 128) so the
+timing oracle itself is unaffected.
+
+All fixes incorporated into `cinit9.c` (V20):
+- D1: dumps `/proc/cmdline` verbatim into the log at t≈0, before any module
+  loading - free, persistent, bootloader-authored context.
+- D2/D3: a `/cache/v20_boot_count.txt` counter + boot-attempt banner line so
+  concatenated crash-loop log runs are attributable; version tag/filename
+  corrected from the stale "v18" string to "v20" (confirmed via `strings` on
+  the actual V18/V19 binaries that this was a real, not cosmetic, bug).
+- D4: `log_line()`'s cache open now has `O_CREAT`; `g_cache_ok` is only set
+  after `flush_early_log()` returns a confirmed success, and is cleared again
+  if any later cache write fails, so the in-memory fallback resumes instead
+  of silently losing lines.
+- D5: explicit `umount("/cache")` before `reboot()`, not just `sync()` -
+  `sync()` alone does not clear ext4's `needs_recovery` flag, so every prior
+  build left the partition needing journal recovery on every crash-loop
+  iteration.
+- D6: fixed the *second* seq_file single-`read()` site (`wait_for_partition()`
+  reading `/proc/partitions`) that round 6 had left unfixed when it fixed the
+  same bug in `module_present()`; also switched from raw `strstr()` to a
+  line-anchored match.
+- D7: `SIGSEGV/SIGBUS/SIGILL/SIGABRT/SIGFPE` handlers that write one line +
+  `fsync` before re-raising, using only async-signal-safe calls.
+- D8: `platform_bound()` now returns 3 states (no-driver / unbound / bound)
+  instead of collapsing the first two into the same `bound=0`.
+- F1: writes `/etc/modules/s3c2410_wdt` containing `tmr_atboot=1` before
+  loading the module, matching the bootloader's own policy instead of
+  silently diverging from it, and logs which policy was chosen.
+- F3: logs the real console/kmsg fd numbers and errno instead of an
+  unconditional (and, on this device, false) "console wired" claim.
+- N1: bounded `modprobe()`'s wait loop to a hard 20s cap per module
+  (`MODPROBE_MAX_WAIT_S`) - a stuck child now costs at most 20s of wall time
+  instead of blocking forever, with the child deliberately left running
+  rather than killed (killing mid-`probe()` risks a worse-defined state).
+- N4: `errno` is captured immediately at the `waitpid()` failure site before
+  any other syscall can clobber it.
+- L1: corrected the header comment's overstated "clean PSCI-only" claim.
+- L2: logs explicitly when the 45s deadline has already passed before the
+  heartbeat loop, instead of silently skipping straight to the reboot line.
+- L4: `g_wd_fd` now gets the same fd 0-2 escape treatment as `g_kmsg_fd`.
+- L6: stripped the double-newline inconsistency across log call sites.
+- L7: bound-check loop now iterates by `sizeof(checks)/sizeof(checks[0])`
+  instead of a hardcoded count.
+- L3, L5 noted as latent/low-impact and left as documented risk given the
+  measured live headroom (32KB cap vs 23.6KB actual `/proc/modules`; buffer
+  size vs actual formatted-message length) rather than adding more code for
+  a margin that isn't currently being exceeded.
+
+**Empirical re-verification this session** (not requested by either reviewer,
+done anyway before considering this converged): compiled `wait_for_partition()`
+and `platform_bound()` out of `cinit9.c` via the same wrapper-`#include`
+technique used in rounds 6 and the V19 re-check, ran them on the live phone.
+`wait_for_partition("sda33",1)` → 1, `wait_for_partition("nonexistent99",1)` →
+0 (no false positive from the line-anchored match), `platform_bound()`
+correctly returns 2/1/0 for bound/unbound/no-driver test cases against real
+and fabricated driver/device names.
+
+`native_recovery_v20.img`, SHA256
+`0c14dffc3cd2581a35b8803d7403d93b13ad0ecf83838daa86967ab8456e84c4`, exactly
+100,663,296 bytes. Verified post-build: unpacked image's `/init` is
+byte-identical to `cinit9` source; module directory layout unchanged (324
+`.ko` files in the versioned dir only, zero flat copies).
+
+**V20 supersedes V19.** Round 8 found real new issues (N1-N4) that round 7
+missed despite reviewing the same file, and round 7 itself overturned two
+assumptions that had survived six prior rounds - so by the project's own
+"loop until no corrections are needed" standard, convergence has still not
+formally been reached at a round with zero findings. Whether to run a round 9
+(fresh Opus pass on V20/`cinit9.c`) before flashing, or to consider two
+increasingly narrow/low-severity rounds in a row (7→8 mix of tier-0/1 vs the
+declining severity trend across L1-L7) sufficient to proceed toward flashing
+V16 (disambiguator) then V20, is an open question for the user.
+
+Nothing has been flashed to the phone. It remains on the known-good LineageOS
+recovery boot, reachable via root ADB, throughout all of rounds 7-8 and the
+V20 build.
