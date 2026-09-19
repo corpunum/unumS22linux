@@ -1,0 +1,8 @@
+/tmp/s22-v23-round4/harness.c: In function ‘put’:
+/tmp/s22-v23-round4/harness.c:268:117: warning: ignoring return value of ‘write’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  268 | static void put(const char*p,const char*s){int fd=open(p,O_CREAT|O_TRUNC|O_WRONLY,0600);if(fd<0){perror(p);exit(2);}write(fd,s,strlen(s));close(fd);}
+      |                                                                                                                     ^~~~~~~~~~~~~~~~~~~~~
+/tmp/s22-v23-round4/harness.c: In function ‘reset’:
+/tmp/s22-v23-round4/harness.c:270:201: warning: ignoring return value of ‘ftruncate’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  270 | static void reset(void){mode=0;reads=writes=0;counterfd=bannerfd=-1;g_cache_ok=0;early_log_n=0;unlink("/cache/v23_boot_count.txt");unlink("/cache/v23_boot_count.txt.tmp");unlink("/cache/v23_log.txt");ftruncate(g_kmsg_fd,0);lseek(g_kmsg_fd,0,SEEK_SET);}
+      |                                                                                                                                                                                                         ^~~~~~~~~~~~~~~~~~~~~~

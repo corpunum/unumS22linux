@@ -1,0 +1,47 @@
+MATRIX mode=50 boot=-1 cache_ok=1 queued=1 writes=0
+/cache/v23_boot_count.txt bytes=6 {123456}
+/cache/v23_log.txt bytes=181 {[v23] ===== BOOT ATTEMPT #unknown, counter unavailable/untrustworthy (V23/cinit12) =====
+EARLY
+[v23 t=56346.693s] cache mounted OK, banner + early log flushed and confirmed written
+}
+MATRIX mode=51 boot=-1 cache_ok=1 queued=1 writes=0
+/cache/v23_boot_count.txt bytes=6 {123456}
+/cache/v23_log.txt bytes=181 {[v23] ===== BOOT ATTEMPT #unknown, counter unavailable/untrustworthy (V23/cinit12) =====
+EARLY
+[v23 t=56346.693s] cache mounted OK, banner + early log flushed and confirmed written
+}
+MATRIX mode=52 boot=-1 cache_ok=1 queued=1 writes=0
+/cache/v23_boot_count.txt bytes=6 {123456}
+/cache/v23_log.txt bytes=181 {[v23] ===== BOOT ATTEMPT #unknown, counter unavailable/untrustworthy (V23/cinit12) =====
+EARLY
+[v23 t=56346.694s] cache mounted OK, banner + early log flushed and confirmed written
+}
+MATRIX mode=53 boot=123457 cache_ok=1 queued=1 writes=3
+/cache/v23_boot_count.txt bytes=6 {123457}
+/cache/v23_log.txt bytes=145 {[v23] ===== BOOT ATTEMPT #123457 (V23/cinit12) =====
+EARLY
+[v23 t=56346.694s] cache mounted OK, banner + early log flushed and confirmed written
+}
+MATRIX mode=54 boot=123457 cache_ok=1 queued=1 writes=0
+/cache/v23_boot_count.txt bytes=6 {123457}
+/cache/v23_log.txt bytes=186 {[v23] ===== BOOT ATTEMPT #123457 (V23/cinit12) =====
+EARLY
+[v23 t=56346.694s] cache mounted OK, early log flushed but BANNER WRITE FAILED - attempt numbering may be missing for this run
+}
+MATRIX mode=55 boot=123457 cache_ok=1 queued=1 writes=0
+/cache/v23_boot_count.txt bytes=6 {123457}
+/cache/v23_log.txt bytes=194 {[v23] ===== BOOT ATTEMPT #123457 (V23/cinit12) =====
+EARLY
+[v23 t=56346.695s] cache mounted OK, banner written, but flush_early_log() FAILED - early pre-mount lines lost, live logging continues
+}
+MATRIX mode=56 boot=123457 cache_ok=0 queued=2 writes=0
+/cache/v23_boot_count.txt bytes=6 {123457}
+/cache/v23_log.txt bytes=59 {[v23] ===== BOOT ATTEMPT #123457 (V23/cinit12) =====
+EARLY
+}
+MATRIX mode=57 boot=123457 cache_ok=1 queued=1 writes=0
+/cache/v23_boot_count.txt bytes=6 {123457}
+/cache/v23_log.txt bytes=133 {EARLY
+[v23 t=56346.695s] cache mounted OK, early log flushed but BANNER WRITE FAILED - attempt numbering may be missing for this run
+}
+FD LEAK 100 counter/banner/flush sequences before=4 after=4

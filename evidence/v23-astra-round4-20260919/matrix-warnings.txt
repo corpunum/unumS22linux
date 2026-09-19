@@ -1,0 +1,12 @@
+/tmp/s22-v23-round4/matrix.c:269:13: warning: ‘status’ defined but not used [-Wunused-function]
+  269 | static void status(pid_t p){int s;if(waitpid(p,&s,0)!=p)exit(2);printf("child exit=%d signal=%d\n",WIFEXITED(s)?WEXITSTATUS(s):-1,WIFSIGNALED(s)?WTERMSIG(s):0);}
+      |             ^~~~~~
+/tmp/s22-v23-round4/matrix.c:240:13: warning: ‘early_summary’ defined but not used [-Wunused-function]
+  240 | static void early_summary(void){
+      |             ^~~~~~~~~~~~~
+/tmp/s22-v23-round4/matrix.c:217:13: warning: ‘cmdline_read’ defined but not used [-Wunused-function]
+  217 | static void cmdline_read(void){
+      |             ^~~~~~~~~~~~
+/tmp/s22-v23-round4/matrix.c:203:13: warning: ‘options_write’ defined but not used [-Wunused-function]
+  203 | static void options_write(void){
+      |             ^~~~~~~~~~~~~

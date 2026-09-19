@@ -12,7 +12,7 @@
   `SUBSYSTEM=="usb", ATTR{idVendor}=="04e8", MODE="0666", GROUP="plugdev"`
 - User `corpunum` already in `plugdev` group
 - ADB authorization required manual "Allow USB debugging" tap on phone (user confirmed)
-- Device serial: `&lt;redacted&gt;`
+- Device serial: `<redacted>`
 
 ## Device properties (VERIFIED, not assumed)
 ```

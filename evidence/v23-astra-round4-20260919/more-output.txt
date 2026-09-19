@@ -1,0 +1,86 @@
+MODPROBE injection=20 (20=exec 21=fork-return 22=after-first-reset)
+/cache/v23_log.txt bytes=134 {[v23 t=56389.799s] modprobe test-module: starting
+[v23 t=56390.002s] modprobe test-module: exit=-1 proc_modules=no
+PARENT STILL ALIVE
+}
+MODPROBE injection=21 (20=exec 21=fork-return 22=after-first-reset)
+/cache/v23_log.txt bytes=174 {[v23 t=56390.002s] modprobe test-module: starting
+[v22 t=56390s] FATAL sig=11 PID1 dying
+[v23 t=56390.205s] modprobe test-module: exit=139 proc_modules=no
+PARENT STILL ALIVE
+}
+MODPROBE injection=22 (20=exec 21=fork-return 22=after-first-reset)
+/cache/v23_log.txt bytes=173 {[v23 t=56390.206s] modprobe test-module: starting
+[v22 t=56390s] FATAL sig=6 PID1 dying
+[v23 t=56390.408s] modprobe test-module: exit=134 proc_modules=no
+PARENT STILL ALIVE
+}
+CACHE mode=30 (30=flush-open-signal 32=flush-write-failure 33=banner-close-signal)
+child exit=134 signal=0
+/cache/v23_log.txt bytes=86 {[v23] ===== BOOT ATTEMPT #1 (V23/cinit12) =====
+[v22 t=56390s] FATAL sig=6 PID1 dying
+}
+/kmsg bytes=63 {EARLY FIRST
+EARLY SECOND
+[v22 t=56390s] FATAL sig=6 PID1 dying
+}
+CACHE mode=32 (30=flush-open-signal 32=flush-write-failure 33=banner-close-signal)
+child exit=0 signal=0
+/cache/v23_log.txt bytes=196 {[v23] ===== BOOT ATTEMPT #1 (V23/cinit12) =====
+EARLY SECOND
+[v23 t=56390.412s] cache mounted OK, banner written, but flush_early_log() FAILED - early pre-mount lines lost, live logging continues
+}
+/kmsg bytes=160 {EARLY FIRST
+EARLY SECOND
+[v23 t=56390.412s] cache mounted OK, banner written, but flush_early_log() FAILED - early pre-mount lines lost, live logging continues
+}
+CACHE mode=33 (30=flush-open-signal 32=flush-write-failure 33=banner-close-signal)
+child exit=134 signal=0
+/cache/v23_log.txt bytes=48 {[v23] ===== BOOT ATTEMPT #1 (V23/cinit12) =====
+}
+/kmsg bytes=63 {EARLY FIRST
+EARLY SECOND
+[v22 t=56390s] FATAL sig=6 PID1 dying
+}
+OPTIONS real /dev/full ENOSPC
+/kmsg bytes=152 {[v23 t=56390.414s] FAILED to write /etc/modules/s3c2410_wdt options file - watchdog will probe with compiled default tmr_atboot=0, diverging from stock
+}
+OPTIONS real RLIMIT_FSIZE=10
+queue len=152 {[v23 t=56390.415s] FAILED to write /etc/modules/s3c2410_wdt options file - watchdog will probe with compiled default tmr_atboot=0, diverging from stock
+}
+child exit=0 signal=0
+/etc/modules/s3c2410_wdt bytes=10 {tmr_atboot}
+OPTIONS real RLIMIT_FSIZE=11
+queue len=152 {[v23 t=56390.416s] FAILED to write /etc/modules/s3c2410_wdt options file - watchdog will probe with compiled default tmr_atboot=0, diverging from stock
+}
+child exit=0 signal=0
+/etc/modules/s3c2410_wdt bytes=11 {tmr_atboot=}
+OPTIONS real RLIMIT_FSIZE=12
+queue len=96 {[v23 t=56390.418s] wrote /etc/modules/s3c2410_wdt: tmr_atboot=1 (match stock bootloader policy)
+}
+child exit=0 signal=0
+/etc/modules/s3c2410_wdt bytes=12 {tmr_atboot=1}
+CMDLINE mode=40 reads=2 queued=1
+/kmsg bytes=25 {cmdline[0]: console=none
+}
+CMDLINE mode=41 reads=0 queued=0
+/kmsg bytes=0 {}
+MAX ERRNO summary[0] len=106 newline=1 {[v23 t=56390.419s] early syscalls A: dev=133 devtmpfs=133 devblock=133 proc=133 sys=133 (0=ok else errno)
+}
+MAX ERRNO summary[1] len=131 newline=1 {[v23 t=56390.419s] early syscalls B: kmsg_n=133 null_n=133 con_n=133 wd_n=133 sda33_n=133 procmnt=133 sysmnt=133 (0=ok else errno)
+}
+child exit=139 signal=0
+/cache/v23_log.txt bytes=39 {[v22 t=56390s] FATAL sig=11 PID1 dying
+}
+child exit=135 signal=0
+/cache/v23_log.txt bytes=38 {[v22 t=56390s] FATAL sig=7 PID1 dying
+}
+child exit=132 signal=0
+/cache/v23_log.txt bytes=38 {[v22 t=56390s] FATAL sig=4 PID1 dying
+}
+child exit=134 signal=0
+/cache/v23_log.txt bytes=38 {[v22 t=56390s] FATAL sig=6 PID1 dying
+}
+child exit=136 signal=0
+/cache/v23_log.txt bytes=38 {[v22 t=56390s] FATAL sig=8 PID1 dying
+}

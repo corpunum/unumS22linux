@@ -23,3 +23,19 @@ lineage/build-*/*.img
 evidence/**/*.img
 evidence/**/*.bin
 rollback/**/*.bin
+
+# Samsung stock firmware (extracted proprietary binaries) - never publish these,
+# copyright/redistribution risk, not our code. Kept on disk, never in git.
+/stock/
+/lineage/build-*/
+
+# ramdisk staging directories - full copies of Samsung's extracted ramdisk tree
+# plus busybox binary and .ko files; large, and same firmware-provenance concern
+# as /stock/ above. Only the cinit*.c sources (tracked separately) are ours.
+/initramfs/nativev*/
+/initramfs/cinit
+/initramfs/cinit[0-9]*
+!/initramfs/cinit*.c
+
+# cloned busybox build tree (GPL source, but large and not our code)
+/tools/busybox/

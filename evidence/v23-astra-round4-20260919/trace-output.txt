@@ -1,0 +1,5 @@
+BLOCKED module syscall=273 options={tmr_atboot=} (seccomp EPERM, never loaded)
+BLOCKED module syscall=105 options={tmr_atboot=} (seccomp EPERM, never loaded)
+BLOCKED module syscall=273 options={tmr_atboot=} (seccomp EPERM, never loaded)
+BLOCKED module syscall=105 options={tmr_atboot=} (seccomp EPERM, never loaded)
+busybox exit=1 signal=0

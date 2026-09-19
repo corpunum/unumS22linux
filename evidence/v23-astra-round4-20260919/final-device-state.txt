@@ -1,0 +1,23 @@
+56390.46 447895.98
+unknown
+uid=0(root) gid=0(root) groups=0(root),1004(input),1007(log),1011(adb),1015(sdcard_rw),1028(sdcard_r),1078(ext_data_rw),1079(ext_obb_rw),3001(net_bt_admin),3002(net_bt),3003(inet),3006(net_bw_stats),3009(readproc),3011(uhid),3012(readtracefs) context=u:r:su:s0
+rootfs / rootfs rw,seclabel,size=2449224k,nr_inodes=612306 0 0
+tmpfs /dev tmpfs rw,seclabel,nosuid,relatime,size=2659668k,nr_inodes=664917,mode=755 0 0
+devpts /dev/pts devpts rw,seclabel,relatime,mode=600,ptmxmode=000 0 0
+proc /proc proc rw,relatime,gid=3009,hidepid=invisible 0 0
+sysfs /sys sysfs rw,seclabel,relatime 0 0
+selinuxfs /sys/fs/selinux selinuxfs rw,relatime 0 0
+tmpfs /mnt tmpfs rw,seclabel,nosuid,nodev,noexec,relatime,size=2659668k,nr_inodes=664917,mode=755,gid=1000 0 0
+tmpfs /apex tmpfs rw,seclabel,nosuid,nodev,noexec,relatime,mode=755 0 0
+tmpfs /linkerconfig tmpfs rw,seclabel,nosuid,nodev,noexec,relatime,mode=755 0 0
+tmpfs /mnt/installer tmpfs rw,seclabel,nosuid,nodev,noexec,relatime,size=2659668k,nr_inodes=664917,mode=755,gid=1000 0 0
+tmpfs /mnt/androidwritable tmpfs rw,seclabel,nosuid,nodev,noexec,relatime,size=2659668k,nr_inodes=664917,mode=755,gid=1000 0 0
+none /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime,memory_recursiveprot 0 0
+tmpfs /tmp tmpfs rw,seclabel,relatime 0 0
+tmpfs /storage tmpfs rw,seclabel,relatime,mode=050,gid=1028 0 0
+binder /dev/binderfs binder rw,relatime,max=1048576,stats=global 0 0
+pstore /sys/fs/pstore pstore rw,seclabel,relatime 0 0
+none /config configfs rw,relatime 0 0
+adb /dev/usb-ffs/adb functionfs rw,seclabel,relatime 0 0
+fastboot /dev/usb-ffs/fastboot functionfs rw,seclabel,relatime 0 0
+/dev/block/sda33 /mnt/nc ext4 rw,seclabel,relatime 0 0

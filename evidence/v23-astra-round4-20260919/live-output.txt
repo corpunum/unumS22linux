@@ -1,0 +1,5 @@
+modules dss=1 wdt=1 ufs=1 absent=0
+partitions sda33=1 da33=0 a33=0 sda330=0
+bound wdt=2 usb=2 ufs=2 phy=2 missing_device=1 missing_driver=0
+cmdline bytes=3329 chunks=28 exact=1
+u2a boundary_failures=0

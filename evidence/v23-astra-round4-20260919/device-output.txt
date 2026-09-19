@@ -1,0 +1,72 @@
+COUNTER input=ENOENT fault=0 boot=1 reads=0 /cache/v23_boot_count.txt bytes=1 {1}
+COUNTER input=42 fault=0 boot=43 reads=2 /cache/v23_boot_count.txt bytes=2 {43}
+COUNTER input=42
+ fault=0 boot=43 reads=2 /cache/v23_boot_count.txt bytes=2 {43}
+COUNTER input= fault=0 boot=-1 reads=1 /cache/v23_boot_count.txt bytes=0 {}
+COUNTER input=1x fault=0 boot=-1 reads=2 /cache/v23_boot_count.txt bytes=2 {1x}
+COUNTER input=1
+2 fault=0 boot=-1 reads=2 /cache/v23_boot_count.txt bytes=3 {1
+2}
+COUNTER input=2147483647 fault=0 boot=-1 reads=2 /cache/v23_boot_count.txt bytes=10 {2147483647}
+COUNTER input=9999998 fault=0 boot=9999999 reads=2 /cache/v23_boot_count.txt bytes=7 {9999999}
+COUNTER input=9999999 fault=0 boot=-1 reads=2 /cache/v23_boot_count.txt bytes=7 {9999999}
+COUNTER input=10000000 fault=0 boot=-1 reads=2 /cache/v23_boot_count.txt bytes=8 {10000000}
+COUNTER input=123456 fault=1 boot=-1 reads=2 /cache/v23_boot_count.txt bytes=6 {123456}
+COUNTER input=123456 fault=2 boot=123457 reads=8 /cache/v23_boot_count.txt bytes=6 {123457}
+COUNTER input=123456 fault=3 boot=-1 reads=1 /cache/v23_boot_count.txt bytes=6 {123456}
+COUNTER input=123456 fault=4 boot=-1 reads=0 /cache/v23_boot_count.txt bytes=6 {123456}
+ORDER normal
+/cache/v23_log.txt bytes=159 {[v23] ===== BOOT ATTEMPT #1 (V23/cinit12) =====
+EARLY FIRST
+EARLY SECOND
+[v23 t=56107.195s] cache mounted OK, banner + early log flushed and confirmed written
+}
+child exit=134 signal=0
+ORDER signal after banner close, before flush
+/cache/v23_log.txt bytes=48 {[v23] ===== BOOT ATTEMPT #1 (V23/cinit12) =====
+}
+/kmsg bytes=63 {EARLY FIRST
+EARLY SECOND
+[v22 t=56107s] FATAL sig=6 PID1 dying
+}
+NEW DIAGNOSTIC LINES
+/cache/v23_log.txt bytes=532 {[v23] ===== BOOT ATTEMPT #1 (V23/cinit12) =====
+[v23 t=56107.196s] early syscalls A: dev=17 devtmpfs=0 devblock=0 proc=17 sys=17 (0=ok else errno)
+[v23 t=56107.196s] early syscalls B: kmsg_n=0 null_n=0 con_n=0 wd_n=0 sda33_n=0 procmnt=13 sysmnt=22 (0=ok else errno)
+[v23 t=56107.196s] NOTE: tmr_atboot=1 arms watchdog at probe (1st build to do so)
+[v23 t=56107.196s] NOTE: running raw DT timeout, NOT stock watchdogd's 30s SETTIMEOUT
+NEXT RECORD
+[v23 t=56107.197s] cache mounted OK, banner + early log flushed and confirmed written
+}
+/kmsg bytes=484 {[v23 t=56107.196s] early syscalls A: dev=17 devtmpfs=0 devblock=0 proc=17 sys=17 (0=ok else errno)
+[v23 t=56107.196s] early syscalls B: kmsg_n=0 null_n=0 con_n=0 wd_n=0 sda33_n=0 procmnt=13 sysmnt=22 (0=ok else errno)
+[v23 t=56107.196s] NOTE: tmr_atboot=1 arms watchdog at probe (1st build to do so)
+[v23 t=56107.196s] NOTE: running raw DT timeout, NOT stock watchdogd's 30s SETTIMEOUT
+NEXT RECORD
+[v23 t=56107.197s] cache mounted OK, banner + early log flushed and confirmed written
+}
+child exit=134 signal=0
+HANDLER EINTR plus short writes
+/cache/v23_log.txt bytes=38 {[v22 t=56107s] FATAL sig=6 PID1 dying
+}
+/kmsg bytes=38 {[v22 t=56107s] FATAL sig=6 PID1 dying
+}
+child exit=-1 signal=25
+HANDLER real RLIMIT_FSIZE
+/cache/v23_log.txt=<absent> errno=2
+/kmsg bytes=3 {[v2}
+OPTIONS failed write
+/etc/modules/s3c2410_wdt bytes=0 {}
+/kmsg bytes=0 {}
+queued=[v23 t=56107.198s] FAILED to write /etc/modules/s3c2410_wdt options file - watchdog will probe with compiled default tmr_atboot=0, diverging from stock
+
+BUSY flags mounted=1 ok=0
+/cache/v23_log.txt bytes=51 {[v23 t=56107.199s] unmounting /cache before reboot
+}
+/kmsg bytes=111 {[v23 t=56107.199s] unmounting /cache before reboot
+[v23] umount(/cache) FAILED errno=16, cache remains mounted
+}
+SUCCESS flags mounted=0 ok=0
+child exit=134 signal=0
+AFTER UNMOUNT underlying
+/cache/v23_log.txt=<absent> errno=2
