@@ -244,3 +244,85 @@ obvious to fault on.
 
 Recommended order: **V16 first** (30 seconds to interpret, disambiguates tooling vs.
 program identity), **then V15** (the actual fix + decisive timing oracle).
+
+## Update — Codex (GPT-6 Astra medium) review of V15, before flashing
+
+Consulted Codex with full sandbox access to read files directly (not pasted context).
+It found real, concrete bugs in V15 that would have wasted the flash cycle:
+
+1. **V15 never loaded the UFS storage controller (`ufs-exynos-core.ko`) at all.** A
+   block device node is just a name and device number - it doesn't initialize the
+   storage controller. V15's cache mount was doomed regardless of the device-node fix,
+   because nothing ever told the kernel the storage hardware exists.
+2. **V15's "dependency-respecting because it's the official list order" claim was
+   false.** `modules.load` lists requested modules; AOSP's actual loader resolves
+   dependencies via `modules.dep`, which straight-line `finit_module()` calls do not
+   replicate. Verified independently: simulating V15's exact sequence against the real
+   `modules.dep` showed 23 of 47 attempts had unmet dependencies at the point they were
+   attempted.
+3. **The module-error logger had a real bug**: `syscall()` returns -1 (not -errno) on
+   failure, so `log_mod(name, ret==0, ret==0?0:-ret)` always logged "errno=1" regardless
+   of the actual failure reason - verified and fixed.
+4. **PID 1 and a forked `watchdogd` cannot both open `/dev/watchdog`** - the kernel
+   enforces single-open access (EBUSY). V15's belt-and-suspenders approach meant only
+   one could ever actually work, silently.
+5. **Corrected the watchdog theory itself**: this driver's `tmr_atboot` defaults to 0,
+   and its probe explicitly STOPS any watchdog left running by the bootloader. The
+   "kernel auto-feeds a boot-enabled watchdog once the driver loads" claim requires
+   `WDOG_HW_RUNNING`, which this Samsung driver does not set. The unmanaged-watchdog
+   theory remains plausible but is not proven by config alone - and there's a
+   *separate* fast path: this driver's own panic notifier can arm a 5-second watchdog
+   reset directly, independent of `panic_timeout`/`panic=N`, which would explain why the
+   `panic=20` cmdline test never showed the expected ~20s timing.
+6. Confirmed `CONFIG_PANIC_TIMEOUT=-1` in the real embedded kernel config (compiled
+   default, before any cmdline override).
+7. The 45-second timing oracle measured loop iterations plus untracked module-loading
+   time, not true monotonic elapsed time since PID1 start - fixed with
+   `clock_gettime(CLOCK_MONOTONIC)`.
+8. Verified via static checks (not requiring a flash): V15/V16 images' kernel/DTB/DTBO
+   payloads match the shipping image exactly; packaged `/init` matches source exactly
+   in both; V15 is confirmed static ELF with no dynamic interpreter; diffing V11 vs.
+   V15/V16 archives shows only `/init` differs - packaging hygiene is sound.
+
+### Fix: discovered busybox modprobe was silently broken
+Independently (verifying Codex's suggestion to test locally before flashing), found
+`CONFIG_DEFAULT_MODULES_DIR=""` in our busybox build - an empty string, meaning
+`busybox modprobe` would always fail immediately with `can't change directory to ''`
+regardless of module placement. Rebuilt busybox with
+`CONFIG_DEFAULT_MODULES_DIR="/lib/modules"` and verified via a local chroot +
+binfmt_misc test that dependency resolution now works correctly: requesting `dss`
+correctly loads `exynos-pmu-if` first (its dependency), and requesting
+`ufs-exynos-core` correctly walks its entire ~26-module transitive closure in
+dependency order (verified against the real `modules.dep`, all module load failures
+were "Function not implemented" - expected, since we were testing ARM64 `.ko` files
+against an x86_64 host kernel purely to validate the RESOLUTION LOGIC, not real loading).
+
+### V17 - supersedes V15, all known issues fixed
+`native_recovery_v17.img`, SHA256
+`8e28ae6b537c41cabfd4e95e35bf07e303dce6dcd55ea77bfb5ab2660af343f1`, exactly
+100,663,296 bytes (fits the partition exactly after AVB footer padding).
+
+- tmpfs (not devtmpfs) + manual mknod for kmsg/null/console/watchdog/the cache block
+  device, exactly as V15, but now console is `dup2`'d onto fds 0/1/2
+- `/dev/kmsg` opened WITHOUT `O_CREAT` - fails loudly instead of silently writing to a
+  fake regular file if mknod somehow didn't happen
+- Module loading now via `fork()+execl("/busybox","modprobe",name)` for each real
+  target (`dss`, `ufs-exynos-core`, `s3c2410_wdt`, `phy-exynos-usbdrd-super`,
+  `dwc3-exynos-usb`, `usb_typec_manager`, `usb_notify_layer`, `usb_notifier`,
+  `usb_f_conn_gadget`) - busybox's own dependency-resolution logic handles the full
+  transitive closure correctly for each, verified locally as above
+- Busybox rebuilt with the `CONFIG_DEFAULT_MODULES_DIR` fix; modules placed at the
+  proper `/lib/modules/5.10.260-g4e5c5ad7d950/` path matching the real kernel's
+  `uname()` release string
+- Polls `/proc/partitions` for `sda33` to actually appear (bounded, 15s) before
+  attempting the cache mount, instead of assuming it's immediately available the
+  instant the controller module loads
+- Single watchdog owner: direct `open()`+`ioctl(WDIOC_GETTIMEOUT)`+periodic `write()`
+  petting only, no forked `watchdogd` competing for the same fd
+- Monotonic-clock timing oracle (`clock_gettime(CLOCK_MONOTONIC)`) at a real T=45s,
+  logged with proper fractional-second precision
+- Early log lines (before cache is mountable) buffered in memory and flushed once the
+  mount succeeds, instead of being lost
+
+Recommended flash order unchanged: **V16 first** (cheapest disambiguator, byte-identical
+real-init-as-regular-file), **then V17** (supersedes V15 entirely - do not flash V15).
