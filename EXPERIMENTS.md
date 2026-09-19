@@ -404,3 +404,99 @@ V16 (still valid as the cheap disambiguator, unaffected by any of this).
 
 All of this was research/build/local-ADB-verification only - nothing was flashed to
 the phone during the entire 4-round loop.
+
+### Rounds 5-6 (Opus, then Astra cross-check) - two real bugs found in V18 itself
+
+Per the user's instruction to keep looping until no corrections are needed, V18
+(`cinit7.c`) was passed back through Opus 5 for a fresh round-5 review, then Opus's
+findings were cross-checked by Codex/Astra (round 6). Both had live root ADB access
+to the phone (still safely on LineageOS recovery) to test claims empirically rather
+than theorize.
+
+**Round 5 (Opus) - cosmetic bug, real but low-impact:**
+- `platform_bound()`'s driver names were wrong: `check_drivers[] =
+  {"s3c2410-wdt", "dwc3-exynos", "ufs-exynos-core"}` - only the watchdog entry is a
+  real driver name. Verified live against `/sys/bus/platform/drivers/` on the
+  phone: the USB driver is actually named `exynos-dwc3` (not `dwc3-exynos`,
+  which is the `.ko` filename, not the registered driver name) and the UFS driver
+  is `exynos-ufs` (not `ufs-exynos-core`, again a `.ko`-name/driver-name mixup).
+  This meant two of three "bound" diagnostic checks always logged false negatives
+  even when the drivers had probed correctly - a misleading log line, not a boot
+  failure, but exactly the kind of thing that would send a future debugging round
+  down the wrong path.
+
+**Round 6 (Astra) - the significant one, missed by round 5 despite reviewing the
+same function:**
+- `module_present()` read `/proc/modules` with a single `read()` call into a
+  16KB buffer and assumed that returned the whole file. `/proc/modules` is a
+  `seq_file` in the kernel - a single `read()` only returns one internal page's
+  worth of data (empirically ~4KB on this kernel), not the full listing,
+  regardless of buffer size. Astra didn't just theorize this: it compiled the
+  actual `module_present()` function out of `cinit7.c` (via a wrapper `#include`
+  trick), pushed the resulting binary to the live phone over ADB, and ran it
+  against the real, live `/proc/modules` with all 9 target modules already
+  loaded. Result: **all 9 reported "absent."** Had V18 been flashed as-is, every
+  `modprobe()` diagnostic log line in the entire boot trace would have read
+  "proc_modules=no" regardless of whether loading actually succeeded - completely
+  invalidating the log as evidence for or against any hypothesis, on the one
+  build where getting believable logs is the entire point.
+- Astra separately flagged a related but distinct latent bug in `modprobe()`:
+  `status` defaulted to 0 and was only ever set by `waitpid()`, so a `fork()`
+  failure or a `waitpid()` error (e.g. `EINTR` not retried) would fall through
+  to logging a false `exit=0` "success" - the code had no path that distinguished
+  "child exited 0" from "we never actually found out."
+
+Both fixes were incorporated into a new build, `cinit8.c` (V19):
+- `module_present()` now loops `read()` in a static 32KB buffer until it
+  returns 0 (true EOF), exactly like reading any other file - not a seq_file
+  special case, just correct file I/O.
+- `platform_bound()` now takes `(driver, device_instance)` and checks
+  `/sys/bus/platform/drivers/<driver>/<device_instance>` via `access()` - proof
+  that *this specific device* bound to the driver, not just that the driver
+  registered. Call site updated with the four correct, live-verified pairs:
+  `{"s3c2410-wdt","10050000.watchdog_cl0"}`, `{"exynos-dwc3","10b00000.usb"}`,
+  `{"exynos-ufs","11100000.ufs"}`, `{"phy_exynos_usbdrd","10aa0000.phy"}`.
+  (`exynos-ufs` has `suppress_bind_attrs` set, so the device-instance symlink is
+  the only available proof of binding for it - driver-directory existence alone
+  proves nothing.)
+- `modprobe()` now explicitly handles `fork() < 0` (early return, distinct log
+  message, no `waitpid()` call at all) and tracks a `reaped` flag through the
+  `WNOHANG` poll loop so `status` is only trusted when a real child exit was
+  observed; an unreaped child (persistent `EINTR` aside, genuine `waitpid()`
+  error) logs "waitpid FAILED errno=N" instead of a fabricated result.
+- `pet_watchdog()` now tracks `g_last_pet_ok` (monotonic timestamp of the last
+  successful watchdog write) and this is logged explicitly right before the
+  final self-reboot call, giving direct evidence of watchdog health at the
+  moment that matters most instead of only inferring it from heartbeat log
+  density.
+
+**Empirical re-verification (this session, not requested by either reviewer but
+done anyway before considering this converged):** the fixed `module_present()`
+was compiled out of `cinit8.c` using the same wrapper-`#include` technique Astra
+used, pushed to the live phone, and run against the real live `/proc/modules`
+with the same 9 modules loaded. All 9 now correctly report present. This closes
+the loop on the round-6 finding with the same standard of evidence Astra used to
+find it, not just a code-review-level "this looks right."
+
+`native_recovery_v19.img`, SHA256
+`5adfb337ea928edd151492489113fa165e639cd399a50bcdaf67bb574fc31c1`, exactly
+100,663,296 bytes (payload 68,372,480 bytes - marginally larger than V18 only
+because of the larger static buffer in `module_present()`; module directory
+layout unchanged, still 324 `.ko` files only in the versioned dir, zero flat
+copies).
+
+Verified post-build: unpacked image's `/init` is byte-identical to `cinit8`
+source; mkbootimg header/load-address arithmetic checks out
+(`load_addr = base 0x10000000 + offset`, matching V18's proven offsets exactly);
+versioned module dir intact; flat copies confirmed absent.
+
+**V19 supersedes V18.** Note that round 6 found a real, previously-missed bug in
+round 5's own reviewed code - meaning strict "loop until no corrections are
+needed" has not yet reached a round with zero findings. The user's specific
+request for "one more round on both" is satisfied by rounds 5+6; whether to run
+a round 7 (Opus reviewing V19/`cinit8.c` fresh) before flashing is an open
+question for the user rather than assumed either way.
+
+Nothing has been flashed to the phone. It remains on the known-good LineageOS
+recovery boot, reachable via root ADB, throughout all of rounds 5-6 and the V19
+build.
