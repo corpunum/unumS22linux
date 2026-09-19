@@ -754,3 +754,33 @@ project has deliberately not made that call unilaterally at any point.
 Nothing has been flashed to the phone. It remains on the known-good LineageOS
 recovery boot, reachable via root ADB, throughout all of rounds 9 and the
 4-round Astra-only loop and the V21-V24 builds.
+
+### Decision: skip V16, flash V24 directly
+
+After the 4-round Astra-only loop concluded without convergence, the user
+decided to flash V24 directly on the next physical session rather than
+flashing V16 first as a separate disambiguation step. Reasoning: V16's
+entire purpose was to rule out the packaging/build pipeline itself (mkbootimg
+header args, AVB footer, cpio/lz4 packaging) as the source of the crash-loop,
+by flashing a byte-identical copy of the real working `/system/bin/init` as
+a regular file through that same pipeline. That question has already been
+answered without needing a flash: every build from V15 onward has had its
+kernel, dtb, and recovery_dtbo verified byte-identical to the known-working
+LineageOS build via `cmp`, with only `/init` and the module set differing -
+confirmed via static header inspection (`unpack_bootimg.py`) on every single
+build in this log, not just V15/V16. Additionally, V24's own timing oracle
+subsumes V16's diagnostic value: if V24 manages to log even a handful of
+heartbeats before resetting, that alone proves the packaging pipeline is
+sound (a genuinely broken pipeline wouldn't let anything execute at all,
+regardless of program identity) while simultaneously testing the real
+hypothesis this project exists to test. Flashing V16 separately would only
+have spent an extra Odin/Download-Mode cycle confirming something already
+established by other means.
+
+**Next physical step: flash `native_recovery_v24.img` directly.** No
+further review rounds are planned before this attempt - see the "not
+converged" note above for the known-open, low-severity signal-timing
+residuals that remain unfixed. What to capture immediately after the
+attempt: physical reset timing (does it match ~45s?), then reboot back into
+LineageOS recovery and pull `/cache/v24_log.txt` and `/cache/v24_boot_count.txt`
+via root ADB before doing anything else.
