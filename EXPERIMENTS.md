@@ -157,3 +157,90 @@ boots fine, the mystery is specifically about REPLACING what real init does, not
 "anything running first" - try V13 next. If V14 crash-loops, that's a major new finding
 in itself (points squarely at a watchdog/hardware mechanism keyed on early execution
 timing, not program identity) and would make V13 lower priority.
+
+## Update — Opus 5 independent review (major corrections)
+
+Consulted Opus 5 (via Agent tool with model override) for an independent second review,
+explicitly asked to find mistakes rather than validate conclusions. It unpacked the
+actual boot images and extracted the real kernel's embedded config (IKCONFIG) rather
+than trusting our defconfig source tree. Found two genuine methodological errors that
+overturn conclusions stated earlier tonight:
+
+### Error 1: This kernel has no devtmpfs
+`CONFIG_DEVTMPFS is not set` in the actual running kernel's embedded config. Every
+custom init before V12 called `mount("devtmpfs", ...)`, which always fails with ENODEV
+on this kernel. V10 in particular (`cinit.c`) has zero `mknod` calls at all - verified
+via `grep -c mknod cinit.c` = 0 - meaning it could not have produced a single byte of
+log output no matter how well it ran. "Zero evidence" from V10 was never evidence of
+anything; it's fully explained by logging that could never have worked. V12-V14 did add
+`mknod` for character devices (kmsg, console) after Sol's earlier feedback, but NONE of
+our builds ever `mknod`'d the raw block device (`/dev/block/sda33`) - they all relied on
+devtmpfs to create it automatically, which never happened. So the cache-partition
+logging was broken in every single build for this reason, independent of the by-name
+vs. raw-path fix in V9. Real AOSP `first_stage_init.cpp` doesn't use devtmpfs either -
+it mounts tmpfs on /dev and mknods everything itself, which is exactly why it's
+unaffected by this.
+
+### Error 2: V8's watchdog module test was invalid
+`s3c2410_wdt.ko` depends on `dss.ko` and `exynos-pmu-if.ko` (confirmed directly via
+`modules.dep`: `s3c2410_wdt.ko: dss.ko exynos-pmu-if.ko`). V8 did a bare `insmod
+s3c2410_wdt.ko` with no dependencies loaded first - this fails on unresolved symbols
+before the driver ever probes. The "loading the kernel module didn't help, so the
+watchdog theory took a hit" conclusion from earlier tonight was wrong - the module
+almost certainly never loaded successfully at all, so the theory was never actually
+tested. (One specific factual claim in the same review, that `clk_exynos` loads AFTER
+`s3c2410_wdt` in `modules.load`, was checked directly against the file and found
+incorrect - `clk_exynos` is at position 4, `s3c2410_wdt` at position 6, so clk_exynos is
+fine. The dependency-chain finding on dss/exynos-pmu-if is independently verified
+correct via modules.dep though.)
+
+### Also clarified: the real pstore mechanism
+No `ramoops` DTB node exists on this device - Samsung uses `debug_snapshot` reserved
+memory instead. The actual crash-log persistence mechanism is `/proc/last_kmsg`, backed
+by `dss.ko` (the debug-snapshot driver) using reserved DRAM that survives warm resets.
+Confirmed live: `/proc/last_kmsg` on the current known-good boot returns real (if
+garbled/corrupted) content - the mechanism genuinely exists and has never been used by
+any of our custom-init attempts, since `dss.ko` was never loaded by any of them.
+
+### Opus's ranked theory (differs from prior "watchdog vs anything-before-init" framing)
+Most likely: PID 1 runs completely fine and the SoC is reset by an **unmanaged hardware
+watchdog** - `CONFIG_WATCHDOG_HANDLE_BOOT_ENABLED=y` means the kernel auto-pings a
+"boot-enabled" watchdog forever, but ONLY once a driver registers it with the watchdog
+core. Since `s3c2410_wdt` never successfully loads in any of our builds (see Error 2),
+a bootloader-armed hardware watchdog runs completely unmanaged and fires on its own
+hardware timeout, independent of any panic/crash in our code at all. This is considered
+MORE likely than an actual PID 1 crash, since simple mount/mkdir/sleep code has nothing
+obvious to fault on.
+
+### Two new builds, ready, NOT yet flashed
+- **V16** (`native_recovery_v16.img`, SHA256
+  `efe77940c820d052c81085c2fe76e2d546dee31ab317448f90070d8bed24a91`) - the cheapest
+  possible disambiguator (Opus's suggestion): exact working ramdisk tree, `/init` = a
+  byte-identical copy of the real `/system/bin/init` binary as a REGULAR FILE (not a
+  symlink), confirmed via `cmp` to be byte-for-byte identical to the working init. If
+  this crash-loops, the bug is in our own file-creation/packaging pipeline, not program
+  identity, and every other conclusion needs re-examination. If it boots fine (expected),
+  it cleanly confirms symlink-vs-regular-file was never the variable and our tooling is
+  sound for this specific change.
+
+- **V15** (`native_recovery_v15.img`, SHA256
+  `00a03e613523921f4338b91d874a565123ead606ebfd0d165ceb0697c002972`) - the real fix
+  attempt, addressing both errors above: mounts tmpfs (not devtmpfs) and manually
+  `mknod`s every device needed including the raw cache block device
+  (`/dev/block/sda33`, confirmed major 259 minor 17 from `/proc/partitions`); loads
+  `exynos-pmu-if.ko` then `dss.ko` FIRST (deliberately out of official order) so
+  `/proc/last_kmsg` has the best chance of capturing everything from this boot onward
+  if it dies later; loads the remaining real module chain in official dependency order
+  through the USB-critical set; opens the real `/dev/watchdog` device and pets it
+  directly every second, AND forks the real `watchdogd` binary as a second independent
+  mechanism; logs to both kmsg and a properly-mounted (now that the block device node
+  actually exists) cache partition file. Critically includes Opus's **self-reboot
+  timing oracle**: after 45 seconds of successfully petting the watchdog and logging
+  heartbeats, it deliberately calls `reboot()` itself. If the observed reset timing
+  matches ~45 seconds, that's conclusive proof PID 1 was alive and healthy that whole
+  time - meaning the "crash-loop" framing has been wrong all along, and something else
+  (the unmanaged watchdog) is resetting the SoC on its own schedule, nothing to do with
+  our code failing.
+
+Recommended order: **V16 first** (30 seconds to interpret, disambiguates tooling vs.
+program identity), **then V15** (the actual fix + decisive timing oracle).
