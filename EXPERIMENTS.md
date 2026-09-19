@@ -326,3 +326,81 @@ against an x86_64 host kernel purely to validate the RESOLUTION LOGIC, not real 
 
 Recommended flash order unchanged: **V16 first** (cheapest disambiguator, byte-identical
 real-init-as-regular-file), **then V17** (supersedes V15 entirely - do not flash V15).
+
+## Update — 3-round Opus<->Astra adversarial review loop, converged
+
+Per explicit instruction, ran an iterative loop: Opus reviews -> findings passed to
+Astra (Codex GPT-6, medium reasoning) for cross-check -> corrections applied ->
+repeat. Both reviewers had live root ADB access to the phone (still on known-good
+LineageOS recovery) throughout and verified claims empirically, not just by reading
+source.
+
+### Round 2 (Opus, live-tested against real hardware)
+Confirmed via real on-device modprobe/rmmod cycles that busybox's dependency
+resolution genuinely works on ARM64 hardware (not just the earlier x86 chroot logic
+test). Found: watchdog module loaded too late in V17 (after UFS+cache, undermining the
+very theory being tested), the 45s timing oracle was relative not absolute, and
+proposed a "POWER_OFF" oracle (a HW watchdog can only reset, never power off) via
+`modprobe("exynos-reboot")`. Also found `/proc/last_kmsg` is confirmed corrupted/
+bit-rotted on live inspection - real mechanism, unreliable content, don't treat as
+primary evidence.
+
+### Round 3 (Astra cross-check, live-tested)
+Confirmed round 2's watchdog-ordering and timing-oracle criticisms, but found Opus's
+own POWER_OFF proposal was wrong: `exynos-reboot`'s `pm_power_off` assignment is
+guarded by `!CONFIG_SEC_REBOOT`, and this kernel has `CONFIG_SEC_REBOOT=m` - so
+`exynos-reboot` alone installs nothing; `sec_reboot.ko` owns the real callback here,
+and it does a power-key-wait / PMIC-helper sequence that deliberately restarts after 5
+failed attempts rather than guaranteeing power-off. Also found a certain (not
+probabilistic) bug in `cinit6.c`: `g_kmsg_fd` opened before console `dup2()`, silently
+clobbered by fd-0 reuse on this ramdisk's empty `/dev`. Corrected Opus's "zero
+headroom" claim by decoding the actual AVB footer math (real free space ~18.5MB).
+
+### Round 4 (Opus final adjudication, live-tested)
+Resolved the power-off dispute completely: **PSCI** (`CONFIG_ARM_PSCI_FW=y`, built in,
+zero modules needed) already installs both `pm_power_off` and the restart handler at
+boot, confirmed via DT (`psci { compatible = "arm,psci-1.0" }`) and kernel source
+(`drivers/firmware/psci/psci.c`). Loading `sec_reboot.ko` would *override* these clean
+handlers with Samsung's messier retry path - so the plan explicitly avoids loading it.
+This also means the primary reset-timing oracle needs zero modules to be trustworthy.
+Confirmed the kmsg-fd bug's exact fix. Confirmed on-device that the flat top-level
+`/lib/modules/*.ko` copies are dead weight - busybox modprobe only ever reads
+`/lib/modules/<uname release>/`, proven by removing the versioned dir and watching it
+fail with "can't change directory to '5.10.260-g4e5c5ad7d950'" while the flat copies
+sat unused.
+
+### V18 - the converged result, built from `cinit7.c`
+`native_recovery_v18.img`, SHA256
+`e8c51a1e4e832d507b512ef94014a98f114fec702ea3b914642e7b7edb97d63`, exactly
+100,663,296 bytes (payload 68,362,240 bytes, ~32MB free before the AVB footer - up from
+V17's ~18.5MB after removing the dead duplicate module copies).
+
+Every agreed fix applied:
+- Console wired to fds 0/1/2 **before** opening kmsg; kmsg forced off fd 0-2 via
+  `F_DUPFD_CLOEXEC` regardless
+- `s3c2410_wdt` loaded and `/dev/watchdog` opened immediately after `dss`, before any
+  UFS/cache work - not deferred behind a 15s partition wait and an ext4 mount
+- Watchdog petted via a `WNOHANG` `waitpid()` poll loop during **every** modprobe
+  child, not just the partition-wait loop
+- `modprobe()` child's stderr redirected to the kmsg fd instead of `/dev/null`
+- Module load success verified against `/proc/modules` (hyphen->underscore
+  normalized) in addition to exit code, since exit 1 was proven on-device to mean
+  "already loaded" as often as "real failure" with this busybox's config
+- Bound-device sanity check via `/sys/bus/platform/drivers/<name>/` for the three
+  drivers that matter most (watchdog, USB, UFS)
+- Absolute monotonic-clock deadline (`while (now_mono() < 45.0)`) instead of a
+  relative checkpoint taken after setup work already consumed unknown time
+- Deliberately does NOT load `sec_reboot.ko` - preserves the clean built-in PSCI
+  restart handler the timing oracle depends on
+- Ramdisk deduplicated: only the correctly-versioned `/lib/modules/5.10.260-g4e5c5ad7d950/`
+  directory ships; the dead flat copies are gone
+
+Verified post-build: unpacked image's `/init` is byte-identical to `cinit7` source;
+mkbootimg header args match; versioned module dir has exactly 324 `.ko` files; flat
+copies confirmed absent.
+
+**This supersedes V15 and V17 entirely. V18 is the build to flash next**, followed by
+V16 (still valid as the cheap disambiguator, unaffected by any of this).
+
+All of this was research/build/local-ADB-verification only - nothing was flashed to
+the phone during the entire 4-round loop.
