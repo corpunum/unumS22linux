@@ -1,0 +1,12 @@
+--- a/opt/s22-ui/shell-trial.json
++++ b/opt/s22-ui/shell-trial.json
+@@ -26,7 +26,8 @@
+         }
+       ],
+       "right": [
+-        { "id": "omarchy.audio" }
++        { "id": "omarchy.audio" },
++        { "id": "omarchy.power", "showPercentage": true }
+       ]
+     }
+   },

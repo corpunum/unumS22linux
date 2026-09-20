@@ -1,0 +1,16 @@
+--- a/root/.config/omarchy/shell.json
++++ b/root/.config/omarchy/shell.json
+@@ -32,6 +32,13 @@
+         {
+           "id": "omarchy.power",
+           "showPercentage": true
++        },
++        {
++          "id": "s22.keyboard",
++          "type": "command",
++          "text": "Keyboard",
++          "tooltip": "Show touchscreen keyboard",
++          "onClick": "gdbus call --session --dest sm.puri.OSK0 --object-path /sm/puri/OSK0 --method sm.puri.OSK0.SetVisible true"
+         }
+       ]
+     }

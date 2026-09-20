@@ -5,19 +5,22 @@ Exynos 2200, codename `r0s`, unlocked bootloader. This is the S22, not S22+.
 
 ## Current result — 2026-09-20
 
-**Current state (18:18UTC):** native Linux is running in RECOVERY
-BORE757. Whole-partition readback verifies the original BOOT rollback and
-unchanged RECOVERY/vendor_boot. Persistent desktop/model autostart succeeded.
-The owner confirmed the physical display is clean with the
+**Current state (19:22UTC):** native Linux is running in RECOVERY
+BORE758 with the persistent desktop and CPU model. An experimental WLAN
+startup caused a kernel panic; the phone returned to RECOVERY and autostarted
+without a requested button press or flash. Radio activation is now disabled.
+The owner previously confirmed the physical display is clean with the
 [narrow display-stride workaround](tools/omarchy-trial/s22-linear-stride.md),
-now saved in persistent startup configuration (new reboot test pending).
-The current boot has been stable for nearly five hours. Wi-Fi/Bluetooth are
-not working yet; internet works through USB. See the
+which now has reboot-observed persistence. Battery telemetry, restored icons,
+screen-power control, and a visible **Keyboard** button are installed. A
+synthetic touchscreen tap reveals the keyboard; physical finger acceptance
+remains unproven. Wi-Fi/Bluetooth/audio are not working yet; internet is via USB.
+See the [current screen](evidence/hardware-20260920/keyboard-after.png) and
 [everyday hardware audit](docs/EVERYDAY_HARDWARE_2026-09-20.md).
 Normal power-on Linux is still unaccepted; do not boot the restored Android
 BOOT or wipe userdata.
 
-The last accepted session, BORE519, ran **Alpine Linux ARM64 from RECOVERY**,
+The first persistent accepted session, BORE519, ran **Alpine Linux ARM64 from RECOVERY**,
 with no Android services. Persistent **Arch Linux ARM + Hyprland + actual
 Omarchy Quickshell UI**, terminal, Squeekboard and a local CPU-only
 **Qwen3.5-2B** streaming chat model started automatically after reboot.
@@ -30,9 +33,10 @@ and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 | --- | --- |
 | Native boot | Alpine 3.24.2; guardian PID1; Samsung/Lineage 5.10.260 kernel |
 | Persistent base | Alpine package/file overlay in existing CACHE; reboot-tested |
-| Persistent desktop/model | ext4 userdata; automatic recovery startup verified at BORE 519 |
+| Persistent desktop/model | ext4 userdata; automatic recovery startup verified again at BORE758 |
 | Desktop | Arch ARM, Hyprland 0.56.2, Omarchy v4.0.4; software-rendered |
-| Keyboard/input | Visible Squeekboard; synthetic touchscreen-to-chat test passed; physical finger sensing not verified remotely |
+| Keyboard/input | Visible Squeekboard plus Keyboard bar button; synthetic tap reveal passed; physical finger sensing unverified |
+| Battery/display power | Native telemetry bar/panel; controlled DPMS off/on passed; no suspend/battery-life acceptance |
 | Local model | Resident Qwen3.5-2B Q4_0, 4K context, four fast CPU cores, loopback-only API |
 | CPU benchmark | 0.8B: 20.21 tok/s; 2B: 10.13 short / 5.47 at depth4096 |
 | GPU | Experimental RADV enumerates; a mapping bug was fixed, but compute still faults |

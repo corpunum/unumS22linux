@@ -1,0 +1,28 @@
+2026-09-20, final parent validation for the native hardware/UI round.
+
+PASS: power-battery-status fixtures (present Samsung lowercase battery and absent).
+PASS: verify-power-ui-candidate.sh hashes, JSON and legacy-dispatch regression check.
+PASS: OSK bar static checks (not a physical touchscreen test).
+PASS: six UI patches applied in order with patch --batch --fuzz=0 to copied
+      original preimages; resulting Lua, Panel.qml and both final JSON files
+      compared byte-for-byte with the deployed candidate files.
+      Parent corrected the original worker OSK patch context/baseline first.
+PASS: 8 inline-F2FS decoder tests, including gap/duplicate/geometry rejection
+      and exact hashes for the two locally retained vendor rc dumps.
+PASS: 7 mocked persistent-desktop supervisor tests.
+PASS: 25 compiled display-stride selection assertions (no device operation).
+PASS: every tools/hardware shell helper and radio-addon builder parsed with bash -n.
+PASS: tools/hardware Python helpers compiled with py_compile.
+PASS: mismatched WLAN kernel release rejected by wifi-stage before payload writes.
+
+Live acceptance has narrower scope than these host checks:
+- Controlled DPMS off/on and model health: dpms-smoke.json (BORE757).
+- Battery/display/font persistence after panic: post-panic-persistence.txt (BORE758).
+- Keyboard button activated by synthetic real-evdev tap: keyboard-tap-note.txt.
+- File hashes, bar geometry, model health and current radio state: final-live-state.txt.
+
+NOT ACCEPTED: physical finger/power-button sensing, Wi-Fi connectivity, Bluetooth,
+speaker/microphone, camera capture, cellular, suspend, GPU/NPU inference,
+native signed pacman transactions, normal cold-power-on Linux.
+WLAN activation FAILED with a kernel panic; the absence of a retry is intentional.
+The new keyboard JSON is persistent on disk but was added after the last reboot.

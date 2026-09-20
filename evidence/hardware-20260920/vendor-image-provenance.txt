@@ -1,0 +1,5 @@
+dcb12940254cabe49a054efcf57121cc490ea4d5148d5cd64211f3ce5f647f0d  rootfs/live-vendor-readonly.img
+6dfe677119792e95a37b016092c327ad62bc0dc7759851424ad05e6bcb31b206  rootfs/vendor-pristine-20260920.img
+f82a046920f8b8ab3772e25890c9d8f78760e6e771ae979777f866f53f8a7779  rootfs/vendor-dlkm-readonly.img
+444 1640783872 rootfs/vendor-pristine-20260920.img
+All bytes after first 4096-byte block are identical

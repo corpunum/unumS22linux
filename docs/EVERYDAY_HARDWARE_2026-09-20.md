@@ -1,4 +1,46 @@
-# Everyday hardware status — 2026-09-20 18:18 UTC
+# Everyday hardware status — 2026-09-20
+
+## Latest implementation checkpoint — 19:22 UTC
+
+Native RECOVERY **BORE758**, SSH/model healthy at20 minutes uptime. This
+supersedes the historical18:18 audit below. No partition writes were made in
+this implementation round. The Wi-Fi test caused a kernel-panic reboot at
+19:01:36; it was not an intentional guardian reset. The phone returned to
+RECOVERY and automatically restarted Linux/desktop/model without new host
+staging, requested physical input, or flashing.
+
+| Function | Latest result |
+| --- | --- |
+| Display and UI | Stride fix persisted across reboot; clean framebuffer, icons/fonts restored. Owner's physical acceptance was on BORE757. |
+| Battery | Visible bar percentage and popup from native sysfs,98% Charging29.7C. Unsupported profiles hidden; no charge-cycle/lifetime test. |
+| Screen power | Lua power-key binding installed; controlled DPMS on/off/on passed with model still healthy. Physical key untested. |
+| Touch keyboard | Keyboard bar button installed in active and startup-template config. Synthetic tap at(.92,.011) reveals Squeekboard. Physical finger unproven; button added after the last reboot. |
+| USB/model | USB SSH and CPU model health confirmed after reboot. Route remains through USB, not Wi-Fi. |
+| Wi-Fi | Exact matching module loaded and firmware reached ready, but delayed calibration collided with normal startup and panicked. Module now unloaded; no autoload. No association/traffic acceptance. |
+| Audio | BORE757 ABOX core firmware reached ready/failsafe ONLINE; debug capture channels only, no speaker playback. Temporary firmware binds were lost on reboot; BORE758 has no soundcards. |
+| Bluetooth | BlueZ installed; no HCI controller or compatible verified native UART initialization. |
+| GPU/NPU | No new acceleration result; GPU compute still faults, NPU inference unproven. |
+| Camera/cellular/suspend | No new acceptance; not working as a daily phone. |
+| Normal power-on | Still unfinished. Keep RECOVERY; do not normal-boot the restored Android BOOT. |
+
+Signed radio/audio tools were installed without disabling APK signatures.
+Remaining CACHE-overlay space is34,088KiB (94% used); firmware/model/package
+staging stays on userdata. Persistent userdata has about100GiB available.
+No audio playback/recording, camera capture or network credentials were used.
+
+Details: [Wi-Fi](WIFI_NATIVE.md), [Bluetooth/audio](BT_AUDIO_NATIVE.md),
+[input/power](INPUT_POWER_NATIVE.md). Evidence:
+[final live state](../evidence/hardware-20260920/final-live-state.txt),
+[keyboard before](../evidence/hardware-20260920/keyboard-before.png),
+[keyboard after](../evidence/hardware-20260920/keyboard-after.png), and
+[battery panel after reboot](../evidence/hardware-20260920/power-panel-bore758.png).
+
+Next driver work must fix the source-backed startup sequence before another
+WLAN activation; no automatic retry is configured. The existing vendor rc
+includes EFS writes/permission changes and must not be run wholesale. Audio
+DSP startup is a milestone, not evidence of usable sound.
+
+## Historical read-only audit — 18:18 UTC
 
 Live native RECOVERY BORE757, guardian PID1, kernel 5.10.260-g4e5c5ad7d950.
 No Android services, reboot, partition flash, radio activation, camera/mic

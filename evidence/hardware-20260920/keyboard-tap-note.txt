@@ -1,0 +1,16 @@
+2026-09-20 19:19 UTC, BORE758, parent-operated synthetic touch check.
+
+Executed existing tools/linux-rootfs/touch-check.py through USB SSH with
+--tap 0.92 0.011. It verified the character-device identity sec_touchscreen,
+axis range0..4095 and all10 tracking IDs inactive before injection.
+Injected raw X3767,Y45 then released; all10 tracking IDs were -1 afterward.
+
+keyboard-before.png: chat terminal and Keyboard bar button, keyboard hidden.
+keyboard-after.png: same chat terminal/bar with visible Squeekboard.
+The bar action is session D-Bus sm.puri.OSK0.SetVisible true.
+No direct D-Bus show command was used in this acceptance exercise: the tap
+activated the visible bar widget. No text/model command was submitted.
+
+physical_touch_verified=false
+button_software_path_verified=true
+button_added_after_last_reboot=true

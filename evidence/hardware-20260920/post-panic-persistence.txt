@@ -1,0 +1,14 @@
+Sun Sep 20 19:04:31 UTC 2026
+173.95 1275.78
+{"arch": "/srv/s22/arch", "desktop_pid": 1582, "device": "/dev/block/by-name/userdata", "model": "/srv/s22/model-bench", "model_pid": 1565, "model_port": 8089, "started_at": 1789930910, "supervisor_pid": 1508, "uuid": "1dd55c26-bd57-489a-9d9b-4c60e6f430eb"}
+4526cba7e7f74c8bbae391cb56952d0dd5179de6b58228408d539bc67418372a  /usr/local/bin/start-persistent-desktop
+23d21ed026b93790b0161f6bf95b74293c4668a14817121665555615fee94096  /etc/s22-linear-stride-enabled
+4d85f72ab1bcd82e147b671adfdfa67d00a135ba6f0699b94d1b63d21bffbbec  /srv/s22/arch/root/hyprland-omarchy-ui.lua
+eb31e1600e3534c323daa6430be5646948afe7d75c46eb9a106a9062f0147e74  /srv/s22/arch/usr/local/bin/omarchy-battery-status
+drwxr-xr-x    2 root     root             0 Sep 20 19:04 /sys/class/ieee80211
+tsp_stm
+--- no soundcards ---
+
+
+[{"id":"omarchy.clock","section":"center","x":218,"y":0,"width":104,"height":26,"visible":true,"itemVisible":true,"itemWidth":104,"itemHeight":26},{"id":"omarchy.menu","section":"left","x":8,"y":0,"width":27,"height":26,"visible":true,"itemVisible":true,"itemWidth":27,"itemHeight":26},{"id":"omarchy.workspaces","section":"left","x":35,"y":0,"width":106,"height":26,"visible":true,"itemVisible":true,"itemWidth":106,"itemHeight":26},{"id":"omarchy.power","section":"right","x":478,"y":0,"width":54,"height":26,"visible":true,"itemVisible":true,"itemWidth":54,"itemHeight":26},{"id":"omarchy.audio","section":"center","x":322,"y":0,"width":27,"height":26,"visible":true,"itemVisible":true,"itemWidth":27,"itemHeight":26}]
+{"status":"ok"}

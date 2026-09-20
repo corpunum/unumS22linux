@@ -1,0 +1,16 @@
+--- a/root/.config/omarchy/shell.json
++++ b/root/.config/omarchy/shell.json
+@@ -28,7 +28,12 @@
+           "id": "omarchy.audio"
+         }
+       ],
+-      "right": []
++      "right": [
++        {
++          "id": "omarchy.power",
++          "showPercentage": true
++        }
++      ]
+     }
+   },
+   "plugins": []
