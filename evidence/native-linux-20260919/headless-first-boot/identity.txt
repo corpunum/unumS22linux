@@ -1,0 +1,9 @@
+uid=0(root) gid=0(root) groups=0(root),1004(input),1007(log),1011(adb),1015(sdcard_rw),1028(sdcard_r),1078(ext_data_rw),1079(ext_obb_rw),3001(net_bt_admin),3002(net_bt),3003(inet),3006(net_bw_stats),3009(readproc),3011(uhid),3012(readtracefs) context=u:r:su:s0
+Linux localhost 5.10.260-g4e5c5ad7d950 #1 SMP PREEMPT Tue Sep 15 12:42:08 UTC 2026 aarch64 Toybox
+27.02 208.08
+S901BXXSIFYI3
+23.2-20260915-NIGHTLY-r0s
+
+1
+91
+316

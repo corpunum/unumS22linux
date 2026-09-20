@@ -1,0 +1,12 @@
+/usr/share/glib-2.0/schemas/org.gnome.desktop.a11y.interface.gschema.xml:19:1  Error on line 19 char 1: <enum id='org.gnome.desktop.GDesktopReducedMotion'> not (yet) defined..  This entire file has been ignored.
+/usr/share/glib-2.0/schemas/org.gnome.desktop.a11y.magnifier.gschema.xml:7:1  Error on line 7 char 1: <enum id='org.gnome.desktop.GDesktopMagnifierMouseTrackingMode'> not (yet) defined..  This entire file has been ignored.
+/usr/share/glib-2.0/schemas/org.gnome.desktop.a11y.mouse.gschema.xml:15:1  Error on line 15 char 1: <enum id='org.gnome.desktop.GDesktopMouseDwellDirection'> not (yet) defined..  This entire file has been ignored.
+/usr/share/glib-2.0/schemas/org.gnome.desktop.background.gschema.xml:5:1  Error on line 5 char 1: <enum id='org.gnome.desktop.GDesktopBackgroundStyle'> not (yet) defined..  This entire file has been ignored.
+/usr/share/glib-2.0/schemas/org.gnome.desktop.calendar.gschema.xml:10:1  Error on line 10 char 1: <enum id='org.gnome.desktop.GDesktopWeekday'> not (yet) defined..  This entire file has been ignored.
+/usr/share/glib-2.0/schemas/org.gnome.desktop.interface.gschema.xml:35:1  Error on line 35 char 1: <enum id='org.gnome.desktop.GDesktopToolbarStyle'> not (yet) defined..  This entire file has been ignored.
+/usr/share/glib-2.0/schemas/org.gnome.desktop.peripherals.gschema.xml:40:1  Error on line 40 char 1: <enum id='org.gnome.desktop.GDesktopTouchpadTapButtonMap'> not (yet) defined..  This entire file has been ignored.
+/usr/share/glib-2.0/schemas/org.gnome.desktop.privacy.gschema.xml:86:1  Error on line 86 char 1: <enum id='org.gnome.desktop.GDesktopUsbProtection'> not (yet) defined..  This entire file has been ignored.
+/usr/share/glib-2.0/schemas/org.gnome.desktop.screensaver.gschema.xml:96:1  Error on line 96 char 1: <enum id='org.gnome.desktop.GDesktopBackgroundStyle'> not (yet) defined..  This entire file has been ignored.
+/usr/share/glib-2.0/schemas/org.gnome.desktop.wm.preferences.gschema.xml:42:1  Error on line 42 char 1: <enum id='org.gnome.desktop.GDesktopFocusMode'> not (yet) defined..  This entire file has been ignored.
+Python 3.14.7
+/usr/bin/squeekboard: error while loading shared libraries: libgnome-desktop-3.so.20: cannot open shared object file: No such file or directory

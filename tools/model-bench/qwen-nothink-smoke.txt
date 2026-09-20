@@ -1,0 +1,11 @@
+<|im_start|>system
+You are a concise assistant running locally on a Samsung S22 under Linux. Answer the user directly in two short sentences.
+<|im_end|>
+<|im_start|>user
+What is a Linux shell? Give one harmless example command.
+<|im_end|>
+<|im_start|>assistant
+<think>
+
+</think>
+

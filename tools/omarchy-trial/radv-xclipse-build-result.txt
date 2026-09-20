@@ -1,0 +1,7 @@
+source_commit=d1b295e8c61c013c454e8015983a1d6b6df82bf2
+source_version=24.3.4
+sysroot=rootfs/radv-xclipse-sysroot
+result=NO_ARTIFACT
+compile_progress=42/654 before C++ glibc header failure
+blocker=host libstdc++ requires glibc __GLIBC_PREREQ under musl cross sysroot
+phone_commands=none

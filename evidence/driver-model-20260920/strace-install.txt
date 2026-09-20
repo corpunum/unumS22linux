@@ -1,0 +1,5 @@
+(1/3) Installing musl-fts (1.2.7-r7)
+(2/3) Installing libdw (0.195-r0)
+(3/3) Installing strace (6.19-r1)
+Executing busybox-1.37.0-r31.trigger
+OK: 446.9 MiB in 244 packages

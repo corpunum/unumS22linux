@@ -1,0 +1,7 @@
+<think>
+Thinking Process:
+
+1.  **Analyze the Request:**
+    *   **Task:** Explain what a Linux shell is (in two short sentences) and give one harmless example command.
+    *   **Context:** Running locally on a Samsung S22 under Linux (specifically, this implies the user might be on Android, but the prompt explicitly states "under Linux").
+

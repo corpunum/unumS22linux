@@ -1,0 +1,11 @@
+Usage:
+  squeekboard [OPTION…] - A on screen keyboard
+
+Help Options:
+  -h, --help               Show help options
+  --help-all               Show all help options
+  --help-gtk               Show GTK+ Options
+
+Application Options:
+  --display=DISPLAY        X display to use
+

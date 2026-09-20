@@ -1,0 +1,40 @@
+Sat Sep 19 22:43:35 UTC 2026
+12177
+12235
+
+
+Window 55cb4db1f0 -> S22-Omarchy:
+	mapped: 1
+	hidden: 0
+	visible: 1
+	acceptsInput: 1
+	at: 12,12
+	size: 516,1146
+	workspace: 1 (1)
+	floating: 0
+	monitor: 0
+	class: foot
+	title: S22-Omarchy
+	initialClass: foot
+	initialTitle: S22-Omarchy
+	pid: 12235
+	xwayland: 0
+	pinned: 0
+	pinFullscreened: 0
+	fullscreen: 0
+	fullscreenClient: 0
+	fullscreenHandler: default
+	allowedOverFullscreen: 1
+	grouped: 0
+	tags: default-opacity*, terminal*
+	swallowing: 0
+	focusHistoryID: 0
+	inhibitingIdle: 0
+	xdgTag: 
+	xdgDescription: 
+	contentType: none
+	tearingHint: 0
+	stableID: 18000000
+
+
+{'card': '/dev/dri/card1', 'crtc_id': 184, 'fb_id': 195, 'fb_size': [1080, 2340], 'window': [0, 0, 1080, 2340], 'format': 'XR24', 'modifier': 0, 'handle': 1, 'pitch': 4352, 'offset': 0, 'mapped_bytes': 10183680, 'output': '/tmp/omarchy-config.png'}

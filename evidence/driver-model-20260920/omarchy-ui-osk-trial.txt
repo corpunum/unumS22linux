@@ -1,0 +1,113 @@
+[ WARNING ] Running Hyprland with superuser privileges might damage your system
+[1;32mDEBUG [0m]: User-specified config location: '/root/hyprland-omarchy-ui.lua'
+Superuser privileges check is omitted. I hope you know what you're doing.
+Welcome to Hyprland!
+
+                                                  
+                     YY    UJ                     
+                    YYY    UUJ                    
+                   XXXY    UUUU                   
+                  zXXXX    UUUUU                  
+                zzzzX        UUUUJ                
+               cczzz          UUUUJ               
+             vccccz            UUUUUJ             
+            vvcccc              UUUUUJ            
+           vvvvv                  UUUUJ           
+          uuuvv                    UUUUJ          
+         uuuuu                      UUUUU         
+        nnnuu                        UUUUU        
+       nnnnn                          YUUUU       
+       xxnn                            YUUU       
+       xxxn                            YYUU       
+      xxxx                              YYUU      
+      rxxx                              YYYY      
+      rrrx                              YYYY      
+       rrrx                            XXXY       
+       rrrr                            XXXX       
+        rrrr                          zzXX        
+         rrrr                        zzzz         
+          rrrrr                    ccczz          
+           rrrrrx                vccccc           
+             rrrrxxxx        uuvvvvvc             
+                rrxxxxxxnnnnuuuuuv                
+                    xxxxxnnnnu                    
+
+
+
+DEBUG ]: Old rlimit: soft -> 1024, hard -> 4096
+DEBUG ]: New rlimit: soft -> 4096, hard -> 4096
+WARN ]: WARNING: Hyprland is being launched without start-hyprland. This is highly advised against.
+DEBUG ]: Creating the EventLoopManager!
+DEBUG ]: Creating the KeybindManager!
+DEBUG ]: Creating the AnimationManager!
+DEBUG ]: Creating the DynamicPermissionManager!
+DEBUG ]: Creating the MonitorState!
+DEBUG ]: Creating the WorkspaceState!
+DEBUG ]: Creating the ConfigManager!
+DEBUG ]: [cfg] Config is either explicit or special.
+DEBUG ]: [cfg] Config is lua, loading lua mgr
+DEBUG ]: Creating the Error Overlay!
+DEBUG ]: Creating the LayoutManager!
+DEBUG ]: Creating the TokenManager!
+DEBUG ]: Creating the EventManager!
+DEBUG ]: Disabling stdout logs (debug.enable_stdout_logs = 0). Further logs will be written to /run/user/0/hypr/efb50993780079460b0cbed1363e2166a2de1d9f_1789858641_1520398695/hyprland.log
+DEBUG ]: Creating the PointerManager!
+DEBUG ]: Creating the AsyncResourceGatherer!
+MESA: error: ZINK: failed to load libvulkan.so.1
+MESA: error: ZINK: failed to load libvulkan.so.1
+MESA: error: ZINK: failed to load libvulkan.so.1
+MESA: error: ZINK: failed to load libvulkan.so.1
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Activating service name='org.freedesktop.portal.Desktop' requested by ':1.3' (uid=0 pid=14133 comm="quickshell -n -p /opt/s22-ui/shell" label="kernel")
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Activating service name='org.freedesktop.impl.portal.PermissionStore' requested by ':1.4' (uid=0 pid=14163 comm="/usr/lib/xdg-desktop-portal" label="kernel")
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Successfully activated service 'org.freedesktop.impl.portal.PermissionStore'
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Activating service name='org.freedesktop.portal.Documents' requested by ':1.4' (uid=0 pid=14163 comm="/usr/lib/xdg-desktop-portal" label="kernel")
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Successfully activated service 'org.freedesktop.portal.Documents'
+fuse: device /dev/fuse not found. Kernel module not loaded?
+error: fuse init failed: Can't mount path /run/user/0/doc
+
+(/usr/lib/xdg-desktop-portal:14163): xdg-desktop-portal-WARNING **: 22:57:22.531: Document portal fuse mount point unknown: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name :1.7 was not provided by any .service files
+
+(/usr/lib/xdg-desktop-portal:14163): GLib-GIO-ERROR **: 22:57:22.533: Settings schema 'org.gnome.system.proxy' is not installed
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Activated service 'org.freedesktop.portal.Desktop' failed: Process org.freedesktop.portal.Desktop received signal 6
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Activating service name='org.freedesktop.portal.Desktop' requested by ':1.3' (uid=0 pid=14133 comm="quickshell -n -p /opt/s22-ui/shell" label="kernel")
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Activating service name='ca.desrt.dconf' requested by ':1.8' (uid=0 pid=14195 comm="gsettings set org.gnome.desktop.interface gtk-them" label="kernel")
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Activating service name='org.a11y.Bus' requested by ':1.9' (uid=0 pid=14133 comm="quickshell -n -p /opt/s22-ui/shell" label="kernel")
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Successfully activated service 'ca.desrt.dconf'
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Activating service name='org.freedesktop.portal.Documents' requested by ':1.11' (uid=0 pid=14209 comm="/usr/lib/xdg-desktop-portal" label="kernel")
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Successfully activated service 'org.a11y.Bus'
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Successfully activated service 'org.freedesktop.portal.Documents'
+fuse: device /dev/fuse not found. Kernel module not loaded?
+error: fuse init failed: Can't mount path /run/user/0/doc
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Activating service name='org.freedesktop.portal.Documents' requested by ':1.11' (uid=0 pid=14209 comm="/usr/lib/xdg-desktop-portal" label="kernel")
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Successfully activated service 'org.freedesktop.portal.Documents'
+fuse: device /dev/fuse not found. Kernel module not loaded?
+error: fuse init failed: Can't mount path /run/user/0/doc
+
+(/usr/lib/xdg-desktop-portal:14209): xdg-desktop-portal-WARNING **: 22:57:22.718: Document portal fuse mount point unknown: GDBus.Error:org.freedesktop.portal.Error.Failed: Can't mount path /run/user/0/doc
+
+(/usr/lib/xdg-desktop-portal:14209): GLib-GIO-ERROR **: 22:57:22.721: Settings schema 'org.gnome.system.proxy' is not installed
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Activated service 'org.freedesktop.portal.Desktop' failed: Process org.freedesktop.portal.Desktop received signal 6
+dbus-daemon[14247]: Activating service name='org.a11y.atspi.Registry' requested by ':1.1' (uid=0 pid=14132 comm="squeekboard" label="kernel")
+/usr/lib/at-spi2-registryd: error while loading shared libraries: libXtst.so.6: cannot open shared object file: No such file or directory
+dbus-daemon[14247]: Activated service 'org.a11y.atspi.Registry' failed: Process org.a11y.atspi.Registry exited with status 127
+dbus-daemon[14247]: Activating service name='org.a11y.atspi.Registry' requested by ':1.1' (uid=0 pid=14132 comm="squeekboard" label="kernel")
+/usr/lib/at-spi2-registryd: error while loading shared libraries: libXtst.so.6: cannot open shared object file: No such file or directory
+dbus-daemon[14247]: Activated service 'org.a11y.atspi.Registry' failed: Process org.a11y.atspi.Registry exited with status 127
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Activating service name='org.freedesktop.portal.Desktop' requested by ':1.3' (uid=0 pid=14133 comm="quickshell -n -p /opt/s22-ui/shell" label="kernel")
+dbus-daemon[14247]: Activating service name='org.a11y.atspi.Registry' requested by ':1.0' (uid=0 pid=14133 comm="quickshell -n -p /opt/s22-ui/shell" label="kernel")
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Activating service name='org.freedesktop.portal.Documents' requested by ':1.22' (uid=0 pid=14310 comm="/usr/lib/xdg-desktop-portal" label="kernel")
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Successfully activated service 'org.freedesktop.portal.Documents'
+fuse: device /dev/fuse not found. Kernel module not loaded?
+error: fuse init failed: Can't mount path /run/user/0/doc
+
+(/usr/lib/xdg-desktop-portal:14310): xdg-desktop-portal-WARNING **: 22:57:23.017: Document portal fuse mount point unknown: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name :1.23 was not provided by any .service files
+
+(/usr/lib/xdg-desktop-portal:14310): GLib-GIO-ERROR **: 22:57:23.019: Settings schema 'org.gnome.system.proxy' is not installed
+/usr/lib/at-spi2-registryd: error while loading shared libraries: libXtst.so.6: cannot open shared object file: No such file or directory
+dbus-daemon[14247]: Activated service 'org.a11y.atspi.Registry' failed: Process org.a11y.atspi.Registry exited with status 127
+dbus-daemon[14060]: [session uid=0 pid=14060 pidfd=5] Activated service 'org.freedesktop.portal.Desktop' failed: Process org.freedesktop.portal.Desktop received signal 6
+dbus-daemon[14247]: Activating service name='org.a11y.atspi.Registry' requested by ':1.0' (uid=0 pid=14133 comm="quickshell -n -p /opt/s22-ui/shell" label="kernel")
+/usr/lib/at-spi2-registryd: error while loading shared libraries: libXtst.so.6: cannot open shared object file: No such file or directory
+dbus-daemon[14247]: Activated service 'org.a11y.atspi.Registry' failed: Process org.a11y.atspi.Registry exited with status 127
+Direct display trial exited 124
+Baseline Weston restored; launcher=15640

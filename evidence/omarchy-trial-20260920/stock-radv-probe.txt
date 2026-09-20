@@ -1,0 +1,32 @@
+VULKANINFO_EXIT=1
+1351.14 10675.62
+[ 1346.075789] [1:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c344, wtcnt = cbce
+[ 1346.077266] [1:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 21:07:54(0x40)PM
+[ 1346.077323] [1:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f638, wtcnt = fec2
+[ 1346.078690] [1:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 21:07:54(0x40)PM
+[ 1346.078745] [1:native-guardian:    1] Watchdog: secdbg_wdd_ping_handler RTC 2026-09-19 21:07:54 UTC
+[ 1347.082106] [0:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c343, wtcnt = cbce
+[ 1347.083720] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 21:07:55(0x40)PM
+[ 1347.083793] [0:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f637, wtcnt = fec2
+[ 1347.085148] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 21:07:55(0x40)PM
+[ 1347.085200] [0:native-guardian:    1] Watchdog: secdbg_wdd_ping_handler RTC 2026-09-19 21:07:55 UTC
+[ 1348.087137] [0:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c345, wtcnt = cbce
+[ 1348.088631] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 21:07:56(0x40)PM
+[ 1348.088691] [0:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f639, wtcnt = fec2
+[ 1348.090045] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 21:07:56(0x40)PM
+[ 1348.090098] [0:native-guardian:    1] Watchdog: secdbg_wdd_ping_handler RTC 2026-09-19 21:07:56 UTC
+[ 1349.092224] [0:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c345, wtcnt = cbce
+[ 1349.093740] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 21:07:57(0x40)PM
+[ 1349.094029] [0:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f638, wtcnt = fec2
+[ 1349.095472] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 21:07:57(0x40)PM
+[ 1349.095530] [0:native-guardian:    1] Watchdog: secdbg_wdd_ping_handler RTC 2026-09-19 21:07:57 UTC
+[ 1350.096051] [0:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c347, wtcnt = cbce
+[ 1350.097520] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 21:07:58(0x40)PM
+[ 1350.097566] [0:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f63d, wtcnt = fec2
+[ 1350.098911] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 21:07:58(0x40)PM
+[ 1350.098960] [0:native-guardian:    1] Watchdog: secdbg_wdd_ping_handler RTC 2026-09-19 21:07:58 UTC
+[ 1351.099471] [0:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c349, wtcnt = cbce
+[ 1351.100778] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 21:07:59(0x40)PM
+[ 1351.100809] [0:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f63d, wtcnt = fec2
+[ 1351.102017] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 21:07:59(0x40)PM
+[ 1351.102042] [0:native-guardian:    1] Watchdog: secdbg_wdd_ping_handler RTC 2026-09-19 21:07:59 UTC

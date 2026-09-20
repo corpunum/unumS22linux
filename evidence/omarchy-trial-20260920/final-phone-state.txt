@@ -1,0 +1,38 @@
+[ WARNING ] Running Hyprland with superuser privileges might damage your system
+[1;32mDEBUG [0m]: User-specified config location: '/root/hyprland-trial.lua'
+Superuser privileges check is omitted. I hope you know what you're doing.
+[1;32mDEBUG [0m]: [cfg] Config is either explicit or special.
+[1;32mDEBUG [0m]: [cfg] Config is lua, loading lua mgr
+
+
+======== Config parsing result:
+
+config ok
+d52e5e8ae6c2a709c79e86986252ba73c69415135f3c3023b2e9597ad7f6dba2  /mnt/omarchy-trial/usr/bin/Hyprland
+Temporary Arch RAM filesystem removed; installed Alpine unchanged.
+native-guardian
+NAME="Alpine Linux"
+ID=alpine
+VERSION_ID=3.24.2
+PRETTY_NAME="Alpine Linux v3.24"
+HOME_URL="https://alpinelinux.org/"
+BUG_REPORT_URL="https://gitlab.alpinelinux.org/alpine/aports/-/issues"
+5.10.260-g4e5c5ad7d950
+magic: b0071257
+version: 20230221
+name: BORE
+last: 517
+[ IDX]       RTC       / RR (CNT) / KEY / M / VERSION       QB_ID    / VCELL ( BAT)(C) / TMU[TRIP],BAT           / I2C FAIL COUNT / DT / SLOT / BOOTING SEQUENCE
+[ 517] 260919 20:45:28 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4340mV( 99%)(+) / 35[0x000] 36[0x000], 29 / 00000000000000 /  - /   -  / SOFT, INFORM3(12345674) > RECOVERY > , JUMP2K [drawLOGO]
+2854.90 22522.65
+5411
+ 5428 root      0:00 matchbox-keyboard -xid
+ 5429 root      0:00 xterm -into 4194306 -fa monospace -fs 12 -bg #101418 -fg #d7e0e7 -cr #70d2c4 -geometry 50x32+0+0 -title S22 Linux -e /usr/local/bin/s22-shell
+ 5505 root      0:00 sh -c sh /tmp/phone-trial.sh config; sha256sum /mnt/omarchy-trial/usr/bin/Hyprland; sh /tmp/phone-trial.sh unmount; cat /proc/1/comm; cat /etc/os-release; uname -r; head -n 6 /proc/boot_reset; cat /proc/uptime; pidof weston; ps -ef | grep -E "xterm|matchbox-keyboard"; free -m; df -h /; sha256sum /dev/sda16
+ 5540 root      0:00 grep -E xterm|matchbox-keyboard
+              total        used        free      shared  buff/cache   available
+Mem:           7274        1326        5093         324         855        6155
+Swap:             0           0           0
+Filesystem                Size      Used Available Use% Mounted on
+overlay                 582.6M    475.6M     94.9M  83% /
+1a827b43d29141efb47f530902dd4e4ee2b6d780515893c9ecd676ad27efd7d1  /dev/sda16

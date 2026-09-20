@@ -1,0 +1,42 @@
+Sun Sep 20 06:02:24 UTC 2026
+native-guardian
+Filesystem                Size      Used Available Use% Mounted on
+overlay                 582.6M    495.9M     74.6M  87% /
+s22-arch-trial            3.0G      1.8G      1.2G  59% /mnt/omarchy-trial
+s22-model-bench           3.0G      1.2G      1.8G  40% /mnt/model-bench
+MAJOR=8
+MINOR=14
+DEVNAME=sda14
+DEVTYPE=partition
+PARTN=14
+PARTNAME=boot
+131072
+MAJOR=259
+MINOR=0
+DEVNAME=sda16
+DEVTYPE=partition
+PARTN=16
+PARTNAME=recovery
+196608
+MAJOR=259
+MINOR=10
+DEVNAME=sda26
+DEVTYPE=partition
+PARTN=26
+PARTNAME=metadata
+65536
+MAJOR=259
+MINOR=17
+DEVNAME=sda33
+DEVTYPE=partition
+PARTN=33
+PARTNAME=cache
+1228800
+MAJOR=259
+MINOR=20
+DEVNAME=sda36
+DEVTYPE=partition
+PARTN=36
+PARTNAME=userdata
+221257728
+control

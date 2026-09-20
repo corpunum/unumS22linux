@@ -1,0 +1,3 @@
+f2fs-tools apt package: f2fs-tools_1.16.0-1_amd64.deb
+914097c27d98f03e5fe56c5038e1a5abd81b8cbf0b24132fa234d608dfa60ea3  -
+extractor: dump.f2fs symlink to fsck.f2fs; command: fsck.f2fs -t --dry-run --no-kernel-check image, then dump.f2fs -i INODE with stdin Y; no mount/fsck repair/image writes.

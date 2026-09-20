@@ -1,0 +1,124 @@
+mountpoint_rc=0
+Toybox 0.8.12-android multicall binary (see toybox --help)
+
+usage: mount [-afFrsvw] [-t TYPE] [-o OPTION,] [[DEVICE] DIR]
+
+Mount new filesystem(s) on directories. With no arguments, display existing
+mounts.
+
+-a	Mount all entries in /etc/fstab (with -t, only entries of that TYPE)
+-O	Only mount -a entries that have this option
+-f	Fake it (don't actually mount)
+-r	Read only (same as -o ro)
+-w	Read/write (default, same as -o rw)
+-t	Specify filesystem type
+-v	Verbose
+
+OPTIONS is a comma separated list of options, which can also be supplied
+as --longopts.
+
+Autodetects loopback mounts (a file on a directory) and bind mounts (file
+on file, directory on directory), so you don't need to say --bind or --loop.
+You can also "mount -a /path" to mount everything in /etc/fstab under /path,
+even if it's noauto. DEVICE starting with UUID= is identified by blkid -U,
+and DEVICE starting with LABEL= is identified by blkid -L.
+               https://wayland.freedesktop.org
+               Bug reports to: https://gitlab.freedesktop.org/wayland/weston/issues/
+               Build: 14.0.2
+[20:35:24.582] Command line: /usr/bin/weston --backend=drm-backend.so --renderer=pixman --drm-device=card1 --seat=seat0 --continue-without-input --config=/run/weston-native.ini -- /usr/bin/weston-terminal
+[20:35:24.582] OS: Linux, 5.10.260-g4e5c5ad7d950, #1 SMP PREEMPT Tue Sep 15 12:42:08 UTC 2026, aarch64
+[20:35:24.582] Flight recorder: enabled
+[20:35:24.583] Using config file '/run/weston-native.ini'
+[20:35:24.583] Output repaint window is 7 ms maximum.
+[20:35:24.583] Loading module '/usr/lib/libweston-14/drm-backend.so'
+[20:35:24.586] initializing drm backend
+[20:35:24.586] Trying libseat launcher...
+[20:35:24.587] [libseat/libseat.c:62] Seat opened with backend 'seatd'
+[20:35:24.587] [libseat/backend/seatd.c:218] Enabling seat
+[20:35:24.587] libseat: session control granted
+[20:35:24.589] using /dev/dri/card1
+[20:35:24.589] DRM: supports atomic modesetting
+[20:35:24.589] DRM: supports GBM modifiers
+[20:35:24.589] DRM: does not support Atomic async page flip
+[20:35:24.589] DRM: supports picture aspect ratio
+[20:35:24.589] Using Pixman renderer
+[20:35:24.608] event6  - sec_vibrator_inputff: not tagged as supported input device
+[20:35:24.610] event6  - not using input device '/dev/input/event6'
+[20:35:24.613] event7  - sec_touchscreen: is tagged by udev as: Keyboard Mouse Touchscreen Switch
+[20:35:24.614] event7  - sec_touchscreen: device is a pointer
+[20:35:24.614] event7  - sec_touchscreen: device is a keyboard
+[20:35:24.614] event7  - sec_touchscreen: device is a touch device
+[20:35:24.616] event8  - sec_touchproximity: is tagged by udev as: Switch
+[20:35:24.616] event8  - sec_touchproximity: kernel bug: kernel axis range [0, -1] on (null) too extreme
+[20:35:24.616] event8  - sec_touchproximity: was rejected
+[20:35:24.618] event8  - not using input device '/dev/input/event8'
+[20:35:24.621] event1  - sec-pmic-key: is tagged by udev as: Keyboard
+[20:35:24.621] event1  - sec-pmic-key: device is a keyboard
+[20:35:24.624] event0  - gpio_keys: is tagged by udev as: Keyboard
+[20:35:24.624] event0  - gpio_keys: device is a keyboard
+[20:35:24.626] event10 - grip_notifier: not tagged as supported input device
+[20:35:24.629] event10 - not using input device '/dev/input/event10'
+[20:35:24.631] event2  - meta_event: is tagged by udev as: Keyboard
+[20:35:24.631] event2  - meta_event: emulating high-resolution scroll wheel events.
+[20:35:24.631] event2  - meta_event: device is a keyboard
+[20:35:24.633] event3  - als_rear: is tagged by udev as: Accelerometer
+[20:35:24.633] event3  - als_rear: device is an accelerometer, ignoring
+[20:35:24.634] event3  - not using input device '/dev/input/event3'
+[20:35:24.635] event4  - certify_hall: is tagged by udev as: Switch
+[20:35:24.637] event4  - not using input device '/dev/input/event4'
+[20:35:24.639] event5  - hall: is tagged by udev as: Switch
+[20:35:24.639] event5  - hall: device is a switch device
+[20:35:24.641] event9  - grip_sensor: not tagged as supported input device
+[20:35:24.642] event9  - not using input device '/dev/input/event9'
+[20:35:24.662] Touchscreen - sec_touchscreen - /sys/devices/platform/11d40000.spi/spi_master/spi2/spi2.0/input/input7/event7
+[20:35:24.662] libinput: configuring device "sec_touchscreen".
+[20:35:24.662] input device event7 has no enabled output associated (none named), skipping calibration for now.
+[20:35:24.662] libinput: configuring device "sec-pmic-key".
+[20:35:24.662] libinput: configuring device "gpio_keys".
+[20:35:24.662] libinput: configuring device "meta_event".
+[20:35:24.662] libinput: configuring device "hall".
+[20:35:24.662] DRM: head 'DP-1' found, connector 190 is disconnected.
+[20:35:24.663] DRM: head 'DSI-1' found, connector 191 is connected, EDID make 'unknown', model 'unknown', serial ''
+               Supported EOTF modes: SDR
+               Supported colorimetry modes: default
+[20:35:24.664] Registered plugin API 'weston_drm_output_api_v1' of size 40
+[20:35:24.664] Registered plugin API 'weston_drm_virtual_output_api_v2' of size 48
+[20:35:24.664] Color manager: no-op
+                 protocol support: no
+[20:35:24.664] Output 'DSI-1' attempts EOTF mode SDR and colorimetry mode default.
+[20:35:24.664] Output 'DSI-1' using color profile: stock sRGB color profile
+[20:35:24.676] DRM: output DSI-1 uses shadow framebuffer.
+[20:35:24.676] Output DSI-1 (crtc 184) video modes:
+               1080x2340@120hs@120.0, preferred, current, 306.9 MHz
+               1080x2340@60phs@60.0, 306.9 MHz
+               1080x2340@60ns@60.0, 153.4 MHz
+               1080x2340@30phs@30.0, 306.9 MHz
+               1080x2340@24phs@24.0, 306.9 MHz
+[20:35:24.677] associating input device event7 with output DSI-1 (none by udev)
+[20:35:24.677] associating input device event1 with output DSI-1 (none by udev)
+[20:35:24.677] associating input device event0 with output DSI-1 (none by udev)
+[20:35:24.677] associating input device event2 with output DSI-1 (none by udev)
+[20:35:24.677] associating input device event5 with output DSI-1 (none by udev)
+[20:35:24.677] Output 'DSI-1' enabled with head(s) DSI-1
+[20:35:24.677] Compositor capabilities:
+               arbitrary surface rotation: yes
+               screen capture uses y-flip: no
+               cursor planes: yes
+               arbitrary resolutions: no
+               view mask clipping: yes
+               explicit sync: no
+               color operations: no
+               presentation clock: CLOCK_MONOTONIC, id 1
+               presentation clock resolution: 0.000000001 s
+[20:35:24.677] Loading module '/usr/lib/weston/desktop-shell.so'
+[20:35:24.679] launching '/usr/libexec/weston-keyboard'
+[20:35:24.680] launching '/usr/libexec/weston-desktop-shell'
+could not load cursor 'dnd-move'
+could not load cursor 'dnd-copy'
+could not load cursor 'dnd-none'
+could not load cursor 'dnd-move'
+could not load cursor 'dnd-copy'
+could not load cursor 'dnd-none'
+could not load cursor 'dnd-move'
+could not load cursor 'dnd-copy'
+could not load cursor 'dnd-none'

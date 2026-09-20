@@ -1,0 +1,17 @@
+loader_api=1.4.347
+device=AMD Radeon Graphics (RADV VANGOGH) type=2 api=1.3.296 driver=100675588
+PREPARE_ONLY: descriptors created; no compute commands submitted; NOT a correctness pass
+prepare_exit=0
+sgpu: bo_alloc heap=2 flags=0x81 size=4096 align=8
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7fbdeaf000
+sgpu: ib_mapped=0x7fbdeaf000 bo_va=0xffff800100001000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=704 align=4096
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7fbdf02000
+sgpu: bo_alloc heap=2 flags=0x85 size=4096 align=65536
+sgpu: bo_alloc heap=6 flags=0x80 size=262144 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7fbde7a000
+sgpu: bo_alloc heap=6 flags=0x80 size=32 align=32
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7fbdeff000
+sgpu: descriptor buffer va=0xffff800100010000 range=0x0000000000000400 dst=0x7fbdeff000 words=00010000,00008001,00000400,31016fac

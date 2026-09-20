@@ -1,0 +1,44 @@
+Sat Sep 19 22:57:46 UTC 2026
+14062
+14133
+14132
+14119
+[32m  INFO[0m: Launching config: "/opt/s22-ui/shell/shell.qml"
+[32m  INFO[0m: Shell ID: "cbada98d95d62f1458e592906673c6a1" Path ID "cbada98d95d62f1458e592906673c6a1"
+[32m  INFO[0m: Saving logs to "/run/user/0/quickshell/by-id/lwamrvmlt/log.qslog"
+[34m DEBUG[97m qml[0m: omarchy-shell paths omarchyPath=/opt/omarchy-source shellDir=/opt/s22-ui/shell firstPartyPluginsDir=/opt/omarchy-source/shell/plugins defaultsPath=/opt/omarchy-source/config/omarchy/shell.json userConfigPath=/root/.config/omarchy/shell.json
+[32m  INFO[0m: Configuration Loaded
+[33m  WARN[97m qt.qpa.theme.gnome[0m: dbus reply error: [ "org.freedesktop.DBus.Error.Spawn.ChildSignaled" ] "Process org.freedesktop.portal.Desktop received signal 6"
+[33m  WARN[97m qt.qpa.theme.gnome[0m: dbus reply error: [ "org.freedesktop.DBus.Error.Spawn.ChildSignaled" ] "Process org.freedesktop.portal.Desktop received signal 6"
+[33m  WARN[0m: Process failed to start, likely because the binary could not be found. Command: QList("inotifywait", "-m", "-r", "-q", "-e", "close_write,create,delete,move", "--format", "%w%f", "/root/.config/omarchy/plugins")
+
+** (quickshell:14133): WARNING **: 22:57:23.061: AT-SPI: Could not obtain desktop path or name
+
+[33m  WARN[97m qt.qpa.services[0m: Failed to register with host portal QDBusError("org.freedesktop.DBus.Error.Spawn.ChildSignaled", "Process org.freedesktop.portal.Desktop received signal 6")
+
+** (quickshell:14133): WARNING **: 22:57:23.111: atk-bridge: GetRegisteredEvents returned message with unknown signature
+
+** (quickshell:14133): WARNING **: 22:57:23.111: atk-bridge: get_device_events_reply: unknown signature
+[33m  WARN[97m quickshell.service.upower[0m: Could not connect to DBus. UPower service will not work.
+[34m DEBUG[97m qml[0m: omarchy idle 2026-09-19T22:57:23.827Z service-ready
+[31m ERROR[97m quickshell.service.pipewire.loop[0m: Failed to connect pipewire context. Errno: 112
+[33m  WARN[97m quickshell.service.polkit.listener[0m: failed to create subject for listener: No session for pid 14133
+[33m  WARN[97m quickshell.service.polkit[0m: failed to register listener on path "/org/omarchy/PolkitAgent"
+[34m DEBUG[97m qml[0m: omarchy idle 2026-09-19T22:57:23.957Z stay-awake: enabled state-file
+[34m DEBUG[97m qml[0m: omarchy idle 2026-09-19T22:57:23.957Z idle-cycle-cancel: stay-awake
+
+** (squeekboard:14132): WARNING **: 22:57:22.760: No system layout present
+
+** (squeekboard:14132): WARNING **: 22:57:22.763: Could not register to session manager: Cannot invoke method; proxy is for the well-known name org.gnome.SessionManager without an owner, and proxy was constructed with the G_DBUS_PROXY_FLAGS_DO_NOT_AUTO_START flag
+
+
+** (squeekboard:14132): WARNING **: 22:57:22.841: No system layout present
+
+** (squeekboard:14132): WARNING **: 22:57:22.856: AT-SPI: Could not obtain desktop path or name
+
+
+** (squeekboard:14132): WARNING **: 22:57:22.911: atk-bridge: GetRegisteredEvents returned message with unknown signature
+
+** (squeekboard:14132): WARNING **: 22:57:22.911: atk-bridge: get_device_events_reply: unknown signature
+warn: wayland.c:1888: compositor does not implement the xdg-toplevel-icon protocol
+{'card': '/dev/dri/card1', 'crtc_id': 184, 'fb_id': 200, 'fb_size': [1080, 2340], 'window': [0, 0, 1080, 2340], 'format': 'XR24', 'modifier': 0, 'handle': 1, 'pitch': 4352, 'offset': 0, 'mapped_bytes': 10183680, 'output': '/tmp/omarchy-ui.png'}

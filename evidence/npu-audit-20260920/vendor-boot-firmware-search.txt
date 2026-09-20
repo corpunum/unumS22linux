@@ -1,0 +1,30 @@
+Host-only read-only audit, 2026-09-20
+
+Scope: existing extracted tree lineage/build-20260915/unpacked/ramdisk_extracted and
+existing initramfs trees. No stock archives were traversed or modified. The extracted
+vendor_boot ramdisk contains only these firmware-like files relevant to this check:
+
+  vendor/firmware/tsp_stm/fts2ba61y_r0.bin
+  vendor/firmware/tsp_stm/fts2ba61y_r0.bin
+  lib/firmware/sgpu/vangogh_lite_unified.bin
+  lib/modules/npu.ko
+
+Exact-name search over lineage/ and initramfs/ found no vectors.bin, NPU.bin,
+AIE.bin, or dsp_reloc_rules.bin outside the already recovered vendor image output.
+The extracted vendor image recovery produced:
+
+  AIE.bin                 2,219,776 bytes  sha256 a9843bbf520c08263c563f3200f0cbceb09c68fbdd1279d24236c3da704d9dc2
+  dsp_reloc_rules.bin        20,804 bytes  sha256 468c0d2cc7c3a11fa80c3799385217bb4c36bb4cc369e754f73baae50e8b0a5d
+
+The same npu.ko is present in the extracted vendor_boot ramdisk and has sha256
+b2110bd9f95c19e6ce2fca97d4a0cc9817029dff92427088dbb8b483d9948da3. Its section
+table has .rodata file offset 0xdb5e0 and .text file offset 0xfa000; strings/
+.rodata identify the downstream firmware names /vendor/firmware/vectors.bin,
+AIE.bin, and dsp_reloc_rules.bin, plus request_firmware and
+request_firmware_direct. No NPU.bin request string is present in this module.
+
+Conclusion: vendor_boot/ramdisk does not supply vectors.bin. AIE.bin and
+dsp_reloc_rules.bin are supplied by recovered vendor partition; vectors.bin is a
+required separate firmware input according to the driver source and remains an
+unrecovered blocker. NPU.bin is not established as required for this build: the
+driver selects AIE.bin when CONFIG_DSP_USE_VS4L is enabled.

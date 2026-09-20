@@ -39,3 +39,45 @@ rollback/**/*.bin
 
 # cloned busybox build tree (GPL source, but large and not our code)
 /tools/busybox/
+
+# Native Linux build roots and private device backups stay on this workstation.
+/rootfs/
+/tools/omarchy-trial/omarchy-source/
+/tools/omarchy-trial/radv-*/
+evidence/**/*.tar.gz
+evidence/**/*.tar.xz
+
+# Generated caches, native libraries, downloaded packages and build roots.
+__pycache__/
+*.py[cod]
+*.tar.gz
+*.tar.xz
+*.tar.zst
+*.tgz
+*.pkg.tar.*
+*.so
+*.so.*
+*.o
+*.a
+/tools/gpu-compute-probe/gpu-compute-probe
+/tools/gpu-compute-probe/*-aarch64-musl
+*.spv
+/tools/omarchy-trial/aquamarine-s22-source/
+/tools/omarchy-trial/omarchy-ui-candidate/package-delta/
+/tools/omarchy-trial/omarchy-ui-candidate/shell/
+
+# Full upstream references stay local; publish the small pinned patches.
+/tools/omarchy-trial/aquamarine-*.cpp
+/tools/omarchy-trial/hyprland-*.cpp
+
+# Raw recovery forensics and private material are not public project evidence.
+/evidence/native-linux-20260919/preflight/cache-recovery/
+/evidence/native-linux-20260919/preflight/boot_reset.txt
+/evidence/native-linux-20260919/native-first-no-ack/linux-state.txt
+/evidence/native-linux-20260919/native-first-no-ack/host-dmesg-after-fallback.txt
+**/*private-key*
+**/id_ed25519
+**/id_rsa
+**/ssh_host_*_key
+**/.env
+**/.env.*

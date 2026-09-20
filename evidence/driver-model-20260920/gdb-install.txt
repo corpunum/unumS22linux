@@ -1,0 +1,7 @@
+(1/5) Installing musl-dbg (1.2.6-r2)
+(2/5) Installing json-c (0.18-r1)
+(3/5) Installing libdebuginfod (0.195-r0)
+(4/5) Installing mpfr4 (4.2.2-r0)
+(5/5) Installing gdb (16.3-r4)
+Executing busybox-1.37.0-r31.trigger
+OK: 464.9 MiB in 249 packages

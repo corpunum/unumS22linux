@@ -1,0 +1,199 @@
+[ WARNING ] Running Hyprland with superuser privileges might damage your system
+[1;32mDEBUG [0m]: User-specified config location: '/root/hyprland-display-patch.lua'
+Superuser privileges check is omitted. I hope you know what you're doing.
+Welcome to Hyprland!
+
+                                                  
+                     YY    UJ                     
+                    YYY    UUJ                    
+                   XXXY    UUUU                   
+                  zXXXX    UUUUU                  
+                zzzzX        UUUUJ                
+               cczzz          UUUUJ               
+             vccccz            UUUUUJ             
+            vvcccc              UUUUUJ            
+           vvvvv                  UUUUJ           
+          uuuvv                    UUUUJ          
+         uuuuu                      UUUUU         
+        nnnuu                        UUUUU        
+       nnnnn                          YUUUU       
+       xxnn                            YUUU       
+       xxxn                            YYUU       
+      xxxx                              YYUU      
+      rxxx                              YYYY      
+      rrrx                              YYYY      
+       rrrx                            XXXY       
+       rrrr                            XXXX       
+        rrrr                          zzXX        
+         rrrr                        zzzz         
+          rrrrr                    ccczz          
+           rrrrrx                vccccc           
+             rrrrxxxx        uuvvvvvc             
+                rrxxxxxxnnnnuuuuuv                
+                    xxxxxnnnnu                    
+
+
+
+DEBUG ]: Old rlimit: soft -> 1024, hard -> 4096
+DEBUG ]: New rlimit: soft -> 4096, hard -> 4096
+WARN ]: WARNING: Hyprland is being launched without start-hyprland. This is highly advised against.
+DEBUG ]: Creating the EventLoopManager!
+DEBUG ]: Creating the KeybindManager!
+DEBUG ]: Creating the AnimationManager!
+DEBUG ]: Creating the DynamicPermissionManager!
+DEBUG ]: Creating the MonitorState!
+DEBUG ]: Creating the WorkspaceState!
+DEBUG ]: Creating the ConfigManager!
+DEBUG ]: [cfg] Config is either explicit or special.
+DEBUG ]: [cfg] Config is lua, loading lua mgr
+DEBUG ]: Creating the Error Overlay!
+DEBUG ]: Creating the LayoutManager!
+DEBUG ]: Creating the TokenManager!
+DEBUG ]: Creating the EventManager!
+DEBUG ]: Creating the PointerManager!
+DEBUG ]: Creating the AsyncResourceGatherer!
+[1;32mDEBUG [0mfrom aquamarine ]: Creating an Aquamarine backend!
+[1;32mDEBUG [0mfrom aquamarine ]: [libseat] [libseat/libseat.c:62] Seat opened with backend 'seatd'
+[1;32mDEBUG [0mfrom aquamarine ]: [libseat] [libseat/backend/seatd.c:218] Enabling seat
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event6  - sec_vibrator_inputff: not tagged as supported input device
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event6  - not using input device '/dev/input/event6'
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event7  - sec_touchscreen: is tagged by udev as: Keyboard Mouse Touchscreen Switch
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event7  - sec_touchscreen: device is a pointer
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event7  - sec_touchscreen: device is a keyboard
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event7  - sec_touchscreen: device is a touch device
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event8  - sec_touchproximity: is tagged by udev as: Switch
+[1;31mERR [0mfrom aquamarine ]: [libinput] event8  - sec_touchproximity: kernel bug: kernel axis range [0, -1] on (null) too extreme
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event8  - sec_touchproximity: was rejected
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event8  - not using input device '/dev/input/event8'
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event1  - sec-pmic-key: is tagged by udev as: Keyboard
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event1  - sec-pmic-key: device is a keyboard
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event0  - gpio_keys: is tagged by udev as: Keyboard
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event0  - gpio_keys: device is a keyboard
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event10 - grip_notifier: not tagged as supported input device
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event10 - not using input device '/dev/input/event10'
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event2  - meta_event: is tagged by udev as: Keyboard
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event2  - meta_event: emulating high-resolution scroll wheel events.
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event2  - meta_event: device is a keyboard
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event3  - als_rear: is tagged by udev as: Accelerometer
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event3  - als_rear: device is an accelerometer, ignoring
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event3  - not using input device '/dev/input/event3'
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event4  - certify_hall: is tagged by udev as: Switch
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event4  - not using input device '/dev/input/event4'
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event5  - hall: is tagged by udev as: Switch
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event5  - hall: device is a switch device
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event9  - grip_sensor: not tagged as supported input device
+[1;32mDEBUG [0mfrom aquamarine ]: [libinput] event9  - not using input device '/dev/input/event9'
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Enumerated device /sys/devices/platform/16e00000.sgpu/drm/card0
+[1;32mDEBUG [0mfrom aquamarine ]: libseat: Device /dev/dri/card0 does not support kms
+[1;31mERR [0mfrom aquamarine ]: drm: Skipping device /sys/devices/platform/16e00000.sgpu/drm/card0, not a KMS device
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Enumerated device /sys/devices/platform/exynos-drm/drm/card1
+[1;32mDEBUG [0mfrom aquamarine ]: libseat: Device /dev/dri/card1 supports kms
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Explicit device list /dev/dri/card1
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Explicit device /dev/dri/card1 found
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Found 1 GPUs
+[1;33mWARN [0mfrom aquamarine ]: drm: AQ_S22_DISPLAY_ONLY: skipping EGL renderer for sole exynos-drmdpu
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Starting backend for /dev/dri/card1, with driver exynos-drmdpu
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Registered gpu /dev/dri/card1
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Atomic supported, using atomic for modesetting
+[1;32mDEBUG [0mfrom aquamarine ]: drm: drmProps.supportsAsyncCommit: false
+[1;32mDEBUG [0mfrom aquamarine ]: drm: drmProps.supportsAddFb2Modifiers: true
+[1;32mDEBUG [0mfrom aquamarine ]: drm: drmProps.supportsTimelines: false
+[1;32mDEBUG [0mfrom aquamarine ]: drm: found 4 CRTCs
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 54 has type 1
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 54 has 16 formats
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane: checking for modifiers
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 61 has type 1
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 61 has 19 formats
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane: checking for modifiers
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 68 has type 1
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 68 has 16 formats
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane: checking for modifiers
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 75 has type 1
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 75 has 19 formats
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane: checking for modifiers
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 82 has type 0
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 82 has 16 formats
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane: checking for modifiers
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 89 has type 0
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 89 has 19 formats
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane: checking for modifiers
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 96 has type 0
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 96 has 16 formats
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane: checking for modifiers
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 103 has type 0
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 103 has 19 formats
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane: checking for modifiers
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 110 has type 0
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 110 has 16 formats
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane: checking for modifiers
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 117 has type 0
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 117 has 19 formats
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane: checking for modifiers
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 124 has type 0
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 124 has 16 formats
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane: checking for modifiers
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 131 has type 0
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 131 has 19 formats
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane: checking for modifiers
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 138 has type 0
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 138 has 16 formats
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane: checking for modifiers
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 145 has type 0
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 145 has 19 formats
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane: checking for modifiers
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 152 has type 0
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 152 has 16 formats
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane: checking for modifiers
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 159 has type 0
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane 159 has 19 formats
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Plane: checking for modifiers
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Basic init pass for gpu /dev/dri/card1
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Scanning connectors for /dev/dri/card1
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Scanning connector id 190
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Initializing connector id 190
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Connector gets name DP-1
+[1;31mERR [0mfrom aquamarine ]: drm: getCurrentCRTC: No CRTC 0
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Connector 190 connection state: 3
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Scanning connector id 191
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Initializing connector id 191
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Connector gets name DSI-1
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Connector 191 connection state: 1
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Rechecking CRTCs
+[1;32mDEBUG [0mfrom aquamarine ]: drm: connector DP-1, has crtc -1, will be rechecked
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Skipping connector DSI-1, has crtc 184 and is connected
+[1;32mDEBUG [0mfrom aquamarine ]: drm: slot 0 crtc 184 taken by DSI-1, skipping
+[1;32mDEBUG [0mfrom aquamarine ]: drm: slot 1 crtc 185 unassigned
+[1;32mDEBUG [0mfrom aquamarine ]: drm: slot 2 crtc 186 unassigned
+[1;32mDEBUG [0mfrom aquamarine ]: drm: slot 3 crtc 187 unassigned
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Connector DSI-1 connected
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Connecting connector DSI-1, CRTC ID 184
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Dumping detected modes:
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Mode 0: 1080x2340@120.00Hz  (preferred)
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Mode 1: 1080x2340@60.00Hz 
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Mode 2: 1080x2340@60.00Hz 
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Mode 3: 1080x2340@30.00Hz 
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Mode 4: 1080x2340@24.00Hz 
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Physical size [64, 140] (mm)
+[1;31mERR [0mfrom aquamarine ]: drm: failed to parse edid
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Description    (DSI-1)
+[1;32mDEBUG [0mfrom aquamarine ]: drm: connector DSI-1 crtc is incapable of vrr: props.vrr_capable -> 0, crtc->props.vrr_enabled -> 24
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Explicit sync unsupported
+[1;32mDEBUG [0mfrom aquamarine ]: drm: connector DSI-1 crtc doesn't support CTM
+[1;32mDEBUG [0mfrom aquamarine ]: drm: connector DSI-1 crtc doesn't support HDR (0)
+[1;32mDEBUG [0mfrom aquamarine ]: drm: connector DSI-1 crtc doesn't support Colorspace (0)
+[1;32mDEBUG [0mfrom aquamarine ]: drm: gpu /dev/dri/card1 becomes primary drm
+[1;32mDEBUG [0mfrom aquamarine ]: DRM Dumb: created a dumb allocator
+[1;32mDEBUG [0mfrom aquamarine ]: Starting the Aquamarine backend!
+[1;32mDEBUG [0mfrom aquamarine ]: Starting the Wayland backend!
+[1;31mERR [0mfrom aquamarine ]: Wayland backend cannot start: wl_display_connect failed (is a wayland compositor running?)
+[1;31mERR [0mfrom aquamarine ]: Requested backend (wayland) could not start, enabling fallbacks
+[1;31mERR [0mfrom aquamarine ]: Implementation wayland failed, erasing.
+[1;32mDEBUG [0mfrom aquamarine ]: reopenDRMNode: drmModeCreateLease failed, falling back to open
+[1;32mDEBUG [0mfrom aquamarine ]: reopenDRMNode: opening node /dev/dri/renderD129
+MESA: error: ZINK: failed to load libvulkan.so.1
+MESA: error: ZINK: failed to load libvulkan.so.1
+[1;32mDEBUG [0mfrom aquamarine ]: Created a GBM allocator with drm fd 27
+[1;32mDEBUG [0mfrom aquamarine ]: drm: Connectors size2 2
+Direct display trial exited 137
+Killed
+Baseline Weston restored; launcher=9789

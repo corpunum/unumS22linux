@@ -1,0 +1,10 @@
+llama.cpp source: https://github.com/ggml-org/llama.cpp
+llama.cpp revision: e613ef2c81bae98d59850d061ac29e6e3e88cb00
+build: clang 18.1.3, CMAKE_SYSTEM_PROCESSOR=aarch64, GGML_NATIVE=OFF, GGML_OPENMP=OFF
+0.8B repo: https://huggingface.co/ggml-org/Qwen3.5-0.8B-GGUF (repo revision 8fea620810c4afa23dd6443f999a48574c1611a3)
+0.8B file: Qwen3.5-0.8B-Q4_0.gguf; x-linked-size 563036064; x-linked-etag 57d1997790d1744fba5b40a7317df71ea5e2acee28c47e78f0cce39c0703f8cf
+2B repo: https://huggingface.co/unsloth/Qwen3.5-2B-GGUF (repo revision f6d5376be1edb4d416d56da11e5397a961aca8ae)
+2B file: Qwen3.5-2B-Q4_0.gguf; x-linked-size 1214873856; x-linked-etag cd70221bebaee0503e0f6717e174250cd7825aa88438b3aabec9ad55731d9bb1
+
+optimized-build=/tmp/llama-build-opt.kxgM41
+optimized-configure: cmake -S /tmp/llama.cpp-bench.kbOmm0 -B /tmp/llama-build-opt.kxgM41 -G Ninja -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DCMAKE_C_FLAGS="--target=aarch64-linux-gnu --gcc-toolchain=/usr" -DCMAKE_CXX_FLAGS="--target=aarch64-linux-gnu --gcc-toolchain=/usr" -DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=armv8.6-a+dotprod+i8mm -DGGML_OPENMP=OFF -DLLAMA_BUILD_SERVER=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=ON -DCMAKE_BUILD_TYPE=Release

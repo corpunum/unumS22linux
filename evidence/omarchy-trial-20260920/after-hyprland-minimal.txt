@@ -1,0 +1,18 @@
+Temporary Arch RAM filesystem removed; installed Alpine unchanged.
+magic: b0071257
+version: 20230221
+name: BORE
+last: 517
+[ IDX]       RTC       / RR (CNT) / KEY / M / VERSION       QB_ID    / VCELL ( BAT)(C) / TMU[TRIP],BAT           / I2C FAIL COUNT / DT / SLOT / BOOTING SEQUENCE
+[ 517] 260919 20:45:28 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4340mV( 99%)(+) / 35[0x000] 36[0x000], 29 / 00000000000000 /  - /   -  / SOFT, INFORM3(12345674) > RECOVERY > , JUMP2K [drawLOGO]
+3434.29 27024.95
+6531
+ 6364     1 S<   {start-weston-na} /bin/sh /usr/local/bin/start-weston-native
+ 6538  6364 S<   python3 -
+ 6543  6538 S<   matchbox-keyboard -xid
+ 6544  6538 S<   xterm -into 4194306 -fa monospace -fs 12 -bg #101418 -fg #d7e0e7 -cr #70d2c4 -geometry 50x32+0+0 -title S22 Linux -e /usr/local/bin/s22-shell
+ 6549  6548 S<   sh -c sh /tmp/phone-trial.sh unmount; head -n 6 /proc/boot_reset; cat /proc/uptime; pidof weston; ps -o pid,ppid,stat,args | grep -E "xterm|matchbox-keyboard|python3 -|start-weston-native"; free -m
+ 6564  6549 R<   grep -E xterm|matchbox-keyboard|python3 -|start-weston-native
+              total        used        free      shared  buff/cache   available
+Mem:           7274        1376        5044         323         853        6106
+Swap:             0           0           0

@@ -1,0 +1,8 @@
+source=e613ef2c81bae98d59850d061ac29e6e3e88cb00
+builddir=/tmp/llama-server-opt.FbG4
+configure=cmake -S /tmp/llama.cpp-bench.kbOmm0 -B /tmp/llama-server-opt.FbG4 -G Ninja -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DCMAKE_C_FLAGS="--target=aarch64-linux-gnu --gcc-toolchain=/usr" -DCMAKE_CXX_FLAGS="--target=aarch64-linux-gnu --gcc-toolchain=/usr" -DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=armv8.6-a+dotprod+i8mm -DGGML_OPENMP=OFF -DLLAMA_BUILD_SERVER=ON -DLLAMA_BUILD_UI=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=ON -DGGML_VULKAN=OFF -DGGML_CUDA=OFF -DGGML_METAL=OFF -DCMAKE_BUILD_TYPE=Release
+build=nice -n 19 cmake --build /tmp/llama-server-opt.FbG4 --target llama-server -j4
+post-build-reconfigure=cmake -S /tmp/llama.cpp-bench.kbOmm0 -B /tmp/llama-server-opt.FbG4 -G Ninja -DCMAKE_SKIP_RPATH=ON; rebuild target llama-server -j4; staged closure has no /tmp RUNPATH
+entrypoint=tools/model-bench/run-arm64-server-optimized.sh
+binding=127.0.0.1:8089
+runtime=private glibc closure, no system-library replacement

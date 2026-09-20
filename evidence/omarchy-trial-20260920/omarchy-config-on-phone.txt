@@ -1,0 +1,12 @@
+[ WARNING ] Running Hyprland with superuser privileges might damage your system
+[1;32mDEBUG [0m]: User-specified config location: '/root/hyprland-trial.lua'
+Superuser privileges check is omitted. I hope you know what you're doing.
+[1;32mDEBUG [0m]: [cfg] Config is either explicit or special.
+[1;32mDEBUG [0m]: [cfg] Config is lua, loading lua mgr
+[1;32mDEBUG [0m]: Disabling stdout logs (debug.enable_stdout_logs = 0). Further logs will be written to /hyprland.log
+
+
+======== Config parsing result:
+
+config ok
+config_exit=0

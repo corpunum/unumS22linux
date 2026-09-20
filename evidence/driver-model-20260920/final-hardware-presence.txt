@@ -1,0 +1,40 @@
+lo               UNKNOWN        00:00:00:00:00:00 <LOOPBACK,UP,LOWER_UP> 
+dummy0           DOWN           ae:cd:dd:23:b0:c6 <BROADCAST,NOARP> 
+ifb0             DOWN           a2:12:fe:30:9c:98 <BROADCAST,NOARP> 
+ifb1             DOWN           9e:9e:8d:ec:65:3f <BROADCAST,NOARP> 
+tunl0@NONE       DOWN           0.0.0.0 <NOARP> 
+gre0@NONE        DOWN           0.0.0.0 <NOARP> 
+gretap0@NONE     DOWN           00:00:00:00:00:00 <BROADCAST,MULTICAST> 
+erspan0@NONE     DOWN           00:00:00:00:00:00 <BROADCAST,MULTICAST> 
+ip_vti0@NONE     DOWN           0.0.0.0 <NOARP> 
+ip6_vti0@NONE    DOWN           :: <NOARP> 
+sit0@NONE        DOWN           0.0.0.0 <NOARP> 
+ip6tnl0@NONE     DOWN           :: <NOARP> 
+ip6gre0@NONE     DOWN           :: <NOARP> 
+umts_dm0         DOWN           <POINTOPOINT,MULTICAST,NOARP> 
+rmnet0           DOWN           <POINTOPOINT,MULTICAST,NOARP> 
+rmnet1           DOWN           <POINTOPOINT,MULTICAST,NOARP> 
+rmnet2           DOWN           <POINTOPOINT,MULTICAST,NOARP> 
+rmnet3           DOWN           <POINTOPOINT,MULTICAST,NOARP> 
+rmnet4           DOWN           <POINTOPOINT,MULTICAST,NOARP> 
+rmnet5           DOWN           <POINTOPOINT,MULTICAST,NOARP> 
+rmnet6           DOWN           <POINTOPOINT,MULTICAST,NOARP> 
+rmnet7           DOWN           <POINTOPOINT,MULTICAST,NOARP> 
+ecm0             UP             02:73:22:00:00:02 <BROADCAST,MULTICAST,UP,LOWER_UP> 
+panel
+ac
+battery
+max77705-charger
+max77705-fuelgauge
+max77705-otg
+mfc-charger
+otg
+pca9481-charger
+pogo
+sec-direct-charger
+usb
+wireless
+Filesystem                Size      Used Available Use% Mounted on
+overlay                 582.6M    495.9M     74.6M  87% /
+s22-model-bench           3.0G      1.2G      1.8G  39% /mnt/model-bench
+s22-arch-trial            3.0G      1.8G      1.2G  59% /mnt/omarchy-trial

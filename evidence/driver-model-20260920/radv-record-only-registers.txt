@@ -1,0 +1,50 @@
+loader_api=1.4.347
+sgpu: gpu_info address32_hi=0xffff8000 gfx_level=13 family=81
+sgpu: bo_alloc heap=2 flags=0x81 size=4096 align=8
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7ff6dc6000
+sgpu: ib_mapped=0x7ff6dc6000 bo_va=0xffff800100001000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=704 align=4096
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7ff6e1a000
+sgpu: bo_alloc heap=2 flags=0x85 size=4096 align=65536
+sgpu: bo_alloc heap=6 flags=0x80 size=262144 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7ff6d91000
+sgpu: bo_alloc heap=6 flags=0x80 size=32 align=32
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7ff6e16000
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7ff6dfc000
+sgpu: ib_mapped=0x7ff6dfc000 bo_va=0xffff800100016000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=16384 align=4096
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7ff6df8000
+sgpu: shader pointer va=0xffff800000040000 use32=1 address32_hi=0xffff8000 reconstructed=0xffff800000040000
+
+Program received signal SIGSEGV, Segmentation fault.
+0x0000007ff7ae12a8 in vk_pipeline_cache_destroy () from /opt/radv-xclipse/lib/libvulkan_radeon_address32.so
+#0  0x0000007ff7ae12a8 in vk_pipeline_cache_destroy () from /opt/radv-xclipse/lib/libvulkan_radeon_address32.so
+#1  0x0000007ff7a29460 in radv_DestroyDevice () from /opt/radv-xclipse/lib/libvulkan_radeon_address32.so
+#2  0x0000007ff7ebe64c in ?? () from /usr/lib/libvulkan.so.1
+#3  0x0000007ff7ed1c98 in vkDestroyDevice () from /usr/lib/libvulkan.so.1
+#4  0x0000005555562924 in main ()
+x0             0x7ff6e1a030        549602828336
+x1             0x0                 0
+x19            0x7ff6e1a030        549602828336
+x20            0x290               656
+   0x7ff7ae1298 <vk_pipeline_cache_destroy+4>:	str	x21, [sp, #16]
+   0x7ff7ae129c <vk_pipeline_cache_destroy+8>:	stp	x20, x19, [sp, #32]
+   0x7ff7ae12a0 <vk_pipeline_cache_destroy+12>:	mov	x29, sp
+   0x7ff7ae12a4 <vk_pipeline_cache_destroy+16>:	mov	x19, x0
+=> 0x7ff7ae12a8 <vk_pipeline_cache_destroy+20>:	ldr	x0, [x0, #112]
+   0x7ff7ae12ac <vk_pipeline_cache_destroy+24>:	cbz	x0, 0x7ff7ae12fc <vk_pipeline_cache_destroy+104>
+   0x7ff7ae12b0 <vk_pipeline_cache_destroy+28>:	ldrb	w8, [x19, #68]
+   0x7ff7ae12b4 <vk_pipeline_cache_destroy+32>:	mov	x21, x1
+   0x7ff7ae12b8 <vk_pipeline_cache_destroy+36>:	cbnz	w8, 0x7ff7ae12ec <vk_pipeline_cache_destroy+88>
+   0x7ff7ae12bc <vk_pipeline_cache_destroy+40>:	mov	x1, xzr
+   0x7ff7ae12c0 <vk_pipeline_cache_destroy+44>:	bl	0x7ff7b86288 <_mesa_set_next_entry>
+   0x7ff7ae12c4 <vk_pipeline_cache_destroy+48>:	cbz	x0, 0x7ff7ae12ec <vk_pipeline_cache_destroy+88>
+A debugging session is active.
+
+	Inferior 1 [process 13374] will be killed.
+
+Quit anyway? (y or n) [answered Y; input not from terminal]

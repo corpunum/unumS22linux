@@ -1,0 +1,42 @@
+#!/bin/sh
+# Phone-native, bounded CPU comparison. Models/runtime are staged in RAM.
+set -eu
+build=${1:?usage: s22-benchmark baseline\|optimized 08\|2b 4\|8}
+model=${2:?missing model}
+threads=${3:-4}
+base=/mnt/model-bench
+case "$build" in
+  baseline) runtime=$base ;;
+  optimized) runtime=$base/optimized ;;
+  *) echo 'invalid runtime' >&2; exit 2 ;;
+esac
+case "$model" in
+  08) model_file=Qwen3.5-0.8B-Q4_0.gguf ;;
+  2b) model_file=Qwen3.5-2B-Q4_0.gguf ;;
+  *) echo 'invalid model' >&2; exit 2 ;;
+esac
+case "$threads" in
+  4) mask=f0 ;;
+  8) mask=ff ;;
+  *) echo 'invalid thread count' >&2; exit 2 ;;
+esac
+test -x "$base/libc/ld-linux-aarch64.so.1"
+test -s "$base/models/$model_file"
+out=$base/$build-$model-t$threads
+date -u
+printf 'runtime=%s model=%s threads=%s cpu_mask=%s\n' "$build" "$model_file" "$threads" "$mask"
+printf 'battery_temp_deci_C_before='; cat /sys/class/power_supply/battery/temp
+free -m
+set +e
+timeout -s TERM 300 nice -n 20 "$base/libc/ld-linux-aarch64.so.1" \
+  --library-path "$base/libc:$runtime/lib" "$runtime/bin/llama-bench" \
+  -m "$base/models/$model_file" -t "$threads" -C "$mask" --cpu-strict 1 \
+  -p 256 -n 64 -r 2 -ngl 0 -lm mmap -o json > "$out.json" 2> "$out.stderr"
+status=$?
+set -e
+printf 'benchmark_exit=%s\n' "$status"
+cat "$out.json"
+cat "$out.stderr" >&2
+printf 'battery_temp_deci_C_after='; cat /sys/class/power_supply/battery/temp
+free -m
+exit "$status"

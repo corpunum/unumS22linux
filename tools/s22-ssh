@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Connect to this phone's verified, persisted SSH host key over USB Ethernet.
+set -euo pipefail
+project_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+known_hosts="$project_dir/evidence/native-linux-20260919/native-v2-known-hosts"
+[[ -s "$known_hosts" ]] || { echo "Missing verified phone host-key file: $known_hosts" >&2; exit 1; }
+exec ssh -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$known_hosts" \
+    -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
+    root@10.55.0.2 "$@"

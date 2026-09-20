@@ -1,0 +1,72 @@
+/vendor/firmware/
+/vendor/firmware/vectors.bin
+AIE.bin
+NCP version: %u
+[%d: %15s:%5d]NPU:[*]%s(%d):============= ncp_header =============
+[%d: %15s:%5d]NPU:[*]%s(%d):checking firmware head MAGIC(0x%08x)
+[%d: %15s:%5d]NPU:[*]%s(%d):checking firmware phys(%#llx), bin_size(%#zx), daddr(%#llx++%#zx)
+[%d: %15s:%5d]NPU:[*]%s(%d):complete in npu_firmware_load
+[%d: %15s:%5d]NPU:[*]%s(%d):error(%d) in npu_firmware_load
+[%d: %15s:%5d]NPU:[*]%s(%d):firmware load : clear working memory at %p(0x%llx), Len(%llu)
+[%d: %15s:%5d]NPU:[*]%s(%d):firmware load: read and locate firmware to %pK
+[%d: %15s:%5d]NPU:[*]%s(%d):mailbox initialize: wait for firmware boot signature.
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):NCP version mismatch. user=0x%x, expected=0x%x
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):address vector out of bounds. start=0x%x, cnt=%u, ncp_size=0x%lx
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):body out of bounds. start=0x%x, size=0x%x, ncp_size=0x%lx
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):error(%d) in npu_firmware_file_read_signature
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):fail(%d) in npu_firmware_load
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):fail(%d) in request_firmware(%s)
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):group vector intrinsic out of bounds. start=0x%x, size=0x%x, ncp_size=0x%lx
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):group vector isa out of bounds. start=0x%x, size=0x%x, ncp_size=0x%lx
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):group vector out of bounds. start=0x%x, cnt=%u, ncp_size=0x%lx
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):init. error(%d) in firmware waiting
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):interruption vector isa out of bounds. start=0x%x, size=0x%x, ncp_size=0x%lx
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):interruption vector out of bounds. start=0x%x, cnt=%u, ncp_size=0x%lx
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):llc vector out of bounds. start=0x%x, cnt=%u, ncp_size=0x%lx
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):m_addr out of bounds. start=0x%x, size=0x%x, ncp_size=0x%lx
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):memory vector out of bounds. start=0x%x, cnt=%u, ncp_size=0x%lx
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):power estimation vector out of bounds. start=0x%x, cnt=%u, ncp_size=0x%lx
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):thread vector out of bounds. start=0x%x, cnt=%u, ncp_size=0x%lx
+[%d: %15s:%5d]NPU:[*][U%d][ERR]%s(%d):npu_ncp_mgmt_put failed : (%d)
+[%d: %15s:%5d]NPU:[T][npu-sess][U%d]%s(%d):usr_data(0x%pK), ncp_size(%u)
+[%d: %15s:%5d]NPU:[if-session-protodrv]%s(%d):callback for ncp_mgmt(%pK)
+[%d: %15s:%5d]NPU:[npu-sess]%s(%d):ncp_ion_map(0x%pad), vaddr(0x%pK)
+[%d: %15s:%5d]NPU:[npu-sess][ERR]%s(%d):__ncp_ion_map is fail(%d).
+[%d: %15s:%5d]NPU:[npu-sess][ERR]%s(%d):failed in __pilot_parsing_ncp
+[%d: %15s:%5d]NPU:[npu-sess][ERR]%s(%d):invalid session or ncp_mem_buf
+[%d: %15s:%5d]NPU:[npu-sess][ERR]%s(%d):weight_offset(0x%x) + weight size (0x%x) seems to go beyond ncp size(0x%x)
+[%d: %15s:%5d]NPU:[npu-sess][U%d]%s(%d):IMB: NCP max size = 0x%zX
+[%d: %15s:%5d]NPU:[npu-sess][U%d][ERR]%s(%d):IMB: npu_ncp_mgmt_put failed
+[%d: %15s:%5d]NPU:[npu-sess][U%d][ERR]%s(%d):__ncp_ion_map is fail(%d)
+[%d: %15s:%5d]NPU:[npu-sess][U%d][ERR]%s(%d):fail(%d) in second_parsing_ncp
+[%d: %15s:%5d]NPU:[npu-sess][U%d][ERR]%s(%d):npu_ncp_mgmt_put failed
+[%d: %15s:%5d]NPU:[npu-sess][U%d][ERR]%s(%d):weight_offset is invalid, offset(0x%x), ncp_daddr(0x%x)
+[%d: %15s:%5d]NPU:[proto-drv][U%d][ERR]%s(%d):error(%d) in npu_ncp_mgmt_save_result
+__ncp_ion_map
+__pilot_parsing_ncp
+__pilot_parsing_ncp_for_dsp
+__second_parsing_ncp
+__second_parsing_ncp_for_dsp
+__update_ncp_info
+dbg_print_ncp_header
+dsp_reloc_rules.bin
+ncp_mgmt_list_size
+ncp_version
+npu_firmware_file_read_signature
+npu_firmware_load
+npu_ncp_mgmt_get
+npu_ncp_mgmt_is_available
+npu_ncp_mgmt_put
+npu_ncp_mgmt_register_cb
+npu_ncp_mgmt_save_result
+npu_util_validate_user_ncp
+release_firmware
+request_firmware
+request_firmware_direct
+strncpy
+validate_ncp_group_vector
+validate_ncp_header
+validate_ncp_interruption_vector
+validate_ncp_memory_vector
+validate_ncp_thread_vector
+vectors.bin

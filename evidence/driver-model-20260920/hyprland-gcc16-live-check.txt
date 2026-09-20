@@ -1,0 +1,47 @@
+Sat Sep 19 22:42:13 UTC 2026
+11774
+11804
+instance efb50993780079460b0cbed1363e2166a2de1d9f_1789857717_81940635:
+	time: 1789857717
+	pid: 11774
+	wl socket: wayland-1
+
+
+
+
+
+Window 55b0bcc340 -> S22-Hyprland-test:
+	mapped: 1
+	hidden: 0
+	visible: 1
+	acceptsInput: 1
+	at: 21,21
+	size: 498,1128
+	workspace: 1 (1)
+	floating: 0
+	monitor: 0
+	class: foot
+	title: S22-Hyprland-test
+	initialClass: foot
+	initialTitle: S22-Hyprland-test
+	pid: 11804
+	xwayland: 0
+	pinned: 0
+	pinFullscreened: 0
+	fullscreen: 0
+	fullscreenClient: 0
+	fullscreenHandler: default
+	allowedOverFullscreen: 1
+	grouped: 0
+	tags: 
+	swallowing: 0
+	focusHistoryID: 0
+	inhibitingIdle: 0
+	xdgTag: 
+	xdgDescription: 
+	contentType: none
+	tearingHint: 0
+	stableID: 18000000
+
+
+{'card': '/dev/dri/card1', 'crtc_id': 184, 'fb_id': 194, 'fb_size': [1080, 2340], 'window': [0, 0, 1080, 2340], 'format': 'XR24', 'modifier': 0, 'handle': 1, 'pitch': 4352, 'offset': 0, 'mapped_bytes': 10183680, 'output': '/tmp/hypr-fonts.png'}

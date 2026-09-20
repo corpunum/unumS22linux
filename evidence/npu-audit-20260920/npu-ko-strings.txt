@@ -1,0 +1,100 @@
+NPU0
+drivers/vision/npu/core/npu-util-regs.c
+[V][ERR]%s:%d:vertexioc_profileoff failed(%d)
+[V][ERR]%s:%d:get_vs4l_version failed(%d)
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):expected_type error(%d != %d)
+3NPU:[ERR]%s:%d:failed to alloc for reg_cmd data for %s
+npu_get_sfr
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):memory vector %d has invalid address vector index %d
+npu_fw_report_deinit
+[%d: %15s:%5d]NPU:[*]%s(%d):start.
+[%d: %15s:%5d]NPU:[*]%s(%d):complete in npu_debug start
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):fail(%d) in proto_drv_close
+[%d: %15s:%5d]NPU:[*][WRN]%s(%d):NPU DEVICE IS EMERGENCY ERROR!
+[%d: %15s:%5d]NPU:[*][WRN]%s(%d):Emergency flag set.
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):fail(%d) in npu_log_stop
+6NPU:NPU Device driver build info :
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):fail(%d) in vref_get
+npu_imgloader_probe
+3NPU:[ERR]%s:%d:fail(%d) in npu_system_soc_probe
+3NPU:[ERR]%s:%d:npu_imgloader_probe is fail(%d)
+3NPU:[ERR]%s:%d:fail to vmap %u pages for rmem(%s)
+[%d: %15s:%5d]NPU:[*]%s(%d):(%13s) Phy(0x%08x)-(0x%08llx) Virt(%pK) Size(%llu)
+[%d: %15s:%5d]NPU:[proto-drv][U%d]%s(%d):NW linked to ref@%pK.
+[%d: %15s:%5d]NPU:[proto-drv][ERR]%s(%d):init fail(%d) in LSM(frame)
+[%d: %15s:%5d]NPU:[proto-drv]%s(%d):start in proto_drv_start
+__update_npu_timestamp
+[%d: %15s:%5d]NPU:[proto-drv][WRN]%s(%d):out of order response from mbox
+[%d: %15s:%5d]NPU:[T][proto-drv][U%u][F%u]%s(%d):INVALID
+[%d: %15s:%5d]NPU:[proto-drv][U%d]%s(%d):complete UNLOAD : change s_state (%d) -> (%d)
+[%d: %15s:%5d]NPU:[proto-drv][U%d][ERR]%s(%d):invalid command(%u)
+[%d: %15s:%5d]NPU:[proto-drv][U%d][ERR]%s(%d):error(%d) in npu_ncp_mgmt_save_result
+[%d: %15s:%5d]NPU:[proto-drv]%s(%d):CUR[%s] PPID[%d] PARENT[%s] MODEL[%s]
+[%d: %15s:%5d]NPU:[proto-drv]%s(%d):End of session state list [%d] entries =========
+[%d: %15s:%5d]NPU:[npu-sess]%s(%d):param num : %d
+npu_session_s_graph
+npu_session_NW_CMD_SUSPEND
+[%d: %15s:%5d]NPU:[npu-sess]%s(%d):    %15s(%d) %6d | %9d %8d %8d %5s %#8x %4d %#10x %#7x %4d %4d %4d
+[%d: %15s:%5d]NPU:[T][if-protodrv-mbox2][U%d]%s(%d):nw_post_request failed. Reclaiming msgid(%d)
+6NPU:failed npu create_config %s
+npu_pbha_hint_11
+npu_imb_threshold_size
+[%d: %15s:%5d]NPU:[*]%s(%d):start %s
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):fail(%d) in npu_cmd_map for %s
+exynos-npu-hwdev
+3NPU:[ERR]%s:%d:error (%d)
+[%d: %15s:%5d]NPU:[*]%s(%d):%s power %s (%d)
+[%d: %15s:%5d]NPU:[*]%s(%d):%s %s (%d)
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):failed to get vaddr of execution info for dsp
+[%d: %15s:%5d]NPU:[*]%s(%d):sgmt_ofs: (%d)
+[%d: %15s:%5d]NPU:[*]%s(%d):wptr: (%d)
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):timeout after waiting %d(ms). Current value: [0x%08x]@%pK
+6NPU:end in npu_util_memdump
+[%d: %15s:%5d]NPU:[*]%s(%d):set %s %s as %d
+[%d: %15s:%5d]NPU:[*]%s(%d):DTM_PID Off
+npu_scheduler_execute_policy
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):timeout exceeded.
+npu_governor_userspace_init_prop
+drivers/vision/npu/core/npu-binary.c
+[V][ERR]%s:%d:vertexioc_streamoff failed(%d)
+get_vs4l_ctrl64
+put_vs4l_ctrl64
+get_vs4l_sched_param64
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):NPU: auto sleep thread: invalid transition (%d) -> (%d)
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):group vector isa out of bounds. start=0x%x, size=0x%x, ncp_size=0x%lx
+[%d: %15s:%5d]NPU:[T][*]%s(%d):----------- End of will_note for npu_fw -------------
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):copy_to_user failed : %zd
+[%d: %15s:%5d]NPU:[*]%s(%d):end: %zu  copy_len: %zu  wr_pos: %zu  read_pos: %zu
+__npu_store_log_fops_read
+npu_store_log_dump
+3NPU:[ERR]%s:%d:memlog_register NPU_DRV1() for log failed: ret = %d
+NCP version: %u
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):ops is null
+3NPU:[ERR]%s:%d:npu_ver_release error : ret = %d
+[%d: %15s:%5d]NPU:[*]%s(%d):%s() : NPU_DEVICE_ERR_STATE_EMERGENCY bit was set before
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):start for emergency recovery
+npu_vertex_streamon
+[%d: %15s:%5d]NPU:[*][I%d][ERR]%s(%d):fail(%d) in %s : hids %x
+npu_queue_streamoff
+3NPU:[ERR]%s:%d:failed to create sysfs for %s
+npu_system_open
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):fail(%d) in npu_util_memdump_open
+npu_system_close
+[%d: %15s:%5d]NPU:[*][ERR]%s(%d):fail(%d) in npu_cpu_on
+[%d: %15s:%5d]NPU:[*]%s(%d):(%13s) Reserved Phy(0x%08x)-(0x%08llx) Size(%llu)
+[%d: %15s:%5d]NPU:[proto-drv][U%u][F%u][ERR]%s(%d):frame does not belong to session ref@%pK.
+3NPU:[ERR]%s:%d:error in npu_debug_register
+[%d: %15s:%5d]NPU:[proto-drv][WRN]%s(%d):session ref list is not empty but claimed to FREE
+[%d: %15s:%5d]NPU:[proto-drv][U%d]%s(%d):complete (%s), with result code (0x%08x)
+[%d: %15s:%5d]NPU:[proto-drv][U%d][ERR]%s(%d):complete load, with error(%u/0x%08x) : Keep current s_state [%d]
+[%d: %15s:%5d]NPU:[proto-drv][U%d][ERR]%s(%d):cannot register session: ret = %d
+npu_protodrv_handler_nw_requested
+npu_session_put_frame_req
+[%d: %15s:%5d]NPU:[npu-sess][U%d][ERR]%s(%d):fail(%d) in kpi_frame_mobx_put
+npu_session_open
+[%d: %15s:%5d]NPU:[npu-sess]%s(%d):		mem attr : 0x%x %d
+[%d: %15s:%5d]NPU:[T][npu-sess][U%d]%s(%d):(*WGT_av + %u)->size = %zu
+/vendor/firmware/vectors.bin
+[%d: %15s:%5d]NPU:[*][U%d]%s(%d):Executing FW test #%u
+[%d: %15s:%5d]NPU:[*][WRN]%s(%d):Session mismatch [%pK] / [%pK]. Something wrong.
+npu_minor

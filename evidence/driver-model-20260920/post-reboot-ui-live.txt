@@ -1,0 +1,16 @@
+Sat Sep 19 23:06:16 UTC 2026
+2125
+2376
+2192
+2177
+[32m  INFO[0m: Configuration Loaded
+[33m  WARN[0m: Process failed to start, likely because the binary could not be found. Command: QList("inotifywait", "-m", "-r", "-q", "-e", "close_write,create,delete,move", "--format", "%w%f", "/root/.config/omarchy/plugins")
+[33m  WARN[97m qt.qpa.services[0m: Failed to register with host portal QDBusError("org.freedesktop.DBus.Error.Spawn.ChildSignaled", "Process org.freedesktop.portal.Desktop received signal 6")
+[33m  WARN[97m quickshell.service.upower[0m: Could not connect to DBus. UPower service will not work.
+[34m DEBUG[97m qml[0m: omarchy idle 2026-09-19T23:06:01.914Z service-ready
+[31m ERROR[97m quickshell.service.pipewire.loop[0m: Failed to connect pipewire context. Errno: 112
+[33m  WARN[97m quickshell.service.polkit.listener[0m: failed to create subject for listener: No session for pid 2376
+[33m  WARN[97m quickshell.service.polkit[0m: failed to register listener on path "/org/omarchy/PolkitAgent"
+[34m DEBUG[97m qml[0m: omarchy idle 2026-09-19T23:06:02.086Z stay-awake: enabled state-file
+[34m DEBUG[97m qml[0m: omarchy idle 2026-09-19T23:06:02.086Z idle-cycle-cancel: stay-awake
+{'card': '/dev/dri/card1', 'crtc_id': 184, 'fb_id': 201, 'fb_size': [1080, 2340], 'window': [0, 0, 1080, 2340], 'format': 'XR24', 'modifier': 0, 'handle': 1, 'pitch': 4352, 'offset': 0, 'mapped_bytes': 10183680, 'output': '/tmp/s22-final-ui.png'}

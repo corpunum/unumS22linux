@@ -1,0 +1,14 @@
+00866ee20d5bfa56406e9e155acc2109aa8a7250006d5c7c5d86716794ef6d61  rootfs/model-bench/libc/libstdc++.so.6
+031767c85871740fd715f983419092515f7107ab26db0c3048522fab78b60730  rootfs/model-bench/libc/libgcc_s.so.1
+101106b8ae66601234e0b61f6ba21bcf0fed952ed8ceaa22fb2ada993c25ec3c  rootfs/model-bench/libc/libc.so.6
+142f02374792bf5f62293efc3500d472dbbe280dc658cc60480eff73ad46f33c  rootfs/model-bench/libc/ld-linux-aarch64.so.1
+20a09d884f6247a2f352960d13212f90035e177e3324ccf332d6af384bf93c48  rootfs/model-bench/libc/libm.so.6
+66c3fe2b0e970b5717d3c5aa6099c49606a87f3e31865fab9651bfc703d8869e  rootfs/model-bench/lib/libggml.so
+760cc6295b0705b483398f5743a8dd6f95da0a8bb59b59ab2e654f356aa8d991  rootfs/model-bench/bin/llama-bench
+775abf2328c8340b7a0649e134e8ca9cddbda43cdd196a93e686adb5efb01cb0  rootfs/model-bench/lib/libggml-cpu.so
+7c31932d2ceb623f57e97d63d91986118317ca3acf8cdefedb8e920423f7aef5  rootfs/model-bench/lib/libllama-bench-impl.so
+90c4e0e7e009a1fa9569d64fcef9bc4dfe2262a5cb989876b3adea70289670af  rootfs/model-bench/bin/llama-completion
+960165368d16f3060dd1e26fa23cb9f69bd6496d072d50d11e87e41871fd1f6f  rootfs/model-bench/lib/libllama-common.so
+b3f265fec034895fd73e4d6906b0ca226e93003688ebdb32830c6def36e2db83  rootfs/model-bench/lib/libllama.so
+e934eac0e2a79aa27748618a907fcf20784a1c497e1c210dd7f7c26e795d8143  rootfs/model-bench/lib/libggml-base.so
+ffba2fba8f8683f861615ce994a11e248feb6c0dea220e16ddf78fe646a0936c  rootfs/model-bench/lib/libllama-completion-impl.so

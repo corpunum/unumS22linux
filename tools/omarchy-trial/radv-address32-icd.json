@@ -1,0 +1,7 @@
+{
+  "file_format_version": "1.0.0",
+  "ICD": {
+    "library_path": "/opt/radv-xclipse/lib/libvulkan_radeon_address32.so",
+    "api_version": "1.3.296"
+  }
+}

@@ -1,0 +1,21 @@
+[Unit]
+Description=Automatically acknowledge the native S22 guardian over isolated USB ECM
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/home/corpunum/s22-linux/tools/linux-rootfs/auto-ack-native.sh
+Restart=always
+RestartSec=3
+Environment=NATIVE_SSH_USER=root
+StandardOutput=journal
+StandardError=journal
+UMask=0077
+
+# This is a user-unit template only.  It is intentionally not installed or
+# enabled by the build agent; the owner can copy it to ~/.config/systemd/user.
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,5 @@
+RAM trial mounted. Stream the verified userspace archive here.
+Read-only kernel metadata and existing Weston socket mounted; no block/DRM devices exposed.
+Staged-ready marker created at /mnt/omarchy-trial/root/.s22-ui-staged-ready.
+No GUI, reboot, flash, package manager, or model-bench staging was invoked.
+Model-bench prerequisite remains a separate explicit tools/model-bench/stage-phone.sh action.

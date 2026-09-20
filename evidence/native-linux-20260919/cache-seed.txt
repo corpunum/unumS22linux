@@ -1,0 +1,4 @@
+381.6M	/mnt/cache/s22-linux/upper
+Filesystem           1024-blocks    Used Available Capacity Mounted on
+/dev/block/by-name/cache        596544    398188    186068  68% /mnt/cache
+Cache root seeded; current running root is still RAM-only.

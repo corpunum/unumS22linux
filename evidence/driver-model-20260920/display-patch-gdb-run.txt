@@ -1,0 +1,3 @@
+Direct display trial exited 143
+Terminated
+Baseline Weston restored; launcher=9212

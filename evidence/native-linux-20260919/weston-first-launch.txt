@@ -1,0 +1,79 @@
+start-weston-native: eudev daemon absent; using libudev plus explicit DRM card and no-input continuation
+start-weston-native: launching Weston 14 DRM/Pixman card=card1 output=DSI-1 mode=preferred scale=2
+Date: 2026-09-19 UTC
+[20:29:20.760] weston 14.0.2
+               https://wayland.freedesktop.org
+               Bug reports to: https://gitlab.freedesktop.org/wayland/weston/issues/
+               Build: 14.0.2
+[20:29:20.760] Command line: /usr/bin/weston --backend=drm-backend.so --renderer=pixman --drm-device=card1 --seat=seat0 --continue-without-input --config=/run/weston-native.ini -- /usr/bin/weston-terminal
+[20:29:20.760] OS: Linux, 5.10.260-g4e5c5ad7d950, #1 SMP PREEMPT Tue Sep 15 12:42:08 UTC 2026, aarch64
+[20:29:20.760] Flight recorder: enabled
+[20:29:20.760] Using config file '/run/weston-native.ini'
+[20:29:20.760] Output repaint window is 7 ms maximum.
+[20:29:20.761] Loading module '/usr/lib/libweston-14/drm-backend.so'
+[20:29:20.763] initializing drm backend
+[20:29:20.763] Trying libseat launcher...
+[20:29:20.765] [libseat/libseat.c:62] Seat opened with backend 'seatd'
+[20:29:20.765] [libseat/backend/seatd.c:218] Enabling seat
+[20:29:20.765] libseat: session control granted
+[20:29:20.766] using /dev/dri/card1
+[20:29:20.766] DRM: supports atomic modesetting
+[20:29:20.766] DRM: supports GBM modifiers
+[20:29:20.766] DRM: does not support Atomic async page flip
+[20:29:20.766] DRM: supports picture aspect ratio
+[20:29:20.766] Using Pixman renderer
+[20:29:20.783] warning: no input devices found, but none required as per configuration.
+[20:29:20.784] DRM: head 'DP-1' found, connector 190 is disconnected.
+[20:29:20.784] DRM: head 'DSI-1' found, connector 191 is connected, EDID make 'unknown', model 'unknown', serial ''
+               Supported EOTF modes: SDR
+               Supported colorimetry modes: default
+[20:29:20.785] Registered plugin API 'weston_drm_output_api_v1' of size 40
+[20:29:20.785] Registered plugin API 'weston_drm_virtual_output_api_v2' of size 48
+[20:29:20.785] Color manager: no-op
+                 protocol support: no
+[20:29:20.785] Output 'DSI-1' attempts EOTF mode SDR and colorimetry mode default.
+[20:29:20.785] Output 'DSI-1' using color profile: stock sRGB color profile
+[20:29:20.798] DRM: output DSI-1 uses shadow framebuffer.
+[20:29:20.799] Output DSI-1 (crtc 184) video modes:
+               1080x2340@120hs@120.0, preferred, current, 306.9 MHz
+               1080x2340@60phs@60.0, 306.9 MHz
+               1080x2340@60ns@60.0, 153.4 MHz
+               1080x2340@30phs@30.0, 306.9 MHz
+               1080x2340@24phs@24.0, 306.9 MHz
+[20:29:20.799] Output 'DSI-1' enabled with head(s) DSI-1
+[20:29:20.799] Compositor capabilities:
+               arbitrary surface rotation: yes
+               screen capture uses y-flip: no
+               cursor planes: yes
+               arbitrary resolutions: no
+               view mask clipping: yes
+               explicit sync: no
+               color operations: no
+               presentation clock: CLOCK_MONOTONIC, id 1
+               presentation clock resolution: 0.000000001 s
+[20:29:20.801] Loading module '/usr/lib/weston/desktop-shell.so'
+[20:29:20.803] launching '/usr/libexec/weston-keyboard'
+[20:29:20.803] launching '/usr/libexec/weston-desktop-shell'
+could not load cursor 'dnd-move'
+could not load cursor 'dnd-copy'
+could not load cursor 'dnd-none'
+could not load cursor 'dnd-move'
+could not load cursor 'dnd-copy'
+could not load cursor 'dnd-none'
+could not load cursor 'dnd-move'
+could not load cursor 'dnd-copy'
+could not load cursor 'dnd-none'
+00:00:00.000 [INFO] [seatd/seat.c:50] Created seat seat0
+00:00:00.000 [INFO] [seatd/seatd.c:194] seatd started
+00:00:00.123 [INFO] [seatd/server.c:145] New client connected (pid: 1736, uid: 0, gid: 0)
+00:00:00.123 [INFO] [seatd/seat.c:248] Added client 1 to seat0
+00:00:00.123 [INFO] [seatd/seat.c:584] Opened client 1 on seat0
+ 1724 root      0:00 {start-weston-na} /bin/sh /usr/local/bin/start-weston-native
+ 1731 root      0:00 /usr/bin/seatd -u root -g root -l info
+ 1736 root      0:00 /usr/bin/weston --backend=drm-backend.so --renderer=pixman --drm-device=card1 --seat=seat0 --continue-without-input --config=/run/weston-native.ini -- /usr/bin/weston-terminal
+ 1737 root      0:00 /usr/bin/weston-terminal
+ 1738 root      0:00 /usr/libexec/weston-keyboard
+ 1739 root      0:00 /usr/libexec/weston-desktop-shell
+ 1745 root      0:00 sh -c cat /run/weston-native.log; cat /run/seatd-native.log; ps -ef | grep -E "weston|seatd"; cat /proc/uptime
+ 1749 root      0:00 grep -E weston|seatd
+307.25 2427.85

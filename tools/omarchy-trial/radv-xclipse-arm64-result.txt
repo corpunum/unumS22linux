@@ -1,0 +1,25 @@
+source_commit=d1b295e8c61c013c454e8015983a1d6b6df82bf2
+mesa_version=24.3.4
+build_mode=host_cross_clang18_with_native_alpine_arm64_musl_sysroot
+configuration=RADV amd only; LLVM disabled; Gallium EGL GLX platforms disabled; ACO compiled
+artifact=rootfs/radv-xclipse-artifact/lib/libvulkan_radeon.so
+17d159f9f9f5228bef6919cbefa577555c158c923e67384d7c0e7b847ef233b3  rootfs/radv-xclipse-artifact/lib/libvulkan_radeon.so
+icd_json=rootfs/radv-xclipse-artifact/share/vulkan/icd.d/radeon_icd.aarch64.json
+465278a914330a0d12e21fea044f135975eca34819b159b43bda9661dbbd30c2  rootfs/radv-xclipse-artifact/share/vulkan/icd.d/radeon_icd.aarch64.json
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+needed:
+ 0x0000000000000001 (NEEDED)             Shared library: [libdrm_amdgpu.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libelf.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libz.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libzstd.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdrm.so.2]
+ 0x0000000000000001 (NEEDED)             Shared library: [libexpat.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libstdc++.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.musl-aarch64.so.1]
+interpreter=none_shared_object
+phone_commands=none
+runtime_enumeration=not_run_host_only_artifact
+8d95190bb9393388c65e6a4f34a694831d153af8ccf681ef614f03ff7127ea50

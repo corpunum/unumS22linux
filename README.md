@@ -1,91 +1,75 @@
 # unumS22linux
 
-Turning a Samsung Galaxy S22 (SM-S901B/DS, Exynos 2200, codename `r0s`,
-bootloader genuinely unlocked) into a native Linux handheld with **no Android
-userspace** — eventually Arch Linux ARM + Wayland + Hyprland + Omarchy,
-running directly on the hardware instead of inside Android.
+Native Linux experiments on the **Samsung Galaxy S22 SM-S901B/DS**,
+Exynos 2200, codename `r0s`, unlocked bootloader. This is the S22, not S22+.
 
-## Vision
+## Current result — 2026-09-20
 
-Most "Linux on phone" projects run inside a chroot or container on top of a
-still-booted Android kernel/userspace. This project's goal is different and
-harder: replace Android's `/init` and userspace entirely, so the phone boots
-straight into a normal Linux distribution the same way a laptop does — full
-control of the boot chain, no Android services running underneath, no
-compatibility shims. The Exynos 2200 recovery partition is being used as the
-target because it's a separate, independently-flashable boot slot (not
-A/B-paired with the main boot chain), making it a safe place to iterate
-without touching the phone's primary boot path.
+The phone boots **Alpine Linux ARM64 from RECOVERY**, with no running Android
+services. A RAM-staged **Arch Linux ARM + Hyprland + actual Omarchy Quickshell
+UI**, terminal and Squeekboard runs on its internal display. A local,
+CPU-only **Qwen3.5-2B** model serves streaming terminal chat.
 
-## Safety model
+[Actual screen capture](evidence/driver-model-20260920/omarchy-resident-chat.png)
+and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 
-- **Human-in-the-loop for anything that writes to the device.** Flashing and
-  crash-loop recovery both require someone physically at the phone; this is
-  a deliberate constraint, not a missing feature. Nothing in this repo's
-  tooling attempts to bypass that.
-- **Hard boundaries, never touched:** PIT table, EFS, IMEI, bootloader (BL),
-  secondary bootloader (SBL), TrustZone. Only the RECOVERY partition is ever
-  written by this project's own builds.
-- Every build in this repo has a "FLASH GATE" — an explicit go/no-go point
-  before anything reaches the device — and a known-good rollback path (a
-  verified LineageOS recovery image) is always one flash away.
+| Component | Verified state |
+| --- | --- |
+| Native boot | Alpine 3.24.2; guardian PID1; Samsung/Lineage 5.10.260 kernel |
+| Persistent base | Alpine package/file overlay in existing CACHE; reboot-tested |
+| Desktop | Arch ARM, Hyprland 0.56.2, Omarchy v4.0.4; software-rendered |
+| Keyboard/input | Visible Squeekboard; synthetic touchscreen-to-chat test passed; physical finger sensing not verified remotely |
+| Local model | Resident Qwen3.5-2B Q4_0, 4K context, four fast CPU cores, loopback-only API |
+| CPU benchmark | 0.8B: 20.21 tok/s; 2B: 10.13 short / 5.47 at depth4096 |
+| GPU | Experimental RADV enumerates; a mapping bug was fixed, but compute still faults |
+| NPU | Vendor assets investigated; no working inference |
+| Connectivity | USB Ethernet + SSH; Wi-Fi/cellular/audio/camera/suspend not accepted |
 
-## Where things stand
+Short resident chat tests started streaming in 0.4–0.7 seconds. Those samples
+are not sustained agent benchmarks. The chat client does not execute commands.
 
-The bootloader is unlocked and a **known-good reference boot** is
-established: LineageOS's own (unmodified) recovery image boots successfully
-on this device with full USB/display/touch, and remains the current state of
-the phone. Nothing custom has been flashed.
+**This is not a complete persistent Omarchy installation or a daily-driver
+phone.** The Arch desktop, runtime and model currently live in RAM. The base
+Linux overlay persists, but the large components need host restoration after
+reboot. Normal cold-power-on routing has not been converted to Linux.
+See [the persistence plan](docs/PERSISTENCE.md).
 
-The open mystery this project is chasing: **any** substitute for AOSP's
-`/init` — a busybox script, a minimal script, or a from-scratch static C
-binary — crash-loops identically on the same kernel/dtb/ramdisk-base that
-boots fine under the real, unmodified `/init`. This has been true regardless
-of what the substitute program actually does; even a version that did
-nothing but create a few directories failed the same way. That question can
-only be answered by an actual flash-and-observe cycle on real hardware.
+## Architecture and safety
 
-Since that cycle requires someone physically at the phone, the effort so far
-has gone into making sure that when it happens, the resulting evidence (a
-persisted boot log surviving the crash-loop) is actually trustworthy — not
-just building the fix would-be, but proving each diagnostic mechanism (device
-node creation, module loading, log persistence, the watchdog, the reset
-timing) works correctly *before* spending a real flash attempt on it.
+AOSP first-stage init performs hardware/module bootstrap, then hands off to
+the native guardian before Android services start. Android recovery binaries
+remain available for rescue. This is not mainline Linux and not a chroot over
+a running Android userspace; the Arch desktop chroot runs over native Alpine.
 
-That work has gone through 24 build iterations (`cinit.c` → `cinit13.c` /
-V10 → V24) and a long adversarial multi-model review process: Claude,
-Opus 5, and Codex/GPT ("Astra") reviewing each other's work, each with live
-root ADB access to the actual phone to empirically prove or disprove claims
-rather than reason about them abstractly. The 4 most recent rounds were run
-Astra-only, back to back, each reviewing the previous round's fixes — and
-**every single round found new, real, live-proven bugs**, including two
-cases where a previous round's own fix turned out to only narrow a race
-condition rather than close it. The full round-by-round history, every bug
-found, and the reasoning behind every fix is in [`EXPERIMENTS.md`](EXPERIMENTS.md) —
-that file is the canonical project log; this README is just the front door.
+- Raw image writes are limited to **RECOVERY**. No BOOT, MISC, PIT, EFS,
+  IMEI, bootloader or TrustZone modification is authorized.
+- Ordinary files under the existing CACHE Linux directory provide the base
+  overlay. CACHE and userdata were not reformatted for this installation.
+- Keep the hash-verified Lineage recovery rollback available before any
+  image experiment. Use the documented flash gate; never bypass tool blocks.
+- Targeted `s22-reboot recovery` has been verified without physical buttons.
+  A failed software path can still require physical recovery intervention.
+- Verify boot mode using bounded `/proc/boot_reset` reads, not the splash screen.
 
-## Repo layout
+Current RECOVERY V3 SHA256:
+`1a827b43d29141efb47f530902dd4e4ee2b6d780515893c9ecd676ad27efd7d1`.
+Whole-partition readback matched again after the Omarchy/model experiments.
 
-- `initramfs/cinit*.c` — the sequence of custom `/init` implementations
-  (V10 → V24), each a strict improvement on the last, documented in detail
-  in `EXPERIMENTS.md`.
-- `EXPERIMENTS.md` — the master experiment log. Every build, every bug
-  found, every review round, in order.
-- `evidence/` — captured output from live device sessions (dmesg, module
-  lists, partition dumps, hardware deep-dives) and the adversarial-review
-  test harnesses/results.
-- `docs/` — feasibility analysis (kexec, recovery-image comparison).
-- `DEVICE.md`, `STATUS.md`, `FLASH_LOG.md`, `MODULES.md` — supporting
-  reference docs.
+## Start here
 
-Not included in this public repo: extracted Samsung stock firmware
-binaries, LineageOS build artifacts, and compiled ramdisk staging trees —
-these carry copyright/redistribution concerns and aren't this project's own
-code. See `.gitignore`.
+- [EXPERIMENTS.md](EXPERIMENTS.md): canonical chronological log, including failed tests.
+- [STATUS.md](STATUS.md): concise current state and outstanding work.
+- [Native Linux](docs/NATIVE_LINUX.md): connection, reboot, storage and rollback.
+- [Omarchy trial](docs/OMARCHY_TRIAL.md): scoped desktop and host restore procedure.
+- [Drivers and models](docs/DRIVER_MODELS_2026-09-20.md): measurements and remaining failures.
+- [Persistence](docs/PERSISTENCE.md): internal/external storage and cold-boot decisions.
+- [Publication scope](docs/PUBLICATION.md): local-only artifacts and source provenance.
 
-## Nothing has been flashed
+`tools/native-handoff/`, `tools/headless-recovery/`, `tools/linux-rootfs/`,
+`tools/omarchy-trial/`, `tools/model-bench/` and `tools/npu-probe/` contain
+project sources and experiment helpers. `initramfs/cinit*.c` preserves the
+earlier custom-init experiments. `evidence/` holds publishable logs and frames.
 
-At every point in this project's history, the phone has remained on the
-known-good LineageOS recovery boot, reachable via root ADB. All build,
-review, and verification work has been done through static analysis and
-live (but read-only-to-the-device) ADB testing.
+The public checkout is **not a one-command installer**: large verified local
+builds, downloaded packages/models, vendor firmware and private backups are
+deliberately excluded. The full working tree remains on the original host.

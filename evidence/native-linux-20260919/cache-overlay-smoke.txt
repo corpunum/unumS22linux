@@ -1,0 +1,9 @@
+overlay on /tmp/persist-check type overlay (rw,relatime,lowerdir=/tmp/persist-lower,upperdir=/mnt/cache/s22-linux/upper,workdir=/mnt/cache/s22-linux/work)
+Python 3.14.7
+weston 14.0.2
+755 /tmp/persist-check
+700 /tmp/persist-check/root
+Filesystem           1K-blocks      Used Available Use% Mounted on
+native-root            1048576    693840    354736  66% /
+/dev/block/by-name/cache
+                        596544    398196    186060  68% /mnt/cache

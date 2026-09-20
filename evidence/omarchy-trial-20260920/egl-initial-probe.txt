@@ -1,0 +1,79 @@
+(1/1) Installing mesa-dri-gallium (26.1.6-r0)
+OK: 445.2 MiB in 242 packages
+GBM platform:
+amdgpu: DRM version is 3.40.0, but this driver is only compatible with 3.54.0 (kernel 6.6+) or later.
+MESA: error: ZINK: vkEnumeratePhysicalDevices failed (VK_ERROR_INITIALIZATION_FAILED)
+MESA: error: ZINK: failed to choose pdev
+amdgpu: DRM version is 3.40.0, but this driver is only compatible with 3.54.0 (kernel 6.6+) or later.
+MESA: error: ZINK: vkEnumeratePhysicalDevices failed (VK_ERROR_INITIALIZATION_FAILED)
+MESA: error: ZINK: failed to choose pdev
+amdgpu: DRM version is 3.40.0, but this driver is only compatible with 3.54.0 (kernel 6.6+) or later.
+amdgpu: DRM version is 3.40.0, but this driver is only compatible with 3.54.0 (kernel 6.6+) or later.
+error: XDG_RUNTIME_DIR is invalid or not set in the environment.
+error: XDG_RUNTIME_DIR is invalid or not set in the environment.
+error: XDG_RUNTIME_DIR is invalid or not set in the environment.
+amdgpu: DRM version is 3.40.0, but this driver is only compatible with 3.54.0 (kernel 6.6+) or later.
+MESA: error: ZINK: vkEnumeratePhysicalDevices failed (VK_ERROR_INITIALIZATION_FAILED)
+MESA: error: ZINK: failed to choose pdev
+amdgpu: DRM version is 3.40.0, but this driver is only compatible with 3.54.0 (kernel 6.6+) or later.
+MESA: error: ZINK: vkEnumeratePhysicalDevices failed (VK_ERROR_INITIALIZATION_FAILED)
+MESA: error: ZINK: failed to choose pdev
+libEGL warning: egl: failed to create dri2 screen
+libEGL warning: DRI2: failed to create screen
+amdgpu: DRM version is 3.40.0, but this driver is only compatible with 3.54.0 (kernel 6.6+) or later.
+MESA: error: amdgpu: ac_query_gpu_info failed.
+libEGL warning: egl: failed to create dri2 screen
+libEGL warning: DRI2: failed to create screen
+amdgpu: DRM version is 3.40.0, but this driver is only compatible with 3.54.0 (kernel 6.6+) or later.
+MESA: error: ZINK: vkEnumeratePhysicalDevices failed (VK_ERROR_INITIALIZATION_FAILED)
+MESA: error: ZINK: failed to choose pdev
+amdgpu: DRM version is 3.40.0, but this driver is only compatible with 3.54.0 (kernel 6.6+) or later.
+MESA: error: ZINK: vkEnumeratePhysicalDevices failed (VK_ERROR_INITIALIZATION_FAILED)
+MESA: error: ZINK: failed to choose pdev
+libEGL warning: egl: failed to create dri2 screen
+libEGL warning: DRI2: failed to create screen
+amdgpu: DRM version is 3.40.0, but this driver is only compatible with 3.54.0 (kernel 6.6+) or later.
+MESA: error: amdgpu: ac_query_gpu_info failed.
+libEGL warning: egl: failed to create dri2 screen
+libEGL warning: DRI2: failed to create screen
+EGL API version: 1.5
+EGL vendor string: Mesa Project
+EGL version string: 1.5
+EGL client APIs: OpenGL OpenGL_ES 
+OpenGL core profile vendor: Mesa
+OpenGL core profile renderer: llvmpipe (LLVM 22.1.3, 128 bits)
+OpenGL core profile version: 4.6 (Core Profile) Mesa 26.1.6
+OpenGL core profile shading language version: 4.60
+OpenGL compatibility profile vendor: Mesa
+OpenGL compatibility profile renderer: llvmpipe (LLVM 22.1.3, 128 bits)
+OpenGL compatibility profile version: 4.6 (Compatibility Profile) Mesa 26.1.6
+OpenGL compatibility profile shading language version: 4.60
+OpenGL ES profile vendor: Mesa
+OpenGL ES profile renderer: llvmpipe (LLVM 22.1.3, 128 bits)
+OpenGL ES profile version: OpenGL ES 3.2 Mesa 26.1.6
+OpenGL ES profile shading language version: OpenGL ES GLSL ES 3.20
+
+Wayland platform:
+eglinfo: eglInitialize failed
+
+X11 platform:
+eglinfo: eglInitialize failed
+
+Surfaceless platform:
+EGL API version: 1.5
+EGL vendor string: Mesa Project
+EGL version string: 1.5
+EGL client APIs: OpenGL OpenGL_ES 
+OpenGL core profileamdgpu: DRM version is 3.40.0, but this driver is only compatible with 3.54.0 (kernel 6.6+) or later.
+MESA: error: ZINK: vkEnumeratePhysicalDevices failed (VK_ERROR_INITIALIZATION_FAILED)
+MESA: error: ZINK: failed to choose pdev
+amdgpu: DRM version is 3.40.0, but this driver is only compatible with 3.54.0 (kernel 6.6+) or later.
+MESA: error: ZINK: vkEnumeratePhysicalDevices failed (VK_ERROR_INITIALIZATION_FAILED)
+MESA: error: ZINK: failed to choose pdev
+libEGL warning: egl: failed to create dri2 screen
+amdgpu: DRM version is 3.40.0, but this driver is only compatible with 3.54.0 (kernel 6.6+) or later.
+MESA: error: ZINK: vkEnumeratePhysicalDevices failed (VK_ERROR_INITIALIZATION_FAILED)
+MESA: error: ZINK: failed to choose pdev
+amdgpu: DRM version is 3.40.0, but this driver is only compatible with 3.54.0 (kernel 6.6+) or later.
+EGL_PIPELINE_EXIT=0
+1445.11 11421.56

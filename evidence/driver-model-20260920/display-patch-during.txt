@@ -1,0 +1,10 @@
+{'card': '/dev/dri/card1', 'crtc_id': 184, 'fb_id': 196, 'fb_size': [1080, 2340], 'window': [0, 0, 1080, 2340], 'format': 'XR24', 'modifier': 0, 'handle': 1, 'pitch': 4320, 'offset': 0, 'mapped_bytes': 10108800, 'output': '/tmp/hyprland-display-patch.png'}
+ 8740     1 {start-weston-na} /bin/sh /usr/local/bin/start-weston-native
+ 8916  8740 /usr/bin/weston --backend=drm-backend.so --renderer=pixman --drm-device=card1 --seat=seat0 --socket=wayland-0 --continue-without-input --config=/run/weston-native.ini --xwayland
+ 8919  8916 /usr/libexec/weston-keyboard
+ 8920  8916 /usr/libexec/weston-desktop-shell
+ 8940  8939 sh -c python3 /tmp/drm-capture.py /tmp/hyprland-display-patch.png --card /dev/dri/card1 --crtc-id 184; ps -eo pid,ppid,args | grep -E "Hyprland|foot|weston"; free -m
+ 8943  8940 grep -E Hyprland|foot|weston
+              total        used        free      shared  buff/cache   available
+Mem:           7274        1452        1485        3779        4336        2560
+Swap:             0           0           0

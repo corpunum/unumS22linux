@@ -1,0 +1,26 @@
+44.52 348.14
+Python 3.14.7
+git version 2.54.0
+HTTP/2 200 
+0 /proc/boot_reset
+crw-rw-rw-    1 root     root        5,   2 Jan  1  1970 /dev/ptmx
+
+/dev/dri:
+total 0
+crw-------    1 root     root      226,   0 Sep 19 19:54 card0
+crw-------    1 root     root      226,   1 Sep 19 19:54 card1
+crw-------    1 root     root      226, 128 Sep 19 19:54 renderD128
+crw-------    1 root     root      226, 129 Sep 19 19:54 renderD129
+
+/dev/pts:
+total 0
+c---------    1 root     root        5,   2 Jan  1  1970 ptmx
+native-root / tmpfs rw,relatime,size=1048576k,mode=755 0 0
+tmpfs /dev tmpfs rw,nosuid,relatime,size=2659668k,nr_inodes=664917,mode=755 0 0
+devpts /dev/pts devpts rw,relatime,mode=600,ptmxmode=000 0 0
+proc /proc proc rw,relatime,gid=3009,hidepid=invisible 0 0
+sysfs /sys sysfs rw,relatime 0 0
+selinuxfs /sys/fs/selinux selinuxfs rw,relatime 0 0
+rootfs /run rootfs rw,size=2436928k,nr_inodes=609232 0 0
+rootfs /native rootfs rw,size=2436928k,nr_inodes=609232 0 0
+100

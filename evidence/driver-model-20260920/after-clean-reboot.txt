@@ -1,0 +1,11 @@
+Sat Sep 19 23:02:41 UTC 2026
+21.90 166.08
+/system/bin/native-guardian
+1548
+magic: b0071257
+version: 20230221
+name: BORE
+last: 518
+[ IDX]       RTC       / RR (CNT) / KEY / M / VERSION       QB_ID    / VCELL ( BAT)(C) / TMU[TRIP],BAT           / I2C FAIL COUNT / DT / SLOT / BOOTING SEQUENCE
+[ 518] 260919 23:02:18 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4350mV( 99%)(+) / 45[0x000] 45[0x000], 37 / 00000000000000 /  - /   -  / SOFT, INFORM3(12345674) > RECOVERY > , JUMP2K [drawLOGO]
+[ 517] 260919 20:45:28 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4340mV( 99%)

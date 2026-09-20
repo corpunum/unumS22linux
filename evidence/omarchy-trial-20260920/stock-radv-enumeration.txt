@@ -1,0 +1,11 @@
+'DISPLAY' environment variable not set... skipping surface info
+WARNING: [../src/amd/vulkan/radv_physical_device.c:2422] Code 0 : Device '/dev/dri/renderD129' is not using the AMDGPU kernel driver: No such file or directory (VK_ERROR_INCOMPATIBLE_DRIVER)
+VULKANINFO_EXIT=1
+1408.84 11133.86
+amdgpu: DRM version is 3.40.0, but this driver is only compatible with 3.54.0 (kernel 6.6+) or later.
+WARNING: [../src/amd/vulkan/radv_physical_device.c:2451] Code 0 : failed to initialize winsys (VK_ERROR_INITIALIZATION_FAILED)
+ERROR: [Loader Message] Code 0 : setup_loader_term_phys_devs: Call to 'vkEnumeratePhysicalDevices' in ICD /usr/lib/libvulkan_radeon.so failed with error code -3
+[Vulkan Loader] ERROR:          setup_loader_term_phys_devs: Call to 'vkEnumeratePhysicalDevices' in ICD /usr/lib/libvulkan_radeon.so failed with error code -3
+ERROR: [Loader Message] Code 0 : setup_loader_term_phys_devs:  Failed to detect any valid GPUs in the current config
+[Vulkan Loader] ERROR:          setup_loader_term_phys_devs:  Failed to detect any valid GPUs in the current config
+ERROR at /home/buildozer/aports/main/vulkan-tools/src/Vulkan-Tools-1.4.347/vulkaninfo/./vulkaninfo.h:249:vkEnumeratePhysicalDevices failed with ERROR_INITIALIZATION_FAILED

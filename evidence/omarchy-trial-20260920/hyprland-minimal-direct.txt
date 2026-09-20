@@ -1,0 +1,3 @@
+Baseline Weston did not stop
+Baseline Weston restored; launcher=6055
+standalone_trial_exit=1

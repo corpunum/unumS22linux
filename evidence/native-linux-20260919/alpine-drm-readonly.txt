@@ -1,0 +1,12 @@
+total 0
+crw-rw-rw-    1 root     1003      226,   0 Sep 19 19:41 card0
+crw-rw-rw-    1 root     1003      226,   1 Sep 19 19:41 card1
+crw-rw-rw-    1 root     1003      226, 128 Sep 19 19:41 renderD128
+crw-rw-rw-    1 root     1003      226, 129 Sep 19 19:41 renderD129
+/sys/class/drm/card1-DSI-1
+connected
+1080x2340@120hs
+1080x2340@60phs
+1080x2340@60ns
+1080x2340@30phs
+1080x2340@24phs

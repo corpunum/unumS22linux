@@ -1,0 +1,12 @@
+Sat Sep 19 22:41:17 UTC 2026
+11482     1 S<    0:08   {start-weston-na} /bin/sh /usr/local/bin/start-weston-native
+11650 11482 S<    0:08   /usr/bin/seatd -u root -g root -l info
+11659 11482 S<    0:07   /usr/bin/weston --backend=drm-backend.so --renderer=pixman --drm-device=card1 --seat=seat0 --socket=wayland-0 --continue-without-input --config=/run/weston-native.ini --xwayland
+11663 11659 S<    0:07   /usr/libexec/weston-keyboard
+11664 11659 S<    0:07   /usr/libexec/weston-desktop-shell
+11687 11686 S<    0:01   sh -c date -u; ps -o pid,ppid,stat,etime,args | grep -E "11341|timeout|phone-direct|Hyprland|seatd|weston"; cat /proc/11341/status | head -n 8; chroot /mnt/omarchy-trial /usr/bin/env XDG_RUNTIME_DIR=/run/user/0 WAYLAND_DISPLAY=wayland-1 /usr/bin/foot --font=monospace:size=12 /usr/bin/sh -c "echo S22-native-Hyprland; exec sh"
+11690 11687 R<    0:01   grep -E 11341|timeout|phone-direct|Hyprland|seatd|weston
+cat: can't open '/proc/11341/status': No such file or directory
+warn: main.c:495: 'C' is not a UTF-8 locale, falling back to 'C.UTF-8'
+ err: fcft.c:572: monospace::size=8: failed to match font
+ err: wayland.c:1822: failed to connect to wayland; no compositor running?

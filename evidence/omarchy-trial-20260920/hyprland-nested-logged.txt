@@ -1,0 +1,76 @@
+[ WARNING ] Running Hyprland with superuser privileges might damage your system
+[1;32mDEBUG [0m]: User-specified config location: '/root/hyprland-trial.lua'
+Superuser privileges check is omitted. I hope you know what you're doing.
+Welcome to Hyprland!
+
+                                                  
+                     YY    UJ                     
+                    YYY    UUJ                    
+                   XXXY    UUUU                   
+                  zXXXX    UUUUU                  
+                zzzzX        UUUUJ                
+               cczzz          UUUUJ               
+             vccccz            UUUUUJ             
+            vvcccc              UUUUUJ            
+           vvvvv                  UUUUJ           
+          uuuvv                    UUUUJ          
+         uuuuu                      UUUUU         
+        nnnuu                        UUUUU        
+       nnnnn                          YUUUU       
+       xxnn                            YUUU       
+       xxxn                            YYUU       
+      xxxx                              YYUU      
+      rxxx                              YYYY      
+      rrrx                              YYYY      
+       rrrx                            XXXY       
+       rrrr                            XXXX       
+        rrrr                          zzXX        
+         rrrr                        zzzz         
+          rrrrr                    ccczz          
+           rrrrrx                vccccc           
+             rrrrxxxx        uuvvvvvc             
+                rrxxxxxxnnnnuuuuuv                
+                    xxxxxnnnnu                    
+
+
+
+DEBUG ]: Old rlimit: soft -> 1024, hard -> 4096
+DEBUG ]: New rlimit: soft -> 4096, hard -> 4096
+WARN ]: WARNING: Hyprland is being launched without start-hyprland. This is highly advised against.
+DEBUG ]: Creating the EventLoopManager!
+DEBUG ]: Creating the KeybindManager!
+DEBUG ]: Creating the AnimationManager!
+DEBUG ]: Creating the DynamicPermissionManager!
+DEBUG ]: Creating the MonitorState!
+DEBUG ]: Creating the WorkspaceState!
+DEBUG ]: Creating the ConfigManager!
+DEBUG ]: [cfg] Config is either explicit or special.
+DEBUG ]: [cfg] Config is lua, loading lua mgr
+DEBUG ]: Creating the Error Overlay!
+DEBUG ]: Creating the LayoutManager!
+DEBUG ]: Creating the TokenManager!
+DEBUG ]: Creating the EventManager!
+DEBUG ]: Creating the PointerManager!
+DEBUG ]: Creating the AsyncResourceGatherer!
+[1;32mDEBUG [0mfrom aquamarine ]: Creating an Aquamarine backend!
+[1;32mDEBUG [0mfrom aquamarine ]: [libseat] [libseat/backend/seatd.c:64] Could not connect to socket /run/seatd.sock: No such file or directory
+[1;32mDEBUG [0mfrom aquamarine ]: [libseat] [libseat/libseat.c:76] Backend 'seatd' failed to open seat, skipping
+[1;31mERR [0mfrom aquamarine ]: [libseat] [libseat/backend/logind.c:638] Could not get primary session for user: No data available
+[1;32mDEBUG [0mfrom aquamarine ]: [libseat] [libseat/libseat.c:76] Backend 'logind' failed to open seat, skipping
+[1;31mERR [0mfrom aquamarine ]: [libseat] [libseat/libseat.c:79] No backend was able to open a seat
+[1;31mERR [0mfrom aquamarine ]: libseat: failed to open a seat
+[1;31mERR [0mfrom aquamarine ]: Failed to open a session
+[1;31mERR [0mfrom aquamarine ]: DRM Backend failed
+[1;32mDEBUG [0mfrom aquamarine ]: Starting the Aquamarine backend!
+[1;32mDEBUG [0mfrom aquamarine ]: Starting the Wayland backend!
+[1;32mDEBUG [0mfrom aquamarine ]: Connected to a wayland compositor: Hyprland
+[1;32mDEBUG [0mfrom aquamarine ]: Got registry at 0x55749e8fd0
+[1;31mERR [0mfrom aquamarine ]: Wayland backend cannot start: Missing protocols
+[1;31mERR [0mfrom aquamarine ]: Requested backend (wayland) could not start, enabling fallbacks
+[1;35mCRIT [0mfrom aquamarine ]: Cannot open backend: no allocator available
+[1;35mCRIT [0m]: m_pAqBackend couldn't start! This usually means aquamarine could not find a GPU or encountered some issues. Make sure you're running either on a tty or on a Wayland session, NOT an X11 one.
+[1;35mCRIT [0m]: Critical error thrown: CBackend::create() failed!
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  CBackend::create() failed!
+Aborted
+launch_exit=134

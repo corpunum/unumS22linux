@@ -1,0 +1,75 @@
+Sat Sep 19 20:46:00 UTC 2026
+31.45 243.30
+magic: b0071257
+version: 20230221
+name: BORE
+last: 517
+[ IDX]       RTC       / RR (CNT) / KEY / M / VERSION       QB_ID    / VCELL ( BAT)(C) / TMU[TRIP],BAT           / I2C FAIL COUNT / DT / SLOT / BOOTING SEQUENCE
+[ 517] 260919 20:45:28 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4340mV( 99%)(+) / 35[0x000] 36[0x000], 29 / 00000000000000 /  - /   -  / SOFT, INFORM3(12345674) > RECOVERY > , JUMP2K [drawLOGO]
+[ 516] 260919 20:24:21 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4342mV( 99%)(+) / 36[0x000] 36[0x000], 30 / 00000000000000 /  - /   -  / SOFT, INFORM3(12345674) > RECOVERY > , JUMP2K [drawLOGO]
+[ 515] 260919 20:20:44 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4337mV( 99%)(+) / 42[0x000] 41[0x000], 29 / 00000000000000 /  - /   -  / SOFT, REBOOTMODE4 > RECOVERY > , JUMP2K [drawLOGO]
+[ 514] 260919 20:20:22 / RP (  0) /     / N / S901BXXSIFYI3 10073462 / 4336mV( 99%)(+) / 34[0x000] 34[0x000], 29 / 00000000000000 /  - /   -  / SOFT, REBOOTMODE0 > NORMAL > JUMP2K [drawLOGO]
+[ 513] 260919 19:54:47 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4339mV(100%)(+) / 37[0x000] 37[0x000], 30 / 00000000000000 /  - /   -  / SOFT, INFORM3(12345674) > RECOVERY > BL:Recovery Mode Set by key, JUMP2K [drawLOGO]
+[ 512] 260919 19:41:01 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4337mV( 91%)(+) / 37[0x000] 38[0x000], 31 / 00000000000000 /  - /   -  / SOFT, INFORM3(12345674) > RECOVERY > BL:Recovery Mode Set by key, JUMP2K [drawLOGO]
+[ 511] 260919 17:55:45 / MP (  0) /     / R / S901BXXSIFYI3 10073462 / 3806mV( 37%)(+) / 44[0x000] 45[0x000], 34 / 00000000000000 /  - /   -  / PIN, MRST (M) , (S) PWRHOLD,PWROND, INFORM3(0) > RECOVERY > BL:Recovery Mode Set by key, JUMP2K [drawLOGO]
+/system/bin/native-guardian
+2bf666a0fdea56e23793f0acfb06cd6056008accf1c18b4440918a87b5337b01  /native/native-start
+92e22dd4d7aa889578c3b01cada1a6c715690ff5941ce83763bb3c74afd432de  /etc/ssh/ssh_host_ed25519_key.pub
+overlay
+Seeded from live native Alpine + Weston, 2026-09-19.
+overlay on / type overlay (rw,relatime,lowerdir=/native-lower,upperdir=/cache/s22-linux/upper,workdir=/cache/s22-linux/work)
+tmpfs on /dev type tmpfs (rw,nosuid,relatime,size=2659668k,nr_inodes=664917,mode=755)
+devpts on /dev/pts type devpts (rw,relatime,mode=600,ptmxmode=000)
+proc on /proc type proc (rw,relatime,gid=3009,hidepid=invisible)
+sysfs on /sys type sysfs (rw,relatime)
+selinuxfs on /sys/fs/selinux type selinuxfs (rw,relatime)
+rootfs on /run type rootfs (rw,size=2436928k,nr_inodes=609232)
+native-tmp on /tmp type tmpfs (rw,relatime,size=262144k)
+rootfs on /native type rootfs (rw,size=2436928k,nr_inodes=609232)
+Filesystem                Size      Used Available Use% Mounted on
+overlay                 582.6M    389.5M    181.1M  68% /
+native-tmp              256.0M         0    256.0M   0% /tmp
+  481 sshd: /usr/sbin/sshd -D -e [listener] 1 of 10-100 startups
+ 1508 {start-weston-na} /bin/sh /usr/local/bin/start-weston-native
+ 1544 /usr/bin/seatd -u root -g root -l info
+ 1549 /usr/bin/weston --backend=drm-backend.so --renderer=pixman --drm-device=card1 --seat=seat0 --socket=wayland-0 --continue-without-input --config=/run/weston-native.ini
+ 1551 /usr/libexec/weston-keyboard
+ 1552 /usr/libexec/weston-desktop-shell
+ 1553 /usr/bin/weston-terminal --maximized --shell=/usr/local/bin/s22-shell
+ 1594 sshd-session: root [priv]
+ 1596 sshd-session: [accepted]
+ 1597 sshd-session: root@notty
+ 1598 sh -c date; cat /proc/uptime; head -n 12 /proc/boot_reset; readlink /proc/1/exe; sha256sum /native/native-start /etc/ssh/ssh_host_ed25519_key.pub; cat /run/native-storage-mode /root/PERSISTENCE-TEST.txt; mount | head -n 14; df -h / /tmp; ps -o pid,args | grep -E "[w]eston|[s]eatd|[s]shd|[r]ecovery|[a]dbd"; tail -n 30 /run/weston-native.log; python3 --version; git --version
+ 1599 sshd-auth: [session-auth]
+               1080x2340@24phs@24.0, 306.9 MHz
+[20:45:35.637] associating input device event7 with output DSI-1 (none by udev)
+[20:45:35.637] associating input device event1 with output DSI-1 (none by udev)
+[20:45:35.637] associating input device event0 with output DSI-1 (none by udev)
+[20:45:35.637] associating input device event2 with output DSI-1 (none by udev)
+[20:45:35.637] associating input device event5 with output DSI-1 (none by udev)
+[20:45:35.637] Output 'DSI-1' enabled with head(s) DSI-1
+[20:45:35.637] Compositor capabilities:
+               arbitrary surface rotation: yes
+               screen capture uses y-flip: no
+               cursor planes: yes
+               arbitrary resolutions: no
+               view mask clipping: yes
+               explicit sync: no
+               color operations: no
+               presentation clock: CLOCK_MONOTONIC, id 1
+               presentation clock resolution: 0.000000001 s
+[20:45:35.637] Loading module '/usr/lib/weston/desktop-shell.so'
+[20:45:35.639] launching '/usr/libexec/weston-keyboard'
+[20:45:35.639] launching '/usr/libexec/weston-desktop-shell'
+start-weston-native: launching terminal mode=--maximized; compositor remains after terminal close
+could not load cursor 'dnd-move'
+could not load cursor 'dnd-copy'
+could not load cursor 'dnd-none'
+could not load cursor 'dnd-move'
+could not load cursor 'dnd-copy'
+could not load cursor 'dnd-none'
+could not load cursor 'dnd-move'
+could not load cursor 'dnd-copy'
+could not load cursor 'dnd-none'
+Python 3.14.7
+git version 2.54.0

@@ -1,0 +1,4 @@
+(1/1) Installing vulkan-loader (1.4.347-r0)
+OK: 445.1 MiB in 241 packages
+VULKANINFO_EXIT=1
+1366.78 10799.23

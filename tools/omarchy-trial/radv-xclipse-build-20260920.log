@@ -1,0 +1,234 @@
+ninja: Entering directory `/tmp/radv-cross-config.Ez9YRt'
+[1/635] Compiling C object src/util/libmesa_util.a.p/compress.c.o
+FAILED: src/util/libmesa_util.a.p/compress.c.o 
+/usr/bin/clang -Isrc/util/libmesa_util.a.p -Isrc/util -I../radv-xclipse-audit.d1QiDb/src/util -Iinclude -I../radv-xclipse-audit.d1QiDb/include -Isrc -I../radv-xclipse-audit.d1QiDb/src -Isrc/util/format -I../radv-xclipse-audit.d1QiDb/src/util/format -I/home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot/usr/include -fvisibility=hidden -fdiagnostics-color=always -DNDEBUG -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -std=c11 -O3 -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS '-DPACKAGE_VERSION="24.3.4"' '-DPACKAGE_BUGREPORT="https://gitlab.freedesktop.org/mesa/mesa/-/issues"' -DHAVE_OPENGL=1 -DHAVE_OPENGL_ES_1=0 -DHAVE_OPENGL_ES_2=0 -DVIDEO_CODEC_VC1DEC=0 -DVIDEO_CODEC_H264DEC=0 -DVIDEO_CODEC_H264ENC=0 -DVIDEO_CODEC_H265DEC=0 -DVIDEO_CODEC_H265ENC=0 -DVIDEO_CODEC_AV1DEC=1 -DVIDEO_CODEC_AV1ENC=1 -DVIDEO_CODEC_VP9DEC=1 -DUSE_LIBGLVND=0 -DGLAPI_EXPORT_PROTO_ENTRY_POINTS=0 -DALLOW_KCMP -DMESA_DEBUG=0 -DENABLE_SHADER_CACHE -DHAVE___BUILTIN_BSWAP32 -DHAVE___BUILTIN_BSWAP64 -DHAVE___BUILTIN_CLZ -DHAVE___BUILTIN_CLZLL -DHAVE___BUILTIN_CTZ -DHAVE___BUILTIN_EXPECT -DHAVE___BUILTIN_FFS -DHAVE___BUILTIN_FFSLL -DHAVE___BUILTIN_POPCOUNT -DHAVE___BUILTIN_POPCOUNTLL -DHAVE___BUILTIN_UNREACHABLE -DHAVE___BUILTIN_TYPES_COMPATIBLE_P -DHAVE_FUNC_ATTRIBUTE_CONST -DHAVE_FUNC_ATTRIBUTE_FLATTEN -DHAVE_FUNC_ATTRIBUTE_MALLOC -DHAVE_FUNC_ATTRIBUTE_PURE -DHAVE_FUNC_ATTRIBUTE_UNUSED -DHAVE_FUNC_ATTRIBUTE_WARN_UNUSED_RESULT -DHAVE_FUNC_ATTRIBUTE_WEAK -DHAVE_FUNC_ATTRIBUTE_FORMAT -DHAVE_FUNC_ATTRIBUTE_PACKED -DHAVE_FUNC_ATTRIBUTE_RETURNS_NONNULL -DHAVE_FUNC_ATTRIBUTE_ALIAS -DHAVE_FUNC_ATTRIBUTE_NORETURN -DHAVE_FUNC_ATTRIBUTE_VISIBILITY -DHAVE_UINT128 -DHAVE_REALLOCARRAY -DHAVE_FMEMOPEN -D_GNU_SOURCE -DUSE_GCC_ATOMIC_BUILTINS -DUSE_AARCH64_ASM -DMAJOR_IN_SYSMACROS -DHAS_SCHED_H -DHAS_SCHED_GETAFFINITY -DHAVE_LINUX_FUTEX_H -DHAVE_ENDIAN_H -DHAVE_DLFCN_H -DHAVE_SYS_SHM_H -DHAVE_SYS_INOTIFY_H -DHAVE_LINUX_UDMABUF_H -DHAVE_STRTOF -DHAVE_MKOSTEMP -DHAVE_MEMFD_CREATE -DHAVE_FLOCK -DHAVE_STRTOK_R -DHAVE_GETRANDOM -DHAVE_POSIX_FALLOCATE -DHAVE_SECURE_GETENV -DHAVE_STRUCT_TIMESPEC -DHAVE_PROGRAM_INVOCATION_NAME -DHAVE_POSIX_MEMALIGN -DHAVE_DIRENT_D_TYPE -DHAVE_STRTOD_L -DHAVE_DLADDR -DHAVE_DL_ITERATE_PHDR -DHAVE_ZLIB -DHAVE_ZSTD -DHAVE_COMPRESSION -DHAVE_PTHREAD -DHAVE_PTHREAD_SETAFFINITY -DHAVE_LIBDRM '-DMESA_LLVM_VERSION_STRING="22.1.3"' -DLLVM_IS_SHARED=1 -DLLVM_AVAILABLE=1 -DDRAW_LLVM_AVAILABLE=1 -DAMD_LLVM_AVAILABLE=0 -DGALLIVM_USE_ORCJIT=0 -DUSE_LIBELF -DTHREAD_SANITIZER=0 -DHAVE_DRI2 -Werror=implicit-function-declaration -Werror=missing-prototypes -Werror=return-type -Werror=empty-body -Werror=incompatible-pointer-types -Werror=int-conversion -Wimplicit-fallthrough -Wmisleading-indentation -Wno-missing-field-initializers -Wno-format-truncation -fno-math-errno -fno-trapping-math -Qunused-arguments -fno-common -Wno-unknown-pragmas -Wno-microsoft-enum-value -Wno-unused-function -Werror=format -Wformat-security -Werror=thread-safety -ffunction-sections -fdata-sections -Wno-unused-variable -Wno-unused-but-set-variable --target=aarch64-linux-musl --sysroot=/home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot -nostdinc -isystem /home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot/usr/include -fPIC -pthread -Werror=pointer-arith -Werror=vla -Werror=gnu-empty-initializer -MD -MQ src/util/libmesa_util.a.p/compress.c.o -MF src/util/libmesa_util.a.p/compress.c.o.d -o src/util/libmesa_util.a.p/compress.c.o -c ../radv-xclipse-audit.d1QiDb/src/util/compress.c
+In file included from ../radv-xclipse-audit.d1QiDb/src/util/compress.c:41:
+In file included from ../radv-xclipse-audit.d1QiDb/src/util/compress.h:27:
+/home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot/usr/include/inttypes.h:21:15: fatal error: 'inttypes.h' file not found
+   21 | #include_next <inttypes.h>
+      |               ^~~~~~~~~~~~
+1 error generated.
+[2/635] Compiling C object src/util/libmesa_util.a.p/crc32.c.o
+ninja: build stopped: subcommand failed.
+ninja: Entering directory `/tmp/radv-cross-config.Ez9YRt'
+[1/634] Compiling C object src/util/libmesa_util.a.p/compress.c.o
+FAILED: src/util/libmesa_util.a.p/compress.c.o 
+/usr/bin/clang -Isrc/util/libmesa_util.a.p -Isrc/util -I../radv-xclipse-audit.d1QiDb/src/util -Iinclude -I../radv-xclipse-audit.d1QiDb/include -Isrc -I../radv-xclipse-audit.d1QiDb/src -Isrc/util/format -I../radv-xclipse-audit.d1QiDb/src/util/format -I/home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot/usr/include -fvisibility=hidden -fdiagnostics-color=always -DNDEBUG -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -std=c11 -O3 -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS '-DPACKAGE_VERSION="24.3.4"' '-DPACKAGE_BUGREPORT="https://gitlab.freedesktop.org/mesa/mesa/-/issues"' -DHAVE_OPENGL=1 -DHAVE_OPENGL_ES_1=0 -DHAVE_OPENGL_ES_2=0 -DVIDEO_CODEC_VC1DEC=0 -DVIDEO_CODEC_H264DEC=0 -DVIDEO_CODEC_H264ENC=0 -DVIDEO_CODEC_H265DEC=0 -DVIDEO_CODEC_H265ENC=0 -DVIDEO_CODEC_AV1DEC=1 -DVIDEO_CODEC_AV1ENC=1 -DVIDEO_CODEC_VP9DEC=1 -DUSE_LIBGLVND=0 -DGLAPI_EXPORT_PROTO_ENTRY_POINTS=0 -DALLOW_KCMP -DMESA_DEBUG=0 -DENABLE_SHADER_CACHE -DHAVE___BUILTIN_BSWAP32 -DHAVE___BUILTIN_BSWAP64 -DHAVE___BUILTIN_CLZ -DHAVE___BUILTIN_CLZLL -DHAVE___BUILTIN_CTZ -DHAVE___BUILTIN_EXPECT -DHAVE___BUILTIN_FFS -DHAVE___BUILTIN_FFSLL -DHAVE___BUILTIN_POPCOUNT -DHAVE___BUILTIN_POPCOUNTLL -DHAVE___BUILTIN_UNREACHABLE -DHAVE___BUILTIN_TYPES_COMPATIBLE_P -DHAVE_FUNC_ATTRIBUTE_CONST -DHAVE_FUNC_ATTRIBUTE_FLATTEN -DHAVE_FUNC_ATTRIBUTE_MALLOC -DHAVE_FUNC_ATTRIBUTE_PURE -DHAVE_FUNC_ATTRIBUTE_UNUSED -DHAVE_FUNC_ATTRIBUTE_WARN_UNUSED_RESULT -DHAVE_FUNC_ATTRIBUTE_WEAK -DHAVE_FUNC_ATTRIBUTE_FORMAT -DHAVE_FUNC_ATTRIBUTE_PACKED -DHAVE_FUNC_ATTRIBUTE_RETURNS_NONNULL -DHAVE_FUNC_ATTRIBUTE_ALIAS -DHAVE_FUNC_ATTRIBUTE_NORETURN -DHAVE_FUNC_ATTRIBUTE_VISIBILITY -DHAVE_UINT128 -DHAVE_REALLOCARRAY -DHAVE_FMEMOPEN -D_GNU_SOURCE -DUSE_GCC_ATOMIC_BUILTINS -DUSE_AARCH64_ASM -DMAJOR_IN_SYSMACROS -DHAS_SCHED_H -DHAS_SCHED_GETAFFINITY -DHAVE_LINUX_FUTEX_H -DHAVE_ENDIAN_H -DHAVE_DLFCN_H -DHAVE_SYS_SHM_H -DHAVE_SYS_INOTIFY_H -DHAVE_LINUX_UDMABUF_H -DHAVE_STRTOF -DHAVE_MKOSTEMP -DHAVE_MEMFD_CREATE -DHAVE_FLOCK -DHAVE_STRTOK_R -DHAVE_GETRANDOM -DHAVE_POSIX_FALLOCATE -DHAVE_SECURE_GETENV -DHAVE_STRUCT_TIMESPEC -DHAVE_PROGRAM_INVOCATION_NAME -DHAVE_POSIX_MEMALIGN -DHAVE_DIRENT_D_TYPE -DHAVE_STRTOD_L -DHAVE_DLADDR -DHAVE_DL_ITERATE_PHDR -DHAVE_ZLIB -DHAVE_ZSTD -DHAVE_COMPRESSION -DHAVE_PTHREAD -DHAVE_PTHREAD_SETAFFINITY -DHAVE_LIBDRM '-DMESA_LLVM_VERSION_STRING="22.1.3"' -DLLVM_IS_SHARED=1 -DLLVM_AVAILABLE=1 -DDRAW_LLVM_AVAILABLE=1 -DAMD_LLVM_AVAILABLE=0 -DGALLIVM_USE_ORCJIT=0 -DUSE_LIBELF -DTHREAD_SANITIZER=0 -DHAVE_DRI2 -Werror=implicit-function-declaration -Werror=missing-prototypes -Werror=return-type -Werror=empty-body -Werror=incompatible-pointer-types -Werror=int-conversion -Wimplicit-fallthrough -Wmisleading-indentation -Wno-missing-field-initializers -Wno-format-truncation -fno-math-errno -fno-trapping-math -Qunused-arguments -fno-common -Wno-unknown-pragmas -Wno-microsoft-enum-value -Wno-unused-function -Werror=format -Wformat-security -Werror=thread-safety -ffunction-sections -fdata-sections -Wno-unused-variable -Wno-unused-but-set-variable --target=aarch64-linux-musl --sysroot=/home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot -nostdinc -isystem /home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot/usr/include -fPIC -pthread -Werror=pointer-arith -Werror=vla -Werror=gnu-empty-initializer -MD -MQ src/util/libmesa_util.a.p/compress.c.o -MF src/util/libmesa_util.a.p/compress.c.o.d -o src/util/libmesa_util.a.p/compress.c.o -c ../radv-xclipse-audit.d1QiDb/src/util/compress.c
+In file included from ../radv-xclipse-audit.d1QiDb/src/util/compress.c:41:
+In file included from ../radv-xclipse-audit.d1QiDb/src/util/compress.h:27:
+/home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot/usr/include/inttypes.h:21:15: fatal error: 'inttypes.h' file not found
+   21 | #include_next <inttypes.h>
+      |               ^~~~~~~~~~~~
+1 error generated.
+[2/634] Compiling C object src/util/libmesa_util.a.p/dag.c.o
+FAILED: src/util/libmesa_util.a.p/dag.c.o 
+/usr/bin/clang -Isrc/util/libmesa_util.a.p -Isrc/util -I../radv-xclipse-audit.d1QiDb/src/util -Iinclude -I../radv-xclipse-audit.d1QiDb/include -Isrc -I../radv-xclipse-audit.d1QiDb/src -Isrc/util/format -I../radv-xclipse-audit.d1QiDb/src/util/format -I/home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot/usr/include -fvisibility=hidden -fdiagnostics-color=always -DNDEBUG -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -std=c11 -O3 -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS '-DPACKAGE_VERSION="24.3.4"' '-DPACKAGE_BUGREPORT="https://gitlab.freedesktop.org/mesa/mesa/-/issues"' -DHAVE_OPENGL=1 -DHAVE_OPENGL_ES_1=0 -DHAVE_OPENGL_ES_2=0 -DVIDEO_CODEC_VC1DEC=0 -DVIDEO_CODEC_H264DEC=0 -DVIDEO_CODEC_H264ENC=0 -DVIDEO_CODEC_H265DEC=0 -DVIDEO_CODEC_H265ENC=0 -DVIDEO_CODEC_AV1DEC=1 -DVIDEO_CODEC_AV1ENC=1 -DVIDEO_CODEC_VP9DEC=1 -DUSE_LIBGLVND=0 -DGLAPI_EXPORT_PROTO_ENTRY_POINTS=0 -DALLOW_KCMP -DMESA_DEBUG=0 -DENABLE_SHADER_CACHE -DHAVE___BUILTIN_BSWAP32 -DHAVE___BUILTIN_BSWAP64 -DHAVE___BUILTIN_CLZ -DHAVE___BUILTIN_CLZLL -DHAVE___BUILTIN_CTZ -DHAVE___BUILTIN_EXPECT -DHAVE___BUILTIN_FFS -DHAVE___BUILTIN_FFSLL -DHAVE___BUILTIN_POPCOUNT -DHAVE___BUILTIN_POPCOUNTLL -DHAVE___BUILTIN_UNREACHABLE -DHAVE___BUILTIN_TYPES_COMPATIBLE_P -DHAVE_FUNC_ATTRIBUTE_CONST -DHAVE_FUNC_ATTRIBUTE_FLATTEN -DHAVE_FUNC_ATTRIBUTE_MALLOC -DHAVE_FUNC_ATTRIBUTE_PURE -DHAVE_FUNC_ATTRIBUTE_UNUSED -DHAVE_FUNC_ATTRIBUTE_WARN_UNUSED_RESULT -DHAVE_FUNC_ATTRIBUTE_WEAK -DHAVE_FUNC_ATTRIBUTE_FORMAT -DHAVE_FUNC_ATTRIBUTE_PACKED -DHAVE_FUNC_ATTRIBUTE_RETURNS_NONNULL -DHAVE_FUNC_ATTRIBUTE_ALIAS -DHAVE_FUNC_ATTRIBUTE_NORETURN -DHAVE_FUNC_ATTRIBUTE_VISIBILITY -DHAVE_UINT128 -DHAVE_REALLOCARRAY -DHAVE_FMEMOPEN -D_GNU_SOURCE -DUSE_GCC_ATOMIC_BUILTINS -DUSE_AARCH64_ASM -DMAJOR_IN_SYSMACROS -DHAS_SCHED_H -DHAS_SCHED_GETAFFINITY -DHAVE_LINUX_FUTEX_H -DHAVE_ENDIAN_H -DHAVE_DLFCN_H -DHAVE_SYS_SHM_H -DHAVE_SYS_INOTIFY_H -DHAVE_LINUX_UDMABUF_H -DHAVE_STRTOF -DHAVE_MKOSTEMP -DHAVE_MEMFD_CREATE -DHAVE_FLOCK -DHAVE_STRTOK_R -DHAVE_GETRANDOM -DHAVE_POSIX_FALLOCATE -DHAVE_SECURE_GETENV -DHAVE_STRUCT_TIMESPEC -DHAVE_PROGRAM_INVOCATION_NAME -DHAVE_POSIX_MEMALIGN -DHAVE_DIRENT_D_TYPE -DHAVE_STRTOD_L -DHAVE_DLADDR -DHAVE_DL_ITERATE_PHDR -DHAVE_ZLIB -DHAVE_ZSTD -DHAVE_COMPRESSION -DHAVE_PTHREAD -DHAVE_PTHREAD_SETAFFINITY -DHAVE_LIBDRM '-DMESA_LLVM_VERSION_STRING="22.1.3"' -DLLVM_IS_SHARED=1 -DLLVM_AVAILABLE=1 -DDRAW_LLVM_AVAILABLE=1 -DAMD_LLVM_AVAILABLE=0 -DGALLIVM_USE_ORCJIT=0 -DUSE_LIBELF -DTHREAD_SANITIZER=0 -DHAVE_DRI2 -Werror=implicit-function-declaration -Werror=missing-prototypes -Werror=return-type -Werror=empty-body -Werror=incompatible-pointer-types -Werror=int-conversion -Wimplicit-fallthrough -Wmisleading-indentation -Wno-missing-field-initializers -Wno-format-truncation -fno-math-errno -fno-trapping-math -Qunused-arguments -fno-common -Wno-unknown-pragmas -Wno-microsoft-enum-value -Wno-unused-function -Werror=format -Wformat-security -Werror=thread-safety -ffunction-sections -fdata-sections -Wno-unused-variable -Wno-unused-but-set-variable --target=aarch64-linux-musl --sysroot=/home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot -nostdinc -isystem /home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot/usr/include -fPIC -pthread -Werror=pointer-arith -Werror=vla -Werror=gnu-empty-initializer -MD -MQ src/util/libmesa_util.a.p/dag.c.o -MF src/util/libmesa_util.a.p/dag.c.o.d -o src/util/libmesa_util.a.p/dag.c.o -c ../radv-xclipse-audit.d1QiDb/src/util/dag.c
+In file included from ../radv-xclipse-audit.d1QiDb/src/util/dag.c:24:
+In file included from ../radv-xclipse-audit.d1QiDb/src/util/set.h:31:
+/home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot/usr/include/inttypes.h:21:15: fatal error: 'inttypes.h' file not found
+   21 | #include_next <inttypes.h>
+      |               ^~~~~~~~~~~~
+1 error generated.
+ninja: build stopped: subcommand failed.
+ninja: Entering directory `/tmp/radv-cross-config.Ez9YRt'
+[1/634] Compiling C object src/util/libmesa_util.a.p/compress.c.o
+[2/634] Compiling C object src/util/libmesa_util.a.p/dag.c.o
+[3/634] Compiling C object src/util/libmesa_util.a.p/disk_cache.c.o
+[4/634] Compiling C object src/util/libmesa_util.a.p/double.c.o
+[5/634] Compiling C object src/util/libmesa_util.a.p/fast_idiv_by_const.c.o
+[6/634] Compiling C object src/util/libmesa_util.a.p/disk_cache_os.c.o
+[7/634] Compiling C object src/util/libmesa_util.a.p/futex.c.o
+[8/634] Compiling C object src/util/libmesa_util.a.p/half_float.c.o
+[9/634] Compiling C object src/util/libmesa_util.a.p/fossilize_db.c.o
+[10/634] Compiling C object src/util/libmesa_util.a.p/helpers.c.o
+[11/634] Compiling C object src/util/libmesa_util.a.p/hash_table.c.o
+[12/634] Compiling C object src/util/libmesa_util.a.p/u_idalloc.c.o
+[13/634] Compiling C object src/util/libmesa_util.a.p/memstream.c.o
+[14/634] Compiling C object src/util/libmesa_util.a.p/log.c.o
+[15/634] Compiling C object src/util/libmesa_util.a.p/mesa-sha1.c.o
+[16/634] Compiling C object src/util/libmesa_util.a.p/mesa-blake3.c.o
+[17/634] Compiling C object src/util/libmesa_util.a.p/os_time.c.o
+[18/634] Compiling C object src/util/libmesa_util.a.p/os_file.c.o
+[19/634] Compiling C object src/util/libmesa_util.a.p/os_memory_fd.c.o
+[20/634] Compiling C object src/util/libmesa_util.a.p/os_misc.c.o
+[21/634] Compiling C object src/util/libmesa_util.a.p/os_socket.c.o
+[22/634] Compiling C object src/util/libmesa_util.a.p/u_process.c.o
+[23/634] Compiling C++ object src/util/libmesa_util.a.p/u_qsort.cpp.o
+FAILED: src/util/libmesa_util.a.p/u_qsort.cpp.o 
+/usr/bin/clang++ -Isrc/util/libmesa_util.a.p -Isrc/util -I../radv-xclipse-audit.d1QiDb/src/util -Iinclude -I../radv-xclipse-audit.d1QiDb/include -Isrc -I../radv-xclipse-audit.d1QiDb/src -Isrc/util/format -I../radv-xclipse-audit.d1QiDb/src/util/format -I/home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot/usr/include -fvisibility=hidden -fdiagnostics-color=always -DNDEBUG -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -std=c++17 -O3 -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS '-DPACKAGE_VERSION="24.3.4"' '-DPACKAGE_BUGREPORT="https://gitlab.freedesktop.org/mesa/mesa/-/issues"' -DHAVE_OPENGL=1 -DHAVE_OPENGL_ES_1=0 -DHAVE_OPENGL_ES_2=0 -DVIDEO_CODEC_VC1DEC=0 -DVIDEO_CODEC_H264DEC=0 -DVIDEO_CODEC_H264ENC=0 -DVIDEO_CODEC_H265DEC=0 -DVIDEO_CODEC_H265ENC=0 -DVIDEO_CODEC_AV1DEC=1 -DVIDEO_CODEC_AV1ENC=1 -DVIDEO_CODEC_VP9DEC=1 -DUSE_LIBGLVND=0 -DGLAPI_EXPORT_PROTO_ENTRY_POINTS=0 -DALLOW_KCMP -DMESA_DEBUG=0 -DENABLE_SHADER_CACHE -DHAVE___BUILTIN_BSWAP32 -DHAVE___BUILTIN_BSWAP64 -DHAVE___BUILTIN_CLZ -DHAVE___BUILTIN_CLZLL -DHAVE___BUILTIN_CTZ -DHAVE___BUILTIN_EXPECT -DHAVE___BUILTIN_FFS -DHAVE___BUILTIN_FFSLL -DHAVE___BUILTIN_POPCOUNT -DHAVE___BUILTIN_POPCOUNTLL -DHAVE___BUILTIN_UNREACHABLE -DHAVE___BUILTIN_TYPES_COMPATIBLE_P -DHAVE_FUNC_ATTRIBUTE_CONST -DHAVE_FUNC_ATTRIBUTE_FLATTEN -DHAVE_FUNC_ATTRIBUTE_MALLOC -DHAVE_FUNC_ATTRIBUTE_PURE -DHAVE_FUNC_ATTRIBUTE_UNUSED -DHAVE_FUNC_ATTRIBUTE_WARN_UNUSED_RESULT -DHAVE_FUNC_ATTRIBUTE_WEAK -DHAVE_FUNC_ATTRIBUTE_FORMAT -DHAVE_FUNC_ATTRIBUTE_PACKED -DHAVE_FUNC_ATTRIBUTE_RETURNS_NONNULL -DHAVE_FUNC_ATTRIBUTE_ALIAS -DHAVE_FUNC_ATTRIBUTE_NORETURN -DHAVE_FUNC_ATTRIBUTE_VISIBILITY -DHAVE_UINT128 -DHAVE_REALLOCARRAY -DHAVE_FMEMOPEN -D_GNU_SOURCE -DUSE_GCC_ATOMIC_BUILTINS -DUSE_AARCH64_ASM -DMAJOR_IN_SYSMACROS -DHAS_SCHED_H -DHAS_SCHED_GETAFFINITY -DHAVE_LINUX_FUTEX_H -DHAVE_ENDIAN_H -DHAVE_DLFCN_H -DHAVE_SYS_SHM_H -DHAVE_SYS_INOTIFY_H -DHAVE_LINUX_UDMABUF_H -DHAVE_STRTOF -DHAVE_MKOSTEMP -DHAVE_MEMFD_CREATE -DHAVE_FLOCK -DHAVE_STRTOK_R -DHAVE_GETRANDOM -DHAVE_POSIX_FALLOCATE -DHAVE_SECURE_GETENV -DHAVE_STRUCT_TIMESPEC -DHAVE_PROGRAM_INVOCATION_NAME -DHAVE_POSIX_MEMALIGN -DHAVE_DIRENT_D_TYPE -DHAVE_STRTOD_L -DHAVE_DLADDR -DHAVE_DL_ITERATE_PHDR -DHAVE_ZLIB -DHAVE_ZSTD -DHAVE_COMPRESSION -DHAVE_PTHREAD -DHAVE_PTHREAD_SETAFFINITY -DHAVE_LIBDRM '-DMESA_LLVM_VERSION_STRING="22.1.3"' -DLLVM_IS_SHARED=1 -DLLVM_AVAILABLE=1 -DDRAW_LLVM_AVAILABLE=1 -DAMD_LLVM_AVAILABLE=0 -DGALLIVM_USE_ORCJIT=0 -DUSE_LIBELF -DTHREAD_SANITIZER=0 -DHAVE_DRI2 -Werror=return-type -Werror=empty-body -Wmisleading-indentation -Wno-non-virtual-dtor -Wno-missing-field-initializers -Wno-format-truncation -fno-math-errno -fno-trapping-math -Qunused-arguments -Wno-unknown-pragmas -Wno-microsoft-enum-value -Werror=format -Wformat-security -ffunction-sections -fdata-sections -Wno-unused-variable -Wno-unused-but-set-variable --target=aarch64-linux-musl --sysroot=/home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot -nostdinc -isystem /home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot/usr/include -fPIC -pthread -MD -MQ src/util/libmesa_util.a.p/u_qsort.cpp.o -MF src/util/libmesa_util.a.p/u_qsort.cpp.o.d -o src/util/libmesa_util.a.p/u_qsort.cpp.o -c ../radv-xclipse-audit.d1QiDb/src/util/u_qsort.cpp
+../radv-xclipse-audit.d1QiDb/src/util/u_qsort.cpp:25:10: fatal error: 'thread' file not found
+   25 | #include <thread>
+      |          ^~~~~~~~
+1 error generated.
+[24/634] Compiling C object src/util/libmesa_util.a.p/perf_u_trace.c.o
+ninja: build stopped: subcommand failed.
+ninja: Entering directory `/tmp/radv-cross-config.Ez9YRt'
+[1/654] Compiling C object src/c11/impl/libmesa_util_c11.a.p/time.c.o
+[2/654] Compiling C object src/c11/impl/libmesa_util_c11.a.p/threads_posix.c.o
+[3/654] Linking static target src/c11/impl/libmesa_util_c11.a
+[4/654] Compiling C object src/util/blake3/libblake3.a.p/blake3_dispatch.c.o
+[5/654] Compiling C object src/util/blake3/libblake3.a.p/blake3.c.o
+[6/654] Compiling C object src/util/blake3/libblake3.a.p/blake3_portable.c.o
+[7/654] Compiling C object src/util/libmesa_util_sse41.a.p/streaming-load-memcpy.c.o
+[8/654] Linking static target src/util/libmesa_util_sse41.a
+[9/654] Compiling C object src/util/blake3/libblake3.a.p/blake3_neon.c.o
+[10/654] Linking static target src/util/blake3/libblake3.a
+[11/654] Compiling C object src/util/libmesa_util.a.p/meson-generated_.._format_srgb.c.o
+[12/654] Compiling C object src/util/libmesa_util.a.p/anon_file.c.o
+[13/654] Compiling C object src/util/libmesa_util.a.p/bitscan.c.o
+[14/654] Compiling C object src/util/libmesa_util.a.p/blob.c.o
+[15/654] Compiling C object src/util/libmesa_util.a.p/build_id.c.o
+[16/654] Compiling C object src/util/libmesa_util.a.p/cnd_monotonic.c.o
+[17/654] Compiling C object src/util/libmesa_util.a.p/compress.c.o
+[18/654] Compiling C object src/util/libmesa_util.a.p/thread_sched.c.o
+[19/654] Compiling C object src/util/libmesa_util.a.p/crc32.c.o
+[20/654] Compiling C object src/util/libmesa_util.a.p/dag.c.o
+[21/654] Compiling C object src/util/libmesa_util.a.p/disk_cache.c.o
+[22/654] Compiling C object src/util/libmesa_util.a.p/disk_cache_os.c.o
+[23/654] Compiling C object src/util/libmesa_util.a.p/double.c.o
+[24/654] Compiling C object src/util/libmesa_util.a.p/fast_idiv_by_const.c.o
+[25/654] Compiling C object src/util/libmesa_util.a.p/fossilize_db.c.o
+[26/654] Compiling C object src/util/libmesa_util.a.p/futex.c.o
+[27/654] Compiling C object src/util/libmesa_util.a.p/half_float.c.o
+[28/654] Compiling C object src/util/libmesa_util.a.p/hash_table.c.o
+[29/654] Compiling C object src/util/libmesa_util.a.p/helpers.c.o
+[30/654] Compiling C object src/util/libmesa_util.a.p/u_idalloc.c.o
+[31/654] Compiling C object src/util/libmesa_util.a.p/log.c.o
+[32/654] Compiling C object src/util/libmesa_util.a.p/memstream.c.o
+[33/654] Compiling C object src/util/libmesa_util.a.p/mesa-sha1.c.o
+[34/654] Compiling C object src/util/libmesa_util.a.p/mesa-blake3.c.o
+[35/654] Compiling C object src/util/libmesa_util.a.p/os_time.c.o
+[36/654] Compiling C object src/util/libmesa_util.a.p/os_file.c.o
+[37/654] Compiling C object src/util/libmesa_util.a.p/os_memory_fd.c.o
+[38/654] Compiling C object src/util/libmesa_util.a.p/os_misc.c.o
+[39/654] Compiling C object src/util/libmesa_util.a.p/os_socket.c.o
+[40/654] Compiling C object src/util/libmesa_util.a.p/perf_u_trace.c.o
+[41/654] Compiling C object src/util/libmesa_util.a.p/u_process.c.o
+[42/654] Compiling C++ object src/util/libmesa_util.a.p/u_qsort.cpp.o
+FAILED: src/util/libmesa_util.a.p/u_qsort.cpp.o 
+/usr/bin/clang++ -Isrc/util/libmesa_util.a.p -Isrc/util -I../radv-xclipse-audit.d1QiDb/src/util -Iinclude -I../radv-xclipse-audit.d1QiDb/include -Isrc -I../radv-xclipse-audit.d1QiDb/src -Isrc/util/format -I../radv-xclipse-audit.d1QiDb/src/util/format -I/home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot/usr/include -fvisibility=hidden -fdiagnostics-color=always -DNDEBUG -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -std=c++17 -O3 -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS '-DPACKAGE_VERSION="24.3.4"' '-DPACKAGE_BUGREPORT="https://gitlab.freedesktop.org/mesa/mesa/-/issues"' -DHAVE_OPENGL=1 -DHAVE_OPENGL_ES_1=0 -DHAVE_OPENGL_ES_2=0 -DVIDEO_CODEC_VC1DEC=0 -DVIDEO_CODEC_H264DEC=0 -DVIDEO_CODEC_H264ENC=0 -DVIDEO_CODEC_H265DEC=0 -DVIDEO_CODEC_H265ENC=0 -DVIDEO_CODEC_AV1DEC=1 -DVIDEO_CODEC_AV1ENC=1 -DVIDEO_CODEC_VP9DEC=1 -DUSE_LIBGLVND=0 -DGLAPI_EXPORT_PROTO_ENTRY_POINTS=0 -DALLOW_KCMP -DMESA_DEBUG=0 -DENABLE_SHADER_CACHE -DHAVE___BUILTIN_BSWAP32 -DHAVE___BUILTIN_BSWAP64 -DHAVE___BUILTIN_CLZ -DHAVE___BUILTIN_CLZLL -DHAVE___BUILTIN_CTZ -DHAVE___BUILTIN_EXPECT -DHAVE___BUILTIN_FFS -DHAVE___BUILTIN_FFSLL -DHAVE___BUILTIN_POPCOUNT -DHAVE___BUILTIN_POPCOUNTLL -DHAVE___BUILTIN_UNREACHABLE -DHAVE___BUILTIN_TYPES_COMPATIBLE_P -DHAVE_FUNC_ATTRIBUTE_CONST -DHAVE_FUNC_ATTRIBUTE_FLATTEN -DHAVE_FUNC_ATTRIBUTE_MALLOC -DHAVE_FUNC_ATTRIBUTE_PURE -DHAVE_FUNC_ATTRIBUTE_UNUSED -DHAVE_FUNC_ATTRIBUTE_WARN_UNUSED_RESULT -DHAVE_FUNC_ATTRIBUTE_WEAK -DHAVE_FUNC_ATTRIBUTE_FORMAT -DHAVE_FUNC_ATTRIBUTE_PACKED -DHAVE_FUNC_ATTRIBUTE_RETURNS_NONNULL -DHAVE_FUNC_ATTRIBUTE_ALIAS -DHAVE_FUNC_ATTRIBUTE_NORETURN -DHAVE_FUNC_ATTRIBUTE_VISIBILITY -DHAVE_UINT128 -DHAVE_REALLOCARRAY -DHAVE_FMEMOPEN -D_GNU_SOURCE -DUSE_GCC_ATOMIC_BUILTINS -DUSE_AARCH64_ASM -DMAJOR_IN_SYSMACROS -DHAS_SCHED_H -DHAS_SCHED_GETAFFINITY -DHAVE_LINUX_FUTEX_H -DHAVE_ENDIAN_H -DHAVE_DLFCN_H -DHAVE_SYS_SHM_H -DHAVE_SYS_INOTIFY_H -DHAVE_LINUX_UDMABUF_H -DHAVE_STRTOF -DHAVE_MKOSTEMP -DHAVE_MEMFD_CREATE -DHAVE_FLOCK -DHAVE_STRTOK_R -DHAVE_GETRANDOM -DHAVE_POSIX_FALLOCATE -DHAVE_SECURE_GETENV -DHAVE_STRUCT_TIMESPEC -DHAVE_PROGRAM_INVOCATION_NAME -DHAVE_POSIX_MEMALIGN -DHAVE_DIRENT_D_TYPE -DHAVE_STRTOD_L -DHAVE_DLADDR -DHAVE_DL_ITERATE_PHDR -DHAVE_ZLIB -DHAVE_ZSTD -DHAVE_COMPRESSION -DHAVE_PTHREAD -DHAVE_PTHREAD_SETAFFINITY -DHAVE_LIBDRM '-DMESA_LLVM_VERSION_STRING="22.1.3"' -DLLVM_IS_SHARED=1 -DLLVM_AVAILABLE=1 -DDRAW_LLVM_AVAILABLE=1 -DAMD_LLVM_AVAILABLE=0 -DGALLIVM_USE_ORCJIT=0 -DUSE_LIBELF -DTHREAD_SANITIZER=0 -DHAVE_DRI2 -Werror=return-type -Werror=empty-body -Wmisleading-indentation -Wno-non-virtual-dtor -Wno-missing-field-initializers -Wno-format-truncation -fno-math-errno -fno-trapping-math -Qunused-arguments -Wno-unknown-pragmas -Wno-microsoft-enum-value -Werror=format -Wformat-security -ffunction-sections -fdata-sections -Wno-unused-variable -Wno-unused-but-set-variable --target=aarch64-linux-musl --sysroot=/home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot -nostdinc -isystem /home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot/usr/include -isystem /usr/include/c++/13 -isystem /usr/include/aarch64-linux-gnu/c++/13 -fPIC -pthread -MD -MQ src/util/libmesa_util.a.p/u_qsort.cpp.o -MF src/util/libmesa_util.a.p/u_qsort.cpp.o.d -o src/util/libmesa_util.a.p/u_qsort.cpp.o -c ../radv-xclipse-audit.d1QiDb/src/util/u_qsort.cpp
+In file included from ../radv-xclipse-audit.d1QiDb/src/util/u_qsort.cpp:25:
+In file included from /usr/include/c++/13/thread:34:
+/usr/include/c++/13/bits/requires_hosted.h:31:10: fatal error: 'bits/c++config.h' file not found
+   31 | #include <bits/c++config.h>
+      |          ^~~~~~~~~~~~~~~~~~
+1 error generated.
+[43/654] Compiling C object src/util/libmesa_util.a.p/meson-generated_.._format_u_format_table.c.o
+ninja: build stopped: subcommand failed.
+ninja: Entering directory `/tmp/radv-cross-config.Ez9YRt'
+[1/654] Compiling C object src/c11/impl/libmesa_util_c11.a.p/time.c.o
+[2/654] Compiling C object src/c11/impl/libmesa_util_c11.a.p/threads_posix.c.o
+[3/654] Linking static target src/c11/impl/libmesa_util_c11.a
+[4/654] Compiling C object src/util/blake3/libblake3.a.p/blake3_dispatch.c.o
+[5/654] Compiling C object src/util/blake3/libblake3.a.p/blake3.c.o
+[6/654] Compiling C object src/util/blake3/libblake3.a.p/blake3_portable.c.o
+[7/654] Compiling C object src/util/libmesa_util_sse41.a.p/streaming-load-memcpy.c.o
+[8/654] Linking static target src/util/libmesa_util_sse41.a
+[9/654] Compiling C object src/util/blake3/libblake3.a.p/blake3_neon.c.o
+[10/654] Linking static target src/util/blake3/libblake3.a
+[11/654] Compiling C object src/util/libmesa_util.a.p/meson-generated_.._format_srgb.c.o
+[12/654] Compiling C object src/util/libmesa_util.a.p/anon_file.c.o
+[13/654] Compiling C object src/util/libmesa_util.a.p/bitscan.c.o
+[14/654] Compiling C object src/util/libmesa_util.a.p/blob.c.o
+[15/654] Compiling C object src/util/libmesa_util.a.p/build_id.c.o
+[16/654] Compiling C object src/util/libmesa_util.a.p/cnd_monotonic.c.o
+[17/654] Compiling C object src/util/libmesa_util.a.p/compress.c.o
+[18/654] Compiling C object src/util/libmesa_util.a.p/thread_sched.c.o
+[19/654] Compiling C object src/util/libmesa_util.a.p/crc32.c.o
+[20/654] Compiling C object src/util/libmesa_util.a.p/dag.c.o
+[21/654] Compiling C object src/util/libmesa_util.a.p/disk_cache.c.o
+[22/654] Compiling C object src/util/libmesa_util.a.p/disk_cache_os.c.o
+[23/654] Compiling C object src/util/libmesa_util.a.p/double.c.o
+[24/654] Compiling C object src/util/libmesa_util.a.p/fast_idiv_by_const.c.o
+[25/654] Compiling C object src/util/libmesa_util.a.p/fossilize_db.c.o
+[26/654] Compiling C object src/util/libmesa_util.a.p/futex.c.o
+[27/654] Compiling C object src/util/libmesa_util.a.p/half_float.c.o
+[28/654] Compiling C object src/util/libmesa_util.a.p/hash_table.c.o
+[29/654] Compiling C object src/util/libmesa_util.a.p/helpers.c.o
+[30/654] Compiling C object src/util/libmesa_util.a.p/u_idalloc.c.o
+[31/654] Compiling C object src/util/libmesa_util.a.p/log.c.o
+[32/654] Compiling C object src/util/libmesa_util.a.p/memstream.c.o
+[33/654] Compiling C object src/util/libmesa_util.a.p/mesa-sha1.c.o
+[34/654] Compiling C object src/util/libmesa_util.a.p/mesa-blake3.c.o
+[35/654] Compiling C object src/util/libmesa_util.a.p/os_time.c.o
+[36/654] Compiling C object src/util/libmesa_util.a.p/os_file.c.o
+[37/654] Compiling C object src/util/libmesa_util.a.p/os_memory_fd.c.o
+[38/654] Compiling C object src/util/libmesa_util.a.p/os_misc.c.o
+[39/654] Compiling C object src/util/libmesa_util.a.p/os_socket.c.o
+[40/654] Compiling C object src/util/libmesa_util.a.p/perf_u_trace.c.o
+[41/654] Compiling C object src/util/libmesa_util.a.p/u_process.c.o
+[42/654] Compiling C++ object src/util/libmesa_util.a.p/u_qsort.cpp.o
+FAILED: src/util/libmesa_util.a.p/u_qsort.cpp.o 
+/usr/bin/clang++ -Isrc/util/libmesa_util.a.p -Isrc/util -I../radv-xclipse-audit.d1QiDb/src/util -Iinclude -I../radv-xclipse-audit.d1QiDb/include -Isrc -I../radv-xclipse-audit.d1QiDb/src -Isrc/util/format -I../radv-xclipse-audit.d1QiDb/src/util/format -I/home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot/usr/include -fvisibility=hidden -fdiagnostics-color=always -DNDEBUG -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -std=c++17 -O3 -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS '-DPACKAGE_VERSION="24.3.4"' '-DPACKAGE_BUGREPORT="https://gitlab.freedesktop.org/mesa/mesa/-/issues"' -DHAVE_OPENGL=1 -DHAVE_OPENGL_ES_1=0 -DHAVE_OPENGL_ES_2=0 -DVIDEO_CODEC_VC1DEC=0 -DVIDEO_CODEC_H264DEC=0 -DVIDEO_CODEC_H264ENC=0 -DVIDEO_CODEC_H265DEC=0 -DVIDEO_CODEC_H265ENC=0 -DVIDEO_CODEC_AV1DEC=1 -DVIDEO_CODEC_AV1ENC=1 -DVIDEO_CODEC_VP9DEC=1 -DUSE_LIBGLVND=0 -DGLAPI_EXPORT_PROTO_ENTRY_POINTS=0 -DALLOW_KCMP -DMESA_DEBUG=0 -DENABLE_SHADER_CACHE -DHAVE___BUILTIN_BSWAP32 -DHAVE___BUILTIN_BSWAP64 -DHAVE___BUILTIN_CLZ -DHAVE___BUILTIN_CLZLL -DHAVE___BUILTIN_CTZ -DHAVE___BUILTIN_EXPECT -DHAVE___BUILTIN_FFS -DHAVE___BUILTIN_FFSLL -DHAVE___BUILTIN_POPCOUNT -DHAVE___BUILTIN_POPCOUNTLL -DHAVE___BUILTIN_UNREACHABLE -DHAVE___BUILTIN_TYPES_COMPATIBLE_P -DHAVE_FUNC_ATTRIBUTE_CONST -DHAVE_FUNC_ATTRIBUTE_FLATTEN -DHAVE_FUNC_ATTRIBUTE_MALLOC -DHAVE_FUNC_ATTRIBUTE_PURE -DHAVE_FUNC_ATTRIBUTE_UNUSED -DHAVE_FUNC_ATTRIBUTE_WARN_UNUSED_RESULT -DHAVE_FUNC_ATTRIBUTE_WEAK -DHAVE_FUNC_ATTRIBUTE_FORMAT -DHAVE_FUNC_ATTRIBUTE_PACKED -DHAVE_FUNC_ATTRIBUTE_RETURNS_NONNULL -DHAVE_FUNC_ATTRIBUTE_ALIAS -DHAVE_FUNC_ATTRIBUTE_NORETURN -DHAVE_FUNC_ATTRIBUTE_VISIBILITY -DHAVE_UINT128 -DHAVE_REALLOCARRAY -DHAVE_FMEMOPEN -D_GNU_SOURCE -DUSE_GCC_ATOMIC_BUILTINS -DUSE_AARCH64_ASM -DMAJOR_IN_SYSMACROS -DHAS_SCHED_H -DHAS_SCHED_GETAFFINITY -DHAVE_LINUX_FUTEX_H -DHAVE_ENDIAN_H -DHAVE_DLFCN_H -DHAVE_SYS_SHM_H -DHAVE_SYS_INOTIFY_H -DHAVE_LINUX_UDMABUF_H -DHAVE_STRTOF -DHAVE_MKOSTEMP -DHAVE_MEMFD_CREATE -DHAVE_FLOCK -DHAVE_STRTOK_R -DHAVE_GETRANDOM -DHAVE_POSIX_FALLOCATE -DHAVE_SECURE_GETENV -DHAVE_STRUCT_TIMESPEC -DHAVE_PROGRAM_INVOCATION_NAME -DHAVE_POSIX_MEMALIGN -DHAVE_DIRENT_D_TYPE -DHAVE_STRTOD_L -DHAVE_DLADDR -DHAVE_DL_ITERATE_PHDR -DHAVE_ZLIB -DHAVE_ZSTD -DHAVE_COMPRESSION -DHAVE_PTHREAD -DHAVE_PTHREAD_SETAFFINITY -DHAVE_LIBDRM '-DMESA_LLVM_VERSION_STRING="22.1.3"' -DLLVM_IS_SHARED=1 -DLLVM_AVAILABLE=1 -DDRAW_LLVM_AVAILABLE=1 -DAMD_LLVM_AVAILABLE=0 -DGALLIVM_USE_ORCJIT=0 -DUSE_LIBELF -DTHREAD_SANITIZER=0 -DHAVE_DRI2 -Werror=return-type -Werror=empty-body -Wmisleading-indentation -Wno-non-virtual-dtor -Wno-missing-field-initializers -Wno-format-truncation -fno-math-errno -fno-trapping-math -Qunused-arguments -Wno-unknown-pragmas -Wno-microsoft-enum-value -Werror=format -Wformat-security -ffunction-sections -fdata-sections -Wno-unused-variable -Wno-unused-but-set-variable --target=aarch64-linux-musl --sysroot=/home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot -nostdinc -isystem /home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot/usr/include -isystem /usr/include/c++/13 -isystem /usr/include/aarch64-linux-gnu/c++/13 -isystem /usr/aarch64-linux-gnu/include/c++/13 -fPIC -pthread -MD -MQ src/util/libmesa_util.a.p/u_qsort.cpp.o -MF src/util/libmesa_util.a.p/u_qsort.cpp.o.d -o src/util/libmesa_util.a.p/u_qsort.cpp.o -c ../radv-xclipse-audit.d1QiDb/src/util/u_qsort.cpp
+In file included from ../radv-xclipse-audit.d1QiDb/src/util/u_qsort.cpp:25:
+In file included from /usr/include/c++/13/thread:34:
+/usr/include/c++/13/bits/requires_hosted.h:31:10: fatal error: 'bits/c++config.h' file not found
+   31 | #include <bits/c++config.h>
+      |          ^~~~~~~~~~~~~~~~~~
+1 error generated.
+[43/654] Compiling C object src/util/libmesa_util.a.p/meson-generated_.._format_u_format_table.c.o
+ninja: build stopped: subcommand failed.
+ninja: Entering directory `/tmp/radv-cross-config.Ez9YRt'
+[1/654] Compiling C object src/c11/impl/libmesa_util_c11.a.p/time.c.o
+[2/654] Compiling C object src/c11/impl/libmesa_util_c11.a.p/threads_posix.c.o
+[3/654] Linking static target src/c11/impl/libmesa_util_c11.a
+[4/654] Compiling C object src/util/blake3/libblake3.a.p/blake3_dispatch.c.o
+[5/654] Compiling C object src/util/blake3/libblake3.a.p/blake3.c.o
+[6/654] Compiling C object src/util/blake3/libblake3.a.p/blake3_portable.c.o
+[7/654] Compiling C object src/util/libmesa_util_sse41.a.p/streaming-load-memcpy.c.o
+[8/654] Linking static target src/util/libmesa_util_sse41.a
+[9/654] Compiling C object src/util/blake3/libblake3.a.p/blake3_neon.c.o
+[10/654] Linking static target src/util/blake3/libblake3.a
+[11/654] Compiling C object src/util/libmesa_util.a.p/meson-generated_.._format_srgb.c.o
+[12/654] Compiling C object src/util/libmesa_util.a.p/anon_file.c.o
+[13/654] Compiling C object src/util/libmesa_util.a.p/bitscan.c.o
+[14/654] Compiling C object src/util/libmesa_util.a.p/blob.c.o
+[15/654] Compiling C object src/util/libmesa_util.a.p/build_id.c.o
+[16/654] Compiling C object src/util/libmesa_util.a.p/cnd_monotonic.c.o
+[17/654] Compiling C object src/util/libmesa_util.a.p/compress.c.o
+[18/654] Compiling C object src/util/libmesa_util.a.p/thread_sched.c.o
+[19/654] Compiling C object src/util/libmesa_util.a.p/crc32.c.o
+[20/654] Compiling C object src/util/libmesa_util.a.p/dag.c.o
+[21/654] Compiling C object src/util/libmesa_util.a.p/disk_cache.c.o
+[22/654] Compiling C object src/util/libmesa_util.a.p/disk_cache_os.c.o
+[23/654] Compiling C object src/util/libmesa_util.a.p/double.c.o
+[24/654] Compiling C object src/util/libmesa_util.a.p/fast_idiv_by_const.c.o
+[25/654] Compiling C object src/util/libmesa_util.a.p/fossilize_db.c.o
+[26/654] Compiling C object src/util/libmesa_util.a.p/futex.c.o
+[27/654] Compiling C object src/util/libmesa_util.a.p/half_float.c.o
+[28/654] Compiling C object src/util/libmesa_util.a.p/hash_table.c.o
+[29/654] Compiling C object src/util/libmesa_util.a.p/helpers.c.o
+[30/654] Compiling C object src/util/libmesa_util.a.p/u_idalloc.c.o
+[31/654] Compiling C object src/util/libmesa_util.a.p/log.c.o
+[32/654] Compiling C object src/util/libmesa_util.a.p/memstream.c.o
+[33/654] Compiling C object src/util/libmesa_util.a.p/mesa-sha1.c.o
+[34/654] Compiling C object src/util/libmesa_util.a.p/mesa-blake3.c.o
+[35/654] Compiling C object src/util/libmesa_util.a.p/os_time.c.o
+[36/654] Compiling C object src/util/libmesa_util.a.p/os_file.c.o
+[37/654] Compiling C object src/util/libmesa_util.a.p/os_memory_fd.c.o
+[38/654] Compiling C object src/util/libmesa_util.a.p/os_misc.c.o
+[39/654] Compiling C object src/util/libmesa_util.a.p/os_socket.c.o
+[40/654] Compiling C object src/util/libmesa_util.a.p/perf_u_trace.c.o
+[41/654] Compiling C object src/util/libmesa_util.a.p/u_process.c.o
+[42/654] Compiling C++ object src/util/libmesa_util.a.p/u_qsort.cpp.o
+FAILED: src/util/libmesa_util.a.p/u_qsort.cpp.o 
+/usr/bin/clang++ -Isrc/util/libmesa_util.a.p -Isrc/util -I../radv-xclipse-audit.d1QiDb/src/util -Iinclude -I../radv-xclipse-audit.d1QiDb/include -Isrc -I../radv-xclipse-audit.d1QiDb/src -Isrc/util/format -I../radv-xclipse-audit.d1QiDb/src/util/format -I/home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot/usr/include -fvisibility=hidden -fdiagnostics-color=always -DNDEBUG -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -std=c++17 -O3 -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS '-DPACKAGE_VERSION="24.3.4"' '-DPACKAGE_BUGREPORT="https://gitlab.freedesktop.org/mesa/mesa/-/issues"' -DHAVE_OPENGL=1 -DHAVE_OPENGL_ES_1=0 -DHAVE_OPENGL_ES_2=0 -DVIDEO_CODEC_VC1DEC=0 -DVIDEO_CODEC_H264DEC=0 -DVIDEO_CODEC_H264ENC=0 -DVIDEO_CODEC_H265DEC=0 -DVIDEO_CODEC_H265ENC=0 -DVIDEO_CODEC_AV1DEC=1 -DVIDEO_CODEC_AV1ENC=1 -DVIDEO_CODEC_VP9DEC=1 -DUSE_LIBGLVND=0 -DGLAPI_EXPORT_PROTO_ENTRY_POINTS=0 -DALLOW_KCMP -DMESA_DEBUG=0 -DENABLE_SHADER_CACHE -DHAVE___BUILTIN_BSWAP32 -DHAVE___BUILTIN_BSWAP64 -DHAVE___BUILTIN_CLZ -DHAVE___BUILTIN_CLZLL -DHAVE___BUILTIN_CTZ -DHAVE___BUILTIN_EXPECT -DHAVE___BUILTIN_FFS -DHAVE___BUILTIN_FFSLL -DHAVE___BUILTIN_POPCOUNT -DHAVE___BUILTIN_POPCOUNTLL -DHAVE___BUILTIN_UNREACHABLE -DHAVE___BUILTIN_TYPES_COMPATIBLE_P -DHAVE_FUNC_ATTRIBUTE_CONST -DHAVE_FUNC_ATTRIBUTE_FLATTEN -DHAVE_FUNC_ATTRIBUTE_MALLOC -DHAVE_FUNC_ATTRIBUTE_PURE -DHAVE_FUNC_ATTRIBUTE_UNUSED -DHAVE_FUNC_ATTRIBUTE_WARN_UNUSED_RESULT -DHAVE_FUNC_ATTRIBUTE_WEAK -DHAVE_FUNC_ATTRIBUTE_FORMAT -DHAVE_FUNC_ATTRIBUTE_PACKED -DHAVE_FUNC_ATTRIBUTE_RETURNS_NONNULL -DHAVE_FUNC_ATTRIBUTE_ALIAS -DHAVE_FUNC_ATTRIBUTE_NORETURN -DHAVE_FUNC_ATTRIBUTE_VISIBILITY -DHAVE_UINT128 -DHAVE_REALLOCARRAY -DHAVE_FMEMOPEN -D_GNU_SOURCE -DUSE_GCC_ATOMIC_BUILTINS -DUSE_AARCH64_ASM -DMAJOR_IN_SYSMACROS -DHAS_SCHED_H -DHAS_SCHED_GETAFFINITY -DHAVE_LINUX_FUTEX_H -DHAVE_ENDIAN_H -DHAVE_DLFCN_H -DHAVE_SYS_SHM_H -DHAVE_SYS_INOTIFY_H -DHAVE_LINUX_UDMABUF_H -DHAVE_STRTOF -DHAVE_MKOSTEMP -DHAVE_MEMFD_CREATE -DHAVE_FLOCK -DHAVE_STRTOK_R -DHAVE_GETRANDOM -DHAVE_POSIX_FALLOCATE -DHAVE_SECURE_GETENV -DHAVE_STRUCT_TIMESPEC -DHAVE_PROGRAM_INVOCATION_NAME -DHAVE_POSIX_MEMALIGN -DHAVE_DIRENT_D_TYPE -DHAVE_STRTOD_L -DHAVE_DLADDR -DHAVE_DL_ITERATE_PHDR -DHAVE_ZLIB -DHAVE_ZSTD -DHAVE_COMPRESSION -DHAVE_PTHREAD -DHAVE_PTHREAD_SETAFFINITY -DHAVE_LIBDRM '-DMESA_LLVM_VERSION_STRING="22.1.3"' -DLLVM_IS_SHARED=1 -DLLVM_AVAILABLE=1 -DDRAW_LLVM_AVAILABLE=1 -DAMD_LLVM_AVAILABLE=0 -DGALLIVM_USE_ORCJIT=0 -DUSE_LIBELF -DTHREAD_SANITIZER=0 -DHAVE_DRI2 -Werror=return-type -Werror=empty-body -Wmisleading-indentation -Wno-non-virtual-dtor -Wno-missing-field-initializers -Wno-format-truncation -fno-math-errno -fno-trapping-math -Qunused-arguments -Wno-unknown-pragmas -Wno-microsoft-enum-value -Werror=format -Wformat-security -ffunction-sections -fdata-sections -Wno-unused-variable -Wno-unused-but-set-variable --target=aarch64-linux-musl --sysroot=/home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot -nostdinc -isystem /home/corpunum/s22-linux/rootfs/radv-xclipse-sysroot/usr/include -isystem /usr/include/c++/13 -isystem /usr/include/aarch64-linux-gnu/c++/13 -isystem /usr/aarch64-linux-gnu/include/c++/13 -isystem /usr/include/x86_64-linux-gnu/c++/13 -fPIC -pthread -MD -MQ src/util/libmesa_util.a.p/u_qsort.cpp.o -MF src/util/libmesa_util.a.p/u_qsort.cpp.o.d -o src/util/libmesa_util.a.p/u_qsort.cpp.o -c ../radv-xclipse-audit.d1QiDb/src/util/u_qsort.cpp
+In file included from ../radv-xclipse-audit.d1QiDb/src/util/u_qsort.cpp:25:
+In file included from /usr/include/c++/13/thread:34:
+In file included from /usr/include/c++/13/bits/requires_hosted.h:31:
+In file included from /usr/include/x86_64-linux-gnu/c++/13/bits/c++config.h:679:
+/usr/include/x86_64-linux-gnu/c++/13/bits/os_defines.h:44:5: error: function-like macro '__GLIBC_PREREQ' is not defined
+   44 | #if __GLIBC_PREREQ(2,15) && defined(_GNU_SOURCE)
+      |     ^
+/usr/include/x86_64-linux-gnu/c++/13/bits/os_defines.h:55:5: error: function-like macro '__GLIBC_PREREQ' is not defined
+   55 | #if __GLIBC_PREREQ(2, 26) \
+      |     ^
+/usr/include/x86_64-linux-gnu/c++/13/bits/os_defines.h:66:6: error: function-like macro '__GLIBC_PREREQ' is not defined
+   66 | # if __GLIBC_PREREQ(2, 27)
+      |      ^
+/usr/include/x86_64-linux-gnu/c++/13/bits/os_defines.h:78:6: error: function-like macro '__GLIBC_PREREQ' is not defined
+   78 | # if __GLIBC_PREREQ(2, 34)
+      |      ^
+4 errors generated.
+[43/654] Compiling C object src/util/libmesa_util.a.p/meson-generated_.._format_u_format_table.c.o
+ninja: build stopped: subcommand failed.

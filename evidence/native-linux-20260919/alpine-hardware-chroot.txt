@@ -1,0 +1,29 @@
+uid=0(root) gid=0(root) groups=0(root),0(root),1(bin),2(daemon),3(sys),4(adm),6(disk),10(wheel),11(floppy),20(dialout),26(tape),27(video)
+Linux localhost 5.10.260-g4e5c5ad7d950 #1 SMP PREEMPT Tue Sep 15 12:42:08 UTC 2026 aarch64 Linux
+3.24.2
+Python 3.14.7
+git version 2.54.0
+              total        used        free      shared  buff/cache   available
+Mem:           7.1G        1.2G        5.6G      204.1M      262.6M        6.3G
+Swap:             0           0           0
+/system/bin/init
+PID   PPID  COMMAND
+    1     0 init
+    2     0 kthreadd
+    3     2 rcu_gp
+    4     2 kworker/0:0-mm_
+    5     2 kworker/0:0H-kb
+    6     2 kworker/u16:0-a
+    7     2 mm_percpu_wq
+    8     2 kworker/u16:1-a
+    9     2 rcu_tasks_kthre
+   10     2 rcu_tasks_trace
+   11     2 ksoftirqd/0
+   12     2 rcu_preempt
+   13     2 rcub/0
+   14     2 rcuc/0
+   15     2 rcu_exp_gp_kthr
+   16     2 rcu_exp_par_gp_
+   17     2 migration/0
+   18     2 cpuhp/0
+   19     2 cpuhp/1

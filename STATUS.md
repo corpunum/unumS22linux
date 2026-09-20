@@ -1,125 +1,52 @@
-# S22 Native Linux Project — STATUS
+# S22 native Linux status
 
-Last updated: 2026-09-18 (session 3)
+Updated 2026-09-20. Older states and experiments remain in `EXPERIMENTS.md`
+and Git history; the old claim that nothing custom was flashed is obsolete.
 
-## Objective
-Native Linux (no Android userspace) → Arch Linux ARM → Wayland → Hyprland → Omarchy
-on Samsung Galaxy S22 (SM-S901B/DS, Exynos 2200, codename r0s).
+## Working
 
-## MAJOR MILESTONE REACHED — Phase 7/8 complete
+- SM-S901B/DS (`r0s`), Exynos 2200; unlocked S901BXXSIFYI3 bootloader.
+- Native Alpine 3.24.2 ARM64, guardian PID1, kernel 5.10.260-g4e5c5ad7d950.
+  AOSP first-stage bootstrap is retained; Android services do not run.
+- RECOVERY V3 image, whole-partition SHA256 verified:
+  `1a827b43d29141efb47f530902dd4e4ee2b6d780515893c9ecd676ad27efd7d1`.
+- CACHE-backed Alpine package/file persistence, USB Ethernet/SSH and fallback
+  Weston desktop; targeted software recovery reboot verified through BORE 518.
+- RAM-staged Arch ARM, Hyprland 0.56.2, Omarchy v4.0.4 Quickshell bar, foot,
+  Squeekboard. Internal 1080x2340 display, llvmpipe software rendering.
+- Synthetic touchscreen → keyboard → local chat path; this is not a physical
+  finger-sensing test.
+- Resident Qwen3.5-2B Q4_0 CPU server, 4096 context, one slot, four fast cores,
+  loopback 127.0.0.1:8089. Short first-text latency 0.4–0.7 seconds.
 
-The current official LineageOS recovery.img was flashed to RECOVERY and successfully
-BOOTED on this exact phone, with USB, display (DSI panel, 1080x2340@120Hz), and touch
-all confirmed working, plus a rooted ADB shell. Full details and captured evidence in
-`evidence/lineage_recovery_boot/MILESTONE.md`. This is the known-good recovery
-"trampoline" the project plan calls for — USB/display/touch/module-loading are now all
-independently proven to work on this hardware via a non-stock kernel/ramdisk.
+## Not finished
 
-An incident occurred and was fully resolved during this test: a raw MISC/BCB write
-(used to force boot-to-recovery without physical buttons) failed Samsung's own
-`SECURE CHECK FAIL: (MISC)` bootloader integrity check and temporarily left the phone
-unable to boot. Fixed by reflashing the byte-exact factory `misc.bin` extracted from the
-already-downloaded FYI3 stock firmware package — no data loss, phone fully recovered.
-See MILESTONE.md for the full incident writeup and lesson learned (MISC is a
-Samsung-protected partition on this platform; always extract+preserve the factory
-misc.bin before writing custom BCB data to it, and note the factory default command is
-`boot-skiprecovery`, not zero/empty).
+- Arch/Omarchy and models are RAM-only; automatic persistent desktop startup
+  and ordinary cold-power-on Linux selection are not implemented.
+- GPU compute still faults despite a validated CPU-mapping lifecycle fix.
+- NPU runtime/firmware integration and inference are unproven.
+- Physical finger sensing, Wi-Fi, cellular, audio, cameras, suspend and daily
+  use have not passed acceptance in the native Omarchy environment.
+- The normal Omarchy installer was not run. Some host-verified UI package
+  payloads were staged without phone-side package database registration after
+  its signature-helper startup hung. Do not treat this as a finished distro.
 
-## Current phase
-All pre-flash research/build blockers CLOSED. Rollback route READY and validated (used
-for real during the MISC incident above). Recovery comparison COMPLETE. Phase 7/8
-control-boot test COMPLETE and SUCCESSFUL. Phone currently sitting in LineageOS recovery
-with a live root ADB shell — decide next: continue evidence-gathering, or reboot back to
-normal Android (which will self-heal RECOVERY back to stock via vendor_flash_recovery,
-ending this test cleanly with a fully working phone).
+## Next decision
 
-## Verified device state (2026-09-18, re-verified independently, see evidence/)
-- Model: SM-S901B, device r0s
-- Bootloader: S901BXXSIFYI3, UNLOCKED (flash.locked=0, verifiedbootstate=orange,
-  vbmeta.device_state=unlocked) — CONFIRMED genuine, not assumed
-- Android 15, build AP3A.240905.015.A2.S901BXXSIFYI3, kernel 5.10.223
-- warranty_bit=1 (correction vs prior record of 0 — flag as possibly stale/changed)
-- Stock, non-rooted, ro.secure=1 — no su, no adb root, pstore/last_kmsg unreadable
-- CSC region: EUX
+The persistent CACHE overlay has about **74.6 MiB free**. The existing
+userdata partition is about **105.5 GiB**, not demonstrated accessible as a
+decrypted filesystem from native Linux. Choose an external-storage trial or
+an explicitly authorized, backed-up Linux-only userdata conversion; see
+[PERSISTENCE.md](docs/PERSISTENCE.md). No such conversion is authorized yet.
+Cold-boot routing is a separate boot-image problem, not a desktop setting.
 
-## What's ready
-- Ubuntu host toolchain: aarch64-linux-gnu-gcc 13.3.0, clang/lld 18, dtc 1.7.0,
-  simg2img/img2simg, mkbootimg/unpack_bootimg (AOSP, tools/mkbootimg),
-  avbtool 1.4.0 (AOSP, external/avb), rust/cargo, meson/ninja, samloader-rs 2.1.0
-- adb/fastboot installed + udev rule for Samsung vendor 04e8 + device authorized
-- Current LineageOS r0s sources cloned at lineage/, branch lineage-23.2:
-  - android_device_samsung_r0s @ 142838b2
-  - android_device_samsung_s5e9925-common @ 7be96871
-  - android_kernel_samsung_s5e9925 @ 4e5c5ad7
-- Current official LineageOS r0s recovery/boot/vendor_boot/dtbo/vbmeta (build 20260915)
-  downloaded and SHA256-verified against LineageOS's own published manifest —
-  lineage/build-20260915/
-- Stock FYI3 firmware (BL/AP/CP/CSC/HOME_CSC, 11.25GB) downloaded directly from Samsung's
-  FUS server via samloader-rs, matching the phone's exact currently-installed version.
-  boot/recovery/vendor_boot/dtbo/vbmeta/vbmeta_system extracted, decompressed, and
-  SHA256-hashed — stock/FYI3/, hashes in stock/FYI3/fyi3_hashes.txt and FLASH_LOG.md
-- Full three-way structural comparison (stock vs Lineage vs prior failed design)
-  complete in docs/RECOVERY_COMPARISON.md
-- Linux-side rollback route: READY (see FLASH_LOG.md) — no longer dependent on the old
-  Windows laptop
+## Safety and rollback
 
-## Key technical findings
-See docs/RECOVERY_COMPARISON.md, docs/KEXEC_FEASIBILITY.md, MODULES.md
+RECOVERY-only raw writes. Do not modify BOOT, MISC, PIT, EFS, IMEI, bootloader
+or TrustZone, or format userdata/cache. The historical MISC/BCB integrity
+failure is documented in the experiment log, not a procedure to repeat.
 
-1. Recovery uses **boot header v2** on both stock and Lineage — matches, confirmed twice
-   now from real binaries. NOT the cause of the previous failure.
-2. **NEW finding**: stock FYI3 recovery uses **4096-byte page size**; current Lineage
-   recovery uses **2048-byte**. Both self-describing in-header, but Native Recovery V2
-   should match stock's 4096 exactly for this specific device/firmware baseline.
-3. `CONFIG_KEXEC`, `CONFIG_KEXEC_FILE`, `CONFIG_CRASH_DUMP` are all **disabled** in the
-   current upstream s5e9925_defconfig. Kexec-based RAM-boot iteration is NOT available
-   out of the box; would require a kernel rebuild (see KEXEC_FEASIBILITY.md).
-4. **Root cause of the previous failed native recovery boot — now PROVEN from two
-   independent real binaries (stock AND Lineage)**: both recovery ramdisks carry ~330
-   kernel `.ko` files (334 stock / 324 Lineage) including USB PHY (`phy-exynos-usbdrd-super.ko`)
-   and DWC3 controller (`dwc3-exynos-usb.ko`) modules, loaded automatically by AOSP
-   `init`'s built-in module-loading logic before anything else happens (stock uses
-   `modules.dep`-driven loading, Lineage ships an explicit `modules.load` order — both
-   valid, different mechanisms, same effect). USB, display, and touch drivers are ALL
-   modular on this SoC, not built into the kernel. The previous static BusyBox `/init`
-   had no equivalent module-loading step, so USB never came up — matching the observed
-   symptom exactly (splash → ~60s → reset, zero USB enumeration).
-5. pstore/last_kmsg evidence from the previous failed boot could NOT be recovered —
-   stock build has no root, SELinux blocks shell access even with DAC group match.
-   Closed dead end unless a rooted shell is obtained by other means later.
-
-## Pre-flash blockers: ALL CLOSED
-- ~~samloader-rs not installed~~ → installed, working, verified against Samsung's server
-- ~~Lineage recovery not downloaded~~ → downloaded, SHA256-verified
-- ~~FYI3 stock artifacts not extracted~~ → extracted, SHA256-hashed
-- ~~No binary comparison~~ → complete, see docs/RECOVERY_COMPARISON.md
-- No physical flash has occurred or been approved
-
-## FLASH GATE — awaiting approval
-
-Proposed next physical experiment (Phase 7 control test): flash the CURRENT OFFICIAL
-LineageOS recovery.img (build 20260915) to the RECOVERY partition ONLY, then boot
-directly into recovery without letting Android boot in between (avoiding
-vendor_flash_recovery/install-recovery.sh self-healing back to stock).
-
-- Target partition: RECOVERY only
-- Artifact: `~/s22-linux/lineage/build-20260915/recovery.img`
-- Exact bytes: 100,663,296
-- SHA256: `b5bf01c4a47091eb95078fc69b133b44c2b453b31c23433594c5b605e3747b5`
-- Why: prove the Samsung S-LK → recovery partition → recovery kernel → recovery ramdisk
-  chain works on this exact phone, using a known-good reference, before designing our
-  own native recovery
-- Command: `samloader flash --partition RECOVERY recovery.img --no-reboot`, then manually
-  boot to recovery immediately (Vol Up + Power while connected via USB), never letting
-  Android boot first
-- Expected result: LineageOS recovery logo/UI appears
-- Failure mode: black screen / bootloop / "unlocked software" warning loop with no
-  progress, similar to the previously observed failure
-- Recovery procedure if it fails: return to Download Mode (Vol Up + Vol Down + USB),
-  `samloader flash --partition RECOVERY stock/FYI3/extracted/recovery.img`, confirmed
-  byte-identical to what's already running (SHA256
-  `e002ec56b306d9e650eb8abd51bd81662e9198bf35bf9dd04e182646c12722ef`)
-- This test does NOT install LineageOS itself — no factory reset, no sideload, no
-  reboot to system. Recovery boot only.
-
-Waiting for explicit go-ahead before touching any partition.
+Known-good Lineage recovery: `lineage/build-20260915/recovery.img`, SHA256
+`b5bf01c4a47091eb95078fc69b133b44c2b453b31c23433594c5b605e3747b55`.
+It is a local-only artifact. See [NATIVE_LINUX.md](docs/NATIVE_LINUX.md) for
+the verified connection, reboot and rollback procedures.

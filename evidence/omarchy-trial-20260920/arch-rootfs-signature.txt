@@ -1,0 +1,12 @@
+[GNUPG:] NEWSIG
+gpg: Signature made Wed Aug  5 15:41:42 2026 EEST
+gpg:                using RSA key 68B3537F39A313B3E574D06777193F152BDBE6A6
+[GNUPG:] KEY_CONSIDERED 68B3537F39A313B3E574D06777193F152BDBE6A6 0
+[GNUPG:] SIG_ID AIYeXdK0neTku6qDepkFnpr/cAQ 2026-08-05 1785933702
+[GNUPG:] GOODSIG 77193F152BDBE6A6 Arch Linux ARM Build System <builder@archlinuxarm.org>
+gpg: Good signature from "Arch Linux ARM Build System <builder@archlinuxarm.org>" [unknown]
+[GNUPG:] VALIDSIG 68B3537F39A313B3E574D06777193F152BDBE6A6 2026-08-05 1785933702 0 4 0 1 10 00 68B3537F39A313B3E574D06777193F152BDBE6A6
+[GNUPG:] TRUST_UNDEFINED 0 pgp
+gpg: WARNING: This key is not certified with a trusted signature!
+gpg:          There is no indication that the signature belongs to the owner.
+Primary key fingerprint: 68B3 537F 39A3 13B3 E574  D067 7719 3F15 2BDB E6A6

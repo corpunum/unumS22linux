@@ -1,0 +1,28 @@
+473.34 3735.68
+magic: b0071257
+version: 20230221
+name: BORE
+last: 517
+[ IDX]       RTC       / RR (CNT) / KEY / M / VERSION       QB_ID    / VCELL ( BAT)(C) / TMU[TRIP],BAT           / I2C FAIL COUNT / DT / SLOT / BOOTING SEQUENCE
+[ 517] 260919 20:45:28 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4340mV( 99%)(+) / 35[0x000] 36[0x000], 29 / 00000000000000 /  - /   -  / SOFT, INFORM3(12345674) > RECOVERY > , JUMP2K [drawLOGO]
+Filesystem                Size      Used Available Use% Mounted on
+overlay                 582.6M    454.6M    116.0M  80% /
+wayland-libs-client><Q1oa75E3LWxLjeqZ+CrzurArY5OR4=
+wayland-libs-cursor><Q1KPE6j9HubpooDE4nCoM5vQbyfQ0=
+wayland-libs-egl><Q18MThPL+2Eg5VWSqmPxYSLyXNylc=
+wayland-libs-server><Q182CHTGlsskWky54NJ6PJlVmb/IY=
+webrtc-audio-processing-2><Q1vEMhoXcK4+fmrGUau9XdZoF7vvw=
+weston><Q134wTvh2kYoY9ILNIhupKwx8/ylk=
+weston-backend-drm><Q1mVs8bcG/Xio2ZFjUfBVNg2yJ7Fg=
+weston-shell-desktop><Q1ugjfaT030tsa37wYcvZoDRB13vI=
+weston-terminal><Q1Pd2rlsjgdE+/JoSbVqec2x16KKk=
+weston-xwayland
+xdotool
+xkeyboard-config><Q1SA/dJD4l3Sf2PEkBHDVzoiGhzUg=
+xterm
+xwayland
+xz-libs><Q1Fees+uhwysD9zTWYVVONXWbxQCA=
+yaml><Q16hwfIoresp4NlCuio7pNk48OiFY=
+zlib><Q1qeG8MrsxW/2sYiT5J4Xk2aM0vyk=
+zstd-libs><Q1UrGFE6B78rsNBjRohoH37c42uco=
+1a827b43d29141efb47f530902dd4e4ee2b6d780515893c9ecd676ad27efd7d1  /dev/block/by-name/recovery
