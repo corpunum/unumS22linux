@@ -1,0 +1,42 @@
+{
+  "attempt": {
+    "association_observed": true,
+    "boot_id": "60fb2eaf-985f-405d-82fd-6480e7383be9",
+    "internet_verified": false,
+    "monotonic": 38.659,
+    "services_started": true,
+    "state": "complete"
+  },
+  "battery_temperature_c": 32.1,
+  "battery_widget_persisted": true,
+  "boot_mode": "RECOVERY",
+  "bore_last": "760",
+  "hyprland_configerrors_empty": true,
+  "installed_sha256": {
+    "start-persistent-desktop": "a3caa155febc24b64681ec411ebdc8536272495ed6aa6c3cc73369b6fbcee694",
+    "wifi-autostart.py": "3dfcdcadc13a2d21473fb924a10a377e75dba2bcc0797dd2bf3b302ddc74168e",
+    "wifi-bringup-once.py": "cd757deeb828996fc4a8aebc20ac19d7db9fdfa0e2ccc90202b653d425684ebd",
+    "wifi-dhcp-hook.py": "8692dfcfca5fb15b207c2d6510eaa42c6e5edebeb8bdbb982b744648bcc76658",
+    "wifi-optional-firmware.py": "9a37e9a340cb2cf3e17cad4bce5cfd9917c4f9187243c67347a41bf6820f7aa0"
+  },
+  "keyboard_config_persisted": true,
+  "lease_boot_id_current": true,
+  "normal_power_on_verified": false,
+  "physical_unplug_tested": false,
+  "recovery_image_changed": false,
+  "running_desktop_components": [
+    "Hyprland",
+    "quickshell",
+    "squeekboard"
+  ],
+  "same_boot_attempt_refused_read_only": true,
+  "services_exact_argv_root_uid": {
+    "optional-firmware": true,
+    "udhcpc": true,
+    "wpa": true
+  },
+  "stride_marker_persisted": true,
+  "uptime_seconds": 121.04,
+  "usb_linkdown_filter": "1",
+  "wifi_enabled": true
+}

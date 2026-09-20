@@ -1,0 +1,12 @@
+{
+  "attempt_record_absent_before_first_boot": true,
+  "autostart_enabled": true,
+  "bore_before": 758,
+  "desktop_model_runtime_marker": true,
+  "existing_wpa_exact_process": true,
+  "image_or_partition_write": false,
+  "lease_boot_id_current": true,
+  "optional_responder_alive": true,
+  "reboot_target": "recovery",
+  "userdata_mount_identity": true
+}

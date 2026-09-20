@@ -2256,3 +2256,116 @@ requested between samples. This is repeat live acceptance, not a sustained
 traffic/endurance benchmark. Scripts, tests, sanitized evidence and updated
 status documentation are the publication scope; private credentials, firmware
 and raw logs remain excluded.
+
+### 2026-09-20 20:21–20:35UTC — recovery-boot Wi-Fi integration preparation
+
+Owner requested continuing with automatic Wi-Fi startup. BORE758 remains
+healthy; a repeat live WLAN DNS/HTTPS and model check passed at20:29. Read the
+actual native bootstrap: it directly starts SSH, not OpenRC, so local.d hooks
+would never run. Chose a detached optional one-shot task after the existing
+persistent desktop/model runtime-ready marker; its failure does not enter the
+supervisor's desktop-failure path or cause a radio retry. Native guardian,
+SSH startup, recovery image and normal BOOT are not modified.
+
+The runner requires exact native kernel/PID1, userdata mount identity, private
+profile and fresh WLAN state. A synchronously persisted boot-ID-tagged attempt
+record precedes radio activation. Previous incomplete/failed attempts prevent
+automatic activation in subsequent boots; successful same-boot attempts cannot
+run twice. The responder stays alive if a later stage fails. Completion only
+means startup/service checks, with internet acceptance separate.
+
+Review fixed an overly strict fresh-calibration observer: the driver can idle
+power-off into0x420100 before association; accept that exact reviewed state or
+0x420107 only with wlan0 and a fresh calibration-success log. The boot caller
+explicitly permits missing USB carrier; interactive preflight retains USB by
+default. Added per-boot ownership to DHCP/DNS state, because native bootstrap
+overwrites the resolver at each boot. Old metadata must not be restored into
+the new boot. The ecm0-only IPv4 ignore_routes_with_linkdown filter permits
+the WLAN route when USB carrier is absent without deleting/reprioritizing the
+connected USB rescue route; physical unplug behavior is not yet tested.
+
+The first worker's autostart draft had wrong runtime-marker/WPA-control paths,
+insufficient process checks and offline-AP behavior; parent review rejected it
+before activation and replaced it. Default/--check is read-only. Duplicate
+processes are identified from proc argv, not truncated ps text. WPA timeout
+alone allows its normal later association plus DHCP retries; services must
+actually be alive before recording startup completion. No tool reads/logs the
+stored PSK. Private startup/log files are0700/0600.
+
+Revalidated host rollback images: Lineage20260915 SHA256
+b5bf01c4a47091eb95078fc69b133b44c2b453b31c23433594c5b605e3747b55 and nativeV3
+1a827b43d29141efb47f530902dd4e4ee2b6d780515893c9ecd676ad27efd7d1. Current
+installed reboot helper is the tested native RESTART2 path, with filesystem
+sync and literal recovery target; no BCB/MISC writes. Host user auto-ACK
+service remains active. Raw pre-test captures are private under
+`/home/corpunum/s22-private-backups/wifi-autostart-20260920-h3uuQk/`.
+Candidate files were transferred to userdata and compiled/hash-read back
+without enabling autostart or disturbing the working session at this point.
+
+### 2026-09-20 20:35–20:40UTC — first automatic Wi-Fi recovery reboot passes
+
+Installed reviewed autostart/harness/DHCP code on userdata and a small optional
+task launch in the cache-overlay desktop supervisor. All original modified
+files plus private lease/resolver metadata are preserved in
+`/srv/s22/hardware/backups/wifi-autostart-20260920T2035Z/`. Atomic replacement
+of the supervisor was staged on CACHE itself, not a cross-filesystem rename.
+Host/device source hashes match `evidence/wifi-autostart-20260920/install.json`.
+Migrated the current lease's boot-ID metadata without changing its addresses,
+routes or DNS. Verified the private profile's existing WPA control socket path
+without publishing any credential. Enabled the ordinary-file Wi-Fi marker
+only after these checks. No process was restarted in the existing session;
+all13 connectivity/model checks still passed at20:36:26.
+
+At20:36:46 requested `/usr/local/sbin/s22-reboot recovery`. No partition was
+written. Pinned USB SSH returned with **BORE759, RECOVERY**, uptime16.25s;
+native guardian was PID1. The new supervisor automatically launched Wi-Fi
+after desktop/model readiness. Persistent attempt starting at13.043s;
+fresh-state preflight13.455, four RO binds13.491, module-plus-fs_ready13.557
+(0.065s separation). The optional responder was active before loading WLAN.
+
+Early private kernel capture records calibration phase4624ms, completion
+at29.769118. Optional QDSS lookup returned missing promptly:25.003→25.142,
+31.021→31.197 and34.763→34.958, instead of waiting60s. At33.644 the normal
+post-calibration idle state was0x420100; the corrected observer accepted this
+with real interfaces and fresh success evidence. WPA association and exact
+service process checks completed at38.686s. No host radio activation command
+was issued after reboot. No WLAN recovery/error was observed in this startup.
+
+At20:38:21, uptime88.53s, all13 separate acceptance checks passed: WPA2/CCMP,
+DHCP route/private lease, native and Arch DNS, WLAN-bound DNS and TLS-verified
+HTTPS, USB rescue, model health. The phone had run genuinely uninterrupted
+for more than60s. At187.62s it remained BORE759; the completed attempt and
+lease had the current boot ID. Keyboard/battery UI configuration and stride
+marker persisted; Hyprland configerrors was empty. Physical finger sensing
+and physical unplug are still not claimed. Logs/BORE were captured privately
+immediately after return; the small kernel ring later overwrote early messages.
+
+At20:40:32 requested one further recovery-target reboot to test the previous
+completed-attempt path across successive boots. No normal-BOOT selection,
+flash, EFS change, or physical intervention was requested.
+
+### 2026-09-20 20:40–20:43UTC — second recovery reboot confirms autostart
+
+Pinned SSH returned as **BORE760, RECOVERY**, native guardian, uptime15.52s.
+The previous completed attempt was accepted as belonging to an older boot;
+the newly started task recorded current-boot completion at38.659s, including
+association. No radio command or file restoration was sent from the host.
+At20:41:50, uptime71.80s, all13 WLAN/USB/model checks passed again. The second
+boot therefore also ran undisturbed past60s before acceptance.
+
+At121.04s the final capture remains760, with exact responder/WPA/DHCP argv and
+root UID checks, current-boot lease ownership, enable marker and linkdown filter
+readback. A read-only attempt check correctly refused a same-boot duplicate.
+All installed source hashes still match deployment, Hyprland/Quickshell/
+Squeekboard are running, compositor configerrors is empty, keyboard/battery
+configuration and stride marker persist. Battery temperature32.1C is only a
+point sample.50 focused host tests pass after adding real startup-order and
+negative process-identity assertions. Wi-Fi recovery-boot autostart is now
+enabled and verified twice; normal power-on, physical USB-disconnected use,
+roaming/suspend and the remaining hardware/acceleration work are unfinished.
+
+Public record: `evidence/wifi-autostart-20260920/`. The traffic-only script's
+not_tested list describes its own scope, not a contradiction of the separate
+reboot/startup evidence. Network credentials, addresses, raw private captures,
+firmware and original backups remain excluded. No image or partition writes
+were made in this round.

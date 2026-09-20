@@ -1,0 +1,96 @@
+{
+  "attempt": {
+    "association_observed": true,
+    "boot_id": "b2d965b3-9768-4a52-a1f0-6e992cad89da",
+    "internet_verified": false,
+    "monotonic": 38.686,
+    "services_started": true,
+    "state": "complete"
+  },
+  "battery_widget_persisted": true,
+  "boot_mode": "RECOVERY",
+  "bore_last": "759",
+  "keyboard_config_persisted": true,
+  "lease_boot_id_current": true,
+  "model_and_desktop_runtime_ready": true,
+  "startup_events": [
+    {
+      "event": "preflight_ok",
+      "firmware_files": 14,
+      "monotonic": 13.455,
+      "optional_responder": true,
+      "state": "State: 0x400000(PCI PROBE DONE)",
+      "usb_rescue_required": false
+    },
+    {
+      "event": "firmware_binds_verified",
+      "monotonic": 13.491,
+      "targets": [
+        "qca6490",
+        "wlan",
+        "wlan-connection-roaming.ini",
+        "wlan-connection-roaming-backup.ini"
+      ]
+    },
+    {
+      "event": "wlan_only_recovery_enabled",
+      "monotonic": 13.492
+    },
+    {
+      "elapsed": 0.065,
+      "event": "module_and_fs_ready",
+      "monotonic": 13.557
+    },
+    {
+      "event": "observe",
+      "monotonic": 13.558,
+      "state": "State: 0x400000(PCI PROBE DONE)",
+      "wlan_interfaces": []
+    },
+    {
+      "event": "observe",
+      "monotonic": 18.573,
+      "state": "State: 0x400000(PCI PROBE DONE)",
+      "wlan_interfaces": []
+    },
+    {
+      "event": "observe",
+      "monotonic": 23.6,
+      "state": "State: 0x400000(PCI PROBE DONE)",
+      "wlan_interfaces": []
+    },
+    {
+      "event": "observe",
+      "monotonic": 28.627,
+      "state": "State: 0x40000f(QMI_WLFW_CONNECTED | FW_MEM_READY | FW_READY | IN_COLD_BOOT_CAL | PCI PROBE DONE)",
+      "wlan_interfaces": []
+    },
+    {
+      "event": "observe",
+      "monotonic": 33.644,
+      "state": "State: 0x420100(DRIVER_PROBED | COLD_BOOT_CAL_DONE | PCI PROBE DONE)",
+      "wlan_interfaces": [
+        "p2p0",
+        "swlan0",
+        "wifi-aware0",
+        "wlan0"
+      ]
+    },
+    {
+      "calibration_success": true,
+      "connectivity_verified": false,
+      "event": "enumerated_after_calibration",
+      "monotonic": 33.658,
+      "post_calibration_state": "State: 0x420100(DRIVER_PROBED | COLD_BOOT_CAL_DONE | PCI PROBE DONE)"
+    },
+    {
+      "association_observed": true,
+      "event": "wifi_services_started",
+      "internet_verified": false
+    }
+  ],
+  "stride_marker_persisted": true,
+  "uptime_seconds": 187.62,
+  "usb_linkdown_filter": "1",
+  "wifi_enabled": true
+}

@@ -10,6 +10,7 @@ import tempfile
 
 STATE = Path(os.environ.get("WIFI_DHCP_STATE", "/srv/s22/hardware/wifi-private/lease.json"))
 RESOLV = Path("/etc/resolv.conf")
+BOOT_ID = Path('/proc/sys/kernel/random/boot_id')
 RESCUE = ipaddress.ip_network("10.55.0.0/24")
 
 
@@ -80,6 +81,7 @@ def conflicting_default():
 
 
 def save(lease):
+    lease['boot_id'] = BOOT_ID.read_text().strip()
     STATE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=".lease.", dir=STATE.parent)
     try:
@@ -95,6 +97,20 @@ def save(lease):
 
 def resolver_backup():
     return STATE.parent / "resolv.conf.before-wifi"
+
+
+def current_lease():
+    """A persistent lease cannot own addresses/resolver contents in a new boot."""
+    if not STATE.is_file():
+        return None
+    lease = json.loads(STATE.read_text())
+    if lease.get('boot_id') == BOOT_ID.read_text().strip():
+        return lease
+    # native-start recreates the USB resolver at boot. Drop only our stale
+    # metadata, never apply old addresses or restore an earlier boot's DNS.
+    STATE.unlink()
+    resolver_backup().unlink(missing_ok=True)
+    return None
 
 
 def merged_resolver(original, dns):
@@ -176,10 +192,10 @@ def deconfig():
         ensure_wlan_interface()
     except ValueError as error:
         return fail(str(error))
-    if not STATE.is_file():
-        return 0
     try:
-        lease = json.loads(STATE.read_text())
+        lease = current_lease()
+        if lease is None:
+            return 0
         if not {"address", "prefix", "gateway", "dns"}.issubset(lease):
             raise ValueError("invalid owned lease state")
         if not (isinstance(lease["address"], str) and isinstance(lease["gateway"], str)
@@ -201,7 +217,7 @@ def bound():
         lease = lease_from_env()
         if conflicting_default():
             raise ValueError("metric-600 default exists on another interface")
-        old = json.loads(STATE.read_text()) if STATE.is_file() else None
+        old = current_lease()
         run_ip("addr", "replace", f"{lease['address']}/{lease['prefix']}", "dev", "wlan0")
         run_ip("route", "replace", "default", "via", lease["gateway"], "dev", "wlan0", "metric", "600")
         if old and old['gateway'] != lease['gateway']:

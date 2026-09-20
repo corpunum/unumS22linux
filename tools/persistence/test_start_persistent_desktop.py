@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 import signal
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -23,6 +24,37 @@ SPEC.loader.exec_module(MOD)
 
 
 class SupervisorUnitTests(unittest.TestCase):
+    def test_wifi_disabled_by_default_and_explicit_marker(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            enabled, disabled = root / 'enabled', root / 'disabled'
+            with mock.patch.object(MOD, 'WIFI_ENABLED', enabled), \
+                 mock.patch.object(MOD, 'WIFI_DISABLED', disabled), \
+                 mock.patch.object(MOD.subprocess, 'Popen') as popen:
+                self.assertIsNone(MOD.start_optional_wifi())
+                enabled.touch(); disabled.touch()
+                self.assertIsNone(MOD.start_optional_wifi())
+                popen.assert_not_called()
+
+    def test_wifi_spawn_is_detached_and_failure_is_nonfatal(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            enabled = root / 'enabled'; enabled.touch()
+            script = root / 'hardware/wifi-tools/wifi-autostart.py'
+            script.parent.mkdir(parents=True); script.touch()
+            private = root / 'hardware/wifi-private'; private.mkdir(mode=0o700)
+            with mock.patch.object(MOD, 'MOUNT', root), \
+                 mock.patch.object(MOD, 'WIFI_ENABLED', enabled), \
+                 mock.patch.object(MOD, 'WIFI_DISABLED', root / 'disabled'), \
+                 mock.patch.object(MOD.subprocess, 'Popen') as popen:
+                self.assertIs(MOD.start_optional_wifi(), popen.return_value)
+                self.assertEqual(popen.call_args.args[0], ['/usr/bin/python3', str(script), '--start'])
+                self.assertTrue(popen.call_args.kwargs['start_new_session'])
+                self.assertEqual(popen.call_args.kwargs['stdin'], subprocess.DEVNULL)
+                popen.side_effect = OSError('fixture failure')
+                self.assertIsNone(MOD.start_optional_wifi())
+            self.assertEqual((private / 'autostart.log').stat().st_mode & 0o777, 0o600)
+
     def test_stride_trial_missing_library_fails_before_process_start(self):
         with tempfile.TemporaryDirectory() as td, \
              mock.patch.object(MOD, 'CHROOT', Path(td)), \

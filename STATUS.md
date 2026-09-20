@@ -3,27 +3,30 @@
 Updated 2026-09-20. Older states and experiments remain in `EXPERIMENTS.md`
 and Git history; the old claim that nothing custom was flashed is obsolete.
 
-## Current accepted state — 20:06 UTC
+## Current accepted state — 20:41 UTC
 
-Native RECOVERY **BORE758** is running, USB SSH is reachable, and the resident
-CPU model reports `ok`. A WLAN initialization experiment caused a real kernel
-panic at19:01; the bootloader returned directly to RECOVERY without a requested
-button press or rescue flash. The guardian then automatically started the
-persistent desktop/model. This does not prove every future crash is remotely
-recoverable or that normal cold power-on selects Linux.
+Native RECOVERY **BORE760** is running, USB SSH is reachable, and the resident
+CPU model reports `ok`. Two intentional recovery-target software reboots
+(BORE759/760) automatically restored the desktop/model and Wi-Fi. Association
+and service startup completed around39s; separate Wi-Fi DNS/HTTPS checks passed
+after more than60s uninterrupted uptime on both. No physical intervention,
+image write or normal-BOOT selection was needed. This does not establish normal
+cold-power-on Linux or guarantee recovery from every possible driver crash.
 
-- Display stride correction, Omarchy icons/fonts, and battery panel survived
-  that reboot. Latest sampled battery temperature30.0C; not a battery-life test.
+- Display stride marker, Omarchy battery/keyboard configuration and all desktop
+  components persisted. Hyprland configerrors is empty; battery32.1C at the
+  latest sample. Not a physical finger or battery-life test.
 - Native power-key binding is installed. Controlled compositor DPMS passed
   on/off/on; physical-button delivery is not yet accepted.
 - A persistent **Keyboard** bar button was added after the reboot. A synthetic
   tap through `sec_touchscreen` revealed Squeekboard; no physical finger claim.
-  The keyboard addition itself has not been reboot-tested.
+  Its configuration now survives the recovery reboot tests.
 - Wi-Fi is **connected and internet-tested**. The corrected single activation
   completed calibration; an exact optional-firmware response fixed startup
   waits. WPA2/CCMP, DHCP, native/Arch DNS, and WLAN-forced DNS/HTTPS passed.
   USB routes/SSH and model health remain intact. Credentials/tools persist
-  privately on userdata; Wi-Fi autostart is not enabled or reboot-tested.
+  privately on userdata; optional Wi-Fi autostart is enabled and verified
+  across two recovery reboots. Failed/incomplete startup inhibits retry.
 - ABOX core firmware started during BORE757, but no speaker playback path was
   obtained. Those temporary firmware binds disappeared at reboot; current
   BORE758 has no ALSA soundcards. Bluetooth has no HCI controller.
@@ -35,7 +38,8 @@ Evidence: [final live state](evidence/hardware-20260920/final-live-state.txt),
 [hardware audit](docs/EVERYDAY_HARDWARE_2026-09-20.md), and
 [Wi-Fi history](docs/WIFI_NATIVE.md), plus
 [live Wi-Fi acceptance](evidence/wifi-connected-20260920/acceptance.json).
-No partition was written during this
+[Recovery-boot Wi-Fi evidence](docs/WIFI_AUTOSTART.md) supersedes that manual
+connection checkpoint. No partition was written during this
 daily-hardware round. Preserve the working recovery environment.
 
 ## Earlier boot-attempt history (superseded snapshots)
@@ -101,7 +105,7 @@ persistent Omarchy/model startup, readiness at 15.81 seconds and stable at
   by the original Samsung BOOT; Linux currently runs from RECOVERY.
 - GPU compute still faults despite a validated CPU-mapping lifecycle fix.
 - NPU runtime/firmware integration and inference are unproven.
-- Wi-Fi reboot autostart, physical finger sensing, Bluetooth, cellular, audio,
+- Wi-Fi with physically unplugged USB, physical finger sensing, Bluetooth, cellular, audio,
   cameras, suspend and daily use have not passed acceptance.
 - The normal Omarchy installer was not run. Native signed pacman transactions
   reproduce a signature-helper hang; the clean root and signed dependency
@@ -118,14 +122,14 @@ conversion and recovery autostart are complete; see the
 The experimental BOOT has been replaced by the original backup, now verified
 by device readback. BORE confirms236 normal boot entries between07:48 and13:14;
 pstore is empty and last_kmsg is corrupted, so the precise phone-side failure
-is still unproven. Native RECOVERY758 is now running. The physical display fix
+is still unproven. Native RECOVERY760 is now running. The physical display fix
 was accepted by the owner on BORE757; its persistent configuration and clean
 framebuffer are verified after the later BORE758 panic reboot.
 Do not normal-boot Android or wipe userdata. Further experimental normal
 boots need physical rescue availability and are not part of this rollback.
 
-Next Wi-Fi work is supervised startup integration and a separately controlled
-recovery-boot test, not more activation of the running driver. The exact
+Next Wi-Fi work is unplugged/roaming/suspend testing, not more activation of
+the running driver. Recovery-boot integration is now tested. The exact
 missing optional QDSS response must be available before module insertion;
 do not repeat the failed insertion-and-wait sequence. No EFS write or guessed
 calibration was required. Audio needs real machine-card/topology registration; Bluetooth needs

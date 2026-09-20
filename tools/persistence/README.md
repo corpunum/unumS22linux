@@ -103,6 +103,15 @@ marker aside before restarting. See `../omarchy-trial/s22-linear-stride.md`.
 The old installed supervisor is preserved as `.pre-stride`; do not remove
 the installed workaround library while the marker is enabled.
 
+After model/desktop readiness, `/etc/s22-wifi-enabled` permits one detached
+optional Wi-Fi startup task. `/etc/s22-wifi-disabled` overrides it. The radio
+task's failure never triggers GUI/SSH failure or an activation retry. A durable
+failed/incomplete attempt inhibits the next automatic radio startup as well.
+Successful RECOVERY boots759/760 verified this integration, with WLAN traffic
+checked separately. See `../../docs/WIFI_AUTOSTART.md`. The radio responder
+and firmware mounts deliberately outlive a failed observer; do not unload or
+remove them during desktop cleanup under a live WLAN driver.
+
 Native pacman's signature-helper hang was reproduced before a transaction.
 Package DB checks work, but native signed installation is NOT accepted yet.
 The fixup was verified/installed on the host and transferred with its package

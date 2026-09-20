@@ -21,6 +21,8 @@ class HookTests(unittest.TestCase):
         hook.RESOLV = Path(self.tmp.name) / "etc" / "resolv.conf"
         hook.RESOLV.parent.mkdir()
         hook.RESOLV.write_text("# preserved\nnameserver 9.9.9.9\noptions ndots:5\n")
+        hook.BOOT_ID = Path(self.tmp.name) / 'boot-id'
+        hook.BOOT_ID.write_text('test-boot-current\n')
         self.env = {"interface": "wlan0", "ip": "192.0.2.10",
                     "subnet": "255.255.255.0", "router": "192.0.2.1"}
 
@@ -80,7 +82,8 @@ class HookTests(unittest.TestCase):
     def test_deconfig_removes_only_owned_wlan_state(self):
         hook.STATE.parent.mkdir(mode=0o700)
         hook.STATE.write_text(json.dumps({"address": "192.0.2.10", "prefix": 24,
-                                          "gateway": "192.0.2.1", "dns": []}))
+                                          "gateway": "192.0.2.1", "dns": [],
+                                          "boot_id": "test-boot-current"}))
         calls = []
         with patch.dict(os.environ, {"interface": "wlan0"}, clear=False), patch.object(
                 hook, "run_ip", side_effect=lambda *args, **kwargs: calls.append((args, kwargs))):
@@ -150,7 +153,7 @@ class HookTests(unittest.TestCase):
 
     def test_dns_only_renew_does_not_delete_current_address_or_route(self):
         old = {"address": "192.0.2.10", "prefix": 24, "gateway": "192.0.2.1",
-               "dns": ["192.0.2.53"]}
+               "dns": ["192.0.2.53"], "boot_id": "test-boot-current"}
         hook.STATE.parent.mkdir(mode=0o700)
         hook.STATE.write_text(json.dumps(old))
         env = dict(self.env, domain_name_servers="192.0.2.54")
@@ -171,6 +174,28 @@ class HookTests(unittest.TestCase):
                 self.assertTrue(json.loads(hook.STATE.read_text())['resolver_user_override'])
             self.assertEqual(hook.deconfig(), 0)
             self.assertEqual(hook.RESOLV.read_text(), '# user override\nnameserver 1.1.1.1\n')
+
+    def test_old_boot_deconfig_never_changes_new_boot_network_or_resolver(self):
+        hook.STATE.parent.mkdir(mode=0o700)
+        hook.STATE.write_text(json.dumps({'boot_id': 'previous-boot', 'resolver_content': 'old'}))
+        hook.resolver_backup().write_text('old resolver')
+        original = hook.RESOLV.read_text()
+        with patch.dict(os.environ, {'interface': 'wlan0'}, clear=True), patch.object(hook, 'run_ip') as ip:
+            self.assertEqual(hook.deconfig(), 0)
+            ip.assert_not_called()
+        self.assertEqual(hook.RESOLV.read_text(), original)
+        self.assertFalse(hook.STATE.exists())
+        self.assertFalse(hook.resolver_backup().exists())
+
+    def test_new_boot_bound_uses_new_resolver_not_stale_backup(self):
+        hook.STATE.parent.mkdir(mode=0o700)
+        hook.STATE.write_text(json.dumps({'boot_id': 'previous-boot', 'resolver_content': 'old'}))
+        hook.resolver_backup().write_text('old resolver')
+        original = hook.RESOLV.read_text()
+        with patch.dict(os.environ, dict(self.env, dns='192.0.2.53'), clear=True), patch.object(hook, 'run_ip'):
+            self.assertEqual(hook.bound(), 0)
+        self.assertEqual(hook.resolver_backup().read_text(), original)
+        self.assertEqual(json.loads(hook.STATE.read_text())['boot_id'], 'test-boot-current')
 
 
 if __name__ == "__main__":

@@ -1,11 +1,11 @@
 # Reviewed QCA6490 startup sequence
 
 This device-specific development procedure supersedes the first failed WLAN
-experiment. The live BORE758 session now has association and internet traffic;
+experiment. BORE759/760 now have automatic association and internet traffic;
 see [Wi-Fi evidence and limitations](WIFI_NATIVE.md). **Do not execute this
 sequence again on the currently loaded driver.** It is not a general installer
-or an enabled boot service. The revised one-shot harness has host tests but
-has not been exercised end-to-end from a fresh boot.
+or a boot service by itself. The optional [boot runner](WIFI_AUTOSTART.md)
+now invokes the revised harness; two fresh recovery boots passed end-to-end.
 
 ## Before a future single activation
 
@@ -90,4 +90,5 @@ Do not launch duplicate WPA/DHCP processes. Confirm WPA2/CCMP `COMPLETED`
 before DHCP. Raw status, scans, DHCP logs and resolver backups are private.
 The acceptance command intentionally sends only a public DNS/HTTPS probe
 and reports sanitized results. A persisted profile/tool is not boot-autostart
-proof. Integrating and testing supervised recovery-boot Wi-Fi remains next work.
+proof. The separately recorded recovery reboots now establish that proof;
+physical unplug, roaming and suspend/resume remain separate tests.

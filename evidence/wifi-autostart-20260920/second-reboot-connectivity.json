@@ -1,0 +1,28 @@
+{
+  "all_checks_passed": true,
+  "checks": {
+    "arch_app_dns": true,
+    "arch_shares_resolver_inode": true,
+    "cnss_mission_ready": true,
+    "dns_forced_wlan0": true,
+    "https_forced_wlan0_tls_verified": true,
+    "lease_dns_first": true,
+    "lease_private": true,
+    "native_app_dns": true,
+    "resident_model_healthy": true,
+    "usb_carrier": true,
+    "usb_default_preserved": true,
+    "wlan_default_metric_600": true,
+    "wpa2_ccmp_completed": true
+  },
+  "cnss_state": "State: 0x420107(QMI_WLFW_CONNECTED | FW_MEM_READY | FW_READY | DRIVER_PROBED | COLD_BOOT_CAL_DONE | PCI PROBE DONE)",
+  "not_tested": [
+    "reboot_autostart",
+    "USB_disconnected",
+    "suspend_resume",
+    "roaming",
+    "sustained_throughput"
+  ],
+  "timestamp_utc": "2026-09-20T20:41:50.381772+00:00",
+  "uptime_seconds": 71.8
+}

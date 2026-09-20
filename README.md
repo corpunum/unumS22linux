@@ -5,20 +5,22 @@ Exynos 2200, codename `r0s`, unlocked bootloader. This is the S22, not S22+.
 
 ## Current result — 2026-09-20
 
-**Current state (20:06UTC):** native Linux is running in RECOVERY
-BORE758 with the persistent desktop and CPU model. **Wi-Fi now works:**
+**Current state (20:41UTC):** native Linux is running in RECOVERY
+BORE760 with the persistent desktop and CPU model. **Wi-Fi now autostarts:**
 WPA2 association, DHCP, DNS and TLS-verified HTTPS forced through WLAN passed.
 DNS also works in both Alpine and Arch/Omarchy. USB SSH remains available.
-The first WLAN experiment panicked at19:01; the corrected follow-up ran in
-that same recovery boot without another SoC reboot or physical intervention.
+Two consecutive recovery-target software reboots (BORE759/760) automatically
+restored Wi-Fi association and services in about39s. Separate internet checks
+passed after more than60s uninterrupted uptime on each. No physical action,
+image flash or normal-BOOT selection was needed.
 The owner previously confirmed the physical display is clean with the
 [narrow display-stride workaround](tools/omarchy-trial/s22-linear-stride.md),
 which now has reboot-observed persistence. Battery telemetry, restored icons,
 screen-power control, and a visible **Keyboard** button are installed. A
 synthetic touchscreen tap reveals the keyboard; physical finger acceptance
 remains unproven. Bluetooth/audio remain unaccepted. Wi-Fi tools and the private
-profile are saved, but Wi-Fi boot autostart is not yet enabled or reboot-tested.
-See [Wi-Fi acceptance](evidence/wifi-connected-20260920/acceptance.json).
+profile are persisted. See [Wi-Fi recovery-boot acceptance](docs/WIFI_AUTOSTART.md);
+unplugged USB operation and suspend/resume remain untested.
 See the [current screen](evidence/hardware-20260920/keyboard-after.png) and
 [everyday hardware audit](docs/EVERYDAY_HARDWARE_2026-09-20.md).
 Normal power-on Linux is still unaccepted; do not boot the restored Android
@@ -37,7 +39,7 @@ and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 | --- | --- |
 | Native boot | Alpine 3.24.2; guardian PID1; Samsung/Lineage 5.10.260 kernel |
 | Persistent base | Alpine package/file overlay in existing CACHE; reboot-tested |
-| Persistent desktop/model | ext4 userdata; automatic recovery startup verified again at BORE758 |
+| Persistent desktop/model | ext4 userdata; automatic recovery startup verified again at BORE759/760 |
 | Desktop | Arch ARM, Hyprland 0.56.2, Omarchy v4.0.4; software-rendered |
 | Keyboard/input | Visible Squeekboard plus Keyboard bar button; synthetic tap reveal passed; physical finger sensing unverified |
 | Battery/display power | Native telemetry bar/panel; controlled DPMS off/on passed; no suspend/battery-life acceptance |
@@ -45,7 +47,7 @@ and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 | CPU benchmark | 0.8B: 20.21 tok/s; 2B: 10.13 short / 5.47 at depth4096 |
 | GPU | Experimental RADV enumerates; a mapping bug was fixed, but compute still faults |
 | NPU | Vendor assets investigated; no working inference |
-| Connectivity | USB Ethernet + SSH retained; native Wi-Fi association, DHCP, DNS and HTTPS passed; Wi-Fi reboot autostart untested |
+| Connectivity | USB rescue retained; Wi-Fi association, DHCP, DNS and HTTPS passed after two automatic recovery-boot startups |
 | Other everyday hardware | Bluetooth, usable audio, cellular, camera and suspend remain unaccepted |
 
 Short resident chat tests started streaming in 0.4–0.7 seconds. Those samples
