@@ -1,0 +1,4 @@
+4526cba7e7f74c8bbae391cb56952d0dd5179de6b58228408d539bc67418372a  /usr/local/bin/start-persistent-desktop
+4a88743555f3dbbca4cd6fcdfad1d618e551f22ed3ecc75315ccb7063a781791  /usr/local/bin/start-persistent-desktop.pre-stride
+23d21ed026b93790b0161f6bf95b74293c4668a14817121665555615fee94096  /etc/s22-linear-stride-enabled
+fa627c94f4cb536be24567e2a955c578b741e08dcb2860a0fd1f7110a55c7fcc  /srv/s22/arch/opt/s22-aquamarine/libs22-linear-stride.so

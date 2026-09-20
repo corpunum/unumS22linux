@@ -5,11 +5,17 @@ Exynos 2200, codename `r0s`, unlocked bootloader. This is the S22, not S22+.
 
 ## Current result — 2026-09-20
 
-**Current limitation:** the experimental BOOT image was written and read back,
-but the normal reboot at07:48:18UTC had no USB/SSH return by07:56UTC. Normal
-boot mode/runtime are **unconfirmed**. RECOVERY and vendor_boot were unchanged.
-See the [BOOT experiment](tools/native-boot/README.md); physical rescue is
-needed before another device test.
+**Current state (18:18UTC):** native Linux is running in RECOVERY
+BORE757. Whole-partition readback verifies the original BOOT rollback and
+unchanged RECOVERY/vendor_boot. Persistent desktop/model autostart succeeded.
+The owner confirmed the physical display is clean with the
+[narrow display-stride workaround](tools/omarchy-trial/s22-linear-stride.md),
+now saved in persistent startup configuration (new reboot test pending).
+The current boot has been stable for nearly five hours. Wi-Fi/Bluetooth are
+not working yet; internet works through USB. See the
+[everyday hardware audit](docs/EVERYDAY_HARDWARE_2026-09-20.md).
+Normal power-on Linux is still unaccepted; do not boot the restored Android
+BOOT or wipe userdata.
 
 The last accepted session, BORE519, ran **Alpine Linux ARM64 from RECOVERY**,
 with no Android services. Persistent **Arch Linux ARM + Hyprland + actual

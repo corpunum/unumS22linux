@@ -95,6 +95,14 @@ starts the CPU model and actual Omarchy UI, and cleans its own processes and
 mounts on stop. Ordinary startup failure falls back to Weston; a second
 concurrent launch refuses without taking over the display.
 
+After physical confirmation of a clean screen, `/etc/s22-linear-stride-enabled`
+opts the desktop into the narrow S22 linear-stride workaround. The native
+guardian, SSH and model process are not preloaded. Set
+`S22_LINEAR_STRIDE_TRIAL=0` for a controlled no-preload launch, or move the
+marker aside before restarting. See `../omarchy-trial/s22-linear-stride.md`.
+The old installed supervisor is preserved as `.pre-stride`; do not remove
+the installed workaround library while the marker is enabled.
+
 Native pacman's signature-helper hang was reproduced before a transaction.
 Package DB checks work, but native signed installation is NOT accepted yet.
 The fixup was verified/installed on the host and transferred with its package

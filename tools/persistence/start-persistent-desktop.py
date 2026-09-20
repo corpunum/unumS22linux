@@ -32,6 +32,7 @@ DEPLOYMENT = MOUNT / ".persistent-ready.json"
 RUNTIME_READY = Path("/run/s22-persistent-ready.json")
 CHROOT = Path("/mnt/omarchy-trial")
 LOCK = Path("/run/s22-persistent-desktop.lock")
+STRIDE_ENABLED = Path("/etc/s22-linear-stride-enabled")
 
 
 class Failure(RuntimeError):
@@ -295,6 +296,13 @@ def start_model(log: Path, retries: int = 3) -> subprocess.Popen[str]:
 
 
 def start_desktop(log: Path) -> tuple[subprocess.Popen[str], subprocess.Popen[str]]:
+    # Marker is installed only after physical-panel confirmation. An explicit
+    # environment value overrides it, so '=0' retains a no-preload rescue path.
+    stride_setting = os.environ.get('S22_LINEAR_STRIDE_TRIAL')
+    stride_trial = stride_setting == '1' or (stride_setting is None and STRIDE_ENABLED.is_file())
+    stride_library = '/opt/s22-aquamarine/libs22-linear-stride.so'
+    if stride_trial and not (CHROOT / stride_library.lstrip('/')).is_file():
+        raise Failure('requested display stride trial library is missing')
     seat_env = {"HOME": "/root", "PATH": "/usr/local/bin:/usr/bin:/bin",
                 "SEATD_VTBOUND": "0"}
     with log.open("ab", buffering=0) as out:
@@ -320,6 +328,8 @@ def start_desktop(log: Path) -> tuple[subprocess.Popen[str], subprocess.Popen[st
            "LD_LIBRARY_PATH": "/opt/s22-aquamarine:/usr/lib", "AQ_S22_DISPLAY_ONLY": "1",
            "AQ_DRM_DEVICES": "/dev/dri/card1", "LIBGL_ALWAYS_SOFTWARE": "1",
            "GALLIUM_DRIVER": "llvmpipe", "HYPRLAND_NO_CRASHREPORTER": "1"}
+    if stride_trial:
+        env.update({'LD_PRELOAD': stride_library, 'S22_LINEAR_STRIDE': '1'})
     try:
         with log.open("ab", buffering=0) as out:
             desktop = subprocess.Popen(chroot_cmd(env, "/usr/bin/dbus-run-session", "--",

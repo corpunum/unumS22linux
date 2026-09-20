@@ -1,0 +1,4 @@
+S22 physical display confirmed clean by owner on 2026-09-20.
+Enable the narrow exynos-drmdpu XR24 linear stride workaround on recovery startup.
+Library SHA256: fa627c94f4cb536be24567e2a955c578b741e08dcb2860a0fd1f7110a55c7fcc
+Rollback: move /etc/s22-linear-stride-enabled aside, or launch with S22_LINEAR_STRIDE_TRIAL=0.

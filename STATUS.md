@@ -5,6 +5,32 @@ and Git history; the old claim that nothing custom was flashed is obsolete.
 
 ## Current boot-attempt warning
 
+Latest 18:18UTC: owner confirms the physical screen is clean. Workaround startup
+configuration is now persistent, with backup/hash readback; no new reboot was
+performed. BORE757 remains up nearly five hours with healthy model and USB
+internet. Wi-Fi/Bluetooth are not working; audio, cameras, cellular and suspend
+are not accepted. See `docs/EVERYDAY_HARDWARE_2026-09-20.md` for the bounded
+live audit and next steps. Normal-power-on Linux remains unfinished.
+
+At13:22UTC, native RECOVERY BORE757 returned via physical key selection.
+Whole-partition readback verifies the original BOOT restoration and unchanged
+RECOVERY/vendor_boot. Persistent desktop/model autostart succeeded; model
+health `ok`. The owner reports physical display artifacts while framebuffer
+capture is clean. A source-backed, opt-in row-stride workaround is running
+in a temporary desktop session; physical correction is not yet confirmed.
+See `tools/omarchy-trial/s22-linear-stride.md`. Do not normal-boot Android.
+
+Earlier rollback staging (superseded by the live readback above):
+
+At13:16–13:20UTC, Download USB became reachable. The original 64MiB BOOT
+backup (SHA256 `0962dbdd67b748858189b46d464820ec7d1f3ea843cc7c3d033b69c40931b44e`)
+was restored with `--no-reboot`; Odin acknowledged all transfers and the
+tool exited0. Device-side readback is pending. The phone remains in Download
+Mode. Enter unchanged native RECOVERY next, not the restored Android BOOT;
+Linux userdata/CACHE were not touched. No corrected candidate was flashed.
+
+Earlier failed attempt:
+
 At approximately 07:48 UTC, BOOT was written and read back with SHA256
 `4aeb801486e35e2c71dab0e988c6ac14802b05a29d062ddd93834e74802b5b2e`.
 RECOVERY (`1a827b43d29141efb47f530902dd4e4ee2b6d780515893c9ecd676ad27efd7d1`)
@@ -54,10 +80,14 @@ and then approved BOOT work. Private raw backups of 15 selected partitions
 are checksum-verified; personal-file restoration remains unproven. Userdata
 conversion and recovery autostart are complete; see the
 [migration record](docs/PERSISTENCE_MIGRATION_2026-09-20.md).
-The normal BOOT attempt read back with the hash above, but no runtime
-acceptance exists. A mixed-compression decoder failure was reproduced on the
-host, but phone-side boot evidence is unavailable. Enter unchanged RECOVERY,
-then capture bounded BORE/pstore evidence before testing a corrected candidate.
+The experimental BOOT has been replaced by the original backup, now verified
+by device readback. BORE confirms236 normal boot entries between07:48 and13:14;
+pstore is empty and last_kmsg is corrupted, so the precise phone-side failure
+is still unproven. Native RECOVERY757 is running. The physical display fix is
+confirmed and saved for automatic recovery startup; a new recovery reboot
+with that saved configuration is not yet tested.
+Do not normal-boot Android or wipe userdata. Further experimental normal
+boots need physical rescue availability and are not part of this rollback.
 
 ## Safety and rollback
 
