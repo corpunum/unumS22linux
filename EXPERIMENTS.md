@@ -1829,3 +1829,144 @@ wrong reference ramdisk and incomplete dependency checks before building.
 Whole concatenated actual-vendor+generic decoding and the merged328 module
 file hashes passed, as did header/payload and AVB internal hash checks.
 Hardware remains inaccessible; these are preparation results, not boot proof.
+
+### 2026-09-20 08:57–09:00UTC — remote-only rescue checks
+
+Owner is away and cannot press buttons. Rechecked USB/ADB/Download/SSH:
+no phone endpoint or ECM interface, SSH timed out. The last phone USB event
+in the host kernel journal remains07:48:19UTC; no intervening reconnect was
+observed. The existing user-service native reconnect/ACK monitor is still
+active; its last successful ACK is the accepted BORE519 session.
+
+Resolved the phone's historical physical link to USB2 port5-1 and its USB3
+peer6-1 on dedicated PCI controller0000:c7:00.3. Both ports report enabled,
+active, not-attached and zero overcurrent count. Both root-hub descriptors
+report wHubCharacteristic0x000a, no power switching. Thus generic host port
+control is not an established way to cut VBUS or drain/restart the phone.
+No host Type-C class/PD-control interface is exposed.
+
+After verifying both buses had only their root hubs and no other attached
+devices, performed one bounded host-only xHCI unbind/rebind at08:59:41–43UTC.
+The controller rebound successfully, both ports remained enabled, and other
+USB peripherals were unaffected. At09:00:05UTC the phone still exposed no
+native ECM, Samsung USB, ADB or Download interface. No phone partition write,
+new flash or phone reboot command was possible or attempted in this turn.
+
+No reliable remote-only recovery route is available through the currently
+configured interfaces. This does not identify the unseen phone screen or
+prove a specific crash state. Physical recovery entry, by the owner or an
+on-site helper, is required unless the phone later re-enumerates itself.
+
+### 2026-09-20 13:16–13:20UTC — Download Mode rescue and original BOOT rollback
+
+Owner reported the Download screen and suspected hours of boot looping.
+Host checks now confirmed Samsung Download USB 04e8:685d at physical port
+5-1, and samloader detected the device. ADB remained absent. The report does
+not establish actual boot modes, counts or runtimes; BORE/pstore have not yet
+been recovered.
+
+Before writing, verified the private original BOOT backup was 67,108,864
+bytes with SHA256
+`0962dbdd67b748858189b46d464820ec7d1f3ea843cc7c3d033b69c40931b44e`.
+Flashed only BOOT using `samloader flash --verbose --no-reboot -p BOOT`
+and that original backup. The Odin protocol accepted all three data
+sequences (30MiB + 30MiB + 4MiB) and EndSession; the tool exited0.
+No repartition or reboot was requested. This is an acknowledged flash,
+not yet an independent device-side whole-partition readback.
+The local stdout log is `builds/boot-original-rollback-20260920T1316.log`;
+verbose packet acknowledgements were on stderr, retained in the tool session
+rather than that small stdout-only file. Do not repeat the flash for logging.
+
+At13:20UTC, Download USB remained present and samloader still detected it.
+RECOVERY, vendor_boot, CACHE and userdata were not written during rollback.
+The corrected v3 LZ4 candidate remains unflashed. The saved native RECOVERY
+is the next boot target; leave Linux userdata intact. Do not intentionally
+normal-boot the restored Samsung BOOT or perform an Android factory reset:
+userdata is now the persistent Linux filesystem, not Android userdata.
+After recovery entry, first capture bounded boot_reset/pstore and read back
+BOOT/RECOVERY/vendor_boot hashes, then check persistent desktop/model health.
+
+### 2026-09-20 13:22–13:33UTC — rescue confirmed; physical display stride trial
+
+Owner entered recovery and reported lines/artifacts over the physical screen.
+USB ECM and pinned SSH returned. BORE757 is RECOVERY at13:21:59UTC, explicitly
+selected by key. Native guardian remains PID1; persistent Arch/Hyprland,
+Omarchy shell, keyboard and CPU model started automatically. At91.49s uptime,
+model health was `ok`, MemAvailable4,943,748KiB, battery36.0C.
+
+Whole-partition readback now independently confirms the rollback:
+BOOT `0962dbdd67b748858189b46d464820ec7d1f3ea843cc7c3d033b69c40931b44e`;
+RECOVERY `1a827b43d29141efb47f530902dd4e4ee2b6d780515893c9ecd676ad27efd7d1`;
+vendor_boot `383b6f6789e655b070929914db5639e6d9bacc78823ada7bf553962b5b4888be`.
+See `evidence/persistence-20260920/rescue-bore757-partition-readback.txt`.
+
+The owner was correct about prolonged rebooting: bounded BORE capture contains
+236 NORMAL entries, records520–755, from07:48:25 through13:14:29UTC. After the
+first normal entry, the reset counter reaches235. Record756 is DOWNLOAD at
+13:15:22UTC; record757 is the current RECOVERY. Do not equate those normal-mode
+boot records with successful Android or custom-init execution. The exact
+phone-side failure is still unidentified: pstore is empty and the bounded
+last_kmsg sample is corrupted/unreliable. Raw diagnostic captures are retained
+privately; no private boot metadata was published.
+
+Initial read-only DRM capture shows a clean desktop despite the physical
+artifact report. Buffer: XR24, linear modifier0,1080x2340,pitch4352 bytes
+(1088 pixels). Debugfs was mounted for inspection; CRTC/source1080x2340,
+120Hz, underrun/error counters0. Pinned downstream DPP source uses framebuffer
+width, not linear RGB pitch, for RDMA source-full-width. Thus this buffer's
+eight padded pixels per row are not represented in hardware row width.
+
+Built a narrowly opted-in userspace libdrm interposer, documented in
+`tools/omarchy-trial/s22-linear-stride.md`. For exactly this driver/format/
+size/pitch/single-plane linear layout, it registers FBwidth1088 while leaving
+the visible source and panel1080x2340. No buffer memory contents are altered.
+25 host selection assertions,7 mocked supervisor tests, ARM64 compilation and
+phone loader smoke passed. Library SHA256
+`fa627c94f4cb536be24567e2a955c578b741e08dcb2860a0fd1f7110a55c7fcc`.
+
+Staged the library as an ordinary Arch file and a temporary supervisor in
+`/tmp`. Verified exact supervisorPID1505/cmdline before SIGTERM, waited for
+its process/mount cleanup, then started the temporary opted-in supervisor.
+The installed autostart supervisor remains unchanged. Guardian/SSH stayed up;
+no reboot, flash, formatting or raw partition write occurred in this turn.
+At539.79s uptime in the same BORE757, desktop/model were ready, model health
+`ok`, MemAvailable4,915,356KiB, battery33.2C. Shim logs and DRM state confirm
+FB1088x2340/pitch4352 with CRTC/source1080x2340. Screenshot remains clean.
+
+The trial is left running for owner inspection. Physical artifact removal
+is not yet confirmed and the trial is not enabled on automatic startup.
+Do not claim a screen fix from the second clean screenshot alone.
+
+### 2026-09-20 18:15–18:18UTC — physical display accepted; persistence and everyday audit
+
+Owner confirmed "yes its clean". This establishes physical artifact removal,
+not merely a clean framebuffer. BORE757 remains running: at 17,751.97s uptime,
+model health `ok`, MemAvailable 4,845,380KiB, battery 29.6C. There has been no
+reboot since the physical recovery rescue nearly five hours earlier.
+
+Persisted the previously tested narrow workaround through ordinary files:
+installed supervisor SHA256
+`4526cba7e7f74c8bbae391cb56952d0dd5179de6b58228408d539bc67418372a`,
+marker `/etc/s22-linear-stride-enabled` SHA256
+`23d21ed026b93790b0161f6bf95b74293c4668a14817121665555615fee94096`.
+Original supervisor remains at `.pre-stride`, SHA256
+`4a88743555f3dbbca4cd6fcdfad1d618e551f22ed3ecc75315ccb7063a781791`.
+Hash readback of supervisor/backup/marker/library is recorded in
+`evidence/persistence-20260920/stride-persistent-install-readback.txt`.
+Seven mocked supervisor tests and 25 C selection assertions passed. A live
+read-only import confirmed the marker selects the library without a trial
+environment variable. Current working session was not restarted. Saved
+configuration has not yet been recovery-reboot tested; no boot partition was
+written. Explicit environment value 0 overrides the marker for rescue.
+
+Read-only everyday hardware audit: Wi-Fi has no wlan/phy interface despite
+bound cnss2/QCA6490 platform support; radio firmware/userspace initialization
+is incomplete. Bluetooth has a power driver but no HCI and is software-blocked.
+Audio exposes virtual/debug sysfs cards but only `/dev/snd/timer`, not usable
+PCM/control nodes. Camera/ISP devices exist but no capture was attempted;
+cellular interfaces are down. Physical touch/buttons remain unverified even
+though Hyprland registers them. Battery is 100%, Full, Good; thermal telemetry
+is readable. USB SSH works; HTTPS to the official Alpine repository succeeds
+over USB (not Wi-Fi). No radio state or network credential was changed and
+no camera/microphone was opened. Details and next order:
+`docs/EVERYDAY_HARDWARE_2026-09-20.md`.

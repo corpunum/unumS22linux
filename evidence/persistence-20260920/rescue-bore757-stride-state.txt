@@ -1,0 +1,43 @@
+plane[54]: plane-0
+	crtc=exynos-crtc
+	fb=200
+		allocated by = Hyprland
+		refcount=2
+		format=XR24 little-endian (0x34325258)
+		modifier=0x0
+		size=1088x2340
+		layers:
+			size[0]=1088x2340
+			pitch[0]=4352
+			offset[0]=0
+			obj[0]:
+				name=0
+				refcount=2
+				start=001044cc
+				size=10305536
+				imported=yes
+	crtc-pos=1080x2340+0+0
+	src-pos=1080.000000x2340.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=0
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	alpha: 0xffff
+	blend_mode: 0x0
+	split: 0x0
+	standard: 0
+	transfer: 0
+	range: 0
+	hdr_fd: 0
+		win_id=0
+	DPP #0 (off)
+plane[61]: plane-1
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=1
+s22-linear-stride: fb=194 width=1080->1088 pitch=4352
+s22-linear-stride: fb=200 width=1080->1088 pitch=4352
+s22-linear-stride: fb=201 width=1080->1088 pitch=4352

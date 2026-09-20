@@ -23,6 +23,41 @@ SPEC.loader.exec_module(MOD)
 
 
 class SupervisorUnitTests(unittest.TestCase):
+    def test_stride_trial_missing_library_fails_before_process_start(self):
+        with tempfile.TemporaryDirectory() as td, \
+             mock.patch.object(MOD, 'CHROOT', Path(td)), \
+             mock.patch.dict(os.environ, {'S22_LINEAR_STRIDE_TRIAL': '1'}, clear=True), \
+             mock.patch.object(MOD.subprocess, 'Popen') as popen:
+            with self.assertRaises(MOD.Failure):
+                MOD.start_desktop(Path(td) / 'desktop.log')
+            popen.assert_not_called()
+
+    def test_stride_trial_preload_is_opt_in_and_desktop_only(self):
+        for marker, override, enabled in ((False, None, False), (False, '1', True),
+                                          (True, None, True), (True, '0', False)):
+            with self.subTest(marker=marker, override=override), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                (root / 'run').mkdir()
+                (root / 'run/seatd.sock').touch()
+                library = root / 'opt/s22-aquamarine/libs22-linear-stride.so'
+                library.parent.mkdir(parents=True)
+                library.touch()
+                marker_path = root / 'stride-enabled'
+                if marker:
+                    marker_path.touch()
+                env = {'S22_LINEAR_STRIDE_TRIAL': override} if override is not None else {}
+                with mock.patch.object(MOD, 'CHROOT', root), \
+                     mock.patch.object(MOD, 'STRIDE_ENABLED', marker_path), \
+                     mock.patch.dict(os.environ, env, clear=True), \
+                     mock.patch.object(MOD.subprocess, 'Popen') as popen:
+                    MOD.start_desktop(root / 'desktop.log')
+                seat_args = popen.call_args_list[0].args[0]
+                desktop_args = popen.call_args_list[1].args[0]
+                preload = 'LD_PRELOAD=/opt/s22-aquamarine/libs22-linear-stride.so'
+                self.assertNotIn(preload, seat_args)
+                self.assertEqual(preload in desktop_args, enabled)
+                self.assertEqual('S22_LINEAR_STRIDE=1' in desktop_args, enabled)
+
     def test_bind_file_creates_regular_placeholder_and_mounts(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
