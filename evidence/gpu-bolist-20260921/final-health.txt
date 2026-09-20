@@ -1,0 +1,15 @@
+Sun Sep 20 22:14:50 UTC 2026
+HTTP/2 200 
+{"status":"ok"}
+ 1584 Hyprland
+ 1705 squeekboard
+ 1825 quickshell
+magic: b0071257
+version: 20230221
+name: BORE
+last: 760
+ffc1f7ea42afa180d924875b1ef9655511c8a560c46c9077ae8f89e1b7f5f5d0  /srv/s22/gpu-bolist-20260921/lib/libvulkan_radeon_candidate.so
+Filesystem                Size      Used Available Use% Mounted on
+/dev/block/by-name/userdata
+                        104.5G      4.3G    100.2G   4% /srv/s22
+overlay                 582.6M    537.3M     33.3M  94% /

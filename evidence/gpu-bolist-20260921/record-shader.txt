@@ -1,0 +1,104 @@
+loader_api=1.4.347
+sgpu: gpu_info address32_hi=0xffff8000 gfx_level=13 family=81
+sgpu: bo_alloc heap=2 flags=0x81 size=4096 align=8
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: ib_mapped=<CPU_VA> bo_va=0xffff800100001000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=704 align=4096
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: bo_alloc heap=2 flags=0x85 size=4096 align=65536
+shader: MESA_SHADER_COMPUTE
+source_blake3: {0x1ffb41e0, 0xd440dd87, 0xd5cc3144, 0xb4f47b72, 0x3088ac3f, 0xfb5c0d6f, 0x9e7cf8bb, 0x553227ac}
+internal: false
+workgroup_size: 64, 1, 1
+stage: 5
+next_stage: 0
+num_ssbos: 1
+system_values_read: 0x00000000'00001080'00000000
+subgroup_size: 0
+bit_sizes_int: 0x20
+separate_shader: true
+writes_memory: true
+ptr_size: 0
+inputs: 0
+outputs: 0
+uniforms: 0
+decl_var ssbo INTERP_MODE_NONE restrict writeonly block #0 (~0, 0, 0)
+decl_function main (0 params)
+
+impl main {
+    block b0:   // preds: 
+    32x3   %0 = @load_workgroup_id
+    32x3   %2 = @load_local_invocation_id
+    32     %3 = load_const (0x00000006)
+    32     %4 = ishl %0.x, %3 (0x6)
+    32     %5 = iadd %4, %2.x
+    32    %23 = @load_scalar_arg_amd (base=1, arg_upper_bound_u32_amd=0)
+    32    %17 = load_const (0xffff8000 = -32768 = 4294934528)
+    64    %18 = pack_64_2x32_split %23, %17 (0xffff8000)
+    32     %1 = load_const (0x00000000)
+    32x4  %20 = @load_smem_amd (%18, %1 (0x0)) (align_mul=16, align_offset=0)
+    32     %6 = load_const (0x00000003)
+    32     %7 = imul %5, %6 (0x3)
+    32     %8 = load_const (0x00000007)
+    32     %9 = iadd %7, %8 (0x7)
+    32    %12 = load_const (0x00000002)
+    32    %13 = ishl %5, %12 (0x2)
+                @store_ssbo (%9, %20, %13) (wrmask=x, access=writeonly, align_mul=4, align_offset=0)
+                // succs: b1 
+    block b1:
+}
+
+After RA:
+ACO shader stage: SW (CS), HW (COMPUTE_SHADER)
+BB0
+/* logical preds: / linear preds: / kind: uniform, top-level, */
+	 s2: %17:s[0-1],  s1: %18:s[2],  s1: %19:s[3],  s1: %20:s[4],  v3: %21:v[0-2] = p_startpgm
+	 s2: %22:s[0-1],  s1: %23:scc = p_init_scratch %17:s[0-1], (latekill)%20:s[4]
+	p_logical_start
+	 s1: %38:s[0] = p_parallelcopy %19:s[3]
+	 s2: %8:s[2-3] = p_create_vector %18:s[2], 0xffff8000
+	 s4: %10:s[4-7] = s_load_dwordx4 %8:s[2-3], 0
+	 v1: %24:v[0] = p_extract_vector %21:v[0-2], 0
+	 v1: %5:v[0] = v_lshl_add_u32 (is16bit)%38:s[0], 6, %24:v[0]
+	 v1: %14:v[1] = v_mad_u32_u24 3, (is24bit)%5:v[0], 7
+	 v1: %16:v[0] = v_lshlrev_b32 2, (is24bit)%5:v[0]
+	buffer_store_dword %10:s[4-7], %16:v[0], 0, %14:v[1] offen disable_wqm storage:buffer
+	p_logical_end
+	s_endpgm
+
+sgpu: bo_alloc heap=6 flags=0x80 size=262144 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+Compute Shader
+disasm:
+Shader disassembly is not supported in the current configuration (LLVM not available), falling back to print_program.
+
+After lowering to hw instructions:
+ACO shader stage: SW (CS), HW (COMPUTE_SHADER)
+BB0
+/* logical preds: / linear preds: / kind: uniform, top-level, */
+	 s1: %0:s[0] = s_mov_b32 %19:s[3]
+	 s1: %0:s[3] = s_movk_i32 imm:-32768
+	 s4: %10:s[4-7] = s_load_dwordx4 %8:s[2-3], 0
+	 v1: %5:v[0] = v_lshl_add_u32 (is16bit)%38:s[0], 6, %24:v[0]
+	 v1: %14:v[1] = v_mad_u32_u24 3, (is24bit)%5:v[0], 7
+	 v1: %16:v[0] = v_lshlrev_b32 2, (is24bit)%5:v[0]
+	s_waitcnt lgkmcnt(0)
+	buffer_store_dword %10:s[4-7], %16:v[0], 0, %14:v[1] offen disable_wqm storage:buffer
+	s_endpgm
+
+
+sgpu: bo_alloc heap=6 flags=0x80 size=32 align=32
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: descriptor buffer va=0xffff800100010000 range=0x0000000000000400 dst=<CPU_VA> words=00010000,00008001,00000400,31016fac
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: ib_mapped=<CPU_VA> bo_va=0xffff800100016000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=16384 align=4096
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+device=AMD Radeon Graphics (RADV VANGOGH) type=2 api=1.3.296 driver=100675588
+RECORD_ONLY: vkCmdDispatch and vkEndCommandBuffer recorded; NO vkCreateFence/vkQueueSubmit; NOT a correctness pass
+sgpu: shader pointer va=0xffff800000040000 use32=1 address32_hi=0xffff8000 reconstructed=0xffff800000040000
+record_exit=0

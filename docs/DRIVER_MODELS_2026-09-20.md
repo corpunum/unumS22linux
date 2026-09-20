@@ -1,5 +1,10 @@
 # Driver and model evidence report — 2026-09-20
 
+Historical snapshot: the RAM-only and Wi-Fi status below was superseded by
+[persistent migration](PERSISTENCE_MIGRATION_2026-09-20.md) and
+[Wi-Fi autostart](WIFI_AUTOSTART.md). For the latest GPU submission/fence
+repairs and remaining compute failure, see [the September 21 report](GPU_SUBMISSION_2026-09-21.md).
+
 This is a bounded evidence report, not a blanket pass. Measurements below are
 from the staged phone runs and host-side artifacts; they do not establish
 production persistence or complete hardware acceleration.

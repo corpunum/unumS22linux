@@ -3,7 +3,14 @@
 Native Linux experiments on the **Samsung Galaxy S22 SM-S901B/DS**,
 Exynos 2200, codename `r0s`, unlocked bootloader. This is the S22, not S22+.
 
-## Current result — 2026-09-20
+## Current result — 2026-09-21
+
+GPU update: restored resource-buffer submission and repaired inconsistent
+timeline-fence handling. Four isolated native GPU transfer tests now pass exact
+readback and real fence completion. **Compute shaders still fail**, so the
+desktop and model remain on CPU/software rendering. No reboot or flash was
+needed, and Wi-Fi/desktop/model remain running. See
+[GPU repair evidence and limitations](docs/GPU_SUBMISSION_2026-09-21.md).
 
 **Current state (20:41UTC):** native Linux is running in RECOVERY
 BORE760 with the persistent desktop and CPU model. **Wi-Fi now autostarts:**
@@ -45,7 +52,7 @@ and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 | Battery/display power | Native telemetry bar/panel; controlled DPMS off/on passed; no suspend/battery-life acceptance |
 | Local model | Resident Qwen3.5-2B Q4_0, 4K context, four fast CPU cores, loopback-only API |
 | CPU benchmark | 0.8B: 20.21 tok/s; 2B: 10.13 short / 5.47 at depth4096 |
-| GPU | Experimental RADV enumerates; a mapping bug was fixed, but compute still faults |
+| GPU | Experimental RADV: four real-fence transfer/readback passes; shader compute still fails; no model acceleration |
 | NPU | Vendor assets investigated; no working inference |
 | Connectivity | USB rescue retained; Wi-Fi association, DHCP, DNS and HTTPS passed after two automatic recovery-boot startups |
 | Other everyday hardware | Bluetooth, usable audio, cellular, camera and suspend remain unaccepted |

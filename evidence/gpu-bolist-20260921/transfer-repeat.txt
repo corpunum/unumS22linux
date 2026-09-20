@@ -1,0 +1,129 @@
+Sun Sep 20 22:11:52 UTC 2026
+ffc1f7ea42afa180d924875b1ef9655511c8a560c46c9077ae8f89e1b7f5f5d0  lib/libvulkan_radeon_candidate.so
+transfer_trial=1
+loader_api=1.4.347
+sgpu: bo_alloc heap=2 flags=0x81 size=4096 align=8
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: ib_mapped=<CPU_VA> bo_va=0xffff800100001000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=704 align=4096
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: bo_alloc heap=2 flags=0x85 size=4096 align=65536
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: ib_mapped=<CPU_VA> bo_va=0xffff800100016000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=16384 align=4096
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: ib_mapped=<CPU_VA> bo_va=0xffff80010002a000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: ib_mapped=<CPU_VA> bo_va=0xffff80010003e000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: ib_mapped=<CPU_VA> bo_va=0xffff800100052000
+sgpu: cs created ok ip_type=0
+sgpu: bo_number=6 bo_info_size=8
+sgpu: submit ip=0 ring=0 num_chunks=4
+  chunk[0] id=1
+  chunk[1] id=1
+  chunk[2] id=9
+  chunk[3] id=6
+sgpu: fence poll ret=0 expired=1 seq=1
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+device=AMD Radeon Graphics (RADV VANGOGH) type=2 api=1.3.296 driver=100675588
+TRANSFER_ONLY checksum=0xd1cc9f9595a48f83 PASS
+transfer_exit=0
+transfer_trial=2
+loader_api=1.4.347
+sgpu: bo_alloc heap=2 flags=0x81 size=4096 align=8
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: ib_mapped=<CPU_VA> bo_va=0xffff800100001000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=704 align=4096
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: bo_alloc heap=2 flags=0x85 size=4096 align=65536
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: ib_mapped=<CPU_VA> bo_va=0xffff800100016000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=16384 align=4096
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: ib_mapped=<CPU_VA> bo_va=0xffff80010002a000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: ib_mapped=<CPU_VA> bo_va=0xffff80010003e000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: ib_mapped=<CPU_VA> bo_va=0xffff800100052000
+sgpu: cs created ok ip_type=0
+sgpu: bo_number=6 bo_info_size=8
+sgpu: submit ip=0 ring=0 num_chunks=4
+  chunk[0] id=1
+  chunk[1] id=1
+  chunk[2] id=9
+  chunk[3] id=6
+sgpu: fence poll ret=0 expired=1 seq=1
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+device=AMD Radeon Graphics (RADV VANGOGH) type=2 api=1.3.296 driver=100675588
+TRANSFER_ONLY checksum=0xd1cc9f9595a48f83 PASS
+transfer_exit=0
+transfer_trial=3
+loader_api=1.4.347
+sgpu: bo_alloc heap=2 flags=0x81 size=4096 align=8
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: ib_mapped=<CPU_VA> bo_va=0xffff800100001000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=704 align=4096
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: bo_alloc heap=2 flags=0x85 size=4096 align=65536
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: ib_mapped=<CPU_VA> bo_va=0xffff800100016000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=16384 align=4096
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: ib_mapped=<CPU_VA> bo_va=0xffff80010002a000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: ib_mapped=<CPU_VA> bo_va=0xffff80010003e000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+sgpu: ib_mapped=<CPU_VA> bo_va=0xffff800100052000
+sgpu: cs created ok ip_type=0
+sgpu: bo_number=6 bo_info_size=8
+sgpu: submit ip=0 ring=0 num_chunks=4
+  chunk[0] id=1
+  chunk[1] id=1
+  chunk[2] id=9
+  chunk[3] id=6
+sgpu: fence poll ret=0 expired=1 seq=1
+sgpu: amdgpu_bo_cpu_map ret=0 data=<CPU_VA>
+device=AMD Radeon Graphics (RADV VANGOGH) type=2 api=1.3.296 driver=100675588
+TRANSFER_ONLY checksum=0xd1cc9f9595a48f83 PASS
+transfer_exit=0
+new_gpu_errors:
+final_health:
+5473.98 43092.46
+BOOT_SESSION_A
+{"status":"ok"}
+wpa_state=COMPLETED
+300

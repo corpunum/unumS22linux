@@ -1,0 +1,35 @@
+[ 4621.431169]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: [gfxhub] pasid parsing with vmid 1
+[ 4621.431246]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: [gfxhub] page fault (src_id:0 ring:144 vmid:1 pasid:32774, for process gpu-compute-pro pid 17480 thread gpu-compute-pro pid 17480)
+[ 4621.431271]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu:   in page starting at address 0x0000800018040000 from client 27
+[ 4621.431307]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: GCVM_L2_PROTECTION_FAULT_STATUS:0x00101521
+[ 4621.431328]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 Faulty UTCL2 client ID: SQC (data) (0xa)
+[ 4621.431348]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 MORE_FAULTS: 0x1
+[ 4621.431366]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 WALKER_ERROR: 0x0
+[ 4621.431384]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 PERMISSION_FAULTS: 0x2
+[ 4621.431402]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 MAPPING_ERROR: 0x1
+[ 4621.431422]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 RW: 0x0
+[ 4626.666275] [3:    kworker/3:1:   69] [drm] gfx_0.0.0: vmid 1 job_id 1 FENCE drm 334/335/1 sgpu 1/2
+[ 4626.676784] [3:    kworker/3:1:   69] [drm:amdgpu_job_timedout.llvm.3640168509646586719 [sgpu]] *ERROR* ring gfx_0.0.0 timeout, signaled seq=1, emitted seq=2
+[ 4626.677069] [3:    kworker/3:1:   69] [drm:amdgpu_job_timedout.llvm.3640168509646586719 [sgpu]] *ERROR* Process information: process gpu-compute-pro pid 17480 thread gpu-compute-pro pid 17480
+[ 4626.677088] [3:    kworker/3:1:   69] sgpu 16e00000.sgpu: amdgpu: IP block:gfx_v10_0 is hung!
+[ 4626.677096] [3:    kworker/3:1:   69] sgpu 16e00000.sgpu: amdgpu: GPU reset begin!
+[ 4626.677107] [3:    kworker/3:1:   69] sgpu 16e00000.sgpu: amdgpu: Some block need full reset!
+[ 4626.698612] [3:    kworker/3:1:   69] [drm:vangogh_lite_gpu_quiesce [sgpu]] *ERROR* failed to quiesce gpu
+[ 4626.698679] [3:    kworker/3:1:   69] sgpu 16e00000.sgpu: amdgpu: Some block need full reset!
+[ 4626.700831] [3:    kworker/3:1:   69] sgpu 16e00000.sgpu: amdgpu: GPU reset succeeded, trying to resume
+[ 4626.700872] [3:    kworker/3:1:   69] sgpu 16e00000.sgpu: amdgpu: GRBM_CHIP_REVISION is 0x600201
+[ 4626.705765] [3:    kworker/3:1:   69] sgpu 16e00000.sgpu: amdgpu: recover vram bo from shadow start
+[ 4626.705788] [3:    kworker/3:1:   69] sgpu 16e00000.sgpu: amdgpu: recover vram bo from shadow done
+[ 4626.705808] [3:    kworker/3:1:   69] [drm] set_error: pid 17480 faulted job 1 vmid 1 ring gfx_0.0.0 finished 00000000a9190100
+[ 4626.706040] [3:    kworker/3:1:   69] sgpu 16e00000.sgpu: amdgpu: GPU reset(2) succeeded!
+--- ring 0 (gfx_0.0.0) ---
+Last signaled fence          0x00000003
+Last emitted                 0x00000003
+Last signaled trailing fence 0x00000000
+Last emitted                 0x00000000
+Last preempted               0x00000000
+Last reset                   0x00000000
+Last both                    0x00000000
+--- ring 1 (gfx_0.0.1) ---
+Last signaled fence          0x00000001
+{"status":"ok"}

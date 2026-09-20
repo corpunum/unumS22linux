@@ -14,6 +14,11 @@ static PFN_vkGetInstanceProcAddr gip;
 
 int main(int argc, char **argv) {
     if (argc != 2) { fprintf(stderr, "usage: %s compute.spv\n", argv[0]); return 2; }
+    const int transfer_only = getenv("S22_GPU_TRANSFER_ONLY") != NULL;
+    if (transfer_only && (getenv("S22_GPU_PREPARE_ONLY") || getenv("S22_GPU_RECORD_ONLY"))) {
+        fprintf(stderr, "S22_GPU_TRANSFER_ONLY cannot be combined with PREPARE_ONLY or RECORD_ONLY\n");
+        return 2;
+    }
     void *lib = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_LOCAL);
     if (!lib) { fprintf(stderr, "dlopen libvulkan.so.1: %s\n", dlerror()); return 1; }
     gip = (PFN_vkGetInstanceProcAddr)dlsym(lib, "vkGetInstanceProcAddr");
@@ -45,8 +50,95 @@ int main(int argc, char **argv) {
     PFN_vkGetDeviceProcAddr gdp = NULL; VKCHECK(vkCreateDevice(phys, &dci, NULL, &device));
     gdp = (PFN_vkGetDeviceProcAddr)gip(instance, "vkGetDeviceProcAddr");
 #define D(name) PFN_##name name = (PFN_##name)gdp(device, #name)
-    D(vkDestroyDevice); D(vkGetDeviceQueue); D(vkCreateBuffer); D(vkGetBufferMemoryRequirements); D(vkAllocateMemory); D(vkBindBufferMemory); D(vkMapMemory); D(vkUnmapMemory); D(vkCreateDescriptorSetLayout); D(vkCreatePipelineLayout); D(vkCreateShaderModule); D(vkCreateComputePipelines); D(vkCreateDescriptorPool); D(vkAllocateDescriptorSets); D(vkUpdateDescriptorSets); D(vkCreateCommandPool); D(vkAllocateCommandBuffers); D(vkBeginCommandBuffer); D(vkCmdBindPipeline); D(vkCmdBindDescriptorSets); D(vkCmdDispatch); D(vkCmdPipelineBarrier); D(vkEndCommandBuffer); D(vkCreateFence); D(vkQueueSubmit); D(vkWaitForFences); D(vkDestroyFence); D(vkFreeCommandBuffers); D(vkDestroyCommandPool); D(vkDestroyDescriptorPool); D(vkDestroyPipeline); D(vkDestroyPipelineLayout); D(vkDestroyShaderModule); D(vkDestroyDescriptorSetLayout); D(vkDestroyBuffer); D(vkFreeMemory);
+    D(vkDestroyDevice); D(vkGetDeviceQueue); D(vkCreateBuffer); D(vkGetBufferMemoryRequirements); D(vkAllocateMemory); D(vkBindBufferMemory); D(vkMapMemory); D(vkUnmapMemory); D(vkCreateDescriptorSetLayout); D(vkCreatePipelineLayout); D(vkCreateShaderModule); D(vkCreateComputePipelines); D(vkCreateDescriptorPool); D(vkAllocateDescriptorSets); D(vkUpdateDescriptorSets); D(vkCreateCommandPool); D(vkAllocateCommandBuffers); D(vkBeginCommandBuffer); D(vkCmdBindPipeline); D(vkCmdBindDescriptorSets); D(vkCmdDispatch); D(vkCmdFillBuffer); D(vkCmdPipelineBarrier); D(vkEndCommandBuffer); D(vkCreateFence); D(vkQueueSubmit); D(vkWaitForFences); D(vkDestroyFence); D(vkFreeCommandBuffers); D(vkDestroyCommandPool); D(vkDestroyDescriptorPool); D(vkDestroyPipeline); D(vkDestroyPipelineLayout); D(vkDestroyShaderModule); D(vkDestroyDescriptorSetLayout); D(vkDestroyBuffer); D(vkFreeMemory);
     VkQueue queue; vkGetDeviceQueue(device, qfam, 0, &queue);
+    if (transfer_only) {
+        VkBufferCreateInfo tbci = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, NULL, 0, N * 4u,
+                                    VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_SHARING_MODE_EXCLUSIVE, 1, &qfam };
+        VkBuffer tbuf = VK_NULL_HANDLE; VkDeviceMemory tmem = VK_NULL_HANDLE; VkCommandPool tcp = VK_NULL_HANDLE;
+        VkCommandBuffer tcb = VK_NULL_HANDLE; VkFence tfence = VK_NULL_HANDLE; int result = 1;
+        int submitted = 0; const char *stage = "vkCreateBuffer";
+        VkResult tr = vkCreateBuffer(device, &tbci, NULL, &tbuf);
+        if (tr == VK_SUCCESS) {
+            VkMemoryRequirements tmr; vkGetBufferMemoryRequirements(device, tbuf, &tmr);
+            VkPhysicalDeviceMemoryProperties tmp; vkGetPhysicalDeviceMemoryProperties(phys, &tmp);
+            uint32_t tmi = UINT32_MAX;
+            for (uint32_t i = 0; i < tmp.memoryTypeCount; i++)
+                if ((tmr.memoryTypeBits & (1u << i)) &&
+                    (tmp.memoryTypes[i].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) ==
+                    (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) { tmi = i; break; }
+            if (tmi != UINT32_MAX) {
+                VkMemoryAllocateInfo tmai = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, NULL, tmr.size, tmi };
+                stage = "vkAllocateMemory";
+                tr = vkAllocateMemory(device, &tmai, NULL, &tmem);
+            } else tr = VK_ERROR_FEATURE_NOT_PRESENT;
+        }
+        if (tr == VK_SUCCESS) { stage = "vkBindBufferMemory"; tr = vkBindBufferMemory(device, tbuf, tmem, 0); }
+        if (tr == VK_SUCCESS) {
+            uint32_t *initial = NULL; stage = "vkMapMemory(initial)";
+            tr = vkMapMemory(device, tmem, 0, N * 4u, 0, (void **)&initial);
+            if (tr == VK_SUCCESS) { memset(initial, 0xA5, N * 4u); vkUnmapMemory(device, tmem); }
+        }
+        if (tr == VK_SUCCESS) {
+            VkCommandPoolCreateInfo tcpci = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, NULL, 0, qfam };
+            stage = "vkCreateCommandPool";
+            tr = vkCreateCommandPool(device, &tcpci, NULL, &tcp);
+        }
+        if (tr == VK_SUCCESS) {
+            VkCommandBufferAllocateInfo tcai = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, NULL, tcp, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1 };
+            stage = "vkAllocateCommandBuffers";
+            tr = vkAllocateCommandBuffers(device, &tcai, &tcb);
+        }
+        if (tr == VK_SUCCESS) {
+            VkCommandBufferBeginInfo tcbi = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL };
+            stage = "vkBeginCommandBuffer";
+            tr = vkBeginCommandBuffer(tcb, &tcbi);
+            if (tr == VK_SUCCESS) {
+                vkCmdFillBuffer(tcb, tbuf, 0, N * 4u, 0x12345678u);
+                VkMemoryBarrier tmb = { VK_STRUCTURE_TYPE_MEMORY_BARRIER, NULL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT };
+                vkCmdPipelineBarrier(tcb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &tmb, 0, NULL, 0, NULL);
+                stage = "vkEndCommandBuffer";
+                tr = vkEndCommandBuffer(tcb);
+            }
+        }
+        if (tr == VK_SUCCESS) {
+            VkFenceCreateInfo tfci = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, NULL, 0 };
+            stage = "vkCreateFence";
+            tr = vkCreateFence(device, &tfci, NULL, &tfence);
+        }
+        if (tr == VK_SUCCESS) {
+            VkSubmitInfo tsi = { VK_STRUCTURE_TYPE_SUBMIT_INFO, NULL, 0, NULL, NULL, 1, &tcb, 0, NULL };
+            stage = "vkQueueSubmit";
+            tr = vkQueueSubmit(queue, 1, &tsi, tfence);
+            submitted = tr == VK_SUCCESS;
+        }
+        if (tr == VK_SUCCESS) { stage = "vkWaitForFences(3s)"; tr = vkWaitForFences(device, 1, &tfence, VK_TRUE, 3000000000ULL); }
+        if (tr != VK_SUCCESS && submitted) {
+            fprintf(stderr, "TRANSFER_ONLY %s failed: %d; submission completion unproven, leaving Vulkan objects for process exit\n", stage, tr);
+            return 1;
+        }
+        if (tr == VK_SUCCESS) {
+            uint32_t *tout = NULL; stage = "vkMapMemory(readback)"; tr = vkMapMemory(device, tmem, 0, N * 4u, 0, (void **)&tout);
+            if (tr == VK_SUCCESS) {
+                uint64_t checksum = 1469598103934665603ULL;
+                result = 0;
+                for (uint32_t i = 0; i < N; i++) {
+                    if (tout[i] != 0x12345678u) { fprintf(stderr, "TRANSFER_ONLY mismatch[%u]=0x%08x\n", i, tout[i]); result = 4; break; }
+                    checksum = (checksum ^ tout[i]) * 1099511628211ULL;
+                }
+                vkUnmapMemory(device, tmem);
+                if (!result) printf("TRANSFER_ONLY checksum=0x%016llx PASS\n", (unsigned long long)checksum);
+            }
+        }
+        if (tr != VK_SUCCESS) { fprintf(stderr, "TRANSFER_ONLY %s failed: %d\n", stage, tr); result = 1; }
+        if (tfence) vkDestroyFence(device, tfence, NULL);
+        if (tcb) vkFreeCommandBuffers(device, tcp, 1, &tcb);
+        if (tcp) vkDestroyCommandPool(device, tcp, NULL);
+        if (tbuf) vkDestroyBuffer(device, tbuf, NULL);
+        if (tmem) vkFreeMemory(device, tmem, NULL);
+        vkDestroyDevice(device, NULL); vkDestroyInstance(instance, NULL); dlclose(lib);
+        return result;
+    }
     FILE *f = fopen(argv[1], "rb"); if (!f) { perror(argv[1]); return 1; } fseek(f, 0, SEEK_END); long sz = ftell(f); rewind(f); if (sz < 4 || sz > 1024*1024 || (sz & 3)) { fprintf(stderr, "invalid SPIR-V size: %ld\n", sz); return 1; } uint32_t *code = malloc((size_t)sz); if (!code || fread(code, 1, (size_t)sz, f) != (size_t)sz) return 1; fclose(f); if (code[0] != 0x07230203u) { fprintf(stderr, "bad SPIR-V magic\n"); return 1; }
     VkShaderModuleCreateInfo smi = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, NULL, 0, (size_t)sz, code }; VkShaderModule sm; VKCHECK(vkCreateShaderModule(device, &smi, NULL, &sm)); free(code);
     VkBufferCreateInfo bci = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, NULL, 0, N*4u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_SHARING_MODE_EXCLUSIVE, 1, &qfam }; VkBuffer buf; VKCHECK(vkCreateBuffer(device, &bci, NULL, &buf));
