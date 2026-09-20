@@ -5,16 +5,20 @@ Exynos 2200, codename `r0s`, unlocked bootloader. This is the S22, not S22+.
 
 ## Current result — 2026-09-20
 
-**Current state (19:22UTC):** native Linux is running in RECOVERY
-BORE758 with the persistent desktop and CPU model. An experimental WLAN
-startup caused a kernel panic; the phone returned to RECOVERY and autostarted
-without a requested button press or flash. Radio activation is now disabled.
+**Current state (20:06UTC):** native Linux is running in RECOVERY
+BORE758 with the persistent desktop and CPU model. **Wi-Fi now works:**
+WPA2 association, DHCP, DNS and TLS-verified HTTPS forced through WLAN passed.
+DNS also works in both Alpine and Arch/Omarchy. USB SSH remains available.
+The first WLAN experiment panicked at19:01; the corrected follow-up ran in
+that same recovery boot without another SoC reboot or physical intervention.
 The owner previously confirmed the physical display is clean with the
 [narrow display-stride workaround](tools/omarchy-trial/s22-linear-stride.md),
 which now has reboot-observed persistence. Battery telemetry, restored icons,
 screen-power control, and a visible **Keyboard** button are installed. A
 synthetic touchscreen tap reveals the keyboard; physical finger acceptance
-remains unproven. Wi-Fi/Bluetooth/audio are not working yet; internet is via USB.
+remains unproven. Bluetooth/audio remain unaccepted. Wi-Fi tools and the private
+profile are saved, but Wi-Fi boot autostart is not yet enabled or reboot-tested.
+See [Wi-Fi acceptance](evidence/wifi-connected-20260920/acceptance.json).
 See the [current screen](evidence/hardware-20260920/keyboard-after.png) and
 [everyday hardware audit](docs/EVERYDAY_HARDWARE_2026-09-20.md).
 Normal power-on Linux is still unaccepted; do not boot the restored Android
@@ -41,7 +45,8 @@ and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 | CPU benchmark | 0.8B: 20.21 tok/s; 2B: 10.13 short / 5.47 at depth4096 |
 | GPU | Experimental RADV enumerates; a mapping bug was fixed, but compute still faults |
 | NPU | Vendor assets investigated; no working inference |
-| Connectivity | USB Ethernet + SSH; Wi-Fi/cellular/audio/camera/suspend not accepted |
+| Connectivity | USB Ethernet + SSH retained; native Wi-Fi association, DHCP, DNS and HTTPS passed; Wi-Fi reboot autostart untested |
+| Other everyday hardware | Bluetooth, usable audio, cellular, camera and suspend remain unaccepted |
 
 Short resident chat tests started streaming in 0.4–0.7 seconds. Those samples
 are not sustained agent benchmarks. The chat client does not execute commands.

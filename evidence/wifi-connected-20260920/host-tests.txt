@@ -1,0 +1,38 @@
+test_bad_interface_and_rescue_overlap_write_nothing (tools.hardware.test_wifi_dhcp_hook.HookTests.test_bad_interface_and_rescue_overlap_write_nothing) ... wifi-dhcp-hook: refusing non-wlan0 interface
+wifi-dhcp-hook: lease subnet overlaps USB ECM rescue subnet
+ok
+test_bound_only_changes_wlan_and_saves_private_state (tools.hardware.test_wifi_dhcp_hook.HookTests.test_bound_only_changes_wlan_and_saves_private_state) ... ok
+test_deconfig_removes_only_owned_wlan_state (tools.hardware.test_wifi_dhcp_hook.HookTests.test_deconfig_removes_only_owned_wlan_state) ... ok
+test_dns_only_renew_does_not_delete_current_address_or_route (tools.hardware.test_wifi_dhcp_hook.HookTests.test_dns_only_renew_does_not_delete_current_address_or_route) ... ok
+test_dns_update_preserves_inode_and_fallback_then_restores (tools.hardware.test_wifi_dhcp_hook.HookTests.test_dns_update_preserves_inode_and_fallback_then_restores) ... ok
+test_dnsless_renew_keeps_owned_resolver_and_deconfig_restores (tools.hardware.test_wifi_dhcp_hook.HookTests.test_dnsless_renew_keeps_owned_resolver_and_deconfig_restores) ... ok
+test_fresh_dnsless_lease_does_not_write_resolver (tools.hardware.test_wifi_dhcp_hook.HookTests.test_fresh_dnsless_lease_does_not_write_resolver) ... ok
+test_ipv6_fallback_and_inline_comment_are_preserved (tools.hardware.test_wifi_dhcp_hook.HookTests.test_ipv6_fallback_and_inline_comment_are_preserved) ... ok
+test_multiple_router_and_dns_values_are_recorded_and_applied (tools.hardware.test_wifi_dhcp_hook.HookTests.test_multiple_router_and_dns_values_are_recorded_and_applied) ... ok
+test_other_interface_metric_conflict_is_rejected_before_writes (tools.hardware.test_wifi_dhcp_hook.HookTests.test_other_interface_metric_conflict_is_rejected_before_writes) ... wifi-dhcp-hook: metric-600 default exists on another interface
+ok
+test_repeated_renew_does_not_reclaim_user_modified_resolver (tools.hardware.test_wifi_dhcp_hook.HookTests.test_repeated_renew_does_not_reclaim_user_modified_resolver) ... ok
+test_user_modified_resolver_is_not_overwritten_or_restored (tools.hardware.test_wifi_dhcp_hook.HookTests.test_user_modified_resolver_is_not_overwritten_or_restored) ... ok
+test_calibration_requires_fresh_success_marker (tools.hardware.test_wifi_bringup_once.BringupTests.test_calibration_requires_fresh_success_marker) ... ok
+test_responder_rejects_unlocked_lock (tools.hardware.test_wifi_bringup_once.BringupTests.test_responder_rejects_unlocked_lock) ... ok
+test_responder_rejects_wrong_command (tools.hardware.test_wifi_bringup_once.BringupTests.test_responder_rejects_wrong_command) ... ok
+test_responder_rejects_wrong_hash (tools.hardware.test_wifi_bringup_once.BringupTests.test_responder_rejects_wrong_hash) ... ok
+test_responder_rejects_wrong_request (tools.hardware.test_wifi_bringup_once.BringupTests.test_responder_rejects_wrong_request) ... ok
+test_responder_requires_exact_metadata_and_command (tools.hardware.test_wifi_bringup_once.BringupTests.test_responder_requires_exact_metadata_and_command) ... ok
+test_absent_is_not_pending (tools.hardware.test_wifi_optional_firmware.OptionalFirmwareTests.test_absent_is_not_pending) ... ok
+test_exact_owner_and_name_are_accepted (tools.hardware.test_wifi_optional_firmware.OptionalFirmwareTests.test_exact_owner_and_name_are_accepted) ... ok
+test_inspect_does_not_write_loading (tools.hardware.test_wifi_optional_firmware.OptionalFirmwareTests.test_inspect_does_not_write_loading) ... ok
+test_nonmatching_async_rejected (tools.hardware.test_wifi_optional_firmware.OptionalFirmwareTests.test_nonmatching_async_rejected) ... ok
+test_present_firmware_rejected (tools.hardware.test_wifi_optional_firmware.OptionalFirmwareTests.test_present_firmware_rejected) ... ok
+test_serve_lock_rejects_second_owner (tools.hardware.test_wifi_optional_firmware.OptionalFirmwareTests.test_serve_lock_rejects_second_owner) ... ok
+test_serve_requires_ack (tools.hardware.test_wifi_optional_firmware.OptionalFirmwareTests.test_serve_requires_ack) ... ok
+test_wrong_owner_rejected (tools.hardware.test_wifi_optional_firmware.OptionalFirmwareTests.test_wrong_owner_rejected) ... ok
+test_invalid_payloads_leave_no_profile (tools.hardware.test-wifi-provision.ProvisionTests.test_invalid_payloads_leave_no_profile) ... ok
+test_metadata_never_reads_secret_or_prints_identity (tools.hardware.test-wifi-provision.ProvisionTests.test_metadata_never_reads_secret_or_prints_identity) ... ok
+test_private_write_readback_and_no_overwrite (tools.hardware.test-wifi-provision.ProvisionTests.test_private_write_readback_and_no_overwrite) ... ok
+test_wpa_reference_vector_and_saved_hex (tools.hardware.test-wifi-provision.ProvisionTests.test_wpa_reference_vector_and_saved_hex) ... ok
+
+----------------------------------------------------------------------
+Ran 30 tests in 0.015s
+
+OK
