@@ -15,9 +15,35 @@ mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
 
 class BringupTests(unittest.TestCase):
     def test_calibration_requires_fresh_success_marker(self):
-        before = 'Calibration completed successfully\n'
+        before = '[100.0] Calibration completed successfully\n'
         self.assertFalse(mod.calibration_success_since(before, before))
-        self.assertTrue(mod.calibration_success_since(before, before + before))
+        self.assertTrue(mod.calibration_success_since(
+            before, before + '[101.0] Calibration completed successfully\n'))
+        # A ring snapshot with the same old marker is not a fresh event.
+        self.assertFalse(mod.calibration_success_since(
+            before, '[100.0] Calibration completed successfully\n'))
+
+    def test_calibration_marker_survives_ring_rollover_conservatively(self):
+        before = '[100.0] Calibration completed successfully\n[100.1] old\n'
+        after = '[200.0] new\n[201.0] Calibration completed successfully\n'
+        self.assertTrue(mod.calibration_success_since(before, after))
+
+    def test_only_reviewed_full_or_idle_post_cal_states_are_accepted(self):
+        interfaces = {'wlan0'}
+        self.assertTrue(mod.post_calibration_state(
+            'State: 0x420107(QMI_WLFW_CONNECTED | FW_READY | DRIVER_PROBED)',
+            interfaces, True))
+        self.assertTrue(mod.post_calibration_state(
+            'State: 0x420100(QMI_WLFW_CONNECTED | PCI PROBE DONE)',
+            interfaces, True))
+        self.assertFalse(mod.post_calibration_state(
+            'State: 0x420100(QMI_WLFW_CONNECTED | PCI PROBE DONE)',
+            interfaces, False))
+        self.assertFalse(mod.post_calibration_state(
+            'State: 0x400000(PCI PROBE DONE)', interfaces, True))
+        self.assertFalse(mod.post_calibration_state(
+            'State: 0x420107(QMI_WLFW_CONNECTED | FW_READY | DRIVER_PROBED)',
+            set(), True))
 
     def test_responder_requires_exact_metadata_and_command(self):
         with tempfile.TemporaryDirectory() as td:

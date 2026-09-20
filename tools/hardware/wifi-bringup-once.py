@@ -29,6 +29,8 @@ RESPONDER = Path('/srv/s22/hardware/wifi-tools/wifi-optional-firmware.py')
 RESPONDER_SHA = '9a37e9a340cb2cf3e17cad4bce5cfd9917c4f9187243c67347a41bf6820f7aa0'
 RESPONDER_META = Path('/run/wifi-optional-firmware.json')
 RESPONDER_LOCK = Path('/run/wifi-optional-firmware.lock')
+POST_CAL_FULL = 0x420107
+POST_CAL_IDLE = 0x420100
 
 
 def event(kind, **fields):
@@ -90,15 +92,33 @@ def responder_ready(proc_root=Path('/proc')):
 
 
 def calibration_success_since(before, after):
-    # Comparing marker counts avoids accepting an old ring-buffer message;
-    # dmesg ring rollover can conservatively false-negative a fresh marker.
+    # dmesg is a ring.  A newly timestamped marker is accepted even if older
+    # lines rolled out; an unchanged marker (or a count-only increase caused
+    # by duplicated text) is never enough evidence.
     marker = 'Calibration completed successfully'
-    return after.count(marker) > before.count(marker)
+    old = {line.strip() for line in before.splitlines() if marker in line}
+    new = {line.strip() for line in after.splitlines() if marker in line}
+    return bool(new - old)
 
 
-def preflight():
+def post_calibration_state(current, interfaces, fresh_calibration):
+    """Allow only the observed full or idle post-calibration CNSS states."""
+    match = re.fullmatch(r'State: (0x[0-9a-f]+)\([^\n]*\)', current)
+    if not match or 'wlan0' not in interfaces or not fresh_calibration:
+        return False
+    value = int(match.group(1), 16)
+    return value in (POST_CAL_FULL, POST_CAL_IDLE)
+
+
+def preflight(allow_no_usb=False, require_usb=None):
+    # ``require_usb`` is the explicit API used by the boot wrapper; retain
+    # the CLI-oriented spelling for callers that already use it.
+    if require_usb is not None:
+        allow_no_usb = not require_usb
     if os.geteuid() != 0 or os.uname().release != '5.10.260-g4e5c5ad7d950':
         raise RuntimeError('wrong target kernel or uid')
+    if Path('/proc/1/comm').read_text().strip() != 'native-guardian':
+        raise RuntimeError('native guardian is not PID 1')
     if Path('/sys/module/wlan').exists() or state() != 'State: 0x400000(PCI PROBE DONE)':
         raise RuntimeError('requires fresh CNSS PCI-probed-only state, no WLAN module')
     if Path('/sys/module/firmware_class/parameters/path').read_text().strip() != '/vendor/firmware':
@@ -128,14 +148,16 @@ def preflight():
             raise RuntimeError('firmware target already exists; do not overlay unknown state')
     if not (FIRMWARE / 'tsp_stm').is_dir():
         raise RuntimeError('initial-root touchscreen assets absent')
-    if Path('/sys/class/net/ecm0/carrier').read_text().strip() != '1':
+    if (not allow_no_usb and
+            Path('/sys/class/net/ecm0/carrier').read_text().strip() != '1'):
         raise RuntimeError('USB ECM carrier absent')
     responder_ready()
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with opener.open('http://127.0.0.1:8089/health', timeout=5) as response:
         if json.load(response).get('status') != 'ok':
             raise RuntimeError('resident model unhealthy')
-    event('preflight_ok', firmware_files=count, state=state(), optional_responder=True)
+    event('preflight_ok', firmware_files=count, state=state(), optional_responder=True,
+          usb_rescue_required=not allow_no_usb)
 
 
 def activate():
@@ -183,11 +205,10 @@ def activate():
         if any(flag in current for flag in ('DRIVER_RECOVERY', 'FW_BOOT_RECOVERY', 'DEV_ERR', 'IN_PANIC')):
             raise RuntimeError('CNSS failure state; no further activation or unload attempted')
         log_after = run('dmesg')
-        if ('wlan0' in interfaces and 'DRIVER_PROBED' in current and
-                'FW_READY' in current and 'COLD_BOOT_CAL_DONE' in current and
-                calibration_success_since(log_before, log_after)):
+        fresh_calibration = calibration_success_since(log_before, log_after)
+        if post_calibration_state(current, interfaces, fresh_calibration):
             event('enumerated_after_calibration', connectivity_verified=False,
-                  calibration_success=True)
+                  calibration_success=True, post_calibration_state=current)
             return
         time.sleep(5)
     raise RuntimeError('enumeration deadline expired; no automatic retry/unload')
@@ -196,8 +217,10 @@ def activate():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--activate', action='store_true')
+    parser.add_argument('--allow-no-usb', action='store_true',
+                        help='allow boot use without the USB ECM rescue link')
     args = parser.parse_args()
-    preflight()
+    preflight(allow_no_usb=args.allow_no_usb)
     if args.activate:
         try:
             activate()

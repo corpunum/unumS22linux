@@ -1,0 +1,12 @@
+{
+  "autostart_enabled": false,
+  "backup_directory": "/srv/s22/hardware/backups/wifi-autostart-20260920T2035Z",
+  "current_lease_boot_id_migrated": true,
+  "installed_sha256": {
+    "start-persistent-desktop": "a3caa155febc24b64681ec411ebdc8536272495ed6aa6c3cc73369b6fbcee694",
+    "wifi-autostart.py": "3dfcdcadc13a2d21473fb924a10a377e75dba2bcc0797dd2bf3b302ddc74168e",
+    "wifi-bringup-once.py": "cd757deeb828996fc4a8aebc20ac19d7db9fdfa0e2ccc90202b653d425684ebd",
+    "wifi-dhcp-hook.py": "8692dfcfca5fb15b207c2d6510eaa42c6e5edebeb8bdbb982b744648bcc76658"
+  },
+  "profile_control_path_verified": true
+}

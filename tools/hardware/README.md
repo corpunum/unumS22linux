@@ -5,7 +5,8 @@ installer. Read `docs/WIFI_NATIVE.md`, `docs/BT_AUDIO_NATIVE.md`, and
 `docs/INPUT_POWER_NATIVE.md` first. The first Wi-Fi activation panicked; do
 not autoload WLAN or repeat its old module/handshake ordering. The corrected
 follow-up now has verified Wi-Fi traffic; see `docs/wifi-next-experiment.md`
-and `evidence/wifi-connected-20260920/`. Wi-Fi boot autostart is still disabled.
+and `evidence/wifi-connected-20260920/`. Optional Wi-Fi recovery-boot autostart
+now passes two consecutive reboot tests; see `docs/WIFI_AUTOSTART.md`.
 
 The Wi-Fi tools split responsibilities: exact optional-firmware completion,
 fresh-state calibration/enumeration, private host-profile transfer, bounded

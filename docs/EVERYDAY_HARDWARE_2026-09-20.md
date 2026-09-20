@@ -1,6 +1,23 @@
 # Everyday hardware status — 2026-09-20
 
-## Latest implementation checkpoint — 20:06 UTC
+## Latest implementation checkpoint — 20:41 UTC
+
+**Wi-Fi now starts automatically after recovery reboot.** BORE759 and760
+both restored desktop, resident CPU model, WPA association and DHCP without
+host restaging or radio commands. Wi-Fi service/association readiness was
+38.686s and38.659s respectively; separate WLAN-bound DNS/HTTPS, native/Arch DNS
+and USB rescue checks passed beyond60s uptime on each. No unintended reboot,
+flash or physical action occurred in this round. See
+[automatic startup evidence](WIFI_AUTOSTART.md).
+
+Current BORE760 has Hyprland/Quickshell/Squeekboard running, empty compositor
+configerrors, persisted battery/keyboard configuration and stride marker.
+Other hardware limitations remain: physical finger sensing, Bluetooth, usable
+audio, GPU/NPU compute, camera/cellular/suspend and normal cold-power-on Linux
+are not newly accepted. USB was left connected throughout; physical unplug
+behavior and ordinary phone battery life remain untested.
+
+## Previous implementation checkpoint — 20:06 UTC
 
 **Wi-Fi now passes live connectivity checks.** Still RECOVERY BORE758, over
 65 minutes uptime, with healthy USB SSH and resident model. WPA2/CCMP, DHCP,

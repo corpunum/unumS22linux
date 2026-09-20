@@ -1,16 +1,17 @@
 # Native QCA6490 Wi-Fi investigation
 
-Status at 2026-09-20, after 19:55 UTC: **connected and internet-tested on
-native Linux**. WPA2-PSK/CCMP association, DHCP, DNS explicitly bound to
+Status at 2026-09-20, 20:41UTC: **automatic recovery-boot startup and internet
+traffic tested twice**, BORE759/760. WPA2-PSK/CCMP association, DHCP, DNS explicitly bound to
 `wlan0`, and HTTPS explicitly bound to `wlan0` passed. USB ECM rescue and the
-resident model remained healthy. This is the same RECOVERY boot, BORE758;
-there was no new SoC reboot, flash, EFS write, or physical action.
+resident model remained healthy. These were intentional recovery-target
+software reboots, with no image flash, EFS write or physical action.
 
 Wi-Fi credentials and tools are stored privately on persistent userdata,
-but **Wi-Fi boot autostart is not enabled or reboot-tested**. Do not rerun
+and **Wi-Fi recovery-boot autostart is enabled and verified**. Do not rerun
 module insertion or calibration on this running connection. The first failed
 experiment below remains important history, not the current connectivity state.
-See [the corrected startup sequence](wifi-next-experiment.md).
+See [automatic startup and evidence](WIFI_AUTOSTART.md) and
+[the underlying startup sequence](wifi-next-experiment.md).
 
 ## Proven host artifacts
 
@@ -133,4 +134,6 @@ identifiers. It tests association, both Linux resolvers, WLAN-bound DNS and
 TLS-verified HTTPS, rescue route/carrier and model health. Credentials,
 addresses, SSIDs, BSSIDs and raw scans remain private. USB-disconnected use,
 reboot autostart, suspend/resume, roaming and sustained throughput are not
-accepted by this test. No Bluetooth/audio or GPU/NPU result follows from Wi-Fi.
+accepted by this standalone traffic test. Reboot-autostart now has separate
+BORE/startup/traffic evidence in the autostart record. No Bluetooth/audio or
+GPU/NPU result follows from Wi-Fi.

@@ -33,6 +33,8 @@ RUNTIME_READY = Path("/run/s22-persistent-ready.json")
 CHROOT = Path("/mnt/omarchy-trial")
 LOCK = Path("/run/s22-persistent-desktop.lock")
 STRIDE_ENABLED = Path("/etc/s22-linear-stride-enabled")
+WIFI_ENABLED = Path('/etc/s22-wifi-enabled')
+WIFI_DISABLED = Path('/etc/s22-wifi-disabled')
 
 
 class Failure(RuntimeError):
@@ -351,6 +353,32 @@ def rescue_if_requested() -> None:
               ["/usr/local/bin/start-weston-native"], env)
 
 
+def start_optional_wifi() -> subprocess.Popen | None:
+    """Spawn once after desktop readiness; radio failure is not GUI failure."""
+    if not WIFI_ENABLED.is_file() or WIFI_DISABLED.exists():
+        return None
+    try:
+        script = MOUNT / 'hardware/wifi-tools/wifi-autostart.py'
+        private = MOUNT / 'hardware/wifi-private'
+        if not script.is_file() or private.is_symlink() or not private.is_dir():
+            raise Failure('optional Wi-Fi deployment missing')
+        if private.stat().st_mode & 0o077:
+            raise Failure('optional Wi-Fi private directory permissions')
+        fd = os.open(private / 'autostart.log', os.O_WRONLY | os.O_CREAT |
+                     os.O_APPEND | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, 'ab', buffering=0) as out:
+            os.fchmod(out.fileno(), 0o600)
+            child = subprocess.Popen(['/usr/bin/python3', str(script), '--start'],
+                                     stdin=subprocess.DEVNULL, stdout=out,
+                                     stderr=subprocess.STDOUT, start_new_session=True,
+                                     close_fds=True, cwd='/')
+        say(f'optional Wi-Fi startup launched pid={child.pid}')
+        return child
+    except Exception as error:
+        say(f'optional Wi-Fi startup unavailable: {type(error).__name__}')
+        return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="read-only identity and layout check")
@@ -456,8 +484,12 @@ def main() -> int:
                     "supervisor_pid": os.getpid(), "started_at": int(time.time())}
                 RUNTIME_READY.write_text(json.dumps(runtime, sort_keys=True) + "\n")
                 say("persistent desktop and model ready")
+                wifi_startup = start_optional_wifi()
                 model_restarts = 0
                 while desktop.poll() is None:
+                    if wifi_startup is not None and wifi_startup.poll() is not None:
+                        say(f'optional Wi-Fi startup exited status={wifi_startup.returncode}; no retry')
+                        wifi_startup = None
                     if model.poll() is not None:
                         if model_restarts >= 2:
                             raise Failure("model server exceeded bounded runtime restarts")

@@ -1,5 +1,11 @@
 # Native Linux on this S22
 
+Current checkpoint, 2026-09-20: RECOVERY **BORE760** runs persistent native
+Alpine plus Arch/Hyprland/Omarchy and the CPU model. Wi-Fi now automatically
+reconnects on recovery boot, verified across BORE759/760 with WLAN-forced
+internet traffic. See [Wi-Fi autostart](WIFI_AUTOSTART.md) and [current status](../STATUS.md).
+Normal-power-on Linux remains unfinished; do not select the restored Android BOOT.
+
 Verified on 2026-09-19: Alpine 3.24.2 ARM64 boots from RECOVERY, with native
 guardian PID1, persistent packages/files, USB SSH/internet and a CPU-rendered
 Weston Wayland desktop. No Android services are running. This uses the shipping
@@ -41,11 +47,11 @@ display trial are documented in [the driver/model report](DRIVER_MODELS_2026-09-
 
 Use `s22-reboot recovery`, not an ordinary untargeted reboot. This flushes
 filesystems and uses the tested Samsung RESTART2 recovery target without a
-userspace BCB write. Normal-BOOT was recently written/read back, but the
-07:48:18 UTC reboot did not return SSH, ADB, or Download USB by 07:56 UTC.
-Boot mode/runtime are unconfirmed; do not treat it as usable or accepted.
-RECOVERY remains the last accepted working path (BORE519 persistent
-Omarchy/model). Bootloader, vendor_boot, and security partitions remain
+userspace BCB write. The failed native normal-BOOT candidate was restored to
+the original Samsung BOOT; Android userdata has since been replaced by Linux.
+Do not select normal BOOT. RECOVERY remains the accepted working path, now
+retested with persistent desktop/model/Wi-Fi in BORE759/760.
+Bootloader, vendor_boot, and security partitions remain
 outside the authorized write scope; RECOVERY remains unchanged.
 
 ## Storage and networking
@@ -64,8 +70,10 @@ workflow until it is resolved.
 
 USB networking uses phone `10.55.0.2`, host `10.55.0.1`. The host NetworkManager
 profile `s22-linux-usb` shares internet over the MAC-specific ECM interface
-`enx027322000001`. Wi-Fi, cellular, suspend, audio, cameras, GPU compute and NPU
-inference are not accepted/tested features of this Linux installation.
+`enx027322000001`. Wi-Fi now passes association, DHCP, DNS and HTTPS after
+automatic recovery startup. Physical USB-disconnected use is not yet tested.
+Cellular, suspend, usable audio, cameras, GPU compute and NPU inference remain
+unaccepted features of this Linux installation.
 
 ## Boot image and evidence
 
@@ -83,7 +91,7 @@ Arch/Omarchy RAM desktop and resident CPU chat are described in
 [OMARCHY_TRIAL.md](OMARCHY_TRIAL.md) and
 [DRIVER_MODELS_2026-09-20.md](DRIVER_MODELS_2026-09-20.md).
 
-BORE **519** is the last accepted state verifying automatic persistent
+BORE **519** was the first accepted state verifying automatic persistent
 Arch/Omarchy/model startup after userdata conversion; see
 [the migration record](PERSISTENCE_MIGRATION_2026-09-20.md).
 
