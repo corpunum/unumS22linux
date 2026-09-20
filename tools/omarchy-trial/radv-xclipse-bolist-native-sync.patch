@@ -1,0 +1,233 @@
+diff --git a/src/amd/vulkan/radv_cmd_buffer.c b/src/amd/vulkan/radv_cmd_buffer.c
+index fdf3410..8dd4de6 100644
+--- a/src/amd/vulkan/radv_cmd_buffer.c
++++ b/src/amd/vulkan/radv_cmd_buffer.c
+@@ -1979,6 +1979,10 @@ radv_emit_compute_shader(const struct radv_physical_device *pdev, struct radeon_
+ {
+    uint64_t va = radv_shader_get_va(shader);
+ 
++   if (getenv("RADV_SGPU_TRACE_POINTERS"))
++      fprintf(stderr, "sgpu: compute shader va=0x%016" PRIx64 " rsrc1=%08x rsrc2=%08x rsrc3=%08x user_data_0=%x\n",
++              va, shader->config.rsrc1, shader->config.rsrc2, shader->config.rsrc3, shader->info.user_data_0);
++
+    radeon_set_sh_reg(cs, shader->info.regs.pgm_lo, va >> 8);
+ 
+    radeon_set_sh_reg_seq(cs, shader->info.regs.pgm_rsrc1, 2);
+diff --git a/src/amd/vulkan/radv_cmd_buffer.h b/src/amd/vulkan/radv_cmd_buffer.h
+index 3f0d94f..f1cfeb1 100644
+--- a/src/amd/vulkan/radv_cmd_buffer.h
++++ b/src/amd/vulkan/radv_cmd_buffer.h
+@@ -670,6 +670,8 @@ static inline void
+ radv_emit_shader_pointer_head(struct radeon_cmdbuf *cs, unsigned sh_offset, unsigned pointer_count,
+                               bool use_32bit_pointers)
+ {
++   if (getenv("RADV_SGPU_TRACE_POINTERS"))
++      fprintf(stderr, "sgpu: shader pointer reg=0x%x count=%u use32=%u\n", sh_offset, pointer_count, use_32bit_pointers);
+    radeon_emit(cs, PKT3(PKT3_SET_SH_REG, pointer_count * (use_32bit_pointers ? 1 : 2), 0));
+    radeon_emit(cs, (sh_offset - SI_SH_REG_OFFSET) >> 2);
+ }
+@@ -682,6 +684,11 @@ radv_emit_shader_pointer_body(const struct radv_device *device, struct radeon_cm
+ 
+    radeon_emit(cs, va);
+ 
++   if (getenv("RADV_SGPU_TRACE_POINTERS"))
++      fprintf(stderr, "sgpu: shader pointer va=0x%016" PRIx64 " use32=%u address32_hi=0x%08x reconstructed=0x%016" PRIx64 "\n",
++              va, use_32bit_pointers, pdev->info.address32_hi,
++              ((uint64_t)pdev->info.address32_hi << 32) | (uint32_t)va);
++
+    if (use_32bit_pointers) {
+       assert(va == 0 || (va >> 32) == pdev->info.address32_hi);
+    } else {
+diff --git a/src/amd/vulkan/radv_descriptor_set.c b/src/amd/vulkan/radv_descriptor_set.c
+index ed17c99..082958a 100644
+--- a/src/amd/vulkan/radv_descriptor_set.c
++++ b/src/amd/vulkan/radv_descriptor_set.c
+@@ -1080,6 +1080,11 @@ write_buffer_descriptor(struct radv_device *device, unsigned *dst, uint64_t va,
+     * more efficient 8/16-bit buffer accesses.
+     */
+    ac_build_raw_buffer_descriptor(pdev->info.gfx_level, va, align(range, 4), dst);
++
++   if (getenv("RADV_SGPU_TRACE_DESCRIPTORS")) {
++      fprintf(stderr, "sgpu: descriptor buffer va=0x%016" PRIx64 " range=0x%016" PRIx64
++              " dst=%p words=%08x,%08x,%08x,%08x\n", va, range, (void *)dst, dst[0], dst[1], dst[2], dst[3]);
++   }
+ }
+ 
+ static ALWAYS_INLINE void
+diff --git a/src/amd/vulkan/radv_shader.c b/src/amd/vulkan/radv_shader.c
+index 34e72f3..778b1cc 100644
+--- a/src/amd/vulkan/radv_shader.c
++++ b/src/amd/vulkan/radv_shader.c
+@@ -2856,6 +2856,12 @@ radv_aco_build_shader_binary(void **bin, const struct ac_shader_config *config,
+    struct radv_shader_binary **binary = (struct radv_shader_binary **)bin;
+    size_t size = llvm_ir_size;
+ 
++   if (getenv("RADV_SGPU_TRACE_POINTERS")) {
++      fprintf(stderr, "sgpu: shader code_dw=%u exec_size=%u words=", code_dw, exec_size);
++      for (unsigned i = 0; i < MIN2(code_dw, 128); i++)
++         fprintf(stderr, "%08x%s", code[i], i + 1 == MIN2(code_dw, 128) ? "\n" : ",");
++   }
++
+    size += disasm_size;
+    size += stats_size;
+ 
+diff --git a/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_bo.c b/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_bo.c
+index 0bc14ed..83359fb 100644
+--- a/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_bo.c
++++ b/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_bo.c
+@@ -312,8 +312,12 @@ radv_amdgpu_winsys_bo_destroy(struct radeon_winsys *_ws, struct radeon_winsys_bo
+       free(bo->ranges);
+       u_rwlock_destroy(&bo->lock);
+    } else {
+-      if (bo->cpu_map)
+-         munmap(bo->cpu_map, bo->base.size);
++      if (bo->cpu_map) {
++         /* cpu_map is acquired through libdrm; pair it with its unmap API
++          * before freeing the BO rather than bypassing libdrm bookkeeping. */
++         amdgpu_bo_cpu_unmap(bo->bo);
++         bo->cpu_map = NULL;
++      }
+ 
+       if (ws->debug_all_bos)
+          radv_amdgpu_global_bo_list_del(ws, bo);
+@@ -493,6 +497,10 @@ radv_amdgpu_winsys_bo_create(struct radeon_winsys *_ws, uint64_t size, unsigned
+    r = amdgpu_bo_export(buf_handle, amdgpu_bo_handle_type_kms, &bo->bo_handle);
+    assert(!r);
+ 
++   if (getenv("RADV_SGPU_TRACE_POINTERS"))
++      fprintf(stderr, "sgpu: mapped bo handle=%u va=0x%016" PRIx64 " size=%" PRIu64 " bo_flags=%x\n",
++              bo->bo_handle, bo->base.va, bo->base.size, flags);
++
+    if (initial_domain & RADEON_DOMAIN_VRAM) {
+       /* Buffers allocated in VRAM with the NO_CPU_ACCESS flag
+        * aren't mappable and they are counted as part of the VRAM
+@@ -572,9 +580,11 @@ radv_amdgpu_winsys_bo_unmap(struct radeon_winsys *_ws, struct radeon_winsys_bo *
+ 
+    assert(bo->cpu_map);
+    if (replace) {
++      /* Keep the fixed-address reservation after releasing libdrm's map. */
++      amdgpu_bo_cpu_unmap(bo->bo);
+       (void)mmap(bo->cpu_map, bo->base.size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    } else {
+-      munmap(bo->cpu_map, bo->base.size);
++      amdgpu_bo_cpu_unmap(bo->bo);
+    }
+    bo->cpu_map = NULL;
+ }
+diff --git a/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c b/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c
+index 090df44..048e551 100644
+--- a/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c
++++ b/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c
+@@ -1233,8 +1233,7 @@ radv_amdgpu_cs_submit_zero(struct radv_amdgpu_ctx *ctx, enum amd_ip_type ip_type
+    if (!queue_syncobj)
+       return VK_ERROR_OUT_OF_HOST_MEMORY;
+ 
+-   /* sgpu: amdgpu_cs_syncobj_export_sync_file unsupported, skip wait merge */
+-   if (0 && (sem_info->wait.syncobj_count || sem_info->wait.timeline_syncobj_count)) {
++   if (sem_info->wait.syncobj_count || sem_info->wait.timeline_syncobj_count) {
+       int fd = -1;
+       (void)fd;
+       for (unsigned i = 0; i < sem_info->wait.timeline_syncobj_count; ++i) {
+@@ -1264,16 +1263,16 @@ radv_amdgpu_cs_submit_zero(struct radv_amdgpu_ctx *ctx, enum amd_ip_type ip_type
+       if (ret < 0)
+          return VK_ERROR_DEVICE_LOST;
+ 
+-      /* sgpu: never set queue_syncobj_wait, we signal manually */
+-      /* ctx->queue_syncobj_wait[hw_ip][queue_idx] = true; */
++      ctx->queue_syncobj_wait[hw_ip][queue_idx] = true;
+    }
+ 
+    for (unsigned i = 0; i < sem_info->signal.syncobj_count; ++i) {
+       uint32_t dst_handle = sem_info->signal.syncobj[i];
+       uint32_t src_handle = queue_syncobj;
+ 
+-      /* sgpu: skip amdgpu transfer/export, signal directly */
+-      drmSyncobjSignal(ctx->ws->fd, &dst_handle, 1);
++      ret = amdgpu_cs_syncobj_transfer(ctx->ws->dev, dst_handle, 0, src_handle, 0, 0);
++      if (ret < 0)
++         return VK_ERROR_DEVICE_LOST;
+    }
+    for (unsigned i = 0; i < sem_info->signal.timeline_syncobj_count; ++i) {
+       ret = amdgpu_cs_syncobj_transfer(ctx->ws->dev, sem_info->signal.syncobj[i + sem_info->signal.syncobj_count],
+@@ -1820,8 +1819,8 @@ radv_amdgpu_cs_submit(struct radv_amdgpu_ctx *ctx, struct radv_amdgpu_cs_request
+       amdgpu_cs_chunk_fence_info_to_data(&fence_info, &chunk_data[i]);
+    }
+ 
+-   if (0 && sem_info->cs_emit_wait &&
+-       (sem_info->wait.timeline_syncobj_count || sem_info->wait.syncobj_count /* sgpu: || *queue_syncobj_wait */)) {
++   if (sem_info->cs_emit_wait &&
++       (sem_info->wait.timeline_syncobj_count || sem_info->wait.syncobj_count || *queue_syncobj_wait)) {
+ 
+       if (ctx->ws->info.has_timeline_syncobj) {
+          wait_syncobj = radv_amdgpu_cs_alloc_timeline_syncobj_chunk(&sem_info->wait, queue_syncobj, &chunks[num_chunks],
+@@ -1861,8 +1860,15 @@ radv_amdgpu_cs_submit(struct radv_amdgpu_ctx *ctx, struct radv_amdgpu_cs_request
+    bo_list_in.bo_info_size = sizeof(struct drm_amdgpu_bo_list_entry);
+    bo_list_in.bo_info_ptr = (uint64_t)(uintptr_t)request->handles;
+ 
+-   /* sgpu: skip BO_HANDLES chunk */
+-   //(disabled) chunks[num_chunks].chunk_id = AMDGPU_CHUNK_ID_BO_HANDLES;
++   chunks[num_chunks].chunk_id = AMDGPU_CHUNK_ID_BO_HANDLES;
++   chunks[num_chunks].length_dw = sizeof(bo_list_in) / 4;
++   chunks[num_chunks].chunk_data = (uint64_t)(uintptr_t)&bo_list_in;
++   num_chunks++;
++
++   fprintf(stderr, "sgpu: bo_number=%u bo_info_size=%u\n", bo_list_in.bo_number, bo_list_in.bo_info_size);
++   if (getenv("RADV_SGPU_TRACE_POINTERS"))
++      for (unsigned bi = 0; bi < request->num_handles; bi++)
++         fprintf(stderr, "sgpu: submit bo handle=%u priority=%u\n", request->handles[bi].bo_handle, request->handles[bi].bo_priority);
+ 
+    /* The kernel returns -ENOMEM with many parallel processes using GDS such as test suites quite
+     * often, but it eventually succeeds after enough attempts. This happens frequently with dEQP
+@@ -1884,15 +1890,7 @@ radv_amdgpu_cs_submit(struct radv_amdgpu_ctx *ctx, struct radv_amdgpu_cs_request
+       struct amdgpu_cs_fence fence = {.context=ctx->ctx, .ip_type=request->ip_type, .ring=request->ring, .fence=request->seq_no};
+       uint32_t expired = 0;
+       int pr = amdgpu_cs_query_fence_status(&fence, 2000000000ull, 0, &expired);
+-      expired = 1; // FORȚEAZĂ SEMNALIZAREA HARDWARE INSTANTANEE
+       fprintf(stderr, "sgpu: fence poll ret=%d expired=%u seq=%llu\n", pr, expired, (unsigned long long)request->seq_no);
+-      /* sgpu does not signal syncobjs after execution, do it manually (eagerly signal for async pipelines) */
+-      if (!pr) {
+-         uint32_t qsync = radv_amdgpu_ctx_queue_syncobj(ctx, request->ip_type, request->ring);
+-         if (qsync) drmSyncobjSignal(ctx->ws->fd, &qsync, 1);
+-         for (unsigned _si = 0; _si < sem_info->signal.syncobj_count; _si++)
+-            drmSyncobjSignal(ctx->ws->fd, &sem_info->signal.syncobj[_si], 1);
+-      }
+    }
+ 
+    if (r) {
+diff --git a/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_winsys.c b/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_winsys.c
+index c4621e9..4c4b3b9 100644
+--- a/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_winsys.c
++++ b/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_winsys.c
+@@ -41,13 +41,17 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
+    if (!ac_query_gpu_info(fd, ws->dev, &ws->info, true))
+       return false;
+ 
++   if (getenv("RADV_SGPU_TRACE_POINTERS"))
++      fprintf(stderr, "sgpu: gpu_info address32_hi=0x%08x gfx_level=%d family=%d\n",
++              ws->info.address32_hi, ws->info.gfx_level, ws->info.family);
++
+    /* sgpu reports wrong gfx_level, force GFX10_3 for Xclipse 920 */
+    if (ws->info.gfx_level != GFX10_3) {
+       fprintf(stderr, "sgpu: overriding gfx_level %d -> GFX10_3\n", ws->info.gfx_level);
+       ws->info.gfx_level = GFX10_3;
+       ws->info.family = CHIP_VANGOGH;
+    }
+-   ws->info.has_timeline_syncobj = false;
++   /* Keep the kernel's timeline capability consistent with syncobj_sync_type. */
+    ws->info.has_userptr = false;
+ 
+    if (!radv_is_gpu_supported(&ws->info))
+diff --git a/src/vulkan/runtime/vk_drm_syncobj.c b/src/vulkan/runtime/vk_drm_syncobj.c
+index 0b2772c..39bfaf5 100644
+--- a/src/vulkan/runtime/vk_drm_syncobj.c
++++ b/src/vulkan/runtime/vk_drm_syncobj.c
+@@ -247,7 +247,7 @@ vk_drm_syncobj_wait_many(struct vk_device *device,
+    assert(j <= wait_count);
+    wait_count = j;
+ 
+-   uint32_t syncobj_wait_flags = 0; /* sgpu: no WAIT_FOR_SUBMIT, syncobjs manually signaled */
++   uint32_t syncobj_wait_flags = DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT;
+    if (!(wait_flags & VK_SYNC_WAIT_ANY))
+       syncobj_wait_flags |= DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL;
+ 
+

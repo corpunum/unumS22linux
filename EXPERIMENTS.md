@@ -2369,3 +2369,56 @@ not_tested list describes its own scope, not a contradiction of the separate
 reboot/startup evidence. Network credentials, addresses, raw private captures,
 firmware and original backups remain excluded. No image or partition writes
 were made in this round.
+
+### 2026-09-20 21:57–22:12UTC — GPU BO-list and native-fence repairs (September21 local)
+
+Continued remotely with Luna source/build workers; root alone controlled phone
+tests. Phone stayed in native BORE760 throughout. No reboot, partition/image
+write, module replacement or desktop/model restart. Candidate/runtime staging
+uses userdata `/srv/s22/gpu-bolist-20260921`, not the nearly-full CACHE overlay;
+stock Mesa is untouched and no boot service selects the experimental ICD.
+
+Pinned experimental Mesa base remains d1b295e8c61c013c454e8015983a1d6b6df82bf2;
+exact Samsung SGPU kernel source is 4e5c5ad7d950e4de0688b5663965f2075654b2ad.
+Restored omitted BO_HANDLES chunk and removed manual completion signaling.
+Initial candidate 999621a427e36700e1697694266b3196d8e3012a096489040ce2087edd7317ef
+passed record-only but compute failed: SQC read fault0x0000800018040000,
+real fence not complete, kernel GPU reset. This did not prove all CPF/VM faults
+fixed. Added shader ISA, BO VA/handle, descriptor/register tracing.
+
+Transfer-only probe then established hardware completion (expired=1) while
+Vulkan still returned -13. Root found the concrete mismatch: winsys forced
+has_timeline_syncobj=false but syncobj_sync_type retained TIMELINE; application
+fences were classified into timeline_syncobj_count and then omitted by the
+binary OUT allocator. Only the queue syncobj was submitted. Removed that
+override, restored WAIT_FOR_SUBMIT, normal queue waits and empty-submit kernel
+fence transfers. Native OUT now uses chunk9 and includes the application fence.
+
+At22:05:40 transfer-only probe passed all256 words after CP DMA fill, real
+kernel fence and Vulkan wait, checksum0xd1cc9f9595a48f83. Default compute at
+22:06:28 completed its fence but failed numerical readback: output remained
+0xA5A5A5A5 instead of7; TCP write fault0x0000ff787ad50000. A separate optional
+WC policy for CPU-written32-bit shader/descriptor BOs timed out and produced
+automatic GPU resets/CPF fault. That hypothesis is unaccepted; its optional
+code was removed. No manual GPU reset or phone reboot was issued.
+
+Restored final ICD ffc1f7ea42afa180d924875b1ef9655511c8a560c46c9077ae8f89e1b7f5f5d0
+and ran three further isolated transfer probes at22:11:52: 3/3 exact passes,
+real expired=1 each, no new GPU errors in the captured kernel delta. Four
+separate transfer passes total; zero successful compute/model GPU benchmarks.
+Probe rejects CPU Vulkan devices, starts transfer output at0xA5, uses3s fence
+wait/15s outer limit and does not destroy pending Vulkan objects on failed wait.
+
+Final uptime5473.98s, same boot ID, CPU model healthok, WPA COMPLETED, compositor
+and bar still running; battery30.0C. Final source/binary is isolated, not a
+system driver promotion. Full raw kernel captures remain private on userdata.
+Public source patch applies cleanly to pinned base; cross-build and diff-check
+passed. Details and remaining sync/WSI coverage gaps:
+`docs/GPU_SUBMISSION_2026-09-21.md`, `evidence/gpu-bolist-20260921/`, and
+`tools/omarchy-trial/radv-xclipse-bolist-native-sync.patch`.
+
+At22:14:50UTC, final independent HTTPS bound to wlan0 returned HTTP200 with
+normal TLS verification; BORE remained760, CPU model healthok, and Hyprland,
+Quickshell and Squeekboard were running. Candidate hash matched. Host probe
+compiled with -Wall/-Wextra/-Werror and three argument-rejection checks passed
+before Vulkan loading; no host GPU workload was run.
