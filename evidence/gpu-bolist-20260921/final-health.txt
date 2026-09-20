@@ -1,5 +1,5 @@
 Sun Sep 20 22:14:50 UTC 2026
-HTTP/2 200 
+HTTP/2 200
 {"status":"ok"}
  1584 Hyprland
  1705 squeekboard
