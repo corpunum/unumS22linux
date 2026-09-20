@@ -3,7 +3,7 @@
 Updated 2026-09-20. Older states and experiments remain in `EXPERIMENTS.md`
 and Git history; the old claim that nothing custom was flashed is obsolete.
 
-## Current accepted state — 19:22 UTC
+## Current accepted state — 20:06 UTC
 
 Native RECOVERY **BORE758** is running, USB SSH is reachable, and the resident
 CPU model reports `ok`. A WLAN initialization experiment caused a real kernel
@@ -13,15 +13,17 @@ persistent desktop/model. This does not prove every future crash is remotely
 recoverable or that normal cold power-on selects Linux.
 
 - Display stride correction, Omarchy icons/fonts, and battery panel survived
-  that reboot. Current battery98%, Charging,29.7C; not a battery-life test.
+  that reboot. Latest sampled battery temperature30.0C; not a battery-life test.
 - Native power-key binding is installed. Controlled compositor DPMS passed
   on/off/on; physical-button delivery is not yet accepted.
 - A persistent **Keyboard** bar button was added after the reboot. A synthetic
   tap through `sec_touchscreen` revealed Squeekboard; no physical finger claim.
   The keyboard addition itself has not been reboot-tested.
-- Wi-Fi is **not working**. Exact matching WLAN module/firmware reached firmware
-  ready, but our delayed calibration handshake collided with mission mode and
-  panicked CNSS. WLAN is now unloaded, with no automatic radio activation.
+- Wi-Fi is **connected and internet-tested**. The corrected single activation
+  completed calibration; an exact optional-firmware response fixed startup
+  waits. WPA2/CCMP, DHCP, native/Arch DNS, and WLAN-forced DNS/HTTPS passed.
+  USB routes/SSH and model health remain intact. Credentials/tools persist
+  privately on userdata; Wi-Fi autostart is not enabled or reboot-tested.
 - ABOX core firmware started during BORE757, but no speaker playback path was
   obtained. Those temporary firmware binds disappeared at reboot; current
   BORE758 has no ALSA soundcards. Bluetooth has no HCI controller.
@@ -31,7 +33,9 @@ recoverable or that normal cold power-on selects Linux.
 Evidence: [final live state](evidence/hardware-20260920/final-live-state.txt),
 [keyboard screen](evidence/hardware-20260920/keyboard-after.png),
 [hardware audit](docs/EVERYDAY_HARDWARE_2026-09-20.md), and
-[Wi-Fi incident](docs/WIFI_NATIVE.md). No partition was written during this
+[Wi-Fi history](docs/WIFI_NATIVE.md), plus
+[live Wi-Fi acceptance](evidence/wifi-connected-20260920/acceptance.json).
+No partition was written during this
 daily-hardware round. Preserve the working recovery environment.
 
 ## Earlier boot-attempt history (superseded snapshots)
@@ -97,8 +101,8 @@ persistent Omarchy/model startup, readiness at 15.81 seconds and stable at
   by the original Samsung BOOT; Linux currently runs from RECOVERY.
 - GPU compute still faults despite a validated CPU-mapping lifecycle fix.
 - NPU runtime/firmware integration and inference are unproven.
-- Physical finger sensing, Wi-Fi, cellular, audio, cameras, suspend and daily
-  use have not passed acceptance in the native Omarchy environment.
+- Wi-Fi reboot autostart, physical finger sensing, Bluetooth, cellular, audio,
+  cameras, suspend and daily use have not passed acceptance.
 - The normal Omarchy installer was not run. Native signed pacman transactions
   reproduce a signature-helper hang; the clean root and signed dependency
   delta were installed on the host and transferred with their package records.
@@ -120,10 +124,11 @@ framebuffer are verified after the later BORE758 panic reboot.
 Do not normal-boot Android or wipe userdata. Further experimental normal
 boots need physical rescue availability and are not part of this rollback.
 
-The next Wi-Fi experiment must reproduce the source-backed macloader /
-filesystem-ready / calibration order before module activation, without EFS
-writes or guessed calibration. Do not repeat the failed insertion-and-wait
-sequence. Audio needs real machine-card/topology registration; Bluetooth needs
+Next Wi-Fi work is supervised startup integration and a separately controlled
+recovery-boot test, not more activation of the running driver. The exact
+missing optional QDSS response must be available before module insertion;
+do not repeat the failed insertion-and-wait sequence. No EFS write or guessed
+calibration was required. Audio needs real machine-card/topology registration; Bluetooth needs
 a reviewed QCA6490 UART/firmware path. GPU/NPU inference, cameras, cellular and
 suspend remain unfinished. This is an experimental handheld, not a daily phone.
 

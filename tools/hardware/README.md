@@ -3,7 +3,18 @@
 These are device-specific development tools, not a one-command hardware
 installer. Read `docs/WIFI_NATIVE.md`, `docs/BT_AUDIO_NATIVE.md`, and
 `docs/INPUT_POWER_NATIVE.md` first. The first Wi-Fi activation panicked; do
-not autoload WLAN or repeat its old module/handshake ordering.
+not autoload WLAN or repeat its old module/handshake ordering. The corrected
+follow-up now has verified Wi-Fi traffic; see `docs/wifi-next-experiment.md`
+and `evidence/wifi-connected-20260920/`. Wi-Fi boot autostart is still disabled.
+
+The Wi-Fi tools split responsibilities: exact optional-firmware completion,
+fresh-state calibration/enumeration, private host-profile transfer, bounded
+WLAN-only DHCP/DNS setup, and sanitized live acceptance. None is a general
+installer. The responder must remain running while the loaded WLAN driver
+can request its optional file. Do not rerun the one-shot activation now.
+The profile installer reads credentials only with explicit `--install`,
+requires owner approval, and refuses replacing an existing private profile.
+Host tests use mocked interfaces/tempfiles, not actual radios or credentials.
 
 Accepted live changes: battery telemetry UI, icon fonts, and compositor-only
 DPMS, plus a visible Keyboard bar button. The native power-key binding is installed; physical key/finger input

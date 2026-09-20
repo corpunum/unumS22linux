@@ -2148,3 +2148,111 @@ zero fuzz to copied original preimages, reproducing final Lua, Panel.qml and
 both JSON candidates byte-for-byte. Scope and failed hardware acceptance are
 explicit in `evidence/hardware-20260920/validation.txt`. Firmware/APKs/models,
 raw crash captures and private backups remain excluded from GitHub.
+
+### 2026-09-20 19:24–20:06UTC — native Wi-Fi association and internet accepted
+
+Continued in the same BORE758 RECOVERY boot. Reused three bounded Luna
+workers for source/harness, DHCP and profile-tool work; the parent reviewed
+the actual code and serialized all phone operations. No SoC reboot, physical
+button press, flash, EFS/MISC/bootloader operation or calibration-file write
+occurred in this follow-up. Raw scans, network identities and detailed kernel
+logs remain private under
+`/home/corpunum/s22-private-backups/wifi-sequenced-20260920-tXNHr3/`.
+
+Source review corrected two earlier assumptions. `macloader_done` has a10s
+grace, then the cold-boot calibration handler logs and continues. With this
+DT's absent `use-nv-mac` and the host driver's default disabled MAC-provision
+requirement, a normal firmware/default address fallback exists. This is not
+factory-MAC identity proof. The proprietary macloader was recovered for
+inspection but not executed, because EFS remains off-limits. `CalDB:0`
+allows calibration-file download to be disabled and does not require us to
+invent a calibration blob. The stock vendor reference rc's normal ramdump
+policy is `recovery=1`: WLAN-only recovery rather than escalation to SoC panic.
+It is not a calibration bypass. Do not execute that EFS-touching rc wholesale.
+
+Reverified the exact20260915 Lineage WLAN module SHA256
+`cbf8932d079e97006a5b7aae0e1b5acfe65b3e8b5113ab8fa095daa36796738d`,
+kernel release/vermagic,14 firmware/config hashes and manifest SHA256
+`7ab578db57b5c2cef888a646ae989a81f815b9594d4b8f015331308229dca148`.
+Mounted CNSS debugfs read-only for state inspection. Four read-only binds
+exposed QCA directories/configs in PID1's `/vendor/firmware`, preserving the
+touchscreen firmware and global firmware search path. BusyBox bind remount
+requires both source and target; the earlier target-only form failed without
+changing source assets. No ABI-mismatched module was loaded.
+
+The one-shot harness set normal WLAN recovery, then performed module insertion
+and `fs_ready=1` in a single process at monotonic2153.999, elapsed0.055s.
+No remote investigation could split these two operations. Calibration logged
+success at2231.846, with4660ms spent in the calibration phase; overall startup
+was longer because of firmware waits. This is not a4.66s total bring-up.
+
+The first observer still **failed**, despite interface enumeration. An absent
+optional `qca6490/qdss_trace_config_v2.cfg` blocked60s on firmware fallback,
+longer than the40s mission boot deadline. Two WLAN-only recovery events were
+queued. There was no second module insertion, no repeated `fs_ready`, and no
+SoC reset. The shell's original observer pipeline lacked pipefail and returned0
+from tee; the JSON's `observer_failed_no_cleanup` and driver state are the
+actual failure evidence, not that pipeline status.
+
+Reviewed the exact CNSS request and kernel firmware-loader contract. Responded
+with `loading=-1` only to this exact absent optional file after checking the
+CNSS owning device, request name, synchronous flag and firmware absence.
+This completes a missing-file request; it does not fake firmware/calibration.
+Bounded watches resolved the queued and next requests, after which the
+mission driver reached stable state`0x420107`. A serialized exact-name responder
+now runs from userdata; it does not touch ABOX/other requests or global
+timeouts. Passive scan returned0 with four BSS entries on2412/5180MHz.
+
+The owner answered **yes** to privately reusing the matching saved host Wi-Fi
+profile. Metadata selection found exactly one active matching WPA-PSK profile;
+only explicit installation fetched its secret. Derived the WPA PSK in memory
+and sent it through pinned SSH stdin, not argv/logs. Stored profile0600 in
+directory0700 on persistent userdata. Derived PSKs remain secrets. No SSID,
+BSSID, PSK, passphrase, DHCP address or resolver IP is published.
+
+The first wpa_supplicant invocation used unsupported `-f`; this Alpine build
+printed usage and returned0 without starting. The corrected foreground daemon
+under start-stop-daemon associated: `COMPLETED`, `WPA2-PSK`, `CCMP`.
+udhcpc obtained a lease using the reviewed wlan0-only hook, retaining the ECM
+default route and adding a WLAN default at metric600. DNS-only renew was
+fixed before deployment so it cannot remove an unchanged address/route.
+
+At20:06, installed the resolver-aware DHCP hook with old script retained as
+`wifi-dhcp-hook.pre-dns.py`. Original resolver backup is private0600; the
+existing resolver inode is written in place because Arch has a read-only
+bind of the same file. Validated lease DNS is first, original fallback retained.
+User resolver edits are preserved across renew/deconfig, with ownership
+abandoned for that lease. No-DNS renewal retains existing owned resolver state.
+Applied from the existing lease without stopping WPA, DHCP, SSH or the desktop.
+
+All13 live acceptance checks passed at20:06:36UTC, uptime3899s: WPA2/CCMP,
+CNSS mission ready, private lease, USB carrier/default, WLAN metric600 default,
+lease DNS first, shared Arch resolver inode, native and Arch app DNS, DNS UDP
+socket explicitly bound to wlan0, HTTPS explicitly bound to wlan0 with200 and
+TLS verification0, and healthy resident local model. BORE remains758/RECOVERY,
+Hyprland/Quickshell/Squeekboard still running, battery temperature30.0C.
+Evidence: `evidence/wifi-connected-20260920/`.
+
+Saved the revised one-shot harness and acceptance script on userdata, with
+matching host/device hashes. The future harness now requires the exact live
+optional responder before activation and new calibration-success log evidence,
+not merely a state bit. Its read-only responder check passed live; the revised
+activation itself has not been rerun on this already initialized driver.
+Review caught unsupported BusyBox dmesg flags and fixed them.30 mocked host
+tests passed across firmware completion, bring-up prerequisites, DHCP/DNS and
+private profile installation; tests never query real credentials or radios.
+
+**Wi-Fi is working in this session, not yet reboot-autostarted.** Credentials,
+firmware and scripts are persisted, but no WLAN boot hook was installed.
+Reboot-autostart, unplugged USB use, roaming, suspend/resume and sustained
+throughput remain untested. Other hardware status is unchanged: GPU compute
+faults, NPU inference unproven, no accepted Bluetooth/audio/camera/cellular
+path, physical-finger acceptance outstanding. Normal cold-power-on Linux
+remains unfinished; preserve RECOVERY and do not normal-boot restored Android.
+
+At20:10:46UTC, the second saved acceptance sample passed all13 checks again
+at4148.81s uptime,249.55s after the first. No reboot or interface restart was
+requested between samples. This is repeat live acceptance, not a sustained
+traffic/endurance benchmark. Scripts, tests, sanitized evidence and updated
+status documentation are the publication scope; private credentials, firmware
+and raw logs remain excluded.

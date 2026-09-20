@@ -1,6 +1,23 @@
 # Everyday hardware status — 2026-09-20
 
-## Latest implementation checkpoint — 19:22 UTC
+## Latest implementation checkpoint — 20:06 UTC
+
+**Wi-Fi now passes live connectivity checks.** Still RECOVERY BORE758, over
+65 minutes uptime, with healthy USB SSH and resident model. WPA2/CCMP, DHCP,
+native Alpine and Arch app DNS, explicitly WLAN-bound DNS and HTTPS passed.
+The resolver inode is shared with Arch and was preserved during DNS setup.
+The WLAN default route uses metric600, leaving the USB rescue route intact.
+
+Calibration completed in the corrected activation; the missing optional QDSS
+firmware response caused two WLAN-only recovery cycles before being handled.
+No further SoC reboot, partition write or physical action occurred. The owner
+approved privately reusing the matching active saved host Wi-Fi profile.
+Credentials and tools are persisted on userdata, **not yet boot-autostarted**.
+See [acceptance checks](../evidence/wifi-connected-20260920/acceptance.json),
+[platform and installed hashes](../evidence/wifi-connected-20260920/platform.json)
+and [the Wi-Fi record](WIFI_NATIVE.md). Other hardware limitations below remain.
+
+## Previous implementation checkpoint — 19:22 UTC
 
 Native RECOVERY **BORE758**, SSH/model healthy at20 minutes uptime. This
 supersedes the historical18:18 audit below. No partition writes were made in

@@ -1,0 +1,26 @@
+{
+  "battery_temperature_c": 30.0,
+  "boot_mode": "RECOVERY",
+  "bore_last": "758",
+  "installed_script_sha256": {
+    "wifi-acceptance.py": "d0b6cebdd81f1ea01028da79711bb82742cd9bf63b7997384b04ddce28e1be79",
+    "wifi-bringup-once.py": "2b947f92db4917b438e89deddb1335f167f4d80f71473b5210f05269d7e62ce7",
+    "wifi-dhcp-hook.py": "4633922295ef76fc11bfb50da0689f6f17d070e80d10dc435ae0e5d92cc20391",
+    "wifi-install-profile.py": "505fb37008f2311c1f9aef733e33010d12d8cc030a2c5b64c97f1979b584bbc2",
+    "wifi-optional-firmware.py": "9a37e9a340cb2cf3e17cad4bce5cfd9917c4f9187243c67347a41bf6820f7aa0"
+  },
+  "kernel": "5.10.260-g4e5c5ad7d950",
+  "kernel_marker_timestamps": {
+    "Calibration completed successfully": [],
+    "Cold boot calibration took": [],
+    "Driver recovery is disabled": [],
+    "Firmware boot timeout": []
+  },
+  "running_components": [
+    "Hyprland",
+    "quickshell",
+    "squeekboard"
+  ],
+  "uptime_seconds": 3976.28,
+  "wifi_boot_autostart_enabled": false
+}
