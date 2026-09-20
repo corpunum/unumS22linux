@@ -6,6 +6,14 @@
 # select Mesa acceleration, change modes outside Weston, or touch partitions.
 set -eu
 
+# The embedded native startup invokes this independent GUI entry point after
+# SSH/network preparation. Keep the proven Alpine desktop as an explicit
+# rescue path; userdata failures must never change guardian/SSH supervision.
+if [ "${S22_RESCUE:-0}" != 1 ] && [ -f /etc/s22-persistent-enabled ] && \
+   [ -x /usr/local/bin/start-persistent-desktop ]; then
+  exec /usr/local/bin/start-persistent-desktop
+fi
+
 DRM_DEVICE=${WESTON_DRM_DEVICE:-/dev/dri/card1}
 DRM_CARD=${WESTON_DRM_CARD:-${DRM_DEVICE##*/}}
 WESTON_SEAT=${WESTON_SEAT:-seat0}

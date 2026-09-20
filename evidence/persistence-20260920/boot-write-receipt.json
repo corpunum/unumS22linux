@@ -1,0 +1,11 @@
+{
+  "bore_before": "519",
+  "boot_before_sha256": "0962dbdd67b748858189b46d464820ec7d1f3ea843cc7c3d033b69c40931b44e",
+  "candidate_sha256": "4aeb801486e35e2c71dab0e988c6ac14802b05a29d062ddd93834e74802b5b2e",
+  "image_bytes": 67108864,
+  "recovery_unchanged_sha256": "1a827b43d29141efb47f530902dd4e4ee2b6d780515893c9ecd676ad27efd7d1",
+  "vendor_boot_unchanged_sha256": "383b6f6789e655b070929914db5639e6d9bacc78823ada7bf553962b5b4888be",
+  "cache_lower_sha256": "1139f04222e577f18dc2d540721c0be037700952780d54cfb919e39c5d15ac1b",
+  "write_completed": true,
+  "boot_readback_sha256": "4aeb801486e35e2c71dab0e988c6ac14802b05a29d062ddd93834e74802b5b2e"
+}

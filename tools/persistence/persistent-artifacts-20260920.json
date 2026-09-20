@@ -1,0 +1,33 @@
+{
+  "schema": "persistent-artifacts/v1",
+  "date": "2026-09-20",
+  "candidate": "rootfs/persistent-arch-candidate-20260920",
+  "archive": {
+    "path": "builds/persistent-arch-20260920.tar.gz",
+    "sha256": "363f836b6d45673a26e117493b034038d7b845c092c2883039bd8128cda67646",
+    "size_bytes": 963065234,
+    "compression": "gzip-level-1",
+    "tar_features": ["numeric-owner", "xattrs", "acls"],
+    "excluded_payload_subtrees": ["run", "tmp", "dev", "proc", "sys"],
+    "excluded_paths": ["stock"]
+  },
+  "artifacts": [
+    {
+      "path": "rootfs/model-bench/models/Qwen3.5-2B-Q4_0.gguf",
+      "sha256": "cd70221bebaee0503e0f6717e174250cd7825aa88438b3aabec9ad55731d9bb1",
+      "size_bytes": 1214873856
+    },
+    {
+      "path": "tools/model-bench/server-runtime.tar.gz",
+      "sha256": "21426e1eb355c66ee01ee36161072dff4702f5e4fe363f38188876ff0c29fa6b",
+      "size_bytes": 11146441
+    }
+  ],
+  "fixup": {
+    "path": "builds/persistent-arch-fixup-20260920.tar.gz",
+    "sha256": "5d3eeb6d054b3a4ed320a208f44bb51b7be0145133ce86e9b0d27db91dd36841",
+    "size_bytes": 455521,
+    "packages": ["libbsd-0.12.2-2", "libmd-1.2.0-1", "inotify-tools-4.25.9.0-1"]
+  },
+  "status": "base plus signed host-installed fixup deployed; recovery autostart verified at BORE 519"
+}

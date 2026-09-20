@@ -1,5 +1,9 @@
 # S22 Omarchy trial — 2026-09-20
 
+Historical RAM trial: a persistent replacement is now installed. Do not run
+RAM restore scripts over the current `/mnt/omarchy-trial` or `/mnt/model-bench`
+mounts. See [the persistence migration](PERSISTENCE_MIGRATION_2026-09-20.md).
+
 Updated status: **Hyprland, the real Omarchy Quickshell bar, a terminal and
 Squeekboard now render on the S22 display**, using CPU software rendering.
 An opt-in Aquamarine display-only patch and a consistent GCC16-libstdc++

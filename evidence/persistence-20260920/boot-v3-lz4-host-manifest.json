@@ -1,0 +1,380 @@
+{
+  "source_cpio_sha256": "661340d6e98c1fa4c377aac32ede21916c4f40885bbcda87a382531040aae7a2",
+  "source_cpio_bytes": 94278940,
+  "output_cpio_sha256": "ae347afea5e74a992aed995561c639885b7869880ee101bfddb1294295fe9a44",
+  "output_cpio_bytes": 75763892,
+  "lz4_sha256": "09caf6902cea01d79b297c758ebeeb53969944400f37b80091da08255061b39e",
+  "lz4_bytes": 25222162,
+  "image_sha256": "b0481f8888c6d54d8e8e4d885a8f991462d69962d837a9b55b595e9bbf270138",
+  "image_bytes": 67108864,
+  "raw_image_bytes": 58744832,
+  "kernel_sha256": "708474da33de9afafcd1835e6f4cf6f9b6e9451ad37748e95d322678250b69b7",
+  "elf_closure_count": 34,
+  "elf_closure": [
+    "system/bin/init.android",
+    "system/bin/linker64",
+    "system/bin/sh",
+    "system/bin/toybox",
+    "system/lib64/ld-android.so",
+    "system/lib64/libbase.so",
+    "system/lib64/libc++.so",
+    "system/lib64/libc.so",
+    "system/lib64/libcrypto.so",
+    "system/lib64/libcrypto_utils.so",
+    "system/lib64/libcutils.so",
+    "system/lib64/libdl.so",
+    "system/lib64/libext2_uuid.so",
+    "system/lib64/libext4_utils.so",
+    "system/lib64/libfec.so",
+    "system/lib64/libfs_mgr.so",
+    "system/lib64/libgsi.so",
+    "system/lib64/libjsoncpp.so",
+    "system/lib64/libkeyutils.so",
+    "system/lib64/liblog.so",
+    "system/lib64/liblogwrap.so",
+    "system/lib64/liblp.so",
+    "system/lib64/liblzma.so",
+    "system/lib64/libm.so",
+    "system/lib64/libpackagelistparser.so",
+    "system/lib64/libpcre2.so",
+    "system/lib64/libprocessgroup.so",
+    "system/lib64/libprocessgroup_setup.so",
+    "system/lib64/libselinux.so",
+    "system/lib64/libsparse.so",
+    "system/lib64/libsquashfs_utils.so",
+    "system/lib64/libunwindstack.so",
+    "system/lib64/libvendorsupport.so",
+    "system/lib64/libz.so"
+  ],
+  "removed_system_elf_count": 62,
+  "removed_system_elf": [
+    "system/bin/adbd",
+    "system/bin/disable-overlays",
+    "system/bin/dump.erofs",
+    "system/bin/e2fsck",
+    "system/bin/e2fsdroid",
+    "system/bin/fastbootd",
+    "system/bin/fsck.erofs",
+    "system/bin/fsck.f2fs",
+    "system/bin/hw/android.hardware.health-service.samsung-recovery",
+    "system/bin/make_f2fs",
+    "system/bin/minadbd",
+    "system/bin/mke2fs",
+    "system/bin/mkfs.erofs",
+    "system/bin/nano",
+    "system/bin/reboot",
+    "system/bin/resize2fs",
+    "system/bin/servicemanager",
+    "system/bin/sload_f2fs",
+    "system/bin/toolbox",
+    "system/bin/tune2fs",
+    "system/bin/watchdogd",
+    "system/bin/ziptool",
+    "system/lib64/android.hardware.boot-V1-ndk.so",
+    "system/lib64/android.hardware.boot@1.0.so",
+    "system/lib64/android.hardware.boot@1.1.so",
+    "system/lib64/android.hardware.boot@1.2.so",
+    "system/lib64/android.hardware.fastboot-V1-ndk.so",
+    "system/lib64/android.hardware.fastboot@1.0.so",
+    "system/lib64/android.hardware.fastboot@1.1.so",
+    "system/lib64/android.hardware.health-V4-ndk.so",
+    "system/lib64/android.hardware.health@1.0.so",
+    "system/lib64/android.hardware.health@2.0.so",
+    "system/lib64/libadbd_auth.so",
+    "system/lib64/libadbd_fs.so",
+    "system/lib64/libasyncio.so",
+    "system/lib64/libbinder.so",
+    "system/lib64/libbinder_ndk.so",
+    "system/lib64/libboot_control_client.so",
+    "system/lib64/libbootloader_message.so",
+    "system/lib64/libext2_blkid.so",
+    "system/lib64/libext2_com_err.so",
+    "system/lib64/libext2_e2p.so",
+    "system/lib64/libext2_misc.so",
+    "system/lib64/libext2_quota.so",
+    "system/lib64/libext2fs.so",
+    "system/lib64/libfusesideload.so",
+    "system/lib64/libhidl-gen-utils.so",
+    "system/lib64/libhidlbase.so",
+    "system/lib64/liblz4.so",
+    "system/lib64/libncurses_recovery.so",
+    "system/lib64/libpng.so",
+    "system/lib64/libprotobuf-cpp-lite.so",
+    "system/lib64/librecovery_ui.so",
+    "system/lib64/librecovery_ui_ext.so",
+    "system/lib64/libsgdisk.so",
+    "system/lib64/libssl.so",
+    "system/lib64/libsysutils.so",
+    "system/lib64/libtinyxml2.so",
+    "system/lib64/libutils.so",
+    "system/lib64/libvintf.so",
+    "system/lib64/libvolume_manager.so",
+    "system/lib64/libziparchive.so"
+  ],
+  "removed_dangling_symlinks": [
+    "system/bin/defrag.f2fs",
+    "system/bin/dump.f2fs",
+    "system/bin/enable-verity",
+    "system/bin/getevent",
+    "system/bin/getprop",
+    "system/bin/mkfs.ext2",
+    "system/bin/mkfs.ext3",
+    "system/bin/mkfs.ext4",
+    "system/bin/modprobe",
+    "system/bin/resize.f2fs",
+    "system/bin/setprop",
+    "system/bin/start",
+    "system/bin/stop",
+    "system/bin/unzip",
+    "system/bin/zipinfo"
+  ],
+  "recovery_marker": "system/bin/recovery zero-byte regular record",
+  "modules_preserved": 328,
+  "stock_lz4_sha256": [
+    "2ee3688c2c98274af35b9c9cc4ffa0bc9ca1878370049502f73af14eab3d41d5",
+    "3faacc0eec09b38d0ad0532028dcf472363d2551daa58d9afd2b2e2ccc55d083"
+  ],
+  "full_concatenated_decode_sha256": "d930ff5e0da50d69b63c6edba058f44ccf93fa624543ccd0076eb2eb5e84e903",
+  "dependencies": {
+    "system/bin/sh": [
+      "libc.so"
+    ],
+    "system/lib64/libc.so": [
+      "ld-android.so",
+      "libdl.so"
+    ],
+    "system/lib64/libdl.so": [
+      "ld-android.so"
+    ],
+    "system/lib64/ld-android.so": [],
+    "system/bin/toybox": [
+      "libcrypto.so",
+      "liblog.so",
+      "libselinux.so",
+      "libz.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libm.so": [
+      "libc.so"
+    ],
+    "system/lib64/libz.so": [
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libselinux.so": [
+      "libpcre2.so",
+      "liblog.so",
+      "libpackagelistparser.so",
+      "libc.so"
+    ],
+    "system/lib64/libpackagelistparser.so": [
+      "liblog.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libc++.so": [
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/liblog.so": [
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libpcre2.so": [
+      "libc.so"
+    ],
+    "system/lib64/libcrypto.so": [
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/bin/linker64": [],
+    "system/bin/init.android": [
+      "libbase.so",
+      "libcutils.so",
+      "libext4_utils.so",
+      "libfs_mgr.so",
+      "libgsi.so",
+      "libkeyutils.so",
+      "liblog.so",
+      "liblogwrap.so",
+      "liblp.so",
+      "libprocessgroup.so",
+      "libprocessgroup_setup.so",
+      "libselinux.so",
+      "libunwindstack.so",
+      "libvendorsupport.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libvendorsupport.so": [
+      "liblog.so",
+      "libbase.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libbase.so": [
+      "liblog.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libunwindstack.so": [
+      "libbase.so",
+      "liblog.so",
+      "liblzma.so",
+      "libz.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/liblzma.so": [
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libprocessgroup_setup.so": [
+      "libbase.so",
+      "libjsoncpp.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libjsoncpp.so": [
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libprocessgroup.so": [
+      "libbase.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/liblp.so": [
+      "libcrypto.so",
+      "libbase.so",
+      "liblog.so",
+      "libcrypto_utils.so",
+      "libsparse.so",
+      "libext4_utils.so",
+      "libz.so",
+      "libcutils.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libcutils.so": [
+      "liblog.so",
+      "libbase.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libext4_utils.so": [
+      "libz.so",
+      "libbase.so",
+      "libcutils.so",
+      "libext2_uuid.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libext2_uuid.so": [
+      "libc++.so",
+      "libc.so",
+      "libdl.so"
+    ],
+    "system/lib64/libsparse.so": [
+      "libz.so",
+      "libbase.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libcrypto_utils.so": [
+      "libcrypto.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/liblogwrap.so": [
+      "libcutils.so",
+      "liblog.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libkeyutils.so": [
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libgsi.so": [
+      "libbase.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libfs_mgr.so": [
+      "libbase.so",
+      "libcrypto.so",
+      "libcrypto_utils.so",
+      "libcutils.so",
+      "libext4_utils.so",
+      "libfec.so",
+      "liblog.so",
+      "liblp.so",
+      "libselinux.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libfec.so": [
+      "libbase.so",
+      "libcrypto.so",
+      "libcrypto_utils.so",
+      "libcutils.so",
+      "libext4_utils.so",
+      "libsquashfs_utils.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "system/lib64/libsquashfs_utils.so": [
+      "libcutils.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ]
+  },
+  "kernel_sha256_asserted": "708474da33de9afafcd1835e6f4cf6f9b6e9451ad37748e95d322678250b69b7",
+  "hardware_acceptance": "UNTESTED - HOST ONLY"
+}

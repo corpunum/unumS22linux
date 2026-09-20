@@ -1,8 +1,9 @@
 # Native first-stage handoff
 
 This directory contains a narrowly scoped derivative of the verified Lineage
-recovery ramdisk. It preserves the shipping /init symlink and AOSP first
-stage. The shipping regular /system/bin/init is renamed to
+recovery ramdisk. Current V3 preserves AOSP first stage by using a regular,
+byte-identical original-init copy at `/init` (not the old shipping symlink).
+The shipping regular /system/bin/init is renamed to
 /system/bin/init.android; init-wrapper delegates every invocation to it
 except selinux_setup when the build-time /native-enable marker exists.
 
@@ -15,11 +16,10 @@ listen state is not accepted as proof of remote control. After the grace
 period, native-start failures restart the SSH rescue without returning to
 Android.
 
-The default builder mode keeps the Alpine archive on the writable cache
-filesystem as /cache/native-rootfs.tar.gz. This is required for the current
-32,493,352-byte archive because embedding it in the 96 MiB recovery image does
-not fit with the existing 67 MiB payload. An embedded mode is available and
-fails closed if the resulting recovery image exceeds the partition size.
+The current recovery builder embeds the 22,123,828-byte Alpine xz archive.
+V3 fits its 96 MiB RECOVERY partition and extracts that archive to a RAM lower
+layer before adding the persistent CACHE overlay. The separately authorized
+BOOT experiment externalizes this lower archive; see `tools/native-boot/`.
 
 No device operation is performed by the builder. It only writes artifacts
 under builds/native_handoff_*.

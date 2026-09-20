@@ -1652,3 +1652,180 @@ checks and a filename-only credential/ELF scan. Raw diagnostic output, public
 key material and required diff-context whitespace were preserved unchanged;
 they are excluded from the whitespace gate. These do not certify all historical scripts
 as safe to run or establish new hardware functionality.
+
+### 2026-09-20 — Private raw backup complete; persistence candidate prepared
+
+The owner asked to back up Android, remove it and make Linux permanent, then
+said to continue. Backups and host-only preparation proceeded. No phone file
+deployment, partition write, formatting, reboot or erasure was performed in
+this phase. The existing RECOVERY-only boundary has not been silently expanded
+to permit destructive storage or BOOT work before the backup decision.
+
+Added `tools/persistence/` with an allowlisted read-only partition reader,
+private host backup helper and private device/boot-generation receipt helper.
+The reader validates native guardian, sysfs partition names/sizes, block-device
+identity, absence of holders and absence of mounts in both its own and PID1's
+mount namespaces. It opens only the selected partitions with `O_RDONLY`.
+Backups stay outside the public repository under
+`/home/corpunum/s22-private-backups/`; device identity, encrypted key material
+and raw images must never be published.
+
+The initial uncompressed session `20260920T061900Z` was deliberately stopped
+after roughly 14 GiB of userdata transfer. Its partial capture and verified
+small images remain intact. Read-only samples showed substantial zero regions,
+so the replacement used lossless gzip transport and sparse zero storage on the
+host. Zero regions were not treated as proof of empty userdata.
+
+Session `20260920T062514Z` completed with exit 0. At 06:41 UTC its final marker
+and all records were checked: 15 selected partitions, 126859476992 logical
+bytes (118.15 GiB), no partial images. Each passed source-stream SHA256,
+host-stream SHA256 and independent saved-file reread SHA256. Userdata alone
+is 113283956736 bytes. This covers userdata, super, prism, optics, metadata,
+keystorage, keyrefuge, efs, sec_efs, boot, vendor_boot, recovery, dtbo, vbmeta
+and vbmeta_system; it is not a whole-device or atomic snapshot. Images are
+0400, session directories 0700 and receipts/logs 0600. Parent verified sizes,
+record agreement and permissions, then fsynced session files and directories.
+The private after receipt confirmed the same boot generation as during capture.
+Sparse storage occupies approximately 14 GiB on the host.
+
+These hashes prove raw-byte integrity, NOT personal-file restoration. The
+matching fstab configures Android metadata/file encryption with hardware-wrapped
+keys. No decrypted mapper exists in native Linux. Host read-only metadata
+inspection found normal vold/password_slots directories and the ext4 journal
+recovery flag; no key contents were dumped and no repair was attempted.
+Before erasure, obtain a verified readable file export or the owner's explicit
+acceptance that the encrypted raw backup might not recover personal files.
+Generic continuation was not treated as that risk acceptance.
+
+Luna prepared the host-only Arch candidate at
+`rootfs/persistent-arch-candidate-20260920/` with signed-package dependency
+installation: 346 registered packages; worker pacman DB/file checks clean.
+Parent independently checked 80813 registered paths with none missing,
+confirmed the canonical HTTP chat client hash, custom Aquamarine hash and
+real Omarchy shell symlink. An initially stale CLI client in the candidate
+was caught and replaced before acceptance. This candidate has not been
+deployed or phone-tested; persistent mounts, startup supervision, rescue
+tests and cold-power boot integration remain outstanding.
+
+Focused helper validation: Python compilation, gzip/sparse logical-byte
+preservation cases and rejection of truncated gzip; independent read-only
+worker review prompted the private identity receipts and explicit non-atomic
+capture caveat. Final 06:42 UTC phone inspection: native guardian, BORE 518
+RECOVERY, unchanged desktop processes, model loopback health `ok`, battery
+38.4 C. No new GPU/NPU result is claimed. Details and the outstanding backup
+decision are in `docs/PERSISTENCE_PREPARATION_2026-09-20.md`.
+
+### 2026-09-20 — Authorized userdata conversion; automatic persistent Omarchy
+
+The owner explicitly accepted possible Android-data loss. Fresh inventory
+matched all 15 backup records and the same kernel boot generation; Lineage
+rollback and V3 rescue hashes were rechecked. Formatted only validated userdata
+`/dev/sda36` (259:20, start 28594176, sectors 221257728) as conservative 4 KiB
+ext4, UUID `1dd55c26-bd57-489a-9d9b-4c60e6f430eb`, label S22_LINUX. No PIT or
+other partition write was performed. `e2fsck -fn` passed and the running
+kernel mounted the new filesystem. Android userdata was replaced; raw-only
+file recovery remains unproven, as explicitly accepted. Backups remain private.
+
+Copied the clean Arch candidate, resident CPU runtime and 2B weights to
+`/srv/s22`. SHA checks and native package DB/file checks passed. Actual launch
+caught a missing libbsd keyboard dependency that package DB checks did not
+detect. A native signed-package attempt reproduced the earlier signature-helper
+hang before a transaction (PID20831, runnable, SIGKILL pending, fd limit1024).
+Stopped that attempt; did not disable signatures or diagnose its cause by
+guessing. Installed signed libbsd/libmd/inotify-tools in the host candidate
+and deployed an exact file/DB delta, then native ldconfig and package checks.
+There are 349 registered packages. Native signed installs remain unaccepted.
+
+Added a foreground Python supervisor through the existing cache-overlay GUI
+entry point, leaving guardian and SSH independent. It validates UUID/partition,
+mounts persistent Arch/model paths plus volatile runtime/device directories,
+starts loopback model and actual Omarchy UI, and has owned-process/mount cleanup
+and an Alpine fallback. Saved the original Weston entry point. Parent review
+fixed initial worker omissions in file binds, input cold-start, mount ownership,
+process cleanup, concurrent launch handling and UI readiness. Five focused mock
+tests passed; initial phone session and a forced model restart worked without
+restarting the desktop. No GPU/NPU result is claimed.
+
+Enabled startup and rebooted via direct recovery selector; BORE advanced from
+518 to **519**. No image flashing, buttons or host root/model restoration.
+The persistent desktop/model were ready by observed uptime15.81s, and remained
+healthy at77.59s. Actual frame showed Omarchy, terminal and keyboard. Synthetic
+event7 taps typed/submitted `hi`, producing a visible 1.4s reply with0.6s first
+text. Physical finger sensing remains unverified. About4.7GiB MemAvailable
+with the model/desktop is substantially above the former RAM-staged state.
+The reboot cleared the hung package helper; removed only its empty stale DB
+lock after verifying no pacman process. Native DB check passed again.
+
+Full record: `docs/PERSISTENCE_MIGRATION_2026-09-20.md`; frames and bounded
+status evidence: `evidence/persistence-20260920/`. The owner separately replied
+"yes i approve" to modifying BOOT for normal power-on, with RECOVERY retained
+as rescue. That work is now authorized but has not yet produced a tested BOOT
+image. Do not confuse recovery autostart acceptance with cold-power-on proof.
+
+### 2026-09-20 — separately authorized native BOOT candidate
+
+Audited the actual private BOOT/vendor_boot backups, not just the Lineage
+reference images. The phone's vendor_boot has Samsung modules distinct from
+V3. The BOOT candidate therefore retains the known Lineage kernel and every
+V3 module/metadata record in the later generic ramdisk. Gzip is enabled in
+the running kernel; XZ ramdisk decompression is not. Removing only the
+22,123,828-byte embedded Alpine lower archive and using gzip fits BOOT while
+retaining the complete recovery first-stage, recovery marker ELF and modules.
+The lower archive is instead hash-verified from an ordinary CACHE file.
+Normal-boot compatibility with the unchanged stock vendor_boot remains an
+experimental boundary, not a host-audit guarantee.
+
+`builds/native-boot-v2/boot.img` is header4, 67,108,864 bytes with AVB NONE
+BOOT hash footer; pre-footer size62,283,776. SHA256:
+`4aeb801486e35e2c71dab0e988c6ac14802b05a29d062ddd93834e74802b5b2e`.
+The CPIO differs from V3 only in wrapper, guardian, startup script, and
+removal of the embedded lower archive. BOOT-specific failures request the
+unchanged RECOVERY instead of delegating Android second-stage init. Header
+fields, all payload hashes, module identity, and AVB descriptor were checked
+independently. An initial host verification invocation failed because
+avbtool resolves a BOOT descriptor to `boot.img`; this was corrected before
+any device write. No size or payload failure was bypassed.
+
+Native install preflight resolved only BOOT `/dev/sda14` (8:14), start248960,
+131072sectors, unmounted/no holders, matching the original raw backup hash.
+It staged the exact lower archive under `/cache/s22-linux/lower-rootfs.tar.xz`,
+wrote only BOOT, fsynced and read back the complete image hash. RECOVERY V3
+and vendor_boot remained byte-hash unchanged before/after. Receipt:
+`evidence/persistence-20260920/boot-write-receipt.json`.
+
+The restricted RESTART2 helper now also accepts literal `normal` (mapped to
+the kernel's default normal restart reason); no BCB/MISC path is used.
+At2026-09-20 07:48:18UTC, invoked `s22-reboot normal`. This entry records the
+attempt, not acceptance; the device is being left undisturbed for evidence.
+
+By07:56:01UTC (7m43s later), no native ECM USB, Samsung USB, ADB or Download
+endpoint had returned. No buttons, second flash or forced reset were issued.
+The runtime and actual BORE mode are unconfirmed because the device is not
+reachable. Capture: `evidence/persistence-20260920/boot-v2-no-usb.json`.
+The last accepted live state remains BORE519; physical RECOVERY entry is now
+needed. Do not claim a successful normal boot, cold power-on or current UI.
+
+Post-test host investigation found an omitted packaging gate: matching-kernel
+GZIP support does not make legacy-LZ4 vendor + GZIP generic concatenation
+valid. The AOSP vendor-boot contract requires generic last with matching
+compression. Exact vendor fragments decoded with host liblz4; at the GZIP
+boundary its magic becomes an LZ4 chunk size559903 and actual
+LZ4_decompress_safe returns-7. Adding a four-NUL terminator makes the parser
+stop and subsequent GZIP decode match the exact candidate CPIO, but this is
+not a physical acceptance result. A same-format LZ4 candidate with measured
+ELF dependency pruning is preferred. The missing concatenation test should
+have been caught before flashing. Phone BORE/pstore evidence is still needed
+to identify the actual boot failure and possible additional issues.
+
+Prepared a host-only next candidate, **not flashed**:
+`builds/native-boot-v3-lz4/boot.img`, SHA256
+`b0481f8888c6d54d8e8e4d885a8f991462d69962d837a9b55b595e9bbf270138`.
+Final size67,108,864; raw58,744,832; legacy-LZ4 ramdisk25,222,162 bytes.
+The recursive ELF closure has34 objects;62 unused system ELFs and15 optional
+tool symlinks were pruned, while recovery's marker is retained as an empty
+regular file. All324 modules/four metadata files match V3. Parent corrected
+the initial worker prototype's wrong paths, modern-vs-legacy LZ4 invocation,
+wrong reference ramdisk and incomplete dependency checks before building.
+Whole concatenated actual-vendor+generic decoding and the merged328 module
+file hashes passed, as did header/payload and AVB internal hash checks.
+Hardware remains inaccessible; these are preparation results, not boot proof.

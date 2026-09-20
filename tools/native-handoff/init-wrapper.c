@@ -1,9 +1,9 @@
 /*
  * AOSP first-stage preserving init wrapper.
  *
- * The ramdisk keeps /init as the shipping symlink. The shipping regular
- * binary is renamed to /system/bin/init.android and this program takes its
- * old pathname. Every invocation is delegated unchanged except the
+ * The ramdisk keeps /init as the shipping first-stage entrypoint. The
+ * shipping regular binary is renamed to /system/bin/init.android and this
+ * program takes its old pathname. Every invocation is delegated unchanged except the
  * selinux_setup transition, which is native-enabled only when the explicit
  * /native-enable marker exists.
  */
@@ -13,6 +13,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/reboot.h>
+#include <sys/syscall.h>
+#include <linux/reboot.h>
+#include <linux/watchdog.h>
+#include <sys/ioctl.h>
+#include <time.h>
 #include <unistd.h>
 
 static const char *const kOriginal = "/system/bin/init.android";
@@ -48,6 +54,27 @@ static int enabled(void) {
   return stat(kEnable, &st) == 0 && S_ISREG(st.st_mode);
 }
 
+#ifdef S22_BOOT_RECOVERY_FALLBACK
+static void restart_recovery(void) {
+  static const char target[] = "recovery";
+  int wd = open("/dev/watchdog", O_WRONLY | O_CLOEXEC);
+  for (int attempt = 1; attempt <= 3; ++attempt) {
+    sync();
+    long rc = syscall(SYS_reboot, LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
+                      LINUX_REBOOT_CMD_RESTART2, target);
+    log_message("BOOT recovery restart attempt %d returned rc=%ld errno=%d (%s)",
+                attempt, rc, errno, strerror(errno));
+    if (wd >= 0) (void)ioctl(wd, WDIOC_KEEPALIVE, 0);
+    sleep(1);
+  }
+  log_message("BOOT recovery restart unavailable; refusing Android delegation");
+  for (;;) {
+    if (wd >= 0) (void)ioctl(wd, WDIOC_KEEPALIVE, 0);
+    sleep(1);
+  }
+}
+#endif
+
 static int restore_aosp_init_path(void) {
   struct stat st;
   if (stat("/system/bin/init.wrapper", &st) == 0) {
@@ -82,8 +109,12 @@ int main(int argc, char **argv) {
     char *guardian_argv[] = {(char *)kGuardian, NULL};
     log_message("intercepting selinux_setup; native marker is present");
     execve(kGuardian, guardian_argv, environ);
-    log_message("exec %s failed: errno=%d (%s); falling back to AOSP", kGuardian,
-                errno, strerror(errno));
+    log_message("exec %s failed: errno=%d (%s)", kGuardian, errno, strerror(errno));
+#ifdef S22_BOOT_RECOVERY_FALLBACK
+    if (enabled()) restart_recovery();
+#else
+    log_message("falling back to AOSP");
+#endif
   }
   if (restore_aosp_init_path() == 0) {
     execve("/system/bin/init", argv, environ);

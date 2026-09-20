@@ -42,12 +42,14 @@ fingerprint property. The deterministic footer reuses the reference salt.
 
 `restart2.c` and `build_restart2.sh` produce
 `builds/headless_recovery_restart2_aarch64`, a static ARM64 helper accepting
-only `recovery` or `download`. It calls Linux `RESTART2` directly with the
+only `recovery`, `download`, or `normal`. The last target was added for the
+separately authorized BOOT experiment, not to enter the former Android install.
+It calls Linux `RESTART2` directly with the
 literal target consumed by the pinned Samsung `sec_reboot` notifier; it never
 writes Android BCB/MISC. Help and invalid-argument behavior were emulated with
 `qemu-aarch64-static`; no reboot target was invoked.
 
-## Verified artifacts
+## Original verified artifacts (before adding the normal target)
 
 ```
 builds/headless_recovery_key.img             cb8bd4cf1c47027c28278a30ae526667d6ba0fe55bdec6e026e6f2df6de8b654

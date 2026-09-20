@@ -3,8 +3,8 @@
  *
  * This calls Linux RESTART2 directly with the literal target consumed by the
  * matching sec_reboot notifier.  It never writes Android BCB/MISC and accepts
- * only "recovery" or "download".  It is intended for the RAM-backed recovery
- * environment; do not use it from normal Android or with arbitrary strings.
+ * only "recovery", "download", or "normal". The normal target is for the
+ * separately authorized native BOOT install. Do not use it from Android.
  */
 #include <errno.h>
 #include <linux/reboot.h>
@@ -14,13 +14,14 @@
 #include <unistd.h>
 
 static void usage(const char *argv0) {
-  dprintf(STDOUT_FILENO, "usage: %s recovery|download\n", argv0);
+  dprintf(STDOUT_FILENO, "usage: %s recovery|download|normal\n", argv0);
   dprintf(STDOUT_FILENO, "direct Linux RESTART2 selector; no BCB/MISC writes\n");
 }
 
 int main(int argc, char **argv) {
   if (argc != 2 || (strcmp(argv[1], "recovery") != 0 &&
-                    strcmp(argv[1], "download") != 0)) {
+                    strcmp(argv[1], "download") != 0 &&
+                    strcmp(argv[1], "normal") != 0)) {
     usage(argv[0]);
     return argc == 2 ? 2 : 1;
   }

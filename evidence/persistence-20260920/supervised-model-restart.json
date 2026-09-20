@@ -1,0 +1,72 @@
+{
+  "pid1": "native-guardian",
+  "uptime_seconds": 29940.92,
+  "bore_last": "518",
+  "boot_mode": "RECOVERY",
+  "mounts": [
+    "39 30 259:20 / /srv/s22 rw,nosuid,nodev,noatime - ext4 /dev/block/by-name/userdata rw,errors=remount-ro,stripe=128",
+    "40 30 259:20 /arch /mnt/omarchy-trial rw,nosuid,nodev,noatime - ext4 /dev/block/by-name/userdata rw,errors=remount-ro,stripe=128",
+    "41 40 0:30 / /mnt/omarchy-trial/dev rw,nosuid,relatime - tmpfs tmpfs rw,size=8192k,mode=755",
+    "42 40 0:31 / /mnt/omarchy-trial/run rw,nosuid,relatime - tmpfs tmpfs rw,size=65536k,mode=755",
+    "43 40 0:32 / /mnt/omarchy-trial/tmp rw,nosuid,relatime - tmpfs tmpfs rw,size=131072k",
+    "44 41 0:16 /dri /mnt/omarchy-trial/dev/dri rw,nosuid,relatime - tmpfs tmpfs rw,size=2659672k,nr_inodes=664918,mode=755",
+    "45 41 0:16 /input /mnt/omarchy-trial/dev/input rw,nosuid,relatime - tmpfs tmpfs rw,size=2659672k,nr_inodes=664918,mode=755",
+    "46 41 0:17 / /mnt/omarchy-trial/dev/pts rw,relatime - devpts devpts rw,mode=600,ptmxmode=000",
+    "47 40 0:18 / /mnt/omarchy-trial/proc ro,relatime - proc proc rw,gid=3009,hidepid=invisible",
+    "48 40 0:19 / /mnt/omarchy-trial/sys ro,relatime - sysfs sysfs rw",
+    "49 42 0:2 /run/udev /mnt/omarchy-trial/run/udev ro - rootfs rootfs rw,size=2436932k,nr_inodes=609233",
+    "50 41 0:16 /null /mnt/omarchy-trial/dev/null rw,nosuid,relatime - tmpfs tmpfs rw,size=2659672k,nr_inodes=664918,mode=755",
+    "51 41 0:16 /zero /mnt/omarchy-trial/dev/zero rw,nosuid,relatime - tmpfs tmpfs rw,size=2659672k,nr_inodes=664918,mode=755",
+    "52 41 0:16 /random /mnt/omarchy-trial/dev/random rw,nosuid,relatime - tmpfs tmpfs rw,size=2659672k,nr_inodes=664918,mode=755",
+    "53 41 0:16 /urandom /mnt/omarchy-trial/dev/urandom rw,nosuid,relatime - tmpfs tmpfs rw,size=2659672k,nr_inodes=664918,mode=755",
+    "54 40 0:26 /etc/resolv.conf /mnt/omarchy-trial/etc/resolv.conf ro,relatime - overlay overlay rw,lowerdir=/native-lower,upperdir=/cache/s22-linux/upper,workdir=/cache/s22-linux/work",
+    "55 30 259:20 /model-bench /mnt/model-bench rw,nosuid,nodev,noatime - ext4 /dev/block/by-name/userdata rw,errors=remount-ro,stripe=128",
+    "56 40 259:20 /model-bench /mnt/omarchy-trial/mnt/model-bench ro,nosuid,nodev,noatime - ext4 /dev/block/by-name/userdata rw,errors=remount-ro,stripe=128"
+  ],
+  "processes": [
+    {
+      "pid": 19291,
+      "comm": "seatd",
+      "cmdline": "/usr/bin/seatd -u root -g root "
+    },
+    {
+      "pid": 19294,
+      "comm": "Hyprland",
+      "cmdline": "/usr/bin/Hyprland --i-am-really-stupid --config /root/hyprland-omarchy-ui.lua "
+    },
+    {
+      "pid": 19362,
+      "comm": "foot",
+      "cmdline": "foot --font=DejaVu Sans Mono:size=12 --title=S22-local-chat sh -c python3 /usr/local/bin/s22-chat; exec bash --noprofile --norc "
+    },
+    {
+      "pid": 19387,
+      "comm": "quickshell",
+      "cmdline": "quickshell -n -p /opt/s22-ui/shell "
+    },
+    {
+      "pid": 21637,
+      "comm": "ld-linux-aarch6",
+      "cmdline": "/mnt/model-bench/server/libc/ld-linux-aarch64.so.1 --library-path /mnt/model-bench/server/libc:/mnt/model-bench/server/lib /mnt/model-bench/server/bin/llama-server -m /mnt/model-bench/models/Qwen3.5-2B-Q4_0.gguf -t 4 -C f0 --cpu-strict 1 -c 4096 -np 1 -ngl 0 --host 127.0.0.1 --port 8089 --no-webui "
+    }
+  ],
+  "model_health": {
+    "status": "ok"
+  },
+  "runtime_marker": {
+    "arch": "/srv/s22/arch",
+    "desktop_pid": 19292,
+    "device": "/dev/block/by-name/userdata",
+    "model": "/srv/s22/model-bench",
+    "model_pid": 21637,
+    "model_port": 8089,
+    "model_restarts": 1,
+    "started_at": 1789888534,
+    "supervisor_pid": 19216,
+    "uuid": "1dd55c26-bd57-489a-9d9b-4c60e6f430eb"
+  },
+  "mem_available_kib": 4723296,
+  "battery_temperature_c": 37.6,
+  "physical_touch_verified": false,
+  "captured_utc": "2026-09-20T07:21:25.692449+00:00"
+}
