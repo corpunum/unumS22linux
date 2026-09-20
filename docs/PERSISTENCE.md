@@ -1,8 +1,18 @@
 # Persistent, standalone S22 Linux: decision and implementation plan
 
-Status: **proposal only**, checked against the live phone on 2026-09-20.
-No storage migration, partition format, new image flash or boot-target change
-was performed for this assessment.
+Status: **persistent desktop/model recovery autostart verified; normal BOOT
+attempt unconfirmed**, 2026-09-20.
+The owner explicitly accepted possible loss of Android data after the raw
+backup completed. The exact userdata partition has now been formatted as
+ext4 and successfully mounted; the partition table is unchanged. Private raw
+capture is checksum-verified for 15 selected partitions, but readable personal
+file recovery remains unverified. See the
+[preparation record](PERSISTENCE_PREPARATION_2026-09-20.md) and
+[migration record](PERSISTENCE_MIGRATION_2026-09-20.md).
+BOOT was subsequently written/read back at approximately 07:48 UTC, but its
+normal reboot did not return SSH, ADB, or Download USB by 07:56 UTC. RECOVERY
+and vendor_boot remain unchanged. This does not establish a working normal
+boot.
 
 ## Three separate requirements
 
@@ -14,23 +24,24 @@ was performed for this assessment.
    the correct Linux boot path after full power-off. Persistent files alone do
    not change Samsung's boot-target selection.
 
-The small Alpine base already satisfies file persistence and automatic rescue
-desktop/SSH startup through its CACHE overlay. Arch/Omarchy and the model do
-not. Targeted `s22-reboot recovery` works, but ordinary cold-power-on Linux
-selection is not proven or installed.
+Alpine rescue remains CACHE-backed. Arch/Omarchy and the model now live on
+userdata ext4 and started automatically in BORE519, without host restaging.
+Requirements 1 and 2 passed in BORE519 recovery (15.81-second readiness and
+77-second stable sample). Normal cold-power-on/Linux selection is unconfirmed
+after the BOOT attempt.
 
 ## What the live phone provides
 
 | Item | Observed state |
 | --- | --- |
-| CACHE-backed overlay | 582.6 MiB filesystem; 495.9 MiB used; 74.6 MiB free |
-| Arch UI staging | Roughly 1.8 GiB in tmpfs |
-| Model staging | Roughly 1.2 GiB in tmpfs, plus inference working memory |
+| CACHE-backed overlay | 582.6 MiB filesystem, rescue packages/configuration |
+| Arch UI | Persistent `/srv/s22/arch`, runtime bind `/mnt/omarchy-trial` |
+| Model/runtime | Persistent `/srv/s22/model-bench`, runtime bind `/mnt/model-bench` |
 | userdata | 221,257,728 sectors × 512 bytes ≈ 105.5 GiB |
-| userdata access | No recognized filesystem signature from the read-only probe; no decrypted device-mapper volume present |
+| userdata access | Converted ext4; UUID 1dd55c26-bd57-489a-9d9b-4c60e6f430eb; about100GiB free |
 | Boot/recovery sizes | BOOT 64 MiB; RECOVERY 96 MiB; not interchangeable image targets |
 
-The matching device-tree fstab configures F2FS, file-based encryption,
+Before conversion, the matching device-tree fstab configured F2FS, file-based encryption,
 metadata encryption and wrapped keys for userdata. Combined with the live
 probe, this is evidence that the existing Android data volume is **not a
 ready-to-mount spare Linux disk**. It is not proof that the volume is empty.
@@ -42,12 +53,12 @@ depends on the Android key-management path. See the
 A file-backed Linux image would only help if its underlying encrypted storage
 could first be accessed reliably at native boot. That has not been established.
 
-## Recommended route for a dedicated Linux handheld
+## Original migration plan and remaining tests
 
-If the owner accepts losing Android's existing userdata, **reuse the existing
-userdata partition as a Linux filesystem without changing the partition
-table**. This is a proposed destructive conversion, not an authorized command.
-Prefer ext4 for the first validated port; the running kernel supports it.
+The owner accepted the loss risk and the existing userdata partition was
+converted to ext4 without changing the partition table. **Do not format it
+again.** The original sequence is preserved below for context, not as an
+instruction to repeat completed destructive work.
 
 Before implementation:
 
@@ -78,8 +89,10 @@ Before implementation:
    missing-storage recovery, and startup with the host disconnected. Back up
    writable configuration; keep a separate rescue copy.
 
-Existing data loss requires explicit authorization. This plan does not grant
-it and the current scripts do not implement it.
+The owner explicitly accepted raw-only recovery risk; the conversion and
+recovery autostart are complete. Raw snapshots still do not establish readable file
+recovery. The backup helpers themselves deliberately do not format, flash or
+authorize erasure; authority came separately from the owner.
 
 ## Nondestructive alternative: USB-C storage
 
@@ -99,9 +112,12 @@ does not make the phone a standalone installation.
 For now, retain the verified recovery reboot target. Do not write a handcrafted
 MISC/BCB record: the previous attempt failed Samsung integrity checking.
 
-A future conventional Linux BOOT image could be investigated while preserving
-RECOVERY as rescue, but that requires **separate explicit BOOT-write authority**,
-correct boot/vendor_boot/DTB/header/size handling and a verified rollback.
+A conventional Linux BOOT image was authorized, written, and read back with
+SHA256 `4aeb801486e35e2c71dab0e988c6ac14802b05a29d062ddd93834e74802b5b2e`.
+The normal reboot produced no host connection before the bounded observation
+ended, so boot mode/runtime remain unknown. Compression-boundary behavior is a
+current suspicion without phone evidence. RECOVERY remains the last accepted
+rescue path; do not claim normal-BOOT success or repeat a write yet.
 Do not flash the 96 MiB recovery image into the 64 MiB BOOT partition. No
 bootloader replacement or PIT change is proposed. Cold-power-on acceptance
 requires an actual power-cycle test, not an `adb reboot` observation.

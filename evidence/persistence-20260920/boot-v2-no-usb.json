@@ -1,0 +1,28 @@
+{
+  "captured_utc": "2026-09-20T07:56:01.398244+00:00",
+  "normal_reboot_utc": "2026-09-20T07:48:18+00:00",
+  "boot_mode": "UNCONFIRMED",
+  "runtime": "UNCONFIRMED",
+  "checks": {
+    "native_ecm": {
+      "returncode": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    "samsung_usb": {
+      "returncode": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    "adb": {
+      "returncode": 0,
+      "stdout": "List of devices attached",
+      "stderr": ""
+    },
+    "download": {
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "ERROR: Failed to detect compatible download-mode device."
+    }
+  }
+}

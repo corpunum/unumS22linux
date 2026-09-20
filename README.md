@@ -5,18 +5,26 @@ Exynos 2200, codename `r0s`, unlocked bootloader. This is the S22, not S22+.
 
 ## Current result — 2026-09-20
 
-The phone boots **Alpine Linux ARM64 from RECOVERY**, with no running Android
-services. A RAM-staged **Arch Linux ARM + Hyprland + actual Omarchy Quickshell
-UI**, terminal and Squeekboard runs on its internal display. A local,
-CPU-only **Qwen3.5-2B** model serves streaming terminal chat.
+**Current limitation:** the experimental BOOT image was written and read back,
+but the normal reboot at07:48:18UTC had no USB/SSH return by07:56UTC. Normal
+boot mode/runtime are **unconfirmed**. RECOVERY and vendor_boot were unchanged.
+See the [BOOT experiment](tools/native-boot/README.md); physical rescue is
+needed before another device test.
 
-[Actual screen capture](evidence/driver-model-20260920/omarchy-resident-chat.png)
+The last accepted session, BORE519, ran **Alpine Linux ARM64 from RECOVERY**,
+with no Android services. Persistent **Arch Linux ARM + Hyprland + actual
+Omarchy Quickshell UI**, terminal, Squeekboard and a local CPU-only
+**Qwen3.5-2B** streaming chat model started automatically after reboot.
+Readiness was observed at15.81s, and the stable sample passed77s uptime.
+
+[Actual screen capture after reboot](evidence/persistence-20260920/persistent-after-reboot-chat.png)
 and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 
-| Component | Verified state |
+| Component | Last verified state |
 | --- | --- |
 | Native boot | Alpine 3.24.2; guardian PID1; Samsung/Lineage 5.10.260 kernel |
 | Persistent base | Alpine package/file overlay in existing CACHE; reboot-tested |
+| Persistent desktop/model | ext4 userdata; automatic recovery startup verified at BORE 519 |
 | Desktop | Arch ARM, Hyprland 0.56.2, Omarchy v4.0.4; software-rendered |
 | Keyboard/input | Visible Squeekboard; synthetic touchscreen-to-chat test passed; physical finger sensing not verified remotely |
 | Local model | Resident Qwen3.5-2B Q4_0, 4K context, four fast CPU cores, loopback-only API |
@@ -28,11 +36,12 @@ and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 Short resident chat tests started streaming in 0.4–0.7 seconds. Those samples
 are not sustained agent benchmarks. The chat client does not execute commands.
 
-**This is not a complete persistent Omarchy installation or a daily-driver
-phone.** The Arch desktop, runtime and model currently live in RAM. The base
-Linux overlay persists, but the large components need host restoration after
-reboot. Normal cold-power-on routing has not been converted to Linux.
-See [the persistence plan](docs/PERSISTENCE.md).
+**This is not a complete Omarchy distribution or a daily-driver phone.** The
+Arch desktop, runtime and model now persist on userdata and start automatically
+on recovery boot, without host restoration. Normal cold-power-on routing is
+unconfirmed after the BOOT attempt. Native signed
+package installation currently hits a kernel/runtime helper hang; host-verified
+package deployment works. See [the migration record](docs/PERSISTENCE_MIGRATION_2026-09-20.md).
 
 ## Architecture and safety
 
@@ -41,10 +50,12 @@ the native guardian before Android services start. Android recovery binaries
 remain available for rescue. This is not mainline Linux and not a chroot over
 a running Android userspace; the Arch desktop chroot runs over native Alpine.
 
-- Raw image writes are limited to **RECOVERY**. No BOOT, MISC, PIT, EFS,
-  IMEI, bootloader or TrustZone modification is authorized.
+- The owner approved userdata conversion after private backup and explicit
+  data-loss acceptance, then separately approved BOOT work while preserving
+  RECOVERY rescue. No MISC, PIT, EFS, IMEI, bootloader or TrustZone changes.
 - Ordinary files under the existing CACHE Linux directory provide the base
-  overlay. CACHE and userdata were not reformatted for this installation.
+  overlay. CACHE was not reformatted; userdata was intentionally converted
+  to ext4, replacing Android's old userdata filesystem.
 - Keep the hash-verified Lineage recovery rollback available before any
   image experiment. Use the documented flash gate; never bypass tool blocks.
 - Targeted `s22-reboot recovery` has been verified without physical buttons.

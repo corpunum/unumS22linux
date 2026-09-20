@@ -2,8 +2,8 @@
 # Filesystem flush before the raw Samsung Linux RESTART2 selector.
 set -eu
 case "${1:-}" in
-  recovery|download) ;;
-  *) printf 'Usage: s22-reboot recovery|download\n' >&2; exit 2 ;;
+  recovery|download|normal) ;;
+  *) printf 'Usage: s22-reboot recovery|download|normal\n' >&2; exit 2 ;;
 esac
 [ "$(readlink /proc/1/exe)" = /system/bin/native-guardian ] || {
   printf 'This helper is for the native Linux session only.\n' >&2

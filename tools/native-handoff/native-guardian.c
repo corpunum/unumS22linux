@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/watchdog.h>
+#include <linux/reboot.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -20,6 +21,8 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/reboot.h>
+#include <sys/syscall.h>
 
 static const char *const kNativeStart = "/native/native-start";
 static const char *const kNativeLoader = "/native/lib/ld-musl-aarch64.so.1";
@@ -37,6 +40,29 @@ static pid_t native_pid = -1;
 static int ack_confirmed = 0;
 static int timeout_elapsed = 0;
 static int watchdog_failures = 0;
+
+static void log_message(const char *fmt, ...);
+static int pet_watchdog(void);
+
+#ifdef S22_BOOT_RECOVERY_FALLBACK
+static void restart_recovery(void) {
+  static const char target[] = "recovery";
+  for (int attempt = 1; attempt <= 3; ++attempt) {
+    sync();
+    long rc = syscall(SYS_reboot, LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
+                      LINUX_REBOOT_CMD_RESTART2, target);
+    log_message("BOOT recovery restart attempt %d returned rc=%ld errno=%d (%s)",
+                attempt, rc, errno, strerror(errno));
+    (void)pet_watchdog();
+    sleep(1);
+  }
+  log_message("BOOT recovery restart unavailable; refusing Android delegation");
+  for (;;) {
+    (void)pet_watchdog();
+    sleep(1);
+  }
+}
+#endif
 
 static void log_message(const char *fmt, ...) {
   char message[1024];
@@ -204,6 +230,9 @@ static void terminate_native(void) {
 
 static void fallback_to_aosp(const char *reason) {
   log_message("native fallback: %s", reason);
+#ifdef S22_BOOT_RECOVERY_FALLBACK
+  restart_recovery();
+#endif
   terminate_native();
   cleanup_gadget();
   if (restore_aosp_init_path() != 0) {

@@ -1,0 +1,27 @@
+candidate=/home/corpunum/s22-linux/rootfs/persistent-arch-candidate-20260920
+utc=2026-09-20T06:28:14Z
+package_count=346
+[pacman -Dk]
+No database errors have been found!
+[pacman -Qk summary]
+packages=346, missing_files=0
+[ownership]
+/usr/bin/python3 is owned by python 3.14.7-1
+/usr/bin/Hyprland is owned by hyprland 0.56.2-3
+/usr/bin/squeekboard is owned by squeekboard 1.43.1-5
+/usr/lib/libgnome-desktop-3.so.20.0.0 is owned by gnome-desktop 1:44.5-1
+/usr/lib/libgmobile.so.0 is owned by libgmobile 0.7.3-1
+/usr/lib/libaquamarine.so.14 is owned by aquamarine 0.15.1-1
+[schema]
+gschemas.compiled 44751 bytes
+org.gnome.desktop.enums.xml 8013 bytes
+[canonical-chat]
+tools/linux-rootfs/s22-chat-http.py = rootfs/persistent-arch-candidate-20260920/usr/local/bin/s22-chat
+sha256=1f8cf8949103c3771045c652d2b2ea607ecbd65e080e04139c30de0eb9b1bb16
+[custom-aquamarine]
+rootfs/aquamarine-s22-lib-gcc16/libaquamarine.so.0.15.1 = candidate/opt/s22-aquamarine/libaquamarine.so.0.15.1
+sha256=6fb3f4377ac3d14e4d74a18bdc5316e0acc23779e6894a1dab449cdb294d42ca
+[shell]
+/opt/s22-ui/shell -> /opt/omarchy-source/shell
+[runtime]
+Python 3.14.7
