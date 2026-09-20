@@ -1,0 +1,24 @@
+/dev/block/by-name/cache: LABEL="cache" UUID="4407af69-34ae-4723-bbd4-2242385f528e" TYPE="ext4"
+Filesystem           1K-blocks      Used Available Use% Mounted on
+/dev/block/by-name/cache
+                        596544      7448    576808   1% /mnt/cache-ro
+7448	/mnt/cache-ro
+total 48
+drwxrwx---    7 1000     2001          4096 Sep 18 14:48 .
+drwxr-xr-x    3 root     root            60 Sep 19 20:26 ..
+drwx------    2 1000     1000          4096 Sep 18 14:48 backup
+drwx------    2 1000     1000          4096 Sep 18 14:48 backup_stage
+drwxrwx---    2 1000     1000          4096 Sep 18 14:48 fota
+drwxrwx---    2 root     root         16384 Sep 18 14:48 lost+found
+drwxrwx---    2 1000     2001          4096 Sep 19 17:55 recovery
+total 0
+crw-------    1 root     root      249,  13 Sep 19 20:24 camera
+crw-------    1 root     root      249,  14 Sep 19 20:24 camera-uncached
+crw-------    1 root     root      249,   4 Sep 19 20:24 crypto
+crw-------    1 root     root      249,   5 Sep 19 20:24 crypto-uncached
+crw-------    1 root     root      249,  10 Sep 19 20:24 secure_camera-secure
+crw-------    1 root     root      249,   8 Sep 19 20:24 secure_dsp
+crw-------    1 root     root      249,   9 Sep 19 20:24 secure_dsp-uncached
+crw-------    1 root     root      249,  11 Sep 19 20:24 system
+crw-------    1 root     root      249,   3 Sep 19 20:24 system-secure-gpu_buffer-secure
+110.13 861.73

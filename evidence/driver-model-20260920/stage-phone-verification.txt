@@ -1,0 +1,1 @@
+Verified 2B CPU chat is ready. Phone command: s22-chat. Weights remain RAM-only.

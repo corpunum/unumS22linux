@@ -1,0 +1,617 @@
+FILE rootfs/npu-vendor-assets-decompressed/libenn_gc_vendor.so__533
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+ 0x00000001 (NEEDED)                     Shared library: [liblog.so]
+ 0x00000001 (NEEDED)                     Shared library: [libcutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_klm_vendor.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_gc_vendor.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_user.samsung_slsi.so__53a
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+ 0x00000001 (NEEDED)                     Shared library: [vendor.samsung_slsi.hardware.enn@1.0.so]
+ 0x00000001 (NEEDED)                     Shared library: [libhidlbase.so]
+ 0x00000001 (NEEDED)                     Shared library: [libhidlmemory.so]
+ 0x00000001 (NEEDED)                     Shared library: [android.hidl.memory@1.0.so]
+ 0x00000001 (NEEDED)                     Shared library: [liblog.so]
+ 0x00000001 (NEEDED)                     Shared library: [libcutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_common_utils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdmabufheap.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_user.samsung_slsi.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_user_driver_gpu.so__53c
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+ 0x00000001 (NEEDED)                     Shared library: [vendor.samsung_slsi.hardware.enn@1.0.so]
+ 0x00000001 (NEEDED)                     Shared library: [libhidlbase.so]
+ 0x00000001 (NEEDED)                     Shared library: [libhidlmemory.so]
+ 0x00000001 (NEEDED)                     Shared library: [android.hidl.memory@1.0.so]
+ 0x00000001 (NEEDED)                     Shared library: [liblog.so]
+ 0x00000001 (NEEDED)                     Shared library: [libcutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdmabufheap.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_common_utils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libOpenCL.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_user_driver_gpu.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_profiler.so__536
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+ 0x00000001 (NEEDED)                     Shared library: [liblog.so]
+ 0x00000001 (NEEDED)                     Shared library: [libcutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_common_utils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdmabufheap.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_profiler.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_public_api_cpp.so__7c0
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_user.samsung_slsi.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_public_api_cpp.so]
+FILE rootfs/npu-vendor-assets-decompressed/libivp.elf__434
+  Class:                             ELF32
+  Type:                              REL (Relocatable file)
+  Machine:                           None
+FILE rootfs/npu-vendor-assets-decompressed/libenn_user_lib.so__53f
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+ 0x00000001 (NEEDED)                     Shared library: [liblog.so]
+ 0x00000001 (NEEDED)                     Shared library: [libcutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_common_utils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdmabufheap.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_engine_lib.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_user_lib.so]
+FILE rootfs/npu-vendor-assets-decompressed/libsait_npu_compiler.so__841
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [libir.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcommon.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x000000000000000e (SONAME)             Library soname: [libsait_npu_compiler.so]
+FILE rootfs/npu-vendor-assets-decompressed/libnpu_compiler.so__82c
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [libsait_npu_compiler.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcrane_compiler.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdove_compiler.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libir.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcommon.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x000000000000000e (SONAME)             Library soname: [libnpu_compiler.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_engine.so__531
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+ 0x00000001 (NEEDED)                     Shared library: [vendor.samsung_slsi.hardware.enn@1.0.so]
+ 0x00000001 (NEEDED)                     Shared library: [libhidlbase.so]
+ 0x00000001 (NEEDED)                     Shared library: [libhidlmemory.so]
+ 0x00000001 (NEEDED)                     Shared library: [android.hidl.memory@1.0.so]
+ 0x00000001 (NEEDED)                     Shared library: [liblog.so]
+ 0x00000001 (NEEDED)                     Shared library: [libcutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_common_utils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdmabufheap.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_model.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_user_driver_cpu.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_user_driver_gpu.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_user_driver_unified.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_engine.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_klm_vendor.so__534
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+ 0x00000001 (NEEDED)                     Shared library: [liblog.so]
+ 0x00000001 (NEEDED)                     Shared library: [libcutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_klm_vendor.so]
+FILE rootfs/npu-vendor-assets-decompressed/libhdraid.npu.arcsoft.so__562
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x00000001 (NEEDED)                     Shared library: [libmpbase.so]
+ 0x00000001 (NEEDED)                     Shared library: [liblog.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x0000000e (SONAME)                     Library soname: [libhdraid.npu.arcsoft.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_user_driver_gpu.so__7c5
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [vendor.samsung_slsi.hardware.enn@1.0.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libhidlbase.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libhidlmemory.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [android.hidl.memory@1.0.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdmabufheap.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_common_utils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libOpenCL.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_user_driver_gpu.so]
+FILE rootfs/npu-vendor-assets-decompressed/libhdraid.npu.arcsoft.so__7fb
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [libsnap_vndk.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libmpbase.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libhdraid.npu.arcsoft.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_common_utils.so__7b6
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [vendor.samsung_slsi.hardware.enn@1.0.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libhidlbase.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libhidlmemory.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [android.hidl.memory@1.0.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_common_utils.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_engine_lib.so__7bb
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_common_utils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdmabufheap.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_model.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_user_driver_cpu.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_user_driver_gpu_lib.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_user_driver_unified.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_engine_lib.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_user_driver_cpu.so__7c4
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdmabufheap.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_common_utils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_user_driver_cpu.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_user_driver_cpu.so__53b
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+ 0x00000001 (NEEDED)                     Shared library: [liblog.so]
+ 0x00000001 (NEEDED)                     Shared library: [libcutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdmabufheap.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_common_utils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_user_driver_cpu.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_dsp_fw_graph_parser.so__7b8
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_dsp_fw_graph_parser.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_engine.so__7ba
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [vendor.samsung_slsi.hardware.enn@1.0.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libhidlbase.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libhidlmemory.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [android.hidl.memory@1.0.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_common_utils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdmabufheap.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_model.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_user_driver_cpu.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_user_driver_gpu.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_user_driver_unified.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_engine.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_user.samsung_slsi.so__7c3
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [vendor.samsung_slsi.hardware.enn@1.0.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libhidlbase.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libhidlmemory.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [android.hidl.memory@1.0.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_common_utils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdmabufheap.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_user.samsung_slsi.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_dsp_dal.so__7b7
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_dsp_dal.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_wrapper.so__7c9
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_public_api_cpp_lib.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_wrapper.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_public_api_cpp_lib.so__7c1
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_user_lib.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_public_api_cpp_lib.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_klm_vendor.so__7bd
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_klm_vendor.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_model.so__7be
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [vendor.samsung_slsi.hardware.enn@1.0.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libhidlbase.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libhidlmemory.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [android.hidl.memory@1.0.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_common_utils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdmabufheap.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_model.so]
+FILE rootfs/npu-vendor-assets-decompressed/libnn_af16wf16.elf__438
+  Class:                             ELF32
+  Type:                              REL (Relocatable file)
+  Machine:                           None
+FILE rootfs/npu-vendor-assets-decompressed/libenn_profiler.so__7bf
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_common_utils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdmabufheap.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_profiler.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_model.so__535
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+ 0x00000001 (NEEDED)                     Shared library: [vendor.samsung_slsi.hardware.enn@1.0.so]
+ 0x00000001 (NEEDED)                     Shared library: [libhidlbase.so]
+ 0x00000001 (NEEDED)                     Shared library: [libhidlmemory.so]
+ 0x00000001 (NEEDED)                     Shared library: [android.hidl.memory@1.0.so]
+ 0x00000001 (NEEDED)                     Shared library: [liblog.so]
+ 0x00000001 (NEEDED)                     Shared library: [libcutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_common_utils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdmabufheap.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_model.so]
+FILE rootfs/npu-vendor-assets-decompressed/libeden_ud_npu.so__7a7
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [libeden_model.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libeden_profiler.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libeden_osal.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x000000000000000e (SONAME)             Library soname: [libeden_ud_npu.so]
+FILE rootfs/npu-vendor-assets-decompressed/libnn_sdma.elf__439
+  Class:                             ELF32
+  Type:                              REL (Relocatable file)
+  Machine:                           None
+FILE rootfs/npu-vendor-assets-decompressed/libenn_seva_vendor.so__7c2
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_user.samsung_slsi.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_klm_vendor.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_gc_vendor.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_seva_vendor.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_user_driver_unified.so__53e
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+ 0x00000001 (NEEDED)                     Shared library: [liblog.so]
+ 0x00000001 (NEEDED)                     Shared library: [libcutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdmabufheap.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_common_utils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_user_driver_unified.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_user_driver_gpu_lib.so__7c6
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdmabufheap.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_common_utils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libOpenCL.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_user_driver_gpu_lib.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_user_driver_gpu_lib.so__53d
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+ 0x00000001 (NEEDED)                     Shared library: [liblog.so]
+ 0x00000001 (NEEDED)                     Shared library: [libcutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdmabufheap.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_common_utils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libOpenCL.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_user_driver_gpu_lib.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_public_api_cpp.so__537
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+ 0x00000001 (NEEDED)                     Shared library: [libenn_user.samsung_slsi.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_public_api_cpp.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_engine_lib.so__532
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+ 0x00000001 (NEEDED)                     Shared library: [liblog.so]
+ 0x00000001 (NEEDED)                     Shared library: [libcutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_common_utils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdmabufheap.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_model.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_user_driver_cpu.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_user_driver_gpu_lib.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_user_driver_unified.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_engine_lib.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_dsp_kernels_cpu.so__7b9
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_dsp_kernels_cpu.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_user_driver_unified.so__7c7
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdmabufheap.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_common_utils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_user_driver_unified.so]
+FILE rootfs/npu-vendor-assets-decompressed/libnn.elf__437
+  Class:                             ELF32
+  Type:                              REL (Relocatable file)
+  Machine:                           None
+FILE rootfs/npu-vendor-assets-decompressed/liblog.elf__435
+  Class:                             ELF32
+  Type:                              REL (Relocatable file)
+  Machine:                           None
+FILE rootfs/npu-vendor-assets-decompressed/libenn_seva_vendor.so__539
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+ 0x00000001 (NEEDED)                     Shared library: [liblog.so]
+ 0x00000001 (NEEDED)                     Shared library: [libcutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_user.samsung_slsi.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_klm_vendor.so]
+ 0x00000001 (NEEDED)                     Shared library: [libenn_gc_vendor.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_seva_vendor.so]
+FILE rootfs/npu-vendor-assets-decompressed/libann.elf__432
+  Class:                             ELF32
+  Type:                              REL (Relocatable file)
+  Machine:                           None
+FILE rootfs/npu-vendor-assets-decompressed/libenn_public_api_cpp_lib__7c1
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_user_lib.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_public_api_cpp_lib.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_public_api_cpp_lib.so__538
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+ 0x00000001 (NEEDED)                     Shared library: [libenn_user_lib.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_public_api_cpp_lib.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_gc_vendor.so__7bc
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_klm_vendor.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_gc_vendor.so]
+FILE rootfs/npu-vendor-assets-decompressed/libme_rta_pamir.elf__436
+  Class:                             ELF32
+  Type:                              REL (Relocatable file)
+  Machine:                           None
+FILE rootfs/npu-vendor-assets-decompressed/libenn_common_utils.so__530
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+ 0x00000001 (NEEDED)                     Shared library: [vendor.samsung_slsi.hardware.enn@1.0.so]
+ 0x00000001 (NEEDED)                     Shared library: [libhidlbase.so]
+ 0x00000001 (NEEDED)                     Shared library: [libhidlmemory.so]
+ 0x00000001 (NEEDED)                     Shared library: [android.hidl.memory@1.0.so]
+ 0x00000001 (NEEDED)                     Shared library: [liblog.so]
+ 0x00000001 (NEEDED)                     Shared library: [libcutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libutils.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_common_utils.so]
+FILE rootfs/npu-vendor-assets-decompressed/libenn_user_lib.so__7c8
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_common_utils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdmabufheap.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libenn_engine_lib.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x000000000000000e (SONAME)             Library soname: [libenn_user_lib.so]

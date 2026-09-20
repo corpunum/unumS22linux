@@ -1,0 +1,1 @@
+Read-only kernel metadata and existing Weston socket mounted; no block/DRM devices exposed.

@@ -1,0 +1,1 @@
+ecb5ab0c75abb0bbb5e41cb1b9c017229974b87ec061c51110a580435439104d  rootfs/arch-omarchy-trial.tar.gz

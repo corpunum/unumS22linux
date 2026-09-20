@@ -1,0 +1,4 @@
+HTTP/2 200 
+default via 10.55.0.1 dev usb0 
+10.55.0.0/24 dev usb0 proto kernel scope link src 10.55.0.2 
+nameserver 10.55.0.1

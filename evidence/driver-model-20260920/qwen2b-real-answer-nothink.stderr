@@ -1,0 +1,26 @@
+warning: no usable GPU found, --gpu-layers option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+0.00.024.663 I llama_completion: llama backend init
+0.00.024.761 I llama_completion: load the model and apply lora adapter, if any
+0.02.316.941 I cmn          init: llama threadpool init, n_threads = 4
+0.02.412.293 I 
+0.02.412.423 I system_info: n_threads = 4 (n_threads_batch = 4) / 8 | CPU : NEON = 1 | ARM_FMA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | REPACK = 1 | 
+0.02.412.423 I 
+0.02.412.852 I sampler seed: 3054591062
+0.02.412.864 I sampler params: 
+	repeat_last_n = 64, repeat_penalty = 1.000, frequency_penalty = 0.000, presence_penalty = 0.000
+	dry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = 64
+	top_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.800
+	mirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000, adaptive_target = -1.000, adaptive_decay = 0.900
+0.02.412.874 I sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+0.02.412.874 I generate: n_ctx = 4096, n_batch = 2048, n_predict = 128, n_keep = 0
+0.02.412.874 I 
+0.07.235.984 I common_perf_print:    sampling time =      21.15 ms
+0.07.235.987 I common_perf_print:    samplers time =       9.14 ms /    94 tokens
+0.07.235.991 I common_perf_print:        load time =    1163.06 ms
+0.07.235.993 I common_perf_print: prompt eval time =     849.28 ms /    56 tokens (   15.17 ms per token,    65.94 tokens per second)
+0.07.235.994 I common_perf_print:        eval time =    3948.43 ms /    37 runs   (  106.71 ms per token,     9.37 tokens per second)
+0.07.235.995 I common_perf_print:       total time =    4823.70 ms /    93 tokens
+0.07.235.996 I common_perf_print: unaccounted time =       4.84 ms /   0.1 %      (total - sampling - prompt eval - eval) / (total)
+0.07.235.996 I common_perf_print:    graphs reused =         36

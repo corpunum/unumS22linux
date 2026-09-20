@@ -1,0 +1,2 @@
+Sat Sep 19 23:00:03 UTC 2026
+{'card': '/dev/dri/card1', 'crtc_id': 184, 'fb_id': 196, 'fb_size': [1080, 2340], 'window': [0, 0, 1080, 2340], 'format': 'XR24', 'modifier': 0, 'handle': 1, 'pitch': 4320, 'offset': 0, 'mapped_bytes': 10108800, 'output': '/tmp/omarchy-hi-reply.png'}

@@ -1,0 +1,10 @@
+[ WARNING ] Running Hyprland with superuser privileges might damage your system
+[1;32mDEBUG [0m]: User-specified config location: '/root/hyprland-minimal.lua'
+Superuser privileges check is omitted. I hope you know what you're doing.
+[1;32mDEBUG [0m]: [cfg] Config is either explicit or special.
+[1;32mDEBUG [0m]: [cfg] Config is lua, loading lua mgr
+
+
+======== Config parsing result:
+
+config ok

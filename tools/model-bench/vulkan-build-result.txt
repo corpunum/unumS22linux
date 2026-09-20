@@ -1,0 +1,11 @@
+source_commit=e613ef2c81bae98d59850d061ac29e6e3e88cb00
+config=GGML_VULKAN=ON GGML_NATIVE=OFF GGML_CPU_ARM_ARCH=armv8.6-a+dotprod+i8mm GGML_OPENMP=OFF LLAMA_BUILD_TESTS=OFF LLAMA_BUILD_SERVER=OFF
+artifact_tar=tools/model-bench-vulkan.tar.gz
+d48697af4fe53e9778305d16d88e94e7ad44cb590d35cd76716972c68e828547  tools/model-bench-vulkan.tar.gz
+binaries=llama-bench llama-completion
+rootfs/model-bench-vulkan/bin/llama-bench:      ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-aarch64.so.1, BuildID[xxHash]=52c9af58ed343740, with debug_info, not stripped
+rootfs/model-bench-vulkan/bin/llama-completion: ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-aarch64.so.1, BuildID[xxHash]=4ffad26058bc84ed, with debug_info, not stripped
+no_runpath_verified=1
+vulkan_runtime=libvulkan.so.1 bundled; RADV via VK_DRIVER_FILES external
+aggregate_llama=not linked because disabled server/cli impl references
+phone_commands=none

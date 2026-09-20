@@ -1,0 +1,223 @@
+Sat Sep 19 22:53:29 UTC 2026
+7680.93 57937.53
+loader_api=1.4.347
+sgpu: bo_alloc heap=2 flags=0x81 size=4096 align=8
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7f7f675000
+sgpu: ib_mapped=0x7f7f675000 bo_va=0xffff800100001000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=704 align=4096
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7f7f6c9000
+sgpu: bo_alloc heap=2 flags=0x85 size=4096 align=65536
+sgpu: bo_alloc heap=6 flags=0x80 size=262144 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7f7f640000
+sgpu: bo_alloc heap=6 flags=0x80 size=32 align=32
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7f7f6c5000
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7f7f6c3000
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7f7f6ac000
+sgpu: ib_mapped=0x7f7f6ac000 bo_va=0xffff800100016000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=16384 align=4096
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7f7f6a8000
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7f7f62c000
+sgpu: ib_mapped=0x7f7f62c000 bo_va=0xffff80010002a000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7f7f618000
+sgpu: ib_mapped=0x7f7f618000 bo_va=0xffff80010003e000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7f7f604000
+sgpu: ib_mapped=0x7f7f604000 bo_va=0xffff800100052000
+sgpu: cs created ok ip_type=0
+sgpu: submit ip=0 ring=0 num_chunks=3
+  chunk[0] id=1
+  chunk[1] id=1
+  chunk[2] id=5
+sgpu: fence poll ret=0 expired=0 seq=1
+device=AMD Radeon Graphics (RADV VANGOGH) type=2 api=1.3.296 driver=100675588
+vkWaitForFences(device,1,&fence,VK_TRUE,3000000000ULL) failed: -13
+compute_exit=1
+[ 7686.378254] [1:    kworker/1:1:   64] [sec_abc] sec_abc_send_event : ABC is disabled and pre_event is disabled.(MODULE=gpu@INFO=gpu_job_timeout)
+[ 7686.389451] [1:    kworker/1:1:   64] [drm:amdgpu_job_timedout.llvm.3640168509646586719 [sgpu]] *ERROR* ring gfx_0.0.0 timeout, signaled seq=5, emitted seq=6
+[ 7686.390189] [1:    kworker/1:1:   64] [drm:amdgpu_job_timedout.llvm.3640168509646586719 [sgpu]] *ERROR* Process information: process gpu-compute-pro pid 13781 thread gpu-compute-pro pid 13781
+[ 7686.390252] [1:    kworker/1:1:   64] sgpu 16e00000.sgpu: amdgpu: IP block:gfx_v10_0 is hung!
+[ 7686.390259] [1:    kworker/1:1:   64] sgpu 16e00000.sgpu: amdgpu: GPU reset begin!
+[ 7686.390270] [1:    kworker/1:1:   64] sgpu 16e00000.sgpu: amdgpu: Some block need full reset!
+[ 7686.410658] [1:    kworker/1:1:   64] [drm:vangogh_lite_gpu_quiesce [sgpu]] *ERROR* failed to quiesce gpu
+[ 7686.410714] [1:    kworker/1:1:   64] sgpu 16e00000.sgpu: amdgpu: Some block need full reset!
+[ 7686.412852] [1:    kworker/1:1:   64] sgpu 16e00000.sgpu: amdgpu: GPU reset succeeded, trying to resume
+[ 7686.412891] [1:    kworker/1:1:   64] sgpu 16e00000.sgpu: amdgpu: GRBM_CHIP_REVISION is 0x600201
+[ 7686.416033] [1:    kworker/1:1:   64] sgpu 16e00000.sgpu: amdgpu: recover vram bo from shadow start
+[ 7686.416048] [1:    kworker/1:1:   64] sgpu 16e00000.sgpu: amdgpu: recover vram bo from shadow done
+[ 7686.416189] [1:    kworker/1:1:   64] sgpu 16e00000.sgpu: amdgpu: GPU reset(2) succeeded!
+[ 7686.416357]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: [gfxhub] pasid parsing with vmid 3
+[ 7686.416376]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: [gfxhub] page fault (src_id:0 ring:0 vmid:3 pasid:32768, for process gpu-compute-pro pid 13781 thread gpu-compute-pro pid 13781)
+[ 7686.416389]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu:   in page starting at address 0x000080010003e000 from client 27
+[ 7686.416408]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: GCVM_L2_PROTECTION_FAULT_STATUS:0x00300830
+[ 7686.416419]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 Faulty UTCL2 client ID: CPF (0x4)
+[ 7686.416430]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 MORE_FAULTS: 0x0
+[ 7686.416440]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 WALKER_ERROR: 0x0
+[ 7686.416450]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 PERMISSION_FAULTS: 0x3
+[ 7686.416460]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 MAPPING_ERROR: 0x0
+[ 7686.416470]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 RW: 0x0
+[ 7686.416486]I[0:      swapper/0:    0] [sec_abc] sec_abc_send_event : ABC is disabled and pre_event is disabled.(MODULE=gpu@WARN=gpu_fault)
+[ 7686.416490]I[0:      swapper/0:    0] [drm] page_faulted_vmid 3 set
+[ 7686.833607] [0:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c34a, wtcnt = cbce
+[ 7686.834993] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 22:53:34(0x40)PM
+[ 7686.835038] [0:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f63e, wtcnt = fec2
+[ 7686.836549] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 22:53:34(0x40)PM
+[ 7686.836589] [0:native-guardian:    1] Watchdog: secdbg_wdd_ping_handler RTC 2026-09-19 22:53:35 UTC
+[ 7687.145742] [7:    kworker/7:2:11856] stm_ts_spi spi2.0: [sec_input] tc:0 noise:0/0 ext_n:0 wet:0 wc:0(f:0) lp:0 fn:0061/0000 irqd:0 ED:0 PK:0 LS:0// v:ST07180033 C01T0022.LCIA.L Cal_flag:1 fail_cnt:0 chk:0 // tmp:38 // #251 251
+[ 7687.836953] [0:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c349, wtcnt = cbce
+[ 7687.838277] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 22:53:35(0x40)PM
+[ 7687.838314] [0:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f63d, wtcnt = fec2
+[ 7687.839609] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 22:53:35(0x40)PM
+[ 7687.839641] [0:native-guardian:    1] Watchdog: secdbg_wdd_ping_handler RTC 2026-09-19 22:53:36 UTC
+[ 7687.913980] [2:  kworker/u16:0:13285] [SSP]: debug_work_func(0) - Sensor state: 0x3feff, RC: 0(0, 0, 0), CC: 0, TC: 0 NSC: 0 EC: 0
+[ 7687.913991] [2:  kworker/u16:0:13285] [SSP] debugwork_mcu : PC(0x0), LR(0x0)
+[ 7688.840029] [0:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c349, wtcnt = cbce
+[ 7688.841361] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 22:53:36(0x40)PM
+[ 7688.841400] [0:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f63d, wtcnt = fec2
+[ 7688.842947] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 22:53:36(0x40)PM
+[ 7688.842959] [0:native-guardian:    1] Watchdog: secdbg_wdd_ping_handler RTC 2026-09-19 22:53:37 UTC
+[ 7689.424947] [2:  kworker/u16:0:13285] max77705_fg_read_current: current=7mA
+[ 7689.426316] [2:  kworker/u16:0:13285] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.429393] [2:  kworker/u16:0:13285] max77705_fg_read_qh : QH(11507500)
+[ 7689.429426] [2:  kworker/u16:0:13285] [FG power] ISYS(1136mA),ISYSAVG(965mA),VSYS(4400mV),IIN(1051mA),VBYP(4674mV),QH(11507500 uah),WA(0)
+[ 7689.431019] [3:  kworker/u16:0:13285] max77705_fg_read_current: current=7mA
+[ 7689.431811] [3:  kworker/u16:0:13285] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.433380] [1:  kworker/u16:0:13285] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.433395] [1:  kworker/u16:0:13285] max77705_fg_read_isys_avg: isys_avg_current=965mA
+[ 7689.434767] [1:  kworker/u16:0:13285] max77705_fg_read_current: current=7mA
+[ 7689.434783] [1:  kworker/u16:0:13285] max77705_fg_read_isys: isys_current=1136mA
+[ 7689.441006] [1:  kworker/u16:0:13285] max77705_fg_write_temp: temperature to (388, 0x26cd)
+[ 7689.441476] [1:  kworker/u16:0:13285] max77705_fg_read_vcell: VCELL(4388)mV, data(0xdb6c)
+[ 7689.441904] [1:  kworker/u16:0:13285] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.441907] [1:  kworker/u16:0:13285] max77705_get_fg_soc: soc(1000)
+[ 7689.441912] [1:  kworker/u16:0:13285] max77705_fg_get_scaled_capacity : capacity_max (997) scaled capacity(100.3), raw_soc(100.0)
+[ 7689.442135] [1:  kworker/u16:0:13285] max77705_fg_read_rawsoc: raw capacity (0.01%) (10001)
+[ 7689.442557] [1:  kworker/u16:0:13285] max77705_fg_read_qh : QH(11507500)
+[ 7689.442564] [1:  kworker/u16:0:13285] max77705_fg_get_atomic_capacity : NOW(100), OLD(100)
+[ 7689.442575] [1:  kworker/u16:0:13285] sec_bat_get_battery_info:Vnow(4388mV),Vavg(4388mV),Inow(7mA),Iavg(1mA),Isysavg(965mA),Imax(1200mA),Ichg(3150mA),SOC(100%),Tbat(388),Tusb(344),Tchg(472),Twpc(388),Tblkt(0),Tlrp(0),Tdchg(0)
+[ 7689.442628] [1:  kworker/u16:0:13285] sec_bat_check_step_charging
+[ 7689.442634] [1:  kworker/u16:0:13285] sec_bat_reset_step_charging
+[ 7689.442649] [1:  kworker/u16:0:13285] sec-battery samsung_mobile_device:battery: sec_bat_check_recharge: recharging voltage(4350) soc(98) normal
+[ 7689.442656] [1:  kworker/u16:0:13285] sec_bat_thermal_check: co_c3: 0, c3_c2: 50, c2_c1: 150, c1_no: 180, no_wa: 420, wa_ov: 500, tz(NORMAL)
+[ 7689.442662] [1:  kworker/u16:0:13285] sec_usb_temp_gap_check: NORMAL -> NORMAL
+[ 7689.442669] [1:  kworker/u16:0:13285] sec_bat_set_current_event: current event before(0x40008000), after(0x40008000)
+[ 7689.442677] [1:  kworker/u16:0:13285] sec_bat_check_pdic_temp: chg_limit(0)
+[ 7689.442684] [1:  kworker/u16:0:13285] sec_bat_check_lrp_step: st1(380), st2(900), recv_st1(360), recv_st2(380), lrp(0)
+[ 7689.442689] [1:  kworker/u16:0:13285] sec_bat_check_lrp_temp: cable_type(19), lrp_step(0), lrp(0)
+[ 7689.442695] [1:  kworker/u16:0:13285] sec_bat_check_temp_ctrl_by_cable: ct : PDIC
+[ 7689.446643] [1:  kworker/u16:0:13285] max77705 : [0xb1]0x7a, [0xb2]0xdf, [0xb3]0xe0, [0xb4]0x38, [0xb5]0x00, [0xb6]0xff, [0xb7]0x14, [0xb8]0x38, [0xb9]0x7f, [0xba]0x98, [0xbb]0x1a, [0xbc]0x60, [0xbd]0xec, [0xbe]0x34, [0xbf]0x00, [0xc0]0xaf, [0xc1]0x10, [0xc2]0x00, [0xc3]0x68, 
+[ 7689.447026] [1:  kworker/u16:0:13285] max77705_chg_monitor_work: [CHG] MODE(0x4), B2SOVRC(0x0), otg_on(0)
+[ 7689.447039] [1:  kworker/u16:0:13285] pca9481_chg_get_property: CHARGER_STATUS(NO_CHARGING)
+[ 7689.447045] [1:  kworker/u16:0:13285] [PASS-THROUGH]:sb_pt_monitor: end - step = None
+[ 7689.573792] [1:  kworker/u16:0:13285] [2][FG] 8080h,ff9bh,7f80h,ff01h,1900h,0552h,6403h,5b68h,26cdh,db6ch,000ah,0002h,0000h,6dcah,63eah,0551h,0553h,ffffh,2a00h,5a00h,05f1h,0148h,255ch,00b8h,053ch,db67h,4316h,dc68h,0fefh,0314h,02b0h,0551h,0000h,6200h,1700h,04c9h,1403h,1e05h,2496h,7fcch,2656h,cea4h,023ch,3850h,e3e1h,290eh,0400h,0001h,7aafh,5292h,0d80h,ffffh,1da6h,0552h,0430h,05e0h,0027h,1418h,a7e2h,ffc8h,1680h,1408h,b187h,e000h,07fch,0000h,0a80h,0e40h,db6ah,0076h,1340h,0728h,6649h,2441h,04f8h,0c12h,11a8h,11fbh,c325h,0553h,0000h,6e00h,0014h,2ad8h,7f80h,0005h,0066h,05ech,0000h,006bh,090ch,0055h,0000h,0204h,0634h,0000h,20d8h,0000h,0000h,0000h,0000h,0000h,0000h,0000h,0000h,0000h,0000h,0010h,0000h,ffffh,63eah,0551h,0286h,02b0h,e484h,0056h,0012h,0080h,004bh,0002h,4b56h,fff8h,4650h,0000h,4000h,0000h,7d00h,0520h,ffffh,ffffh,ffffh,ffffh,2095h,0000h,0000h,fcf4h,3fe6h,5d36h,ffffh,db7ch,001bh,2910h,db6ch,66a4h,
+[ 7689.576032] [1:  kworker/u16:0:13285] s2mps26-gpio s2mps26-gpio: [SUB_PMIC] pmic_gpio_get: pin12: DAT(low_0x0)
+[ 7689.576051] [1:  kworker/u16:0:13285] sec_bat_monitor_work: Status(Full), mode(None), Health(Good), Cable(PDIC, PDIC, 0, 0), rp(3), HV(PDIC_FIXED), flash(0), mst(0), lcd(1), slate(0), store(0), siop_level(100), sleep_mode(0), charging_enabled(1), Cycle(-1)
+[ 7689.576070] [1:  kworker/u16:0:13285] sec-battery samsung_mobile_device:battery: sec_bat_set_polling: Polling time 30/30 sec.
+[ 7689.576302] [1:    kworker/1:1:   64] max77705_fg_read_current: current=0mA
+[ 7689.576676] [1:    kworker/1:1:   64] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.577239] [1:    kworker/1:1:   64] max77705_fg_read_current: current=0mA
+[ 7689.577809] [1:    kworker/1:1:   64] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.580056] [1:          udevd:13791] max77705_fg_read_current: current=0mA
+[ 7689.580768] [0:          udevd:13791] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.581449] [0:          udevd:13791] max77705_fg_read_current: current=0mA
+[ 7689.582500] [0:          udevd:13791] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.582805] [1:          udevd:13790] max77705_fg_read_current: current=0mA
+[ 7689.583243] [1:          udevd:13790] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.583893] [1:          udevd:13790] max77705_fg_read_current: current=0mA
+[ 7689.584533] [1:          udevd:13790] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.585011] [1:          udevd:13790] max77705_fg_read_current: current=0mA
+[ 7689.585607] [1:          udevd:13790] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.586519] [0:          udevd:13790] max77705_fg_read_current: current=0mA
+[ 7689.587192] [0:          udevd:13790] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.587195] [0:          udevd:13790] max77705_fg_read_isys_avg: isys_avg_current=967mA
+[ 7689.588579] [4:          udevd:13789] max77705_fg_read_current: current=0mA
+[ 7689.590154] [4:          udevd:13789] max77705_fg_read_vcell: VCELL(4387)mV, data(0xdb60)
+[ 7689.590166] [4:          udevd:13789] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.591615] [2:          udevd:13789] max77705_fg_read_current: current=0mA
+[ 7689.592284] [2:          udevd:13789] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.592779] [2:          udevd:13789] max77705_fg_read_current: current=0mA
+[ 7689.593213] [2:          udevd:13789] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.593878] [2:          udevd:13789] max77705_fg_read_current: current=0mA
+[ 7689.594556] [2:          udevd:13789] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.594908] [1:          udevd:13792] max77705_fg_read_current: current=0mA
+[ 7689.595346] [1:          udevd:13792] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.595989] [1:          udevd:13792] max77705_fg_read_current: current=0mA
+[ 7689.596621] [1:          udevd:13792] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.597102] [1:          udevd:13792] max77705_fg_read_current: current=0mA
+[ 7689.597530] [1:          udevd:13792] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.598494] [1:          udevd:13792] max77705_fg_read_current: current=0mA
+[ 7689.599150] [1:          udevd:13792] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.599621] [1:          udevd:13793] max77705_fg_read_current: current=0mA
+[ 7689.600074] [1:          udevd:13793] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.600746] [1:          udevd:13793] max77705_fg_read_current: current=0mA
+[ 7689.601656] [1:          udevd:13793] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.601664] [1:          udevd:13793] max77705_fg_read_isys_avg: isys_avg_current=967mA
+[ 7689.602177] [2:          udevd:13794] max77705_fg_read_current: current=0mA
+[ 7689.602628] [2:          udevd:13794] max77705_fg_read_vcell: VCELL(4387)mV, data(0xdb60)
+[ 7689.602635] [2:          udevd:13794] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.603309] [2:          udevd:13794] max77705_fg_read_current: current=0mA
+[ 7689.603972] [2:          udevd:13794] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.604276] [1:          udevd:13795] max77705_fg_read_current: current=0mA
+[ 7689.604725] [1:          udevd:13795] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.605394] [1:          udevd:13795] max77705_fg_read_current: current=0mA
+[ 7689.606054] [1:          udevd:13795] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.606510] [0:          udevd:13791] max77705_fg_read_current: current=0mA
+[ 7689.607287] [0:          udevd:13791] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.607967] [0:          udevd:13791] max77705_fg_read_current: current=0mA
+[ 7689.608625] [0:          udevd:13791] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.608968] [1:          udevd:13793] max77705_fg_read_current: current=0mA
+[ 7689.609443] [1:          udevd:13793] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.611180] [3:          udevd:13793] max77705_fg_read_current: current=0mA
+[ 7689.612323] [3:          udevd:13793] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.612829] [3:          udevd:13794] max77705_fg_read_current: current=0mA
+[ 7689.613309] [3:          udevd:13794] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.614036] [3:          udevd:13794] max77705_fg_read_current: current=0mA
+[ 7689.614749] [3:          udevd:13794] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.614753] [3:          udevd:13794] max77705_fg_read_isys_avg: isys_avg_current=967mA
+[ 7689.615126] [1:          udevd:13795] max77705_fg_read_current: current=0mA
+[ 7689.615601] [1:          udevd:13795] max77705_fg_read_vcell: VCELL(4387)mV, data(0xdb60)
+[ 7689.615609] [1:          udevd:13795] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.616318] [1:          udevd:13795] max77705_fg_read_current: current=0mA
+[ 7689.617012] [1:          udevd:13795] max77705_fg_read_avg_current: avg_current=1mA
+[ 7689.843312] [0:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c349, wtcnt = cbce
+[ 7689.844640] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 22:53:37(0x40)PM
+[ 7689.844682] [0:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f63d, wtcnt = fec2
+[ 7689.846543] [2:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 22:53:37(0x40)PM
+[ 7689.846589] [2:native-guardian:    1] Watchdog: secdbg_wdd_ping_handler RTC 2026-09-19 22:53:38 UTC
+[ 7690.847166] [1:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c348, wtcnt = cbce
+[ 7690.848531] [3:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 22:53:38(0x40)PM
+[ 7690.848546] [3:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f63c, wtcnt = fec2
+[ 7690.849714] [3:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-09-19 22:53:38(0x40)PM
+[ 7690.849753] [3:native-guardian:    1] Watchdog: secdbg_wdd_ping_handler RTC 2026-09-19 22:53:39 UTC
+[ 7691.242355] [7:    kworker/7:2:11856] exynos_tmu_get_curr_temp_all: 78,69,64,65,65,61,62
+[ 7691.242407] [7:    kworker/7:2:11856] PM: Pending Wakeup Sources: dwc3-otg usb_notify 19eb0000.drmdsim 19f00000.drmdecon 
+[ 7691.244616] [5:    kworker/5:2:  475] pdic_max77705: max77705_muic_print_reg_log USBC1:0x27, USBC2:0xba, BC:0x81, CC0:0x71, CC1:0x9, PD0:0x43, PD1:0x57 attached_dev:1
+[ 7691.244638] [5:    kworker/5:2:  475] pdic_max77705: max77705_muic_print_reg_log UIC_INT_M:0x4, CC_INT_M:0x20, PD_INT_M:0x0, VDM_INT_M:0xf0, PMIC_MASK:0x2, WDT:0, POR:0
+[ 7691.497920] [0:    kworker/0:2:  430] [drm] gfx_0.0.0: vmid 3 job_id 3 FENCE drm 710/711/1 sgpu 1/9
+[ 7691.498005] [0:    kworker/0:2:  430] [drm] gfx_v10_0_check_done: gfx_0.0.0 rptr 639 ib base 80010003e000 ptr 0 mptr 0x600/700/700_mfff seq 8/8/9_m7
+[ 7691.498040] [0:    kworker/0:2:  430] [drm] gfx_v10_0_check_done: gfx_0.0.0 pfp c0023f00 c0009000 c0012800 c0032200 c0008b00 c0008b00 c0064900 c0004200
+[ 7691.498073] [0:    kworker/0:2:  430] [drm] gfx_v10_0_check_done: gfx_0.0.0 me c0023f00 c0009000 c0012800 c0004200 c0008b00 c0004200 c0008b00 c0064900
+[ 7691.498102] [0:    kworker/0:2:  430] [drm] gfx_v10_0_check_done: gfx_0.0.0 me_cntl 01000000 grbm_status a800302c/5000800c/00000000 se 00000006
+[ 7691.498138] [0:    kworker/0:2:  430] [sec_abc] sec_abc_send_event : ABC is disabled and pre_event is disabled.(MODULE=gpu@INFO=gpu_job_timeout)
+[ 7691.508430] [0:    kworker/0:2:  430] [drm:amdgpu_job_timedout.llvm.3640168509646586719 [sgpu]] *ERROR* ring gfx_0.0.0 timeout, signaled seq=8, emitted seq=9
+[ 7691.508717] [0:    kworker/0:2:  430] [drm:amdgpu_job_timedout.llvm.3640168509646586719 [sgpu]] *ERROR* Process information: process gpu-compute-pro pid 13781 thread gpu-compute-pro pid 13781
+[ 7691.508736] [0:    kworker/0:2:  430] sgpu 16e00000.sgpu: amdgpu: IP block:gfx_v10_0 is hung!
+[ 7691.508743] [0:    kworker/0:2:  430] sgpu 16e00000.sgpu: amdgpu: GPU reset begin!
+[ 7691.508754] [0:    kworker/0:2:  430] sgpu 16e00000.sgpu: amdgpu: Some block need full reset!
+[ 7691.530481] [0:    kworker/0:2:  430] [drm:vangogh_lite_gpu_quiesce [sgpu]] *ERROR* failed to quiesce gpu
+[ 7691.530536] [0:    kworker/0:2:  430] sgpu 16e00000.sgpu: amdgpu: Some block need full reset!
+[ 7691.532734] [0:    kworker/0:2:  430] sgpu 16e00000.sgpu: amdgpu: GPU reset succeeded, trying to resume
+[ 7691.532771] [0:    kworker/0:2:  430] sgpu 16e00000.sgpu: amdgpu: GRBM_CHIP_REVISION is 0x600201
+[ 7691.534187] [0:    kworker/0:2:  430] sgpu 16e00000.sgpu: amdgpu: recover vram bo from shadow start
+[ 7691.534204] [0:    kworker/0:2:  430] sgpu 16e00000.sgpu: amdgpu: recover vram bo from shadow done
+[ 7691.534220] [0:    kworker/0:2:  430] [drm] set_error: pid 13781 faulted job 3 vmid 3 ring gfx_0.0.0 finished 000000002253f4c0
+[ 7691.534243] [0:    kworker/0:2:  430] [drm] Skip scheduling IBs!
+[ 7691.534403] [0:    kworker/0:2:  430] sgpu 16e00000.sgpu: amdgpu: GPU reset(4) succeeded!
+13172

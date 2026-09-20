@@ -1,0 +1,3 @@
+Instrumentation:
+RADV_SGPU_TRACE_DESCRIPTORS=1 prints raw storage descriptor VA/range/dst/words.
+RADV_SGPU_TRACE_POINTERS=1 prints shader SGPR pointer VA/use32 at command emission.

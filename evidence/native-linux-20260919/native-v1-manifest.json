@@ -1,0 +1,41 @@
+{
+  "audit": {
+    "base_cpio_sha256": "dfbedf50dad75a4bda8b8627d4a6e9ac4e8e1bb1c7c3bc83902931aceef13d0b",
+    "base_entries": 928,
+    "changed_records": [
+      "init",
+      "system/bin/init",
+      "+system/bin/init.android",
+      "+native-enable",
+      "+native",
+      "+native/bin",
+      "+native/lib",
+      "+run",
+      "+native/native-start",
+      "+native/bin/busybox",
+      "+native/lib/ld-musl-aarch64.so.1",
+      "+native/rootfs.tar.xz",
+      "+system/bin/native-guardian"
+    ],
+    "new_cpio_sha256": "23ea81d19219e4c6f2d0c20e8d3fa8d18cd036905b0810b877c2182e6f9956db",
+    "new_entries": 939
+  },
+  "avb_algorithm": "NONE",
+  "header_source": "lineage/build-20260915/recovery.img",
+  "image": "/home/corpunum/s22-linux/builds/native_handoff_embedded.img",
+  "image_sha256": "7e9ef0cc9c160020c79a8466db99bfa9ea0b8de5148b9ce441b77fef7aab557a",
+  "inputs": {
+    "/home/corpunum/s22-linux/builds/headless_recovery_key_ramdisk.cpio": "dfbedf50dad75a4bda8b8627d4a6e9ac4e8e1bb1c7c3bc83902931aceef13d0b",
+    "/home/corpunum/s22-linux/builds/native_handoff_guardian_aarch64": "38a5bbad1d8eefdceb25de50ba7acc0a7d177d3771b3cd7411fa35d5f9cc96bf",
+    "/home/corpunum/s22-linux/builds/native_handoff_init_wrapper_aarch64": "5fe013945a966fa56de05e90bd56e9d562f129ff103104b6e1073eb5539cb414",
+    "/home/corpunum/s22-linux/rootfs/alpine-arm64.tar.xz": "1139f04222e577f18dc2d540721c0be037700952780d54cfb919e39c5d15ac1b",
+    "/home/corpunum/s22-linux/rootfs/alpine-arm64/bin/busybox": "97d52efa149563c8d886e3670e2496d4140d3c54138017afd3a105e0397fae2e",
+    "/home/corpunum/s22-linux/rootfs/alpine-arm64/lib/ld-musl-aarch64.so.1": "32377e6d71725bb019e9ff6d5e9f16b4d5156d6f2c36504191c2d6a7c4d4a44d",
+    "/home/corpunum/s22-linux/tools/native-handoff/native-start": "24c065424d4fa0a69731f864fd4ce87adfd91728ca556b3447e13166b64290a3"
+  },
+  "partition_size": 100663296,
+  "ramdisk_cpio_sha256": "23ea81d19219e4c6f2d0c20e8d3fa8d18cd036905b0810b877c2182e6f9956db",
+  "ramdisk_lz4_sha256": "16c53b829fd6b4537aade213cf3d25a6be00bf62d8a20149041ea10cf7a135fa",
+  "rootfs_archive_bytes": 22123828,
+  "rootfs_archive_sha256": "1139f04222e577f18dc2d540721c0be037700952780d54cfb919e39c5d15ac1b"
+}

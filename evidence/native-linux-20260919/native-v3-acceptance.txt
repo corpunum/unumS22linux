@@ -1,0 +1,28 @@
+{'card': '/dev/dri/card1', 'crtc_id': 184, 'fb_id': 196, 'fb_size': [1080, 2340], 'window': [0, 0, 1080, 2340], 'format': 'XR24', 'modifier': 0, 'handle': 1, 'pitch': 4320, 'offset': 0, 'mapped_bytes': 10108800, 'output': '/tmp/weston-screen.png'}
+87.43 686.11
+magic: b0071257
+version: 20230221
+name: BORE
+last: 517
+[ IDX]       RTC       / RR (CNT) / KEY / M / VERSION       QB_ID    / VCELL ( BAT)(C) / TMU[TRIP],BAT           / I2C FAIL COUNT / DT / SLOT / BOOTING SEQUENCE
+[ 517] 260919 20:45:28 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4340mV( 99%)(+) / 35[0x000] 36[0x000], 29 / 00000000000000 /  - /   -  / SOFT, INFORM3(12345674) > RECOVERY > , JUMP2K [drawLOGO]
+[ 516] 260919 20:24:21 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4342mV( 99%)(+) / 36[0x000] 36[0x000], 30 / 00000000000000 /  - /   -  / SOFT, INFORM3(12345674) > RECOVERY > , JUMP2K [drawLOGO]
+( 1/17) Installing lsof (4.99.6-r0)
+( 2/17) Installing htop (3.5.3-r0)
+( 3/17) Installing nano (9.2-r0)
+( 4/17) Installing py3-pip-pyc (26.1.2-r0)
+( 5/17) Installing py3-pip (26.1.2-r0)
+( 6/17) Installing py3-platformdirs (4.9.6-r0)
+( 7/17) Installing py3-platformdirs-pyc (4.9.6-r0)
+( 8/17) Installing py3-distlib (0.4.0-r1)
+( 9/17) Installing py3-distlib-pyc (0.4.0-r1)
+(10/17) Installing py3-filelock (3.29.0-r0)
+(11/17) Installing py3-filelock-pyc (3.29.0-r0)
+(12/17) Installing py3-python-discovery (1.2.2-r0)
+(13/17) Installing py3-python-discovery-pyc (1.2.2-r0)
+(14/17) Installing py3-virtualenv (21.3.3-r0)
+(15/17) Installing py3-virtualenv-pyc (21.3.3-r0)
+(16/17) Installing libevent (2.1.13-r0)
+(17/17) Installing tmux (3.7c-r0)
+Executing busybox-1.37.0-r31.trigger
+OK: 392.5 MiB in 191 packages

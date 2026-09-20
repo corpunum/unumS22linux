@@ -1,0 +1,32 @@
+Primary source audit, 2026-09-20
+
+Repository: https://github.com/ExtremeXT/android_kernel_samsung_s5e9925
+Fetched shallow commit: a3310850291d228b1ba9568a28bde5a019262541
+
+Relevant source files:
+  drivers/vision/npu/core/include/npu-binary.h
+  drivers/vision/npu/core/npu-binary.c
+  drivers/vision/npu/core/dsp-kernel.c
+
+include/npu-binary.h defines:
+  #define FW_BASE_NAME "AIE" when CONFIG_DSP_USE_VS4L, otherwise "NPU"
+  #define NPU_FW_NAME (FW_BASE_NAME ".bin")
+  #define NPU_FW_VECTOR_NAME "vectors.bin"
+  NPU_FW_PATH2 "/vendor/firmware/"
+
+npu-binary.c calls request_firmware(&fw_blob, NPU_FW_NAME, binary->dev) for
+the main image and request_firmware(&fw_blob, NPU_FW_VECTOR_NAME, binary->dev)
+in npu_fw_vector_load(). The source does not construct an alternate filename
+for vectors.bin; it requests exactly vectors.bin. dsp-kernel.c defines and loads
+dsp_reloc_rules.bin for DSP dynamic linking.
+
+Source URLs at this exact revision:
+  https://github.com/ExtremeXT/android_kernel_samsung_s5e9925/blob/a3310850291d228b1ba9568a28bde5a019262541/drivers/vision/npu/core/include/npu-binary.h
+  https://github.com/ExtremeXT/android_kernel_samsung_s5e9925/blob/a3310850291d228b1ba9568a28bde5a019262541/drivers/vision/npu/core/npu-binary.c
+  https://github.com/ExtremeXT/android_kernel_samsung_s5e9925/blob/a3310850291d228b1ba9568a28bde5a019262541/drivers/vision/npu/core/dsp-kernel.c
+
+The source confirms the recovered module's strings and the path expectation,
+but it does not provide vectors.bin, Android vendor device nodes, firmware
+signing/imgloader integration, or ENN ABI headers. Therefore no standalone
+Linux ENN probe is staged: the exact missing firmware and kernel/runtime ABI
+remain unproven/blocked.

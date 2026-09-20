@@ -1,0 +1,77 @@
+
+warning: Could not load vsyscall page because no executable was specified
+0x0000007f8a15a848 in ?? ()
+[New LWP 9775]
+[New LWP 9776]
+
+Thread 1 "Hyprland" received signal SIGSEGV, Segmentation fault.
+0x0000005590bb0f78 in ?? ()
+
+Thread 3 (LWP 9776 "Hyprland"):
+#0  0x0000007f8a161c68 in ?? ()
+#1  0x0000007f8379eaa8 in ?? ()
+Backtrace stopped: previous frame inner to this frame (corrupt stack?)
+
+Thread 2 (LWP 9775 "Hyprland"):
+#0  0x0000007f8a161c68 in ?? ()
+#1  0x0000007f83faeaa8 in ?? ()
+Backtrace stopped: previous frame inner to this frame (corrupt stack?)
+
+Thread 1 (LWP 9755 "Hyprland"):
+#0  0x0000005590bb0f78 in ?? ()
+#1  0x0000000000000100 in ?? ()
+Backtrace stopped: previous frame identical to this frame (corrupt stack?)
+x0             0x100               256
+x1             0x3                 3
+x2             0x7ff0cea713        549500921619
+x3             0x0                 0
+x4             0x7ff0cea860        549500921952
+x5             0x50000             327680
+x6             0x7ff0cea716        549500921622
+x7             0x7ff0cea713        549500921619
+x8             0xb5                181
+x9             0x270f              9999
+x10            0x64                100
+x11            0x51eb851f          1374389535
+x12            0x3                 3
+x13            0x7d                125
+x14            0x7f8c205aa0        547811777184
+x15            0x0                 0
+x16            0x5590bba900        367500437760
+x17            0x7f8c071a80        547810122368
+x18            0xd                 13
+x19            0x100               256
+x20            0x100               256
+x21            0x7ff0cea860        549500921952
+x22            0x7ff0cea713        549500921619
+x23            0x7f8c02a418        547809829912
+x24            0x7ff0cea713        549500921619
+x25            0x0                 0
+x26            0x3                 3
+x27            0x3                 3
+x28            0x7f8c02a400        547809829888
+x29            0x7ff0cea540        549500921152
+x30            0x5590bb2218        367500403224
+sp             0x7ff0cea540        0x7ff0cea540
+pc             0x5590bb0f78        0x5590bb0f78
+cpsr           0x80001000          [ EL=0 BTYPE=0 SSBS N ]
+fpsr           0x10                [ IXC ]
+fpcr           0x0                 [ Len=0 Stride=0 RMode=0 ]
+vg             0x2                 2
+tpidr          0x7f8c109740        0x7f8c109740
+pauth_dmask    0x7fff8000000000    36028247263150080
+pauth_cmask    0x7fff8000000000    36028247263150080
+   0x5590bb0f68:	stp	x19, x20, [sp, #16]
+   0x5590bb0f6c:	mov	x19, x0
+   0x5590bb0f70:	stp	x27, x28, [sp, #80]
+   0x5590bb0f74:	mov	x27, x1
+=> 0x5590bb0f78:	ldp	x1, x20, [x0, #8]
+   0x5590bb0f7c:	ldr	x0, [x0, #24]
+   0x5590bb0f80:	stp	x21, x22, [sp, #32]
+   0x5590bb0f84:	sub	x1, x0, x1
+   0x5590bb0f88:	cmp	x1, x20
+   0x5590bb0f8c:	b.hi	0x5590bb12a4  // b.pmore
+   0x5590bb0f90:	sub	x20, x20, x1
+   0x5590bb0f94:	mov	x22, x2
+Kill the program being debugged? (y or n) [answered Y; input not from terminal]
+[Inferior 1 (process 9755) killed]

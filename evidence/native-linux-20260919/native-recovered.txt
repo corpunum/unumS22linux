@@ -1,0 +1,21 @@
+uid=0(root) gid=0(root) groups=0(root),0(root),1(bin),2(daemon),3(sys),4(adm),6(disk),10(wheel),11(floppy),20(dialout),26(tape),27(video)
+/system/bin/native-guardian
+33.73 262.12
+-rw-r--r--    1 root     root             0 Sep 19 20:21 /run/native-ready
+mount: 'rootfs'->'/newroot/native': Device or resource busy
+native-start: native log bind could not be remounted read-only
+ssh-keygen: generating new host keys: RSA ECDSA ED25519 
+native-start: native root extracted and SSH starting; host must touch /run/native-ready
+Server listening on 0.0.0.0 port 22.
+Server listening on :: port 22.
+Accepted publickey for root from 10.55.0.1 port 57388 ssh2: ED25519 SHA256:PeohTlTqpW15xQc9wgA1Fl/lp+K/00Vk+W4wanRQ2gA
+Received disconnect from 10.55.0.1 port 57388:11: disconnected by user
+Disconnected from user root 10.55.0.1 port 57388
+guardian: host readiness marker observed; rescue mode is committed
+Accepted publickey for root from 10.55.0.1 port 50194 ssh2: ED25519 SHA256:PeohTlTqpW15xQc9wgA1Fl/lp+K/00Vk+W4wanRQ2gA
+Received disconnect from 10.55.0.1 port 50194:11: disconnected by user
+Disconnected from user root 10.55.0.1 port 50194
+Accepted publickey for root from 10.55.0.1 port 55744 ssh2: ED25519 SHA256:PeohTlTqpW15xQc9wgA1Fl/lp+K/00Vk+W4wanRQ2gA
+3.24.2
+Filesystem                Size      Used Available Use% Mounted on
+native-root               1.0G     83.8M    940.2M   8% /

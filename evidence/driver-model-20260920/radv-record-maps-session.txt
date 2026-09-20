@@ -1,0 +1,23 @@
+loader_api=1.4.347
+sgpu: gpu_info address32_hi=0xffff8000 gfx_level=13 family=81
+sgpu: bo_alloc heap=2 flags=0x81 size=4096 align=8
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7fb42be000
+sgpu: ib_mapped=0x7fb42be000 bo_va=0xffff800100001000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=704 align=4096
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7fb4312000
+sgpu: bo_alloc heap=2 flags=0x85 size=4096 align=65536
+sgpu: bo_alloc heap=6 flags=0x80 size=262144 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7fb4289000
+sgpu: bo_alloc heap=6 flags=0x80 size=32 align=32
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7fb430e000
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7fb42f4000
+sgpu: ib_mapped=0x7fb42f4000 bo_va=0xffff800100016000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=16384 align=4096
+sgpu: amdgpu_bo_cpu_map ret=0 data=0x7fb42f0000
+sgpu: shader pointer va=0xffff800000040000 use32=1 address32_hi=0xffff8000 reconstructed=0xffff800000040000
+record_exit=139
+Segmentation fault

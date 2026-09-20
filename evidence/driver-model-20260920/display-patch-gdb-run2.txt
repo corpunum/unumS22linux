@@ -1,0 +1,3 @@
+Direct display trial exited 137
+Killed
+Baseline Weston restored; launcher=9485

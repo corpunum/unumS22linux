@@ -1,0 +1,17 @@
+Host-only non-executing audit, 2026-09-20
+
+Primary source: https://github.com/Samsung/ENNDelegate/tree/977585f75811a22814735f9fc9c806c088b59813
+Local file inspected read-only: /tmp/enn-delegate/ENNDelegate_v3.1.13_archive
+archive sha256: 0c1eec6e2030cc4f067f86418d8773528e0086314e4cfec3676d10f5311ad311
+
+The file is a 21 MiB self-extracting Bash script. It was never executed. Its
+embedded zip was copied by byte offset to a temporary directory only for
+unzip -l listing (no extraction into the repository). The listing has 31
+entries, including proprietary ENN/compiler .so libraries and only two public
+headers: include/enn_wrapper_log.h and include/enn_wrapper_sq.h. It contains
+no npu-binary.h, VS4L UAPI, Samsung Exynos-2200 kernel headers, or vectors.bin.
+
+Thus the archive confirms that ENNDelegate supplies user-space object code and
+limited wrapper headers, but is not a complete standalone NPU runtime for this
+phone. Its license text also labels the libraries SEC confidential; no archive
+payload was copied to project output.

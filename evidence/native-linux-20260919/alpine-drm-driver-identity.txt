@@ -1,0 +1,2 @@
+/dev/dri/card0 driver= b'amdgpu' version= (3, 40, 0) description= b'AMD GPU' busid= b''
+/dev/dri/card1 driver= b'exynos-drmdpu' version= (1, 0, 0) description= b'Samsung SoC DRM' busid= b''

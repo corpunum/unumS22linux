@@ -1,0 +1,13 @@
+{'card': '/dev/dri/card1', 'crtc_id': 184, 'fb_id': 200, 'fb_size': [1080, 2340], 'window': [0, 0, 1080, 2340], 'format': 'XR24', 'modifier': 0, 'handle': 1, 'pitch': 4352, 'offset': 0, 'mapped_bytes': 10183680, 'output': '/tmp/omarchy-keyboard.png'}
+15962
+Monitor DSI-1:
+	Layer level 0 (background):
+		Layer 55776854e0: xywh: 0 0 540 1170, a: 1, namespace: omarchy-background, pid: 15963
+	Layer level 1 (bottom):
+	Layer level 2 (top):
+		Layer 5578f6e790: xywh: 0 0 540 26, a: 1, namespace: omarchy-bar, pid: 15963
+		Layer 5578f55220: xywh: 0 855 540 315, a: 1, namespace: osk, pid: 15962
+	Layer level 3 (overlay):
+
+
+

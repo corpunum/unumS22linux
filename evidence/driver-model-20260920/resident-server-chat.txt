@@ -1,0 +1,12 @@
+
+S22 local chat | Qwen3.5 2B Q4 | CPU
+Offline. No command execution. /quit opens the shell.
+Model stays in RAM between questions.
+
+You> S22> Hello! How can I assist you today?
+[1.1s; first text 0.6s]
+
+You> S22> Most distributions use the kernel version shipped with the operating system or a specific upstream kernel (like 5.15 for Debian/Ubuntu or 6.8 for Fedora) that the maintainer selected.
+[3.7s; first text 0.4s]
+
+You> 

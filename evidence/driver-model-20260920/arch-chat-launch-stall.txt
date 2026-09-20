@@ -1,0 +1,35 @@
+Sat Sep 19 23:07:50 UTC 2026
+ 2171  2125 S<    0:00 /bin/sh -c foot --font='DejaVu Sans Mono:size=12' --title=S22-local-chat sh -c 'python3 /usr/local/bin/s22-chat; exec bash --noprofile --norc' >/tmp/s22-foot.log 2>&1
+ 2177  2171 S<    0:00 foot --font=DejaVu Sans Mono:size=12 --title=S22-local-chat sh -c python3 /usr/local/bin/s22-chat; exec bash --noprofile --norc
+ 2343  2177 S<    0:00 sh -c python3 /usr/local/bin/s22-chat; exec bash --noprofile --norc
+ 2349  2343 S<    0:00 python3 /usr/local/bin/s22-chat
+ 3876  3875 S<    0:00 sh -c date -u; ps -o pid,ppid,stat,time,args | grep -E "python3|llama|nice|ld-linux"; ls -l /mnt/omarchy-trial/tmp/s22-chat-last.log; cat /mnt/omarchy-trial/tmp/s22-chat-last.log; cat /proc/sys/fs/nr_open
+ 3879  3876 R<    0:00 grep -E python3|llama|nice|ld-linux
+-rw-r--r--    1 root     root          2103 Sep 19 23:07 /mnt/omarchy-trial/tmp/s22-chat-last.log
+warning: no usable GPU found, --gpu-layers option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+0.00.003.664 I llama_completion: llama backend init
+0.00.003.686 I llama_completion: load the model and apply lora adapter, if any
+0.02.846.444 I cmn          init: llama threadpool init, n_threads = 4
+0.02.999.013 I 
+0.02.999.197 I system_info: n_threads = 4 (n_threads_batch = 4) / 8 | CPU : NEON = 1 | ARM_FMA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | REPACK = 1 | 
+0.02.999.197 I 
+0.02.999.739 I sampler seed: 1085171198
+0.02.999.755 I sampler params: 
+	repeat_last_n = 64, repeat_penalty = 1.000, frequency_penalty = 0.000, presence_penalty = 0.000
+	dry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = 64
+	top_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.600
+	mirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000, adaptive_target = -1.000, adaptive_decay = 0.900
+0.02.999.770 I sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+0.02.999.771 I generate: n_ctx = 4096, n_batch = 2048, n_predict = 256, n_keep = 0
+0.02.999.771 I 
+0.05.124.086 I common_perf_print:    sampling time =       8.08 ms
+0.05.124.123 I common_perf_print:    samplers time =       3.35 ms /    58 tokens
+0.05.124.141 I common_perf_print:        load time =    1534.34 ms
+0.05.124.153 I common_perf_print: prompt eval time =     906.73 ms /    48 tokens (   18.89 ms per token,    52.94 tokens per second)
+0.05.124.164 I common_perf_print:        eval time =    1208.17 ms /     9 runs   (  134.24 ms per token,     7.45 tokens per second)
+0.05.124.174 I common_perf_print:       total time =    2125.14 ms /    57 tokens
+0.05.124.185 I common_perf_print: unaccounted time =       2.15 ms /   0.1 %      (total - sampling - prompt eval - eval) / (total)
+0.05.124.196 I common_perf_print:    graphs reused =          8
+1048576

@@ -1,0 +1,26 @@
+magic: b0071257
+version: 20230221
+name: BORE
+last: 515
+[ IDX]       RTC       / RR (CNT) / KEY / M / VERSION       QB_ID    / VCELL ( BAT)(C) / TMU[TRIP],BAT           / I2C FAIL COUNT / DT / SLOT / BOOTING SEQUENCE
+[ 515] 260919 20:20:44 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4337mV( 99%)(+) / 42[0x000] 41[0x000], 29 / 00000000000000 /  - /   -  / SOFT, REBOOTMODE4 > RECOVERY > , JUMP2K [drawLOGO]
+[ 514] 260919 20:20:22 / RP (  0) /     / N / S901BXXSIFYI3 10073462 / 4336mV( 99%)(+) / 34[0x000] 34[0x000], 29 / 00000000000000 /  - /   -  / SOFT, REBOOTMODE0 > NORMAL > JUMP2K [drawLOGO]
+[ 513] 260919 19:54:47 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4339mV(100%)(+) / 37[0x000] 37[0x000], 30 / 00000000000000 /  - /   -  / SOFT, INFORM3(12345674) > RECOVERY > BL:Recovery Mode Set by key, JUMP2K [drawLOGO]
+[ 512] 260919 19:41:01 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4337mV( 91%)(+) / 37[0x000] 38[0x000], 31 / 00000000000000 /  - /   -  / SOFT, INFORM3(12345674) > RECOVERY > BL:Recovery Mode Set by key, JUMP2K [drawLOGO]
+[ 511] 260919 17:55:45 / MP (  0) /     / R / S901BXXSIFYI3 10073462 / 3806mV( 37%)(+) / 44[0x000] 45[0x000], 34 / 00000000000000 /  - /   -  / PIN, MRST (M) , (S) PWRHOLD,PWROND, INFORM3(0) > RECOVERY > BL:Recovery Mode Set by key, JUMP2K [drawLOGO]
+[ 510] 260919 17:52:49 / 0P (  0) /     / D / S901BXXSIFYI3 10073462 / 3799mV( 37%)(+) / 42[0x000] 44[0x000], 34 / 00000000000000 /  - /   -  / PIN, MRST (M) , (S) PWRHOLD,PWROND, INFORM3(0), KEY,  > DOWNLOAD >  [DOWNLOAD_COMPLETE]
+[ 509] 260919 17:52:30 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 3797mV( 37%)(-) / 48[0x000] 48[0x000], 34 / 00000000000000 /  - /   -  / SOFT, REBOOTMODE4 > RECOVERY > , JUMP2K [drawLOGO]
+[ 508] 260919 17:52:12 / MP (  0) /     / N / S901BXXSIFYI3 10073462 / 3762mV( 37%)(-) / 47[0x000] 47[0x000], 33 / 00000000000000 /  - /   -  / PIN, MRST (M) , (S) PWRHOLD,PWROND, INFORM3(0) > NORMAL > JUMP2K [drawLOGO]
+[ 507] 260919 17:52:00 / MP (  0) /     / N / S901BXXSIFYI3 10073462 / 3766mV( 37%)(-) / 45[0x000] 46[0x000], 33 / 00000000000000 /  - /   -  / PIN, MRST (M) , (S) PWRHOLD,PWROND, INFORM3(0) > NORMAL > JUMP2K [drawLOGO]
+[ 506] 260919 17:51:52 / MP (  0) /     / N / S901BXXSIFYI3 10073462 / 3767mV( 37%)(-) / 42[0x000] 43[0x000], 33 / 00000000000000 /  - /   -  / PIN, MRST (M) , (S) PWRHOLD,PWROND, INFORM3(0) > NORMAL > JUMP2K [drawLOGO]
+[ 505] 260919 17:43:01 / RP (  0) /     / D / S901BXXSIFYI3 10073462 / 3803mV( 37%)(+) / 34[0x000] 36[0x000], 29 / 00000000000000 /  - /   -  / SOFT, REBOOTMODE1, PDN,  > DOWNLOAD >  [DOWNLOAD_COMPLETE]
+[ 504] 260918 21:17:14 / KP (  1) /     / R / S901BXXSIFYI3 10073462 / 4345mV( 99%)(+) / 38[0x000] 39[0x000], 33 / 00000000000000 /  - /   -  / SOFT, PANIC > RECOVERY > , JUMP2K [drawLOGO]
+[ 503] 260918 21:14:47 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4342mV( 99%)(+) / 44[0x000] 44[0x000], 33 / 00000000000000 /  - /   -  / SOFT, INFORM3(0) > RECOVERY > , JUMP2K [drawLOGO]
+7e9ef0cc9c160020c79a8466db99bfa9ea0b8de5148b9ce441b77fef7aab557a  /dev/block/by-name/recovery
+87.93 692.91
+    1 root      0:02 /system/bin/native-guardian
+  480 root      0:00 sshd: /usr/sbin/sshd -D -e [listener] 0 of 10-100 startups
+ 1589 root      0:00 sshd-session: root [priv]
+ 1591 root      0:00 sshd-session: root@notty
+ 1592 root      0:00 sh -c mkdir -p /dev/block/by-name; ln -s /dev/sda28 /dev/block/by-name/debug; ln -s /dev/sda16 /dev/block/by-name/recovery; head -18 /proc/boot_reset; sha256sum /dev/block/by-name/recovery; cat /proc/uptime; ps -ef | grep -E "guardian|sshd|recovery|adbd"
+ 1600 root      0:00 grep -E guardian|sshd|recovery|adbd

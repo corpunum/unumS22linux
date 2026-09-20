@@ -1,0 +1,33 @@
+s22-linux
+/system/bin/native-guardian
+70.32 553.51
+magic: b0071257
+version: 20230221
+name: BORE
+last: 516
+[ IDX]       RTC       / RR (CNT) / KEY / M / VERSION       QB_ID    / VCELL ( BAT)(C) / TMU[TRIP],BAT           / I2C FAIL COUNT / DT / SLOT / BOOTING SEQUENCE
+[ 516] 260919 20:24:21 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4342mV( 99%)(+) / 36[0x000] 36[0x000], 30 / 00000000000000 /  - /   -  / SOFT, INFORM3(12345674) > RECOVERY > , JUMP2K [drawLOGO]
+[ 515] 260919 20:20:44 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4337mV( 99%)(+) / 42[0x000] 41[0x000], 29 / 00000000000000 /  - /   -  / SOFT, REBOOTMODE4 > RECOVERY > , JUMP2K [drawLOGO]
+[ 514] 260919 20:20:22 / RP (  0) /     / N / S901BXXSIFYI3 10073462 / 4336mV( 99%)(+) / 34[0x000] 34[0x000], 29 / 00000000000000 /  - /   -  / SOFT, REBOOTMODE0 > NORMAL > JUMP2K [drawLOGO]
+[ 513] 260919 19:54:47 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4339mV(100%)(+) / 37[0x000] 37[0x000], 30 / 00000000000000 /  - /   -  / SOFT, INFORM3(12345674) > RECOVERY > BL:Recovery Mode Set by key, JUMP2K [drawLOGO]
+[ 512] 260919 19:41:01 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4337mV( 91%)(+) / 37[0x000] 38[0x000], 31 / 00000000000000 /  - /   -  / SOFT, INFORM3(12345674) > RECOVERY > BL:Recovery Mode Set by key, JUMP2K [drawLOGO]
+lrwxrwxrwx    1 root     root             8 Sep 19 20:24 /dev/block/by-name/cache -> ../sda33
+lrwxrwxrwx    1 root     root             8 Sep 19 20:24 /dev/block/by-name/debug -> ../sda28
+lrwxrwxrwx    1 root     root             8 Sep 19 20:24 /dev/block/by-name/recovery -> ../sda16
+c30b106133c53a1adccb4ca00f4c7339eee00b21206094084cd0d8b90b5323a4  /dev/block/by-name/recovery
+wrapper: intercepting selinux_setup; native marker is present
+guardian: watchdog owned with timeout=30 seconds
+guardian: started native-start pid=478 resume=0
+native-start: device scan used generic /sys/dev/{char,block} uevents
+native-start: partition alias recovery -> sda16
+native-start: partition alias radio -> sda17
+native-start: partition alias metadata -> sda26
+native-start: partition alias fmp_selftest -> sda27
+native-start: partition alias debug -> sda28
+native-start: partition alias reserved -> sda29
+native-start: partition alias super -> sda30
+native-start: partition alias prism -> sda31
+MemTotal:        7448236 kB
+MemFree:         6855036 kB
+MemAvailable:    6716488 kB
+Buffers:             532 kB

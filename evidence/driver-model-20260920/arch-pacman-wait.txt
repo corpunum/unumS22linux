@@ -1,0 +1,4 @@
+strace: Process 13493 attached
+strace: Process 13499 attached
+[pid 13493] 22:50:42.820460 read(7strace: Process 13493 detached
+ <detached ...>

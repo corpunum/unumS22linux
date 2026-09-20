@@ -1,0 +1,12 @@
+#!/bin/sh
+printf '\033[2J\033[HS22 native Linux\n\n'
+printf 'Alpine + Wayland | CPU rendering\n'
+printf 'Python, Git, curl and SSH are ready.\n\n'
+printf 'Persistent space: df -h /\n'
+printf 'Install packages: apk add PACKAGE\n'
+printf 'Reboot to Linux: s22-reboot recovery\n\n'
+printf 'USB SSH: root@10.55.0.2\n'
+printf 'Internet currently uses USB sharing.\n'
+printf 'GPU compute not ready; NPU unproven.\n'
+printf 'Local model chat: s22-chat (RAM-staged)\n\n'
+exec /bin/sh -l

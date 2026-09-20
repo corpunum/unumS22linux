@@ -1,0 +1,9 @@
+
+S22 local chat | Qwen3.5 2B Q4 | CPU
+Offline. No command execution. /quit opens the shell.
+Model stays in RAM between questions.
+
+You> S22> Hello!
+[0.6s; first text 0.5s]
+
+You> 

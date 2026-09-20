@@ -1,0 +1,214 @@
+#!/system/bin/sh
+# Recovery-side native userspace setup. This deliberately does not create
+# /run/native-ready: that marker is created by the host over SSH.
+
+set -u
+BB=/system/bin/toybox
+LOG=/native/handoff.log
+PATH=/native/bin:/system/bin:/system/xbin:/sbin:/bin:/usr/sbin:/usr/bin
+export PATH
+
+log() {
+    printf 'native-start: %s\n' "$*" >> "$LOG" 2>/dev/null || true
+    printf 'native-start: %s\n' "$*" > /dev/kmsg 2>/dev/null || true
+}
+die() { log "FATAL: $*"; exit 1; }
+
+ensure_dir() {
+    if [ -L "$1" ]; then die "refusing symlink mount target $1"; fi
+    if [ -e "$1" ]; then [ -d "$1" ] || die "$1 exists and is not a directory"; return; fi
+    mkdir -p "$1" || die "mkdir $1 failed";
+}
+
+mounted() { "$BB" mountpoint -q "$1" 2>/dev/null; }
+
+mount_once() {
+    target=$1; shift
+    mounted "$target" || "$BB" mount "$@" "$target" || die "mount $target failed";
+}
+
+make_node() {
+    path=$1; kind=$2; major=$3; minor=$4
+    [ -e "$path" ] && return 0
+    ensure_dir "${path%/*}"
+    "$BB" mknod -m 0600 "$path" "$kind" "$major" "$minor" || \
+        die "mknod $path failed";
+}
+
+scan_devices() {
+    # Recovery first-stage intentionally skips AOSP DoCreateDevices. Prefer
+    # mdev when present; otherwise use uevent DEVNAME/MAJOR/MINOR records.
+    # The PARTNAME pass below must run in either case: mdev does not create
+    # Android's /dev/block/by-name aliases.
+    if "$BB" mdev -s >/dev/null 2>&1; then
+        log "device scan used toybox mdev -s"
+    else
+        for kind in char block; do
+            for entry in /sys/dev/$kind/*; do
+                [ -r "$entry/uevent" ] || continue
+                major= minor= name=
+                while IFS='=' read -r key value; do
+                    case "$key" in
+                        MAJOR) major=$value ;;
+                        MINOR) minor=$value ;;
+                        DEVNAME) name=$value ;;
+                    esac
+                done < "$entry/uevent"
+                [ -n "$major" ] && [ -n "$minor" ] && [ -n "$name" ] || continue
+                case "$name" in *..*|/*) continue ;; esac
+                path=/dev/$name
+                [ -e "$path" ] || {
+                    ensure_dir "${path%/*}"
+                    "$BB" mknod -m 0600 "$path" "$([ "$kind" = char ] && echo c || echo b)" \
+                        "$major" "$minor" 2>>"$LOG" || true
+                }
+                if [ "$kind" = block ]; then
+                    ensure_dir /dev/block
+                    [ -e "/dev/block/$name" ] || "$BB" ln -s "../$name" "/dev/block/$name" 2>>"$LOG" || true
+                fi
+            done
+        done
+        log "device scan used generic /sys/dev/{char,block} uevents"
+    fi
+
+    # The kernel's GPT parser exposes the partition label as PARTNAME in the
+    # block uevent. Deriving aliases from that metadata avoids guessing an
+    # sdaN index and keeps all links in this tmpfs-only /dev tree.
+    ensure_dir /dev/block
+    ensure_dir /dev/block/by-name
+    for entry in /sys/dev/block/*; do
+        [ -r "$entry/uevent" ] || continue
+        name= partname=
+        while IFS='=' read -r key value; do
+            case "$key" in
+                DEVNAME) name=$value ;;
+                PARTNAME) partname=$value ;;
+            esac
+        done < "$entry/uevent"
+        [ -n "$name" ] && [ -n "$partname" ] || continue
+        case "$name" in *..*|/*) continue ;; esac
+        case "$partname" in
+            *[!A-Za-z0-9._+-]*) continue ;;
+        esac
+        if [ ! -e "/dev/$name" ] && [ ! -e "/dev/block/$name" ]; then
+            continue
+        fi
+        [ -e "/dev/block/$name" ] || \
+            "$BB" ln -s "../$name" "/dev/block/$name" 2>>"$LOG" || true
+        [ -e "/dev/block/$name" ] || continue
+        alias=/dev/block/by-name/$partname
+        if [ ! -e "$alias" ]; then
+            "$BB" ln -s "../$name" "$alias" 2>>"$LOG" || true
+            [ -e "$alias" ] && log "partition alias $partname -> $name"
+        fi
+    done
+}
+
+setup_base_mounts() {
+    ensure_dir /proc; mount_once /proc -t proc proc
+    ensure_dir /sys; mount_once /sys -t sysfs sysfs
+    ensure_dir /config
+    mounted /config || "$BB" mount -t configfs configfs /config || die "configfs mount failed"
+    ensure_dir /dev
+    scan_devices
+    make_node /dev/null c 1 3
+    make_node /dev/kmsg c 1 11
+    make_node /dev/watchdog c 10 130
+    make_node /dev/console c 5 1
+}
+
+setup_cache() {
+    ensure_dir /cache
+    if [ ! -f /native/rootfs.tar.xz ] && [ ! -f /native/rootfs.tar.gz ] && \
+       [ ! -f /cache/native-rootfs.tar.gz ]; then
+        mounted /cache || "$BB" mount -t ext4 -o rw /dev/block/sda33 /cache || \
+            die "cache mount failed and no embedded rootfs exists"
+    fi
+}
+
+bind_tree() {
+    src=$1; dst=$2
+    ensure_dir "$dst"
+    mounted "$dst" || "$BB" mount --rbind "$src" "$dst" || \
+        "$BB" mount --bind "$src" "$dst" || die "bind $src -> $dst failed"
+    "$BB" mount --make-rslave "$dst" 2>/dev/null || true
+}
+
+configure_gadget() {
+    G=/config/usb_gadget/g1
+    C=$G/configs/b.1
+    UDC=10b00000.dwc3
+    if [ -e "$G" ]; then die "refusing to take over existing USB gadget $G"; fi
+    : > /run/native-gadget-owned || die "cannot create gadget ownership marker"
+    mkdir -p "$G/strings/0x409" "$C/strings/0x409" || die "gadget directories failed"
+    printf '%s\n' 0x1d6b > "$G/idVendor"
+    printf '%s\n' 0x0104 > "$G/idProduct"
+    printf '%s\n' 0x0100 > "$G/bcdDevice"
+    printf '%s\n' 0x0200 > "$G/bcdUSB"
+    printf '%s\n' S22-native > "$G/strings/0x409/serialnumber"
+    printf '%s\n' OpenAI > "$G/strings/0x409/manufacturer"
+    printf '%s\n' native-linux > "$G/strings/0x409/product"
+    printf '%s\n' native-ecm > "$C/strings/0x409/configuration"
+    printf '%s\n' 120 > "$C/MaxPower"
+    mkdir "$G/functions/ecm.usb0" || die "ECM function creation failed"
+    printf '%s\n' 02:73:22:00:00:02 > "$G/functions/ecm.usb0/dev_addr"
+    printf '%s\n' 02:73:22:00:00:01 > "$G/functions/ecm.usb0/host_addr"
+    printf '%s\n' 'ecm%d' > "$G/functions/ecm.usb0/ifname"
+    ln -s "$G/functions/ecm.usb0" "$C/f1" || die "ECM config link failed"
+    printf '%s\n' "$UDC" > "$G/UDC" || die "UDC bind failed"
+    log "ECM gadget bound to $UDC"
+}
+
+configure_network() {
+    chroot /newroot /sbin/ip link set lo up || die "loopback setup failed"
+    chroot /newroot /sbin/ip link set ecm0 up || die "ecm0 link setup failed"
+    chroot /newroot /sbin/ip addr replace 10.55.0.2/24 dev ecm0 || die "ECM address failed"
+    chroot /newroot /sbin/ip route replace 10.55.0.0/24 dev ecm0 || die "ECM route failed"
+    chroot /newroot /sbin/ip route replace default via 10.55.0.1 dev ecm0 || die "default route failed"
+    printf '%s\n' 'nameserver 10.55.0.1' > /newroot/etc/resolv.conf || die "DNS setup failed"
+}
+
+prepare_root() {
+    ensure_dir /newroot
+    if ! mounted /newroot; then
+        "$BB" mount -t tmpfs -o mode=0755,size=1G native-root /newroot || die "tmpfs root failed"
+        ensure_dir /newroot
+        if [ -f /native/rootfs.tar.xz ]; then
+            /native/lib/ld-musl-aarch64.so.1 /native/bin/busybox unxz -c \
+                /native/rootfs.tar.xz | "$BB" tar -xf - -C /newroot || \
+                die "xz rootfs extraction failed"
+        else
+            archive=/native/rootfs.tar.gz
+            [ -f "$archive" ] || archive=/cache/native-rootfs.tar.gz
+            [ -f "$archive" ] || die "rootfs archive not found"
+            "$BB" tar -xzf "$archive" -C /newroot || die "gzip rootfs extraction failed"
+        fi
+    fi
+    for tree in dev proc sys run; do
+        ensure_dir "/newroot/$tree"
+        bind_tree "/$tree" "/newroot/$tree"
+    done
+    ensure_dir /newroot/native
+    bind_tree /native /newroot/native
+    "$BB" mount -o remount,bind,ro /newroot/native 2>>"$LOG" || \
+        log "native log bind could not be remounted read-only"
+    ensure_dir /run/sshd
+    if [ ! -f /newroot/etc/ssh/ssh_host_ed25519_key ]; then
+        chroot /newroot /usr/bin/ssh-keygen -A || die "host key generation failed"
+    fi
+    chroot /newroot /bin/hostname s22-linux || die "hostname setup failed"
+}
+
+if [ "${1:-}" = resume ]; then
+    log "resuming SSH rescue"
+    [ -x /newroot/usr/sbin/sshd ] || die "native root is not prepared"
+    exec chroot /newroot /usr/sbin/sshd -D -e
+fi
+
+setup_base_mounts
+setup_cache
+configure_gadget
+prepare_root
+configure_network
+log "native root extracted and SSH starting; host must touch /run/native-ready"
+exec chroot /newroot /usr/sbin/sshd -D -e

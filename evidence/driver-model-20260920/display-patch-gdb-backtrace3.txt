@@ -1,0 +1,265 @@
+To enable execution of this file add
+	add-auto-load-safe-path /mnt/omarchy-trial/usr/lib/libthread_db.so.1
+line to your configuration file "/root/.config/gdb/gdbinit".
+To completely disable this security protection add
+	set auto-load safe-path /
+line to your configuration file "/root/.config/gdb/gdbinit".
+For more information about this security protection see the
+"Auto-loading safe path" section in the GDB manual.  E.g., run from the shell:
+	info "(gdb)Auto-loading safe path"
+
+warning: File "/mnt/omarchy-trial/usr/lib/libthread_db.so.1" auto-loading has been declined by your `auto-load safe-path' set to "$debugdir:$datadir/auto-load".
+
+warning: Unable to find libthread_db matching inferior's thread library, thread debugging will not be available.
+0x0000007fa552a848 in ?? () from /mnt/omarchy-trial/usr/lib/libc.so.6
+[New LWP 10044]
+[New LWP 10045]
+
+Thread 1 "Hyprland" received signal SIGSEGV, Segmentation fault.
+0x0000005580f80f78 in std::__format::_Sink<char>::_M_write(std::basic_string_view<char, std::char_traits<char> >) ()
+
+Thread 3 (LWP 10045 "Hyprland"):
+#0  0x0000007fa5531c68 in ?? () from /mnt/omarchy-trial/usr/lib/libc.so.6
+#1  0x0000007fa5525074 in ?? () from /mnt/omarchy-trial/usr/lib/libc.so.6
+#2  0x0000007fa5525424 in ?? () from /mnt/omarchy-trial/usr/lib/libc.so.6
+#3  0x0000007fa5527ddc in pthread_cond_wait () from /mnt/omarchy-trial/usr/lib/libc.so.6
+#4  0x0000007fa5871458 in std::condition_variable::wait(std::unique_lock<std::mutex>&) () from /mnt/omarchy-trial/usr/lib/libstdc++.so.6
+#5  0x0000007fa7385e30 in Aquamarine::CDRMCommitThread::takeNextRequest(std::unique_lock<std::mutex>&) () from /mnt/omarchy-trial/opt/s22-aquamarine/libaquamarine.so.14
+#6  0x0000007fa73862d0 in Aquamarine::CDRMCommitThread::run() () from /mnt/omarchy-trial/opt/s22-aquamarine/libaquamarine.so.14
+#7  0x0000007fa587e9bc in ?? () from /mnt/omarchy-trial/usr/lib/libstdc++.so.6
+#8  0x0000007fa5528978 in ?? () from /mnt/omarchy-trial/usr/lib/libc.so.6
+#9  0x0000007fa558e75c in ?? () from /mnt/omarchy-trial/usr/lib/libc.so.6
+
+Thread 2 (LWP 10044 "Hyprland"):
+#0  0x0000007fa5531c68 in ?? () from /mnt/omarchy-trial/usr/lib/libc.so.6
+#1  0x0000007fa5525074 in ?? () from /mnt/omarchy-trial/usr/lib/libc.so.6
+#2  0x0000007fa5525424 in ?? () from /mnt/omarchy-trial/usr/lib/libc.so.6
+#3  0x0000007fa55281ec in pthread_cond_clockwait () from /mnt/omarchy-trial/usr/lib/libc.so.6
+#4  0x0000007fa70f721c in Hyprgraphics::CAsyncResourceGatherer::asyncAssetSpinLock() () from /mnt/omarchy-trial/usr/lib/libhyprgraphics.so.4
+#5  0x0000007fa587e9bc in ?? () from /mnt/omarchy-trial/usr/lib/libstdc++.so.6
+#6  0x0000007fa5528978 in ?? () from /mnt/omarchy-trial/usr/lib/libc.so.6
+#7  0x0000007fa558e75c in ?? () from /mnt/omarchy-trial/usr/lib/libc.so.6
+
+Thread 1 (LWP 10026 "Hyprland"):
+#0  0x0000005580f80f78 in std::__format::_Sink<char>::_M_write(std::basic_string_view<char, std::char_traits<char> >) ()
+#1  0x0000005580f82218 in std::basic_format_context<std::__format::_Sink_iter<char>, char>::iterator std::__format::__formatter_int<char>::_M_format_int<std::__format::_Sink_iter<char> >(std::basic_string_view<char, std::char_traits<char> >, unsigned long, std::basic_format_context<std::__format::_Sink_iter<char>, char>&) const ()
+#2  0x0000005580f8af60 in decltype(auto) std::basic_format_arg<std::basic_format_context<std::__format::_Sink_iter<char>, char> >::_M_visit<std::__format::_Formatting_scanner<std::__format::_Sink_iter<char>, char>::_M_format_arg(unsigned long)::{lambda(auto:1&)#1}>(std::__format::_Formatting_scanner<std::__format::_Sink_iter<char>, char>::_M_format_arg(unsigned long)::{lambda(auto:1&)#1}&&, std::__format::_Arg_t) ()
+#3  0x0000007fa7391264 in std::__format::_Sink_iter<char> std::__format::__do_vformat_to<std::__format::_Sink_iter<char>, char, std::basic_format_context<std::__format::_Sink_iter<char>, char> >(std::__format::_Sink_iter<char>, std::basic_string_view<char, std::char_traits<char> >, std::basic_format_args<std::basic_format_context<std::__format::_Sink_iter<char>, char> > const&, std::locale const*) [clone .isra.0] () from /mnt/omarchy-trial/opt/s22-aquamarine/libaquamarine.so.14
+#4  0x0000007fa73ab1dc in Aquamarine::CDRMBackend::onReady() () from /mnt/omarchy-trial/opt/s22-aquamarine/libaquamarine.so.14
+#5  0x0000007fa735c44c in Aquamarine::CBackend::start() () from /mnt/omarchy-trial/opt/s22-aquamarine/libaquamarine.so.14
+#6  0x0000005580f9a528 in CCompositor::initServer(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, int) ()
+#7  0x0000005580e452d4 in main ()
+From                To                  Syms Read   Shared Object Library
+0x0000007fa7570720  0x0000007fa75708e8  Yes (*)     /mnt/omarchy-trial/opt/s22-aquamarine/libdebugger-stop.so
+0x0000007fa7541f40  0x0000007fa7543080  Yes (*)     /mnt/omarchy-trial/usr/lib/libxcb-icccm.so.4
+0x0000007fa7520da0  0x0000007fa7521874  Yes (*)     /mnt/omarchy-trial/usr/lib/libxcb-composite.so.0
+0x0000007fa7502f40  0x0000007fa7505b3c  Yes (*)     /mnt/omarchy-trial/usr/lib/libxcb-xfixes.so.0
+0x0000007fa74e5250  0x0000007fa74e9a30  Yes (*)     /mnt/omarchy-trial/usr/lib/libxcb-render.so.0
+0x0000007fa74c1670  0x0000007fa74c22bc  Yes (*)     /mnt/omarchy-trial/usr/lib/libxcb-res.so.0
+0x0000007fa74912a0  0x0000007fa7492268  Yes (*)     /mnt/omarchy-trial/usr/lib/libxcb-errors.so.0
+0x0000007fa745bcc0  0x0000007fa746fafc  Yes (*)     /mnt/omarchy-trial/usr/lib/libxcb.so.1
+0x0000007fa73238c0  0x0000007fa73e17f0  Yes (*)     /mnt/omarchy-trial/opt/s22-aquamarine/libaquamarine.so.14
+0x0000007fa727b100  0x0000007fa72a7900  Yes (*)     /mnt/omarchy-trial/usr/lib/libhyprlang.so.2
+0x0000007fa71d9820  0x0000007fa723163c  Yes (*)     /mnt/omarchy-trial/usr/lib/libhyprutils.so.13
+0x0000007fa7142180  0x0000007fa718657c  Yes (*)     /mnt/omarchy-trial/usr/lib/libhyprcursor.so.0
+0x0000007fa70dbc40  0x0000007fa70facc4  Yes (*)     /mnt/omarchy-trial/usr/lib/libhyprgraphics.so.4
+0x0000007fa7056660  0x0000007fa7082590  Yes (*)     /mnt/omarchy-trial/usr/lib/libxkbcommon.so.0
+0x0000007fa70218a0  0x0000007fa702620c  Yes (*)     /mnt/omarchy-trial/usr/lib/libuuid.so.1
+0x0000007fa6fe74a0  0x0000007fa6ff120c  Yes (*)     /mnt/omarchy-trial/usr/lib/libwayland-server.so.0
+0x0000007fa6fb5060  0x0000007fa6fbcc10  Yes (*)     /mnt/omarchy-trial/usr/lib/libpangocairo-1.0.so.0
+0x0000007fa6f253e0  0x0000007fa6f676ec  Yes (*)     /mnt/omarchy-trial/usr/lib/libpango-1.0.so.0
+0x0000007fa6dc4640  0x0000007fa6ea7ec8  Yes (*)     /mnt/omarchy-trial/usr/lib/libcairo.so.2
+0x0000007fa6cfb460  0x0000007fa6d759f8  Yes (*)     /mnt/omarchy-trial/usr/lib/libpixman-1.so.0
+0x0000007fa6cc2620  0x0000007fa6cc9420  Yes (*)     /mnt/omarchy-trial/usr/lib/libXcursor.so.1
+0x0000007fa6c850a0  0x0000007fa6c918cc  Yes (*)     /mnt/omarchy-trial/usr/lib/libdrm.so.2
+0x0000007fa6bef080  0x0000007fa6c3a4a0  Yes (*)     /mnt/omarchy-trial/usr/lib/libinput.so.10
+0x0000007fa6b97200  0x0000007fa6baa928  Yes (*)     /mnt/omarchy-trial/usr/lib/libeis.so.1
+0x0000007fa6b614a0  0x0000007fa6b627ac  Yes (*)     /mnt/omarchy-trial/usr/lib/libgbm.so.1
+0x0000007fa6944f40  0x0000007fa6ab0df8  Yes (*)     /mnt/omarchy-trial/usr/lib/libgio-2.0.so.0
+0x0000007fa68815e0  0x0000007fa68bd54c  Yes (*)     /mnt/omarchy-trial/usr/lib/libgobject-2.0.so.0
+0x0000007fa67d9fa0  0x0000007fa68299b8  Yes (*)     /mnt/omarchy-trial/usr/lib/libre2.so.11
+0x0000007fa6722d60  0x0000007fa677f71c  Yes (*)     /mnt/omarchy-trial/usr/lib/libmuparser.so.2
+0x0000007fa668bd00  0x0000007fa66ce2c8  Yes (*)     /mnt/omarchy-trial/usr/lib/liblcms2.so.2
+0x0000007fa6617800  0x0000007fa664bcac  Yes (*)     /mnt/omarchy-trial/usr/lib/liblua.so.5.5
+0x0000007fa65d30c0  0x0000007fa65dfa10  Yes (*)     /mnt/omarchy-trial/usr/lib/libEGL.so.1
+0x0000007fa6587b80  0x0000007fa65882fc  Yes (*)     /mnt/omarchy-trial/usr/lib/libGLESv2.so.2
+0x0000007fa6551180  0x0000007fa655415c  Yes (*)     /mnt/omarchy-trial/usr/lib/libglslang-default-resource-limits.so.16
+0x0000007fa5abc840  0x0000007fa5d51418  Yes (*)     /mnt/omarchy-trial/usr/lib/libglslang.so.16
+0x0000007fa58371a0  0x0000007fa59b87cc  Yes (*)     /mnt/omarchy-trial/usr/lib/libstdc++.so.6
+0x0000007fa56beae0  0x0000007fa5717228  Yes (*)     /mnt/omarchy-trial/usr/lib/libm.so.6
+0x0000007fa5673540  0x0000007fa568b9a8  Yes (*)     /mnt/omarchy-trial/usr/lib/libgcc_s.so.1
+0x0000007fa54c2500  0x0000007fa55e0dd0  Yes (*)     /mnt/omarchy-trial/usr/lib/libc.so.6
+0x0000007fa7593bc0  0x0000007fa75b12e4  Yes (*)     /mnt/omarchy-trial/lib/ld-linux-aarch64.so.1
+0x0000007fa5470cc0  0x0000007fa5471db0  Yes (*)     /mnt/omarchy-trial/usr/lib/libXau.so.6
+0x0000007fa5441220  0x0000007fa5442ea4  Yes (*)     /mnt/omarchy-trial/usr/lib/libXdmcp.so.6
+0x0000007fa53d4240  0x0000007fa53d49bc  Yes (*)     /mnt/omarchy-trial/usr/lib/libOpenGL.so.0
+0x0000007fa5391c40  0x0000007fa539729c  Yes (*)     /mnt/omarchy-trial/usr/lib/libseat.so.1
+0x0000007fa5355f60  0x0000007fa535d50c  Yes (*)     /mnt/omarchy-trial/usr/lib/libwayland-client.so.0
+0x0000007fa518bb00  0x0000007fa52ba50c  Yes (*)     /mnt/omarchy-trial/usr/lib/libudev.so.1
+0x0000007fa5112560  0x0000007fa512b148  Yes (*)     /mnt/omarchy-trial/usr/lib/libdisplay-info.so.3
+0x0000007fa50c5b80  0x0000007fa50dd898  Yes (*)     /mnt/omarchy-trial/usr/lib/libzip.so.5
+0x0000007fa4c909a0  0x0000007fa4f23f3c  Yes (*)     /mnt/omarchy-trial/usr/lib/librsvg-2.so.2
+0x0000007fa4bcd3a0  0x0000007fa4bf0770  Yes (*)     /mnt/omarchy-trial/usr/lib/libtomlplusplus.so.3
+0x0000007fa4b25a00  0x0000007fa4b8c7ac  Yes (*)     /mnt/omarchy-trial/usr/lib/libjpeg.so.8
+0x0000007fa4aa4560  0x0000007fa4ae48a0  Yes (*)     /mnt/omarchy-trial/usr/lib/libwebp.so.7
+0x0000007fa4a53be0  0x0000007fa4a703ec  Yes (*)     /mnt/omarchy-trial/usr/lib/libmagic.so.1
+0x0000007fa49f6240  0x0000007fa4a1bc80  Yes (*)     /mnt/omarchy-trial/usr/lib/libpng16.so.16
+0x0000007fa4874380  0x0000007fa492af50  Yes (*)     /mnt/omarchy-trial/usr/lib/libglib-2.0.so.0
+0x0000007fa42f74a0  0x0000007fa470d20c  Yes (*)     /mnt/omarchy-trial/usr/lib/libjxl.so.0.12
+0x0000007fa42b0fe0  0x0000007fa42b2a0c  Yes (*)     /mnt/omarchy-trial/usr/lib/libjxl_threads.so.0.12
+0x0000007fa4281ea0  0x0000007fa4288dfc  Yes (*)     /mnt/omarchy-trial/usr/lib/libffi.so.8
+0x0000007fa4248380  0x0000007fa425888c  Yes (*)     /mnt/omarchy-trial/usr/lib/libpangoft2-1.0.so.0
+0x0000007fa40cd280  0x0000007fa41dbc30  Yes (*)     /mnt/omarchy-trial/usr/lib/libharfbuzz.so.0
+0x0000007fa4037ea0  0x0000007fa4066c30  Yes (*)     /mnt/omarchy-trial/usr/lib/libfontconfig.so.1
+0x0000007fa3ff1320  0x0000007fa3ff5d38  Yes (*)     /mnt/omarchy-trial/usr/lib/libfribidi.so.0
+0x0000007fa3fc1f80  0x0000007fa3fc5f60  Yes (*)     /mnt/omarchy-trial/usr/lib/libthai.so.0
+0x0000007fa3f826a0  0x0000007fa3f90004  Yes (*)     /mnt/omarchy-trial/usr/lib/libz.so.1
+0x0000007fa3ead8e0  0x0000007fa3f31bc8  Yes (*)     /mnt/omarchy-trial/usr/lib/libfreetype.so.6
+0x0000007fa3d4b360  0x0000007fa3dddef8  Yes (*)     /mnt/omarchy-trial/usr/lib/libX11.so.6
+0x0000007fa3cf35a0  0x0000007fa3cff2fc  Yes (*)     /mnt/omarchy-trial/usr/lib/libXext.so.6
+0x0000007fa3cc1940  0x0000007fa3cc9548  Yes (*)     /mnt/omarchy-trial/usr/lib/libXrender.so.1
+0x0000007fa3ca0d30  0x0000007fa3ca18a8  Yes (*)     /mnt/omarchy-trial/usr/lib/libxcb-shm.so.0
+0x0000007fa3c714a0  0x0000007fa3c74330  Yes (*)     /mnt/omarchy-trial/usr/lib/libXfixes.so.3
+0x0000007fa3c40e00  0x0000007fa3c43640  Yes (*)     /mnt/omarchy-trial/usr/lib/libmtdev.so.1
+0x0000007fa3c0ba20  0x0000007fa3c12038  Yes (*)     /mnt/omarchy-trial/usr/lib/libevdev.so.2
+0x0000007fa3bd42c0  0x0000007fa3bdc92c  Yes (*)     /mnt/omarchy-trial/usr/lib/libwacom.so.9
+0x0000007fa3b67860  0x0000007fa3b993b4  Yes (*)     /mnt/omarchy-trial/usr/lib/liblua5.4.so.5.4
+0x0000007fa3b13920  0x0000007fa3b30d44  Yes (*)     /mnt/omarchy-trial/usr/lib/libexpat.so.1
+0x0000007fa3ae11e0  0x0000007fa3ae2508  Yes (*)     /mnt/omarchy-trial/usr/lib/libgmodule-2.0.so.0
+0x0000007fa3a4d9e0  0x0000007fa3aa3790  Yes (*)     /mnt/omarchy-trial/usr/lib/libmount.so.1
+0x0000007fa3a122e0  0x0000007fa3a14f1c  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_log_internal_check_op.so.2608.0.0
+0x0000007fa39e5980  0x0000007fa39ea400  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_log_internal_message.so.2608.0.0
+0x0000007fa39b22a0  0x0000007fa39b6794  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_raw_hash_set.so.2608.0.0
+0x0000007fa3975be0  0x0000007fa3987750  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_str_format_internal.so.2608.0.0
+0x0000007fa3940720  0x0000007fa3940e04  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_hash.so.2608.0.0
+0x0000007fa3914d20  0x0000007fa391a9fc  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_synchronization.so.2608.0.0
+0x0000007fa38c5ce0  0x0000007fa38d86a4  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_strings.so.2608.0.0
+0x0000007fa3891e80  0x0000007fa38928a4  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_throw_delegate.so.2608.0.0
+0x0000007fa3861a80  0x0000007fa3862d68  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_base.so.2608.0.0
+0x0000007fa3830b80  0x0000007fa3831180  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_raw_logging_internal.so.2608.0.0
+0x0000007fa3800720  0x0000007fa3800a40  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_spinlock_wait.so.2608.0.0
+0x0000007fa378b2a0  0x0000007fa37c5150  Yes (*)     /mnt/omarchy-trial/usr/lib/libgomp.so.1
+0x0000007fa3630800  0x0000007fa363303c  Yes (*)     /mnt/omarchy-trial/usr/lib/libGLdispatch.so.0
+0x0000007fa32b4860  0x0000007fa3565cb4  Yes (*)     /mnt/omarchy-trial/usr/lib/libSPIRV-Tools-opt.so
+0x0000007fa3031020  0x0000007fa31800b4  Yes (*)     /mnt/omarchy-trial/usr/lib/libSPIRV-Tools.so
+0x0000007fa2dcc620  0x0000007fa2f6012c  Yes (*)     /mnt/omarchy-trial/usr/lib/libsystemd.so.0
+0x0000007fa2d71510  0x0000007fa2d7df74  Yes (*)     /mnt/omarchy-trial/usr/lib/libbz2.so.1.0
+0x0000007fa2d24020  0x0000007fa2d4167c  Yes (*)     /mnt/omarchy-trial/usr/lib/liblzma.so.5
+0x0000007fa2c3c0c0  0x0000007fa2cdf1a8  Yes (*)     /mnt/omarchy-trial/usr/lib/libzstd.so.1
+0x0000007fa26d1800  0x0000007fa29cbe70  Yes (*)     /mnt/omarchy-trial/usr/lib/libcrypto.so.3
+0x0000007fa25789a0  0x0000007fa2597960  Yes (*)     /mnt/omarchy-trial/usr/lib/libgdk_pixbuf-2.0.so.0
+0x0000007fa24659e0  0x0000007fa24fcdec  Yes (*)     /mnt/omarchy-trial/usr/lib/libdav1d.so.7
+0x0000007fa2324b40  0x0000007fa23f7820  Yes (*)     /mnt/omarchy-trial/usr/lib/libxml2.so.16
+0x0000007fa22d0a80  0x0000007fa22d3530  Yes (*)     /mnt/omarchy-trial/usr/lib/libsharpyuv.so.0
+0x0000007fa2212940  0x0000007fa227d75c  Yes (*)     /mnt/omarchy-trial/usr/lib/libpcre2-8.so.0
+0x0000007fa21d1ce0  0x0000007fa21ea088  Yes (*)     /mnt/omarchy-trial/usr/lib/libjxl_cms.so.0.12
+0x0000007fa21a1e60  0x0000007fa21a8598  Yes (*)     /mnt/omarchy-trial/usr/lib/libhwy.so.1
+0x0000007fa2170d00  0x0000007fa2178648  Yes (*)     /mnt/omarchy-trial/usr/lib/libbrotlidec.so.1
+0x0000007fa2080ce0  0x0000007fa20ef5cc  Yes (*)     /mnt/omarchy-trial/usr/lib/libbrotlienc.so.1
+0x0000007fa2043000  0x0000007fa205a320  Yes (*)     /mnt/omarchy-trial/usr/lib/libgraphite2.so.3
+0x0000007fa2011920  0x0000007fa201611c  Yes (*)     /mnt/omarchy-trial/usr/lib/libdatrie.so.1
+0x0000007fa1fe3920  0x0000007fa1fe851c  Yes (*)     /mnt/omarchy-trial/usr/lib/libgudev-1.0.so.0
+0x0000007fa1f69ca0  0x0000007fa1fa87d0  Yes (*)     /mnt/omarchy-trial/usr/lib/libblkid.so.1
+0x0000007fa1f30700  0x0000007fa1f30830  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_leak_check.so.2608.0.0
+0x0000007fa1f00560  0x0000007fa1f00644  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_log_internal_nullguard.so.2608.0.0
+0x0000007fa1ed09a0  0x0000007fa1ed10c8  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_examine_stack.so.2608.0.0
+0x0000007fa1ea0f60  0x0000007fa1ea17e0  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_log_internal_format.so.2608.0.0
+0x0000007fa1e70740  0x0000007fa1e70908  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_log_internal_structured_proto.so.2608.0.0
+0x0000007fa1e40980  0x0000007fa1e40ee4  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_strerror.so.2608.0.0
+0x0000007fa1e113c0  0x0000007fa1e12328  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_log_internal_log_sink_set.so.2608.0.0
+0x0000007fa1de0be0  0x0000007fa1de0f48  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_log_internal_globals.so.2608.0.0
+0x0000007fa1db1740  0x0000007fa1db2568  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_log_globals.so.2608.0.0
+0x0000007fa1d80880  0x0000007fa1d81354  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_log_internal_proto.so.2608.0.0
+0x0000007fa1d44fe0  0x0000007fa1d4e3c4  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_time.so.2608.0.0
+0x0000007fa1d11560  0x0000007fa1d12248  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_strings_internal.so.2608.0.0
+0x0000007fa1ce1960  0x0000007fa1ce252c  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_hashtablez_sampler.so.2608.0.0
+0x0000007fa1cb1520  0x0000007fa1cb32a4  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_int128.so.2608.0.0
+0x0000007fa1c80600  0x0000007fa1c80fa0  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_city.so.2608.0.0
+0x0000007fa1c51020  0x0000007fa1c51838  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_kernel_timeout_internal.so.2608.0.0
+0x0000007fa1c20be0  0x0000007fa1c223b4  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_stacktrace.so.2608.0.0
+0x0000007fa1bf0560  0x0000007fa1bf0670  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_tracing_internal.so.2608.0.0
+0x0000007fa1bc11e0  0x0000007fa1bc28a8  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_malloc_internal.so.2608.0.0
+0x0000007fa18c0be0  0x0000007fa1b79454  Yes (*)     /mnt/omarchy-trial/usr/lib/libglycin-2.so.0
+0x0000007fa15e6f60  0x0000007fa17073ec  Yes (*)     /mnt/omarchy-trial/usr/lib/libicuuc.so.78
+0x0000007fa15208c0  0x0000007fa1521374  Yes (*)     /mnt/omarchy-trial/usr/lib/libbrotlicommon.so.1
+0x0000007fa14f1720  0x0000007fa14f4408  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_symbolize.so.2608.0.0
+0x0000007fa14c0780  0x0000007fa14c08a4  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_log_sink.so.2608.0.0
+0x0000007fa1486220  0x0000007fa149535c  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_time_zone.so.2608.0.0
+0x0000007fa1451c00  0x0000007fa1452e18  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_debugging_internal.so.2608.0.0
+0x0000007fa1402900  0x0000007fa1411198  Yes (*)     /mnt/omarchy-trial/usr/lib/libseccomp.so.2
+0x0000007f9f440460  0x0000007f9f440544  Yes (*)     /mnt/omarchy-trial/usr/lib/libicudata.so.78
+0x0000007f9f411b40  0x0000007f9f419604  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_demangle_internal.so.2608.0.0
+0x0000007f9f3e0700  0x0000007f9f3e2ea4  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_demangle_rust.so.2608.0.0
+0x0000007f9f3b0700  0x0000007f9f3b0ce8  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_decode_rust_punycode.so.2608.0.0
+0x0000007f9f380520  0x0000007f9f380704  Yes (*)     /mnt/omarchy-trial/usr/lib/libabsl_utf8_for_code_point.so.2608.0.0
+0x0000007f9e322500  0x0000007f9e32d9b0  Yes (*)     /mnt/omarchy-trial/usr/lib/gbm/dri_gbm.so
+0x0000007f9afceec0  0x0000007f9cd1f150  Yes (*)     /mnt/omarchy-trial/usr/lib/libgallium-26.2.3-arch1.1.so
+0x0000007f915fb140  0x0000007f96c36a90  Yes (*)     /mnt/omarchy-trial/usr/lib/libLLVM.so.22.1
+0x0000007f90c52b00  0x0000007f90c5a0ac  Yes (*)     /mnt/omarchy-trial/usr/lib/libsensors.so.5
+0x0000007f90c26dd0  0x0000007f90c2bf8c  Yes (*)     /mnt/omarchy-trial/usr/lib/libxcb-randr.so.0
+0x0000007f90c022c0  0x0000007f90c04684  Yes (*)     /mnt/omarchy-trial/usr/lib/libxcb-sync.so.1
+0x0000007f90be0f70  0x0000007f90be19f0  Yes (*)     /mnt/omarchy-trial/usr/lib/libxcb-present.so.0
+0x0000007f90bb0a00  0x0000007f90bb0ea4  Yes (*)     /mnt/omarchy-trial/usr/lib/libxshmfence.so.1
+0x0000007f90b91870  0x0000007f90b92c70  Yes (*)     /mnt/omarchy-trial/usr/lib/libxcb-dri3.so.0
+0x0000007f90b53540  0x0000007f90b65d74  Yes (*)     /mnt/omarchy-trial/usr/lib/libelf.so.1
+0x0000007f90b22e00  0x0000007f90b28d20  Yes (*)     /mnt/omarchy-trial/usr/lib/libdrm_amdgpu.so.1
+0x0000007f90ad2f40  0x0000007f90ae8160  Yes (*)     /mnt/omarchy-trial/usr/lib/libdrm_intel.so.1
+0x0000007f90aa04a0  0x0000007f90aa05b8  Yes (*)     /mnt/omarchy-trial/usr/lib/libX11-xcb.so.1
+0x0000007f90a48ea0  0x0000007f90a69330  Yes (*)     /mnt/omarchy-trial/usr/lib/libedit.so.0
+0x0000007f90a120c0  0x0000007f90a16e68  Yes (*)     /mnt/omarchy-trial/usr/lib/libpciaccess.so.0
+0x0000007f90986060  0x0000007f909c904c  Yes (*)     /mnt/omarchy-trial/usr/lib/libncursesw.so.6
+(*): Shared library is missing debugging information.
+x0             0x100               256
+x1             0x3                 3
+x2             0x7fffa357d3        549749741523
+x3             0x0                 0
+x4             0x7fffa35920        549749741856
+x5             0x50000             327680
+x6             0x7fffa357d6        549749741526
+x7             0x7fffa357d3        549749741523
+x8             0xb5                181
+x9             0x270f              9999
+x10            0x64                100
+x11            0x51eb851f          1374389535
+x12            0x3                 3
+x13            0x7d                125
+x14            0x7fa75caaa0        548268714656
+x15            0x0                 0
+x16            0x5580f8a900        367236000000
+x17            0x7fa7441a80        548267104896
+x18            0xd                 13
+x19            0x100               256
+x20            0x100               256
+x21            0x7fffa35920        549749741856
+x22            0x7fffa357d3        549749741523
+x23            0x7fa73fa418        548266812440
+x24            0x7fffa357d3        549749741523
+x25            0x0                 0
+x26            0x3                 3
+x27            0x3                 3
+x28            0x7fa73fa400        548266812416
+x29            0x7fffa35600        549749741056
+x30            0x5580f82218        367235965464
+sp             0x7fffa35600        0x7fffa35600
+pc             0x5580f80f78        0x5580f80f78 <std::__format::_Sink<char>::_M_write(std::basic_string_view<char, std::char_traits<char> >)+24>
+cpsr           0x80001000          [ EL=0 BTYPE=0 SSBS N ]
+fpsr           0x10                [ IXC ]
+fpcr           0x0                 [ Len=0 Stride=0 RMode=0 ]
+vg             0x2                 2
+tpidr          0x7fa74bb740        0x7fa74bb740
+pauth_dmask    0x7fff8000000000    36028247263150080
+pauth_cmask    0x7fff8000000000    36028247263150080
+   0x5580f80f68 <_ZNSt8__format5_SinkIcE8_M_writeESt17basic_string_viewIcSt11char_traitsIcEE+8>:	stp	x19, x20, [sp, #16]
+   0x5580f80f6c <_ZNSt8__format5_SinkIcE8_M_writeESt17basic_string_viewIcSt11char_traitsIcEE+12>:	mov	x19, x0
+   0x5580f80f70 <_ZNSt8__format5_SinkIcE8_M_writeESt17basic_string_viewIcSt11char_traitsIcEE+16>:	stp	x27, x28, [sp, #80]
+   0x5580f80f74 <_ZNSt8__format5_SinkIcE8_M_writeESt17basic_string_viewIcSt11char_traitsIcEE+20>:	mov	x27, x1
+=> 0x5580f80f78 <_ZNSt8__format5_SinkIcE8_M_writeESt17basic_string_viewIcSt11char_traitsIcEE+24>:	ldp	x1, x20, [x0, #8]
+   0x5580f80f7c <_ZNSt8__format5_SinkIcE8_M_writeESt17basic_string_viewIcSt11char_traitsIcEE+28>:	ldr	x0, [x0, #24]
+   0x5580f80f80 <_ZNSt8__format5_SinkIcE8_M_writeESt17basic_string_viewIcSt11char_traitsIcEE+32>:	stp	x21, x22, [sp, #32]
+   0x5580f80f84 <_ZNSt8__format5_SinkIcE8_M_writeESt17basic_string_viewIcSt11char_traitsIcEE+36>:	sub	x1, x0, x1
+   0x5580f80f88 <_ZNSt8__format5_SinkIcE8_M_writeESt17basic_string_viewIcSt11char_traitsIcEE+40>:	cmp	x1, x20
+   0x5580f80f8c <_ZNSt8__format5_SinkIcE8_M_writeESt17basic_string_viewIcSt11char_traitsIcEE+44>:	b.hi	0x5580f812a4 <_ZNSt8__format5_SinkIcE8_M_writeESt17basic_string_viewIcSt11char_traitsIcEE+836>  // b.pmore
+   0x5580f80f90 <_ZNSt8__format5_SinkIcE8_M_writeESt17basic_string_viewIcSt11char_traitsIcEE+48>:	sub	x20, x20, x1
+   0x5580f80f94 <_ZNSt8__format5_SinkIcE8_M_writeESt17basic_string_viewIcSt11char_traitsIcEE+52>:	mov	x22, x2
+Kill the program being debugged? (y or n) [answered Y; input not from terminal]
+[Inferior 1 (process 10026) killed]

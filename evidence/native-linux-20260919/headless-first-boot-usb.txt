@@ -1,0 +1,14 @@
+2026-09-19T22:40:54+03:00
+List of devices attached
+2026-09-19T22:41:24+03:00
+List of devices attached
+DEVICE_SERIAL_REDACTED            recovery usb:5-1 product:r0sxxx model:SM_S901B device:r0s transport_id:19
+
+Bus 005 Device 069: ID 18d1:d001 Google Inc. Nexus 4 (fastboot)
+2026-09-19T22:42:33+03:00
+List of devices attached
+DEVICE_SERIAL_REDACTED            recovery usb:5-1 product:r0sxxx model:SM_S901B device:r0s transport_id:20
+
+Bus 005 Device 070: ID 18d1:d001 Google Inc. Nexus 4 (fastboot)
+2026-09-19T22:42:55+03:00
+Observation interval complete; no device actions performed.

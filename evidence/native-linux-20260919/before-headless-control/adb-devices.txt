@@ -1,0 +1,3 @@
+List of devices attached
+DEVICE_SERIAL_REDACTED            recovery usb:5-1 product:r0sxxx model:SM_S901B device:r0s transport_id:17
+

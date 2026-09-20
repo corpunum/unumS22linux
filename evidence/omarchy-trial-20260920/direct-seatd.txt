@@ -1,0 +1,46 @@
+00:00:00.000 [INFO] [seatd/seat.c:50] Created seat seat0
+00:00:00.000 [INFO] [seatd/seatd.c:194] seatd started
+00:00:00.220 [INFO] [seatd/server.c:145] New client connected (pid: 4492, uid: 0, gid: 0)
+00:00:00.220 [INFO] [seatd/seat.c:248] Added client 1 to seat0
+00:00:00.220 [INFO] [seatd/seat.c:584] Opened client 1 on seat0
+00:00:00.245 [DEBUG] [seatd/seat.c:331] Opening device /dev/input/event6 for client 1 on seat0
+00:00:00.245 [ERROR] [seatd/seat.c:342] Could not canonicalize path /dev/input/event6: No such file or directory
+00:00:00.245 [ERROR] [seatd/client.c:229] Could not open device: No such file or directory
+00:00:00.246 [DEBUG] [seatd/seat.c:331] Opening device /dev/input/event7 for client 1 on seat0
+00:00:00.246 [ERROR] [seatd/seat.c:342] Could not canonicalize path /dev/input/event7: No such file or directory
+00:00:00.246 [ERROR] [seatd/client.c:229] Could not open device: No such file or directory
+00:00:00.248 [DEBUG] [seatd/seat.c:331] Opening device /dev/input/event8 for client 1 on seat0
+00:00:00.248 [ERROR] [seatd/seat.c:342] Could not canonicalize path /dev/input/event8: No such file or directory
+00:00:00.248 [ERROR] [seatd/client.c:229] Could not open device: No such file or directory
+00:00:00.249 [DEBUG] [seatd/seat.c:331] Opening device /dev/input/event1 for client 1 on seat0
+00:00:00.249 [ERROR] [seatd/seat.c:342] Could not canonicalize path /dev/input/event1: No such file or directory
+00:00:00.249 [ERROR] [seatd/client.c:229] Could not open device: No such file or directory
+00:00:00.250 [DEBUG] [seatd/seat.c:331] Opening device /dev/input/event0 for client 1 on seat0
+00:00:00.250 [ERROR] [seatd/seat.c:342] Could not canonicalize path /dev/input/event0: No such file or directory
+00:00:00.250 [ERROR] [seatd/client.c:229] Could not open device: No such file or directory
+00:00:00.251 [DEBUG] [seatd/seat.c:331] Opening device /dev/input/event10 for client 1 on seat0
+00:00:00.251 [ERROR] [seatd/seat.c:342] Could not canonicalize path /dev/input/event10: No such file or directory
+00:00:00.251 [ERROR] [seatd/client.c:229] Could not open device: No such file or directory
+00:00:00.252 [DEBUG] [seatd/seat.c:331] Opening device /dev/input/event2 for client 1 on seat0
+00:00:00.252 [ERROR] [seatd/seat.c:342] Could not canonicalize path /dev/input/event2: No such file or directory
+00:00:00.252 [ERROR] [seatd/client.c:229] Could not open device: No such file or directory
+00:00:00.253 [DEBUG] [seatd/seat.c:331] Opening device /dev/input/event3 for client 1 on seat0
+00:00:00.253 [ERROR] [seatd/seat.c:342] Could not canonicalize path /dev/input/event3: No such file or directory
+00:00:00.253 [ERROR] [seatd/client.c:229] Could not open device: No such file or directory
+00:00:00.255 [DEBUG] [seatd/seat.c:331] Opening device /dev/input/event4 for client 1 on seat0
+00:00:00.255 [ERROR] [seatd/seat.c:342] Could not canonicalize path /dev/input/event4: No such file or directory
+00:00:00.255 [ERROR] [seatd/client.c:229] Could not open device: No such file or directory
+00:00:00.256 [DEBUG] [seatd/seat.c:331] Opening device /dev/input/event5 for client 1 on seat0
+00:00:00.256 [ERROR] [seatd/seat.c:342] Could not canonicalize path /dev/input/event5: No such file or directory
+00:00:00.256 [ERROR] [seatd/client.c:229] Could not open device: No such file or directory
+00:00:00.257 [DEBUG] [seatd/seat.c:331] Opening device /dev/input/event9 for client 1 on seat0
+00:00:00.257 [ERROR] [seatd/seat.c:342] Could not canonicalize path /dev/input/event9: No such file or directory
+00:00:00.257 [ERROR] [seatd/client.c:229] Could not open device: No such file or directory
+00:00:00.262 [DEBUG] [seatd/seat.c:331] Opening device /dev/dri/card0 for client 1 on seat0
+00:00:00.264 [DEBUG] [seatd/seat.c:481] Closing device /dev/dri/card0 for client 1 on seat0
+00:00:00.265 [DEBUG] [seatd/seat.c:331] Opening device /dev/dri/card1 for client 1 on seat0
+00:00:20.268 [INFO] [seatd/client.c:480] Client disconnected
+00:00:20.268 [DEBUG] [seatd/seat.c:481] Closing device /dev/dri/card1 for client 1 on seat0
+00:00:20.279 [INFO] [seatd/seat.c:158] No clients on seat0 to activate
+00:00:20.279 [INFO] [seatd/seat.c:297] Removed client 1 from seat0
+00:00:20.279 [INFO] [seatd/seatd.c:218] seatd stopped

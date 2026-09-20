@@ -1,0 +1,3 @@
+A Linux shell is a command-line interface that allows users to interact with the operating system. One harmless example command is `whoami`, which displays the currently logged-in user's username. [end of text]
+
+

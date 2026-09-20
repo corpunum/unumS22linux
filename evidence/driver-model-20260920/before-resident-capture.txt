@@ -1,0 +1,2 @@
+Sat Sep 19 23:16:14 UTC 2026
+{'card': '/dev/dri/card1', 'crtc_id': 184, 'fb_id': 195, 'fb_size': [1080, 2340], 'window': [0, 0, 1080, 2340], 'format': 'XR24', 'modifier': 0, 'handle': 1, 'pitch': 4352, 'offset': 0, 'mapped_bytes': 10183680, 'output': '/tmp/s22-before-resident.png'}

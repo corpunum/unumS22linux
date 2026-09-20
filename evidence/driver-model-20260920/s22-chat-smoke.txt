@@ -1,0 +1,22 @@
+
+S22 local chat | Qwen3.5 2B Q4 | CPU, four fast cores
+No cloud, no command execution. Type /quit to return to Linux.
+Models are currently RAM-staged and need restoring after reboot.
+
+You> S22> A **Linux shell** is a command-line interface (CLI) that allows users to interact with the Linux operating system. It acts as a bridge between the user and the kernel, processing input commands and executing them.
+
+Here is a harmless example of a command you can run to see it in action:
+
+```bash
+whoami
+```
+
+**What it does:**
+- It queries the system to find the username currently logged in.
+- **Output:** On your Samsung S22, this will likely print something like `root` (if logged in as root) or `user` (if logged in as your regular account). [end of text]
+
+
+
+[21.1s]
+
+You> 

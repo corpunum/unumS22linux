@@ -1,0 +1,39 @@
+Sat Sep 19 23:33:25 UTC 2026
+Linux s22-linux 5.10.260-g4e5c5ad7d950 #1 SMP PREEMPT Tue Sep 15 12:42:08 UTC 2026 aarch64 Linux
+3.24.2
+native-guardian
+magic: b0071257
+version: 20230221
+name: BORE
+last: 518
+[ IDX]       RTC       / RR (CNT) / KEY / M / VERSION       QB_ID    / VCELL ( BAT)(C) / TMU[TRIP],BAT           / I2C FAIL COUNT / DT / SLOT / BOOTING SEQUENCE
+[ 518] 260919 23:02:18 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4350mV( 99%)(+) / 45[0x000] 45[0x000], 37 / 00000000000000 /  - /   -  / SOFT, INFORM3(12345674) > RECOVERY > , JUMP2K [drawLOGO]
+[ 517] 260919 20:45:28 / RP (  0) /     / R / S901BXXSIFYI3 10073462 / 4340mV( 99%)(+) / 35[0x0NAME="Arch Linux ARM"
+PRETTY_NAME="Arch Linux ARM"
+ID=archarm
+ID_LIKE=arch
+BUILD_ID=rolling
+ANSI_COLOR="38;2;23;147;209"
+HOME_URL="https://archlinuxarm.org/"
+DOCUMENTATION_URL="https://archlinuxarm.org/wiki"
+SUPPORT_URL="https://archlinuxarm.org/forum"
+BUG_REPORT_URL="https://github.com/archlinuxarm/PKGBUILDs/issues"
+LOGO=archlinux-logo
+7649 7707 7720 7827
+Active Internet connections (only servers)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State       
+tcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN      
+tcp        0      0 127.0.0.1:8089          0.0.0.0:*               LISTEN      
+tcp        0      0 :::22                   :::*                    LISTEN      
+9484
+ 9484     1     0 /mnt/model-bench/server/libc/ld-linux-aarch64.so.1 --library-path /mnt/model-bench/server/libc:/mnt/model-bench/server/lib /mnt/model-bench/server/bin/llama-server -m /mnt/model-bench/models/Qwen3.5-2B-Q4_0.gguf -t 4 -C f0 --cpu-strict 1 -c 4096 -np 1 -ngl 0 --host 127.0.0.1 --port 8089 --no-webui
+              total        used        free      shared  buff/cache   available
+Mem:           7274        2863         963        3267        3448        1688
+Swap:             0           0           0
+Filesystem                Size      Used Available Use% Mounted on
+overlay                 582.6M    495.9M     74.6M  87% /
+native-tmp              256.0M      1.0M    255.0M   0% /tmp
+s22-arch-trial            3.0G      1.8G      1.2G  59% /mnt/omarchy-trial
+s22-model-bench           3.0G      1.2G      1.8G  40% /mnt/model-bench
+321
+{"name": "sec_touchscreen", "axes": {"0x2f": {"value": 0, "min": 0, "max": 9, "fuzz": 0, "flat": 0, "resolution": 0}, "0x30": {"value": 0, "min": 0, "max": 255, "fuzz": 0, "flat": 0, "resolution": 0}, "0x31": {"value": 0, "min": 0, "max": 255, "fuzz": 0, "flat": 0, "resolution": 0}, "0x35": {"value": 0, "min": 0, "max": 4095, "fuzz": 0, "flat": 0, "resolution": 0}, "0x36": {"value": 0, "min": 0, "max": 4095, "fuzz": 0, "flat": 0, "resolution": 0}, "0x39": {"value": 0, "min": 0, "max": 65535, "fuzz": 0, "flat": 0, "resolution": 0}}, "tracking_ids": [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1]}

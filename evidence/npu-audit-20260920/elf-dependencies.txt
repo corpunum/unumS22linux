@@ -1,0 +1,258 @@
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_gc_vendor.so__533
+  Class:                             ELF32
+  Type:                              <unknown>: f100
+  Machine:                           <unknown>: 0xa010
+  Entry point address:               0x18000000
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_user.samsung_slsi.so__53a
+  Class:                             ELF32
+  Type:                              <unknown>: f100
+  Machine:                           <unknown>: 0x2010
+  Entry point address:               0x88000000
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_user_driver_gpu.so__53c
+  Class:                             ELF32
+  Type:                              <unknown>: f100
+  Machine:                           <unknown>: 0xe010
+  Entry point address:               0x9c000000
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_profiler.so__536
+  Class:                             ELF32
+  Type:                              <unknown>: f200
+  Machine:                           <unknown>: 0x500f
+  Entry point address:               0x30000000
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_public_api_cpp.so__7c0
+  Class:                             ELF64
+  Type:                              <unknown>: 1200
+  Machine:                           <unknown>: 0x1230
+  Entry point address:               0x1000945f8003300
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_user_lib.so__53f
+  Class:                             ELF32
+  Type:                              <unknown>: f100
+  Machine:                           <unknown>: 0xb0f
+  Entry point address:               0x89080000
+FILE rootfs/npu-vendor-assets/enn-libs/libsait_npu_compiler.so__841
+  Class:                             ELF64
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+  Entry point address:               0x13e130
+FILE rootfs/npu-vendor-assets/enn-libs/libnpu_compiler.so__82c
+  Class:                             ELF64
+  Type:                              <unknown>: 2200
+  Machine:                           <unknown>: 0x8f40
+  Entry point address:               0xa03b24800430007
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_engine.so__531
+  Class:                             ELF32
+  Type:                              <unknown>: f100
+  Machine:                           <unknown>: 0x7010
+  Entry point address:               0xbc000000
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_klm_vendor.so__534
+  Class:                             ELF32
+  Type:                              <unknown>: f200
+  Machine:                           <unknown>: 0xa00f
+  Entry point address:               0xe8000000
+FILE rootfs/npu-vendor-assets/enn-libs/libhdraid.npu.arcsoft.so__562
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+  Entry point address:               0x950
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x00000001 (NEEDED)                     Shared library: [libmpbase.so]
+ 0x00000001 (NEEDED)                     Shared library: [liblog.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x0000000e (SONAME)                     Library soname: [libhdraid.npu.arcsoft.so]
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_user_driver_gpu.so__7c5
+  Class:                             ELF64
+  Type:                              <unknown>: 2100
+  Machine:                           <unknown>: 0x42f0
+  Entry point address:               0x6034100000500006
+FILE rootfs/npu-vendor-assets/enn-libs/libhdraid.npu.arcsoft.so__7fb
+  Class:                             ELF64
+  Type:                              <unknown>: 3100
+  Machine:                           <unknown>: 0xc68c
+  Entry point address:               0xdbe8000050000640
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_common_utils.so__7b6
+  Class:                             ELF64
+  Type:                              <unknown>: 1200
+  Machine:                           <unknown>: 0x1250
+  Entry point address:               0x10009ada0003300
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_engine_lib.so__7bb
+  Class:                             ELF64
+  Type:                              <unknown>: 1100
+  Machine:                           <unknown>: 0x1305
+  Entry point address:               0x70bdec800005000
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_user_driver_cpu.so__7c4
+  Class:                             ELF64
+  Type:                              <unknown>: 2100
+  Machine:                           <unknown>: 0x390
+  Entry point address:               0x983b00000500006
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_user_driver_cpu.so__53b
+  Class:                             ELF32
+  Type:                              <unknown>: f100
+  Machine:                           <unknown>: 0x5010
+  Entry point address:               0xc0000000
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_dsp_fw_graph_parser.so__7b8
+  Class:                             ELF64
+  Type:                              <unknown>: 2200
+  Machine:                           <unknown>: 0xd670
+  Entry point address:               0xa03e27000430007
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_engine.so__7ba
+  Class:                             ELF64
+  Type:                              <unknown>: 1100
+  Machine:                           <unknown>: 0x1305
+  Entry point address:               0x70be05800005000
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_user.samsung_slsi.so__7c3
+  Class:                             ELF64
+  Type:                              <unknown>: 1100
+  Machine:                           <unknown>: 0x680
+  Entry point address:               0xa03e6b0330019
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_dsp_dal.so__7b7
+  Class:                             ELF64
+  Type:                              <unknown>: 2000
+  Machine:                           <unknown>: 0x6590
+  Entry point address:               0x6100054000
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_wrapper.so__7c9
+  Class:                             ELF64
+  Type:                              <unknown>: 3100
+  Machine:                           <unknown>: 0x5540
+  Entry point address:               0xf3e8000050000640
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_public_api_cpp_lib.so__7c1
+  Class:                             ELF64
+  Type:                              <unknown>: 1200
+  Machine:                           <unknown>: 0x1230
+  Entry point address:               0x1000945f8003300
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_klm_vendor.so__7bd
+  Class:                             ELF64
+  Type:                              <unknown>: 1100
+  Machine:                           <unknown>: 0x660
+  Entry point address:               0xa03fea8330019
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_model.so__7be
+  Class:                             ELF64
+  Type:                              <unknown>: 1100
+  Machine:                           <unknown>: 0x6e0
+  Entry point address:               0xa04fe68330019
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_profiler.so__7bf
+  Class:                             ELF64
+  Type:                              <unknown>: 1200
+  Machine:                           <unknown>: 0x12e0
+  Entry point address:               0x10016e830003100
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_model.so__535
+  Class:                             ELF32
+  Type:                              <unknown>: f100
+  Machine:                           <unknown>: 0xb010
+  Entry point address:               0xc4000000
+FILE rootfs/npu-vendor-assets/enn-libs/libeden_ud_npu.so__7a7
+  Class:                             ELF64
+  Type:                              <unknown>: 2000
+  Machine:                           <unknown>: 0x6680
+  Entry point address:               0x6100054000
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_seva_vendor.so__7c2
+  Class:                             ELF64
+  Type:                              <unknown>: 2100
+  Machine:                           <unknown>: 0x220
+  Entry point address:               0x4e9680000500006
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_user_driver_unified.so__53e
+  Class:                             ELF32
+  Type:                              <unknown>: 5000
+  Machine:                           <unknown>: 0xd9a0
+  Entry point address:               0xf407f100
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_user_driver_gpu_lib.so__7c6
+  Class:                             ELF64
+  Type:                              <unknown>: 2100
+  Machine:                           <unknown>: 0x42f0
+  Entry point address:               0x6033c00000500006
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_user_driver_gpu_lib.so__53d
+  Class:                             ELF32
+  Type:                              <unknown>: f100
+  Machine:                           <unknown>: 0x7010
+  Entry point address:               0xe0000000
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_public_api_cpp.so__537
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+  Entry point address:               0x2a64
+ 0x00000001 (NEEDED)                     Shared library: [libenn_user.samsung_slsi.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_public_api_cpp.so]
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_engine_lib.so__532
+  Class:                             ELF32
+  Type:                              <unknown>: f100
+  Machine:                           <unknown>: 0x80f
+  Entry point address:               0x3400000
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_dsp_kernels_cpu.so__7b9
+  Class:                             ELF64
+  Type:                              <unknown>: 2200
+  Machine:                           <unknown>: 0xb6a0
+  Entry point address:               0xa05025800430007
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_user_driver_unified.so__7c7
+  Class:                             ELF64
+  Type:                              <unknown>: 2100
+  Machine:                           <unknown>: 0x240
+  Entry point address:               0x51f580000500006
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_seva_vendor.so__539
+  Class:                             ELF32
+  Type:                              <unknown>: f100
+  Machine:                           <unknown>: 0x8010
+  Entry point address:               0xb4000000
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_public_api_cpp_lib.so__538
+  Class:                             ELF32
+  Type:                              DYN (Shared object file)
+  Machine:                           ARM
+  Entry point address:               0x2a5c
+ 0x00000001 (NEEDED)                     Shared library: [libenn_user_lib.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc++.so]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so]
+ 0x00000001 (NEEDED)                     Shared library: [libm.so]
+ 0x00000001 (NEEDED)                     Shared library: [libdl.so]
+ 0x0000000e (SONAME)                     Library soname: [libenn_public_api_cpp_lib.so]
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_gc_vendor.so__7bc
+  Class:                             ELF64
+  Type:                              <unknown>: 2100
+  Machine:                           <unknown>: 0x1880
+  Entry point address:               0x4718200000500006
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_common_utils.so__530
+  Class:                             ELF32
+  Type:                              <unknown>: f200
+  Machine:                           <unknown>: 0x800f
+  Entry point address:               0xd8000000
+FILE rootfs/npu-vendor-assets/enn-libs/libenn_user_lib.so__7c8
+  Class:                             ELF64
+  Type:                              <unknown>: 1100
+  Machine:                           <unknown>: 0x650
+  Entry point address:               0xa037fa0330019
+FILE rootfs/npu-vendor-assets/firmware-elf/libivp.elf__434
+  Class:                             ELF32
+  Type:                              <unknown>: 204
+  Machine:                           <unknown>: 0x2200
+  Entry point address:               0x3409f5
+FILE rootfs/npu-vendor-assets/firmware-elf/libnn_af16wf16.elf__438
+  Class:                             ELF32
+  Type:                              <unknown>: 204
+  Machine:                           <unknown>: 0x3100
+  Entry point address:               0x349000
+FILE rootfs/npu-vendor-assets/firmware-elf/libnn_sdma.elf__439
+  Class:                             ELF32
+  Type:                              <unknown>: 204
+  Machine:                           <unknown>: 0x2200
+  Entry point address:               0x3409f5
+FILE rootfs/npu-vendor-assets/firmware-elf/libnn.elf__437
+  Class:                             ELF32
+  Type:                              <unknown>: 204
+  Machine:                           <unknown>: 0x3100
+  Entry point address:               0x3409f500
+FILE rootfs/npu-vendor-assets/firmware-elf/liblog.elf__435
+  Class:                             ELF32
+  Type:                              <unknown>: 204
+  Machine:                           <unknown>: 0x2200
+  Entry point address:               0x3409f5
+FILE rootfs/npu-vendor-assets/firmware-elf/libann.elf__432
+  Class:                             ELF32
+  Type:                              <unknown>: 204
+  Machine:                           <unknown>: 0x3100
+  Entry point address:               0x3409f500
+FILE rootfs/npu-vendor-assets/firmware-elf/libme_rta_pamir.elf__436
+  Class:                             ELF32
+  Type:                              <unknown>: 204
+  Machine:                           <unknown>: 0x3100
+  Entry point address:               0x6341100
