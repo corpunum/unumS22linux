@@ -1,0 +1,48 @@
+Sun Sep 20 18:48:11 UTC 2026
+5.10.260-g4e5c5ad7d950
+19571.44 154708.05
+ 0 [aboxvdma       ]: abox_vdma - abox_vdma
+                      abox_vdma
+ 1 [aboxdump       ]: abox_dump - abox_dump
+                      abox_dump
+  2: [ 0]   : control
+  3: [ 1]   : control
+ 33:        : timer
+total 0
+crw-------    1 root     root      116,   2 Sep 20 18:36 controlC0
+crw-------    1 root     root      116,   3 Sep 20 18:36 controlC1
+crw-rw----    1 root     audio     116,  33 Sep 20 13:22 timer
+Filesystem           1K-blocks      Used Available Use% Mounted on
+overlay                 596544    550168     34088  94% /
+/dev/block/by-name/userdata
+                     109602836   4445776 105140676   4% /srv/s22
+installed:
+  packages: 268
+  dirs: 1052
+  files: 5934
+  bytes: 503975123
+  triggers: 10
+available:
+  names: 70076
+  packages: 28542
+atoms:
+  num: 60662
+
+/usr/sbin/iw
+/sbin/wpa_supplicant
+/usr/bin/bluetoothctl
+/usr/bin/btattach
+/usr/bin/aplay
+/usr/bin/amixer
+d2460b85f1e8ceabe6a23e103688932c03ca5aca6da0de5ed95ff78dfd8feccd  /proc/1/root/vendor/firmware/calliope_dram.bin
+786ae058d4c439c01edf856abb52184a92e8d25e90b1b748e380186bed84796d  /proc/1/root/vendor/firmware/calliope_sram.bin
+3690d21b6a7e91242ee423ea655604842969607c318769fe73fbc6db826eb9da  /proc/1/root/vendor/firmware/abox_tplg.bin
+ddc3874ec797a085c8497a240d47b995fedbcc5c876483c94e2f236ecb79f782  /proc/1/root/vendor/firmware/abox_tplg.conf
+/dev/block/by-name/userdata /vendor/firmware/calliope_dram.bin ext4 ro,noatime,errors=remount-ro,stripe=128 0 0
+/dev/block/by-name/userdata /vendor/firmware/calliope_sram.bin ext4 ro,noatime,errors=remount-ro,stripe=128 0 0
+/dev/block/by-name/userdata /vendor/firmware/abox_tplg.bin ext4 ro,noatime,errors=remount-ro,stripe=128 0 0
+/dev/block/by-name/userdata /vendor/firmware/abox_tplg.conf ext4 ro,noatime,errors=remount-ro,stripe=128 0 0
+capacity=100
+status=Full
+temp=296
+{"status":"ok"}

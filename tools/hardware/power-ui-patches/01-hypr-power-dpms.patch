@@ -1,0 +1,11 @@
+--- a/root/hyprland-omarchy-ui.lua
++++ b/root/hyprland-omarchy-ui.lua
+@@ -8,6 +8,8 @@
+   decoration = { blur = { enabled = false }, shadow = { enabled = false } },
+   xwayland = { enabled = false },
+ })
++-- Phone power key: display DPMS only. No suspend/reboot/poweroff action.
++hl.bind("XF86PowerOff", hl.dsp.dpms({ action = "toggle" }), { locked = true })
+ hl.on("hyprland.start", function()
+   hl.exec_cmd("env OMARCHY_UI_CANDIDATE=/opt/s22-ui QT_QUICK_BACKEND=software QSG_RHI_BACKEND=software sh /opt/s22-ui/launch-ui.sh >/tmp/s22-omarchy-ui.log 2>&1")
+   hl.exec_cmd("foot --font='DejaVu Sans Mono:size=12' --title=S22-local-chat sh -c 'python3 /usr/local/bin/s22-chat; exec bash --noprofile --norc' >/tmp/s22-foot.log 2>&1")

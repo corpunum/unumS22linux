@@ -1,0 +1,30 @@
+Wi-Fi native activation incident (sanitized; source: private last_kmsg capture)
+Date: 2026-09-20
+
+Source capture: /home/corpunum/s22-private-backups/wifi-rescue-20260920-KkNdFp/last_kmsg.bin
+
+Relevant chronology (kernel monotonic seconds and wall time only):
+
+20350.610  WLAN host initialization reaches target-ready and allocates datapath.
+20350.810  Firmware service-ready event is received.
+20351.122  WLAN wait-for-ready reports firmware ready.
+20351.142  WLAN driver status is updated; host initialization continues.
+20351.156  CNSS processes COLD_BOOT_CAL_START while state still includes driver loading.
+20361.194  CNSS reports macloader_done timeout.
+20361.194  CNSS reports: WLAN in mission mode before cold boot calibration.
+20361.195  Assertion at drivers/net/wireless/cnss2/main.c:1864.
+20361.196  CNSS posts RECOVERY with reason TIMEOUT.
+20361.196  Kernel panic reports subsys-restart: SoC WLAN crashed.
+20361.369  Panic reboot is initiated.
+
+Interpretation: the pinned source's cnss_wlan_register_driver() schedules
+wlan_reg_driver_work with CNSS_TIMEOUT_CALIBRATION. Its timeout handler asserts
+if cold-boot calibration has not completed. cnss_cold_boot_cal_start_hdlr()
+also asserts if CNSS_DRIVER_LOADING, CNSS_DRIVER_PROBED, or CNSS_FW_READY is
+already set. The fs_ready trigger was issued after the deferred registration
+window had elapsed, so this is a sequencing/state-machine failure. CalDB:0 is
+not proof of a missing file: cnss_cal_db_mem_update() returns success when the
+BDF says calibration-file download is disabled.
+
+No SSID, MAC address, credential, serial, or private network address is
+included in this excerpt.

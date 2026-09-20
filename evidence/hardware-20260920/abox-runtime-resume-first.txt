@@ -1,0 +1,157 @@
+runtime=active
+ONLINE
+ 0 [aboxvdma       ]: abox_vdma - abox_vdma
+                      abox_vdma
+ 1 [aboxdump       ]: abox_dump - abox_dump
+                      abox_dump
+01-00: rd0 snd-soc-dummy-dai-0 :  : capture 1
+01-01: rd1 snd-soc-dummy-dai-1 :  : capture 1
+01-02: rd2 snd-soc-dummy-dai-2 :  : capture 1
+01-03: rd3 snd-soc-dummy-dai-3 :  : capture 1
+01-04: rd7 snd-soc-dummy-dai-4 :  : capture 1
+01-05: wr0 snd-soc-dummy-dai-5 :  : capture 1
+01-06: wr1 snd-soc-dummy-dai-6 :  : capture 1
+01-07: wr3 snd-soc-dummy-dai-7 :  : capture 1
+01-08: wr4 snd-soc-dummy-dai-8 :  : capture 1
+01-09: rda snd-soc-dummy-dai-9 :  : capture 1
+01-10: rdb snd-soc-dummy-dai-10 :  : capture 1
+01-11: wr6 snd-soc-dummy-dai-11 :  : capture 1
+01-12: dbg snd-soc-dummy-dai-12 :  : capture 1
+01-13: dec snd-soc-dummy-dai-13 :  : capture 1
+01-14: src snd-soc-dummy-dai-14 :  : capture 1
+01-15: ef1 snd-soc-dummy-dai-15 :  : capture 1
+01-16: om0 snd-soc-dummy-dai-16 :  : capture 1
+01-17: om1 snd-soc-dummy-dai-17 :  : capture 1
+01-18: om2 snd-soc-dummy-dai-18 :  : capture 1
+01-19: ef2 snd-soc-dummy-dai-19 :  : capture 1
+01-20: ef3 snd-soc-dummy-dai-20 :  : capture 1
+01-21: dm1 snd-soc-dummy-dai-21 :  : capture 1
+01-22: dm2 snd-soc-dummy-dai-22 :  : capture 1
+01-23: dm3 snd-soc-dummy-dai-23 :  : capture 1
+01-24: tx0 snd-soc-dummy-dai-24 :  : capture 1
+01-25: uou snd-soc-dummy-dai-25 :  : capture 1
+01-26: uin snd-soc-dummy-dai-26 :  : capture 1
+01-27: fm0 snd-soc-dummy-dai-27 :  : capture 1
+01-28: dv1 snd-soc-dummy-dai-28 :  : capture 1
+01-29: dv2 snd-soc-dummy-dai-29 :  : capture 1
+01-30: dv3 snd-soc-dummy-dai-30 :  : capture 1
+01-31: si0 snd-soc-dummy-dai-31 :  : capture 1
+01-32: si1 snd-soc-dummy-dai-32 :  : capture 1
+01-33: log snd-soc-dummy-dai-33 :  : capture 1
+[19800.829620] [1:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c344, wtcnt = cbce
+[19800.831794] [3:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f637, wtcnt = fec2
+[19801.835366] [2:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c344, wtcnt = cbce
+[19801.837079] [2:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f639, wtcnt = fec2
+[19802.842936] [0:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c33f, wtcnt = cbce
+[19802.844651] [0:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f634, wtcnt = fec2
+[19803.847726] [3:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c346, wtcnt = cbce
+[19803.849511] [3:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f639, wtcnt = fec2
+[19804.853346] [0:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c344, wtcnt = cbce
+[19804.855669] [1:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f637, wtcnt = fec2
+[19805.858702] [1:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c344, wtcnt = cbce
+[19805.860285] [1:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f63a, wtcnt = fec2
+[19806.863922] [1:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c345, wtcnt = cbce
+[19806.865454] [1:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f639, wtcnt = fec2
+[19807.868997] [1:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c345, wtcnt = cbce
+[19807.870789] [1:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f638, wtcnt = fec2
+[19808.874742] [0:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c344, wtcnt = cbce
+[19808.876343] [0:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f638, wtcnt = fec2
+[19809.881164] [2:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c342, wtcnt = cbce
+[19809.883837] [3:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f634, wtcnt = fec2
+[19810.889267] [1:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c33e, wtcnt = cbce
+[19810.891777] [3:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f633, wtcnt = fec2
+[19811.895904] [2:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c342, wtcnt = cbce
+[19811.897468] [2:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f638, wtcnt = fec2
+[19812.902832] [1:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c341, wtcnt = cbce
+[19812.904616] [1:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f634, wtcnt = fec2
+[19813.908882] [0:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c343, wtcnt = cbce
+[19813.910901] [0:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f637, wtcnt = fec2
+[19814.915725] [3:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c341, wtcnt = cbce
+[19814.917296] [3:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f636, wtcnt = fec2
+[19815.921691] [0:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c343, wtcnt = cbce
+[19815.923426] [1:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f637, wtcnt = fec2
+[19816.926628] [3:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c346, wtcnt = cbce
+[19816.928694] [1:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f638, wtcnt = fec2
+[19817.419399] [2:             sh: 6121] abox 18c50000.abox: abox_sysevent_powerup: powerup callback
+[19817.419639] [2:             sh: 6121] abox 18c50000.abox: abox_enable
+[19817.419653] [2:             sh: 6121] abox 18c50000.abox: abox_qos_apply_aud_base(200000)
+[19817.421173] [2:             sh: 6121] abox 18c50000.abox: abox_qos_request_aud(0xab0cdefa, 1210000)
+[19817.422052] [2:             sh: 6121] abox 18c50000.abox: abox_core_download_firmware
+[19817.468398] [4:             sh: 6121] abox-core 18c55000.abox-core: Loaded ABOX Signed Firmware : calliope_sram.bin
+[19817.490142] [4:             sh: 6121] abox 18c50000.abox: dax_param.bin doesn't exist
+[19817.490160] [4:             sh: 6121] abox 18c50000.abox: AP_AUDIO_SLSI.bin doesn't exist
+[19817.490174] [4:             sh: 6121] abox 18c50000.abox: APBargeIn_AUDIO_SLSI.bin doesn't exist
+[19817.490189] [4:             sh: 6121] abox 18c50000.abox: APBiBF_AUDIO_SLSI.bin doesn't exist
+[19817.490203] [4:             sh: 6121] abox 18c50000.abox: APDV_AUDIO_SLSI.bin doesn't exist
+[19817.490217] [4:             sh: 6121] abox 18c50000.abox: SoundBoosterParam.bin doesn't exist
+[19817.490230] [4:             sh: 6121] abox 18c50000.abox: atune.bin doesn't exist
+[19817.490247] [4:             sh: 6121] abox 18c50000.abox: rxse.bin doesn't exist
+[19817.490318] [4:             sh: 6121] abox 18c50000.abox: avsyncmix.bin doesn't exist
+[19817.490331] [4:             sh: 6121] abox 18c50000.abox: txse1.bin doesn't exist
+[19817.490343] [4:             sh: 6121] abox 18c50000.abox: txse2.bin doesn't exist
+[19817.490355] [4:             sh: 6121] abox 18c50000.abox: bidirmic.bin doesn't exist
+[19817.490367] [4:             sh: 6121] abox 18c50000.abox: volumemonitor.bin doesn't exist
+[19817.490378] [4:             sh: 6121] abox 18c50000.abox: sb_others.bin doesn't exist
+[19817.490390] [4:             sh: 6121] abox 18c50000.abox: listenbackeffect.bin doesn't exist
+[19817.490404] [4:             sh: 6121] abox 18c50000.abox: a2dpcom.bin doesn't exist
+[19817.490415] [4:             sh: 6121] abox 18c50000.abox: dolby.bin doesn't exist
+[19817.490427] [4:             sh: 6121] abox 18c50000.abox: sb_music.bin doesn't exist
+[19817.490439] [4:             sh: 6121] abox 18c50000.abox: Cal360.bin doesn't exist
+[19817.490451] [4:             sh: 6121] abox 18c50000.abox: sb_ll.bin doesn't exist
+[19817.490462] [4:             sh: 6121] abox 18c50000.abox: leaudio_enc.bin doesn't exist
+[19817.490473] [4:             sh: 6121] abox 18c50000.abox: leaudio_dec.bin doesn't exist
+[19817.490479] [4:             sh: 6121] abox 18c50000.abox: slogargs: 0x295f8, 0
+[19817.490500] [4:             sh: 6121] abox 18c50000.abox: abox_core_power(1)
+[19817.509621]I[0:      swapper/0:    0] abox 18c50000.abox: Calliope is ready to sing (version:6XH0)
+[19817.509726]I[0:      swapper/0:    0] abox 18c50000.abox: abox_qos_request_aud(0xb00d, 663000)
+[19817.509875]I[0:      swapper/0:    0] abox 18c50000.abox: abox_log_init
+[19817.510549] [0:    kworker/0:1:   63] abox 18c50000.abox: pm qos aud: 1210000kHz, max: 1402000kHz(at 19817.510541677)
+[19817.510610] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_qos_request_aud(0xab0cdefa, 0)
+[19817.510670]I[0:    kworker/0:1:   63] abox 18c50000.abox: abox_qos_request_aud(0xb00d, 0)
+[19817.510695] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_log_register_buffer_work_func(0)
+[19817.511379] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_log_register_buffer_work_func(1)
+[19817.511773] [3:  kworker/u16:2:20423] abox 18c50000.abox: pm qos aud: 200000kHz, max: 1402000kHz(at 19817.511761169)
+[19817.511988] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(33, log, 0x0)
+[19817.512700] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(32, si1, 0x4000)
+[19817.513033] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(31, si0, 0x4000)
+[19817.513371] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(30, dv3, 0x4000)
+[19817.513682] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(29, dv2, 0x4000)
+[19817.514024] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(28, dv1, 0x4000)
+[19817.514388] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(27, fm0, 0x3c00)
+[19817.514722] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(26, uin, 0x4000)
+[19817.515059] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(25, uou, 0x4000)
+[19817.515348] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(24, tx0, 0x4000)
+[19817.515697] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(18, om2, 0x4000)
+[19817.516031] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(17, om1, 0x4000)
+[19817.516331] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(16, om0, 0x4000)
+[19817.516785] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(23, dm3, 0x20000)
+[19817.517195] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(22, dm2, 0x8000)
+[19817.517535] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(21, dm1, 0x4000)
+[19817.517847] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(20, ef3, 0x20000)
+[19817.518161] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(19, ef2, 0x8000)
+[19817.518764] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(15, ef1, 0x4000)
+[19817.519164] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(14, src, 0x30000)
+[19817.519515] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(13, dec, 0x30000)
+[19817.520012] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(12, dbg, 0x4000)
+[19817.520345] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(11, wr6, 0x4000)
+[19817.520606] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(10, rdb, 0x4000)
+[19817.520781] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(9, rda, 0x4000)
+[19817.520938] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(8, wr4, 0x8000)
+[19817.521112] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(7, wr3, 0x4000)
+[19817.521264] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(6, wr1, 0x4000)
+[19817.521416] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(5, wr0, 0x4000)
+[19817.521593] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(4, rd7, 0x8000)
+[19817.521747] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(3, rd3, 0x4000)
+[19817.521906] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(2, rd2, 0x4000)
+[19817.522098] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(1, rd1, 0x4000)
+[19817.522260] [0:    kworker/0:1:   63] abox 18c50000.abox: abox_dump_register_work_single(0, rd0, 0x8000)
+[19817.672663]I[0:      swapper/0:    0] abox 18c50000.abox: abox_qos_request_aud(0x72766f67, 0)
+[19817.831366]I[0:      swapper/0:    0] abox 18c50000.abox: abox_qos_request_aud(0x72766f67, 0)
+[19817.932584] [0:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c343, wtcnt = cbce
+[19817.934202] [0:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f638, wtcnt = fec2
+[19818.312916]I[0:      swapper/0:    0] abox 18c50000.abox: abox_qos_request_aud(0x72766f67, 0)
+[19818.791879]I[0:      swapper/0:    0] abox 18c50000.abox: abox_qos_request_aud(0x72766f67, 0)
+[19818.937740] [0:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c345, wtcnt = cbce
+[19818.940478] [2:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f637, wtcnt = fec2
+[19819.272820]I[0:      swapper/0:    0] abox 18c50000.abox: abox_qos_request_aud(0x72766f67, 0)
+{"status":"ok"}

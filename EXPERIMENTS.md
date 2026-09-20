@@ -1970,3 +1970,181 @@ is readable. USB SSH works; HTTPS to the official Alpine repository succeeds
 over USB (not Wi-Fi). No radio state or network credential was changed and
 no camera/microphone was opened. Details and next order:
 `docs/EVERYDAY_HARDWARE_2026-09-20.md`.
+
+### 2026-09-20 18:20–18:48UTC — native daily-hardware preparation, no reboot
+
+Owner requested implementation with Luna workers. Three workers split Wi-Fi,
+Bluetooth/audio, and input/power UI; parent serialized device changes. BORE757,
+guardian/USB SSH, desktop and CPU model remain running. No partition write,
+reboot, suspend, radio activation or audio playback/capture occurred in this
+interval. The earlier rescue/display changes were pushed as
+`1fe22d1e74f19121ac1b1eb5f39aef03f746fe9d` and the remote SHA was verified.
+
+Recovered QCA6490 firmware and the stock vendor-DLKM WLAN module from the
+existing local images. Stock WLAN vermagic is
+`5.10.223-android12-9-30958166-abS901BXXSIFYI3`, NOT the running
+`5.10.260-g4e5c5ad7d950`; it was not loaded or force-patched. An exact
+20260915 Lineage module is being sourced. Firmware presence is not Wi-Fi
+acceptance.
+
+Provenance correction: the existing host `live-vendor-readonly.img` now hashes
+`dcb12940254cabe49a054efcf57121cc490ea4d5148d5cd64211f3ce5f647f0d`, unlike
+the originally recorded `6dfe677119792e95a37b016092c327ad62bc0dc7759851424ad05e6bcb31b206`.
+Independent byte comparison against the private raw SUPER reconstruction
+found only block0 (4096 bytes) differs; every remaining byte, including
+firmware data extents, matches. Do not call the old host artifact unmodified.
+Preserved it and created mode0444 `rootfs/vendor-pristine-20260920.img` from
+the original backed-up extent; its full hash matches the original6dfe value.
+Phone/private backup were not modified. See
+`evidence/hardware-20260920/vendor-image-provenance.txt`.
+
+Recovered ABOX core firmware `calliope_dram.bin` and `calliope_sram.bin`,
+plus topology files, from that device's vendor image. Staged four ordinary
+files on userdata under `/srv/s22/hardware/firmware/abox/`; hash-verified
+read-only individual binds expose them at PID1's `/vendor/firmware` without
+hiding the existing touchscreen assets or changing firmware_class.path.
+The kernel reads firmware using the initial root, not the Alpine chroot.
+BusyBox's target-only remount could not find an outside-chroot mount in its
+mount table; explicit source+target remount succeeded. PID1's mount table
+confirms all four binds are read-only. No driver retry had yet been run.
+
+Created only missing ALSA control nodes after verifying sysfs devnums:
+controlC0=116:2, controlC1=116:3, root0600. This reveals virtual/debug cards,
+not usable audio: `/proc/asound/pcm` and `aplay -l` remain empty.
+
+Built/transferred a signed Alpine ARM64 offline package closure. All37 APK
+hashes match; installed14 new packages including alsa-utils, bluez, iw and
+wpa_supplicant without disabling signature checks. The initial manifest check
+used host-prefixed paths and failed on missing filenames before installation;
+stripping the known directory prefix produced37 successful checks. No radio
+daemon was started. CACHE root has34,088KiB free afterward; all bulk staging
+is on userdata. At19,571s uptime, model health remains `ok`, battery100% Full,
+29.6C. Evidence: `evidence/hardware-20260920/audio-staged-tools-installed.txt`.
+
+Power/battery UI patches are still host-only candidates at this checkpoint;
+review caught lowercase battery naming, units, initial-refresh and active
+configuration-path issues before deployment. Bluetooth has a bound power
+driver but no HCI transport/controller. GPU/NPU inference remains unaccepted.
+
+### 2026-09-20 18:48–19:01UTC — power UI deployed; DSP startup; WLAN panic
+
+Installed backed-up ordinary Arch files for native battery telemetry and the
+power-key binding. The pinned Hyprland0.56 API is Lua:
+`hl.dsp.dpms({ action = "toggle" })`. Review caught a legacy `dispatch dpms
+toggle` command in the first candidate; it was corrected before the DPMS
+exercise. The controlled test recorded display on/off/on with model health
+`ok` and restores the screen in `finally`; physical power-key delivery remains
+untested. No suspend or poweroff operation was requested.
+
+Quickshell's power panel now falls back to Samsung's lowercase battery sysfs,
+refreshing initially and every30s even while closed. It reports percentage,
+state, and deci-degree temperature without guessing voltage/current units.
+Unavailable power-profile controls are suppressed. Active and template JSON
+both include the battery widget. Original four files were backed up under
+`/srv/s22/hardware/backups/power-ui-20260920T1852Z/`.
+
+Restored JetBrainsMono Nerd Font Regular from a locally signature-verified
+package (font SHA256
+`1c680e8cde9fcf8b88a5605ce8d1fb94dd3fb15841f7ca7bf4c55664855e5611`)
+plus the existing Omarchy icon font and OFL license. This was a small manual
+font installation, not installation of the full243MB font package. Layout
+reload alone left the widget width zero; a scoped Quickshell/OSK launcher
+restart applied QML/fonts while retaining Hyprland and the model. One old
+`dispatch exec` attempt was rejected; the pinned `hl.exec_cmd` path worked.
+`power-bar.png` is the earlier failed panel state, not success evidence;
+`power-bar-ready.png` confirms the visible54x26 widget and restored icons.
+
+With the running ABOX debug configuration checked, a bounded runtime-resume
+test exposed signed calliope core/topology firmware through the reviewed
+read-only PID1 binds. `Calliope is ready to sing (version:6XH0)` and failsafe
+ONLINE were observed. This is DSP firmware startup, not demonstrated recovery
+or normal audio:34 debug capture channels appeared, but no speaker playback
+PCM. No audio was played or captured. The test restored runtime control to
+auto; no topology/machine-card unbind/rebind was performed.
+
+Fetched the official20260915 Lineage OTA, verified SHA256
+`0cee68b94e9a47643af5e752d7cb687fd5aa51ce445b74455ad0bee2f206f558`,
+and extracted its exact EROFS vendor_dlkm WLAN module. Module SHA256
+`cbf8932d079e97006a5b7aae0e1b5acfe65b3e8b5113ab8fa095daa36796738d`,
+vermagic `5.10.260-g4e5c5ad7d950 SMP preempt mod_unload modversions aarch64`.
+Staged it and14 matching recovered firmware/config files on userdata; used
+temporary read-only PID1 firmware binds, preserving touchscreen firmware and
+the existing firmware_class.path. The incompatible stock module was never
+loaded. No firmware autoload/startup integration was installed.
+
+**The parent-orchestrated WLAN test failed and caused a real kernel panic.**
+At monotonic20150.383, `insmod` returned0 but deferred driver registration for
+cold-boot calibration. Investigation then paused longer than that deferred
+deadline. Writing `fs_ready=1` at20331.243 (about181s later) queued calibration
+after the timeout path had already entered mission-mode startup. Firmware
+reached ready20351.122; cold-boot start then waited10s for macloader, reported
+`macloader_done timeout`, and asserted `WLAN in mission mode before cold boot
+calibration` at main.c1864. CNSS recovery escalated to
+`subsys-restart: Resetting the SoC wlan crashed` at20361.196. This was not an
+ABI mismatch, not a proven missing calibration database, and not a harmless
+SSH timeout. The test's sequencing was wrong. No automatic retry is enabled.
+
+### 2026-09-20 19:01–19:24UTC — automatic recovery and keyboard accessibility
+
+BORE758 records **19:01:36 KP(1), SOFT,PANIC -> RECOVERY**. BORE757 had run
+5h39m37s. USB SSH returned and native guardian autostarted the persistent
+desktop/model without a requested physical action, flash, or rescue reboot
+command. The bootloader's retained “Mode Set by key” wording is not proof of
+a new physical keypress. This establishes this recovery event, not a general
+guarantee of unattended crash recovery or normal cold-power-on Linux.
+
+Preserved the full raw last_kmsg and NUL-padded BORE log privately under
+`/home/corpunum/s22-private-backups/wifi-rescue-20260920-KkNdFp/`. Unlike the
+earlier BOOT incident, this last_kmsg contains a valid panic trace; pstore
+was empty. Publishable chronology is
+`evidence/hardware-20260920/wifi-panic-sanitized.txt`. All experimental
+firmware binds and manually created ALSA nodes vanished at reboot. Current
+WLAN module is absent; current `/proc/asound/cards` says no soundcards.
+Ordinary staged firmware/packages remain on userdata, with no radio autoload.
+
+Reboot evidence confirms persistent stride workaround, fonts, battery UI and
+model/desktop startup. `power-panel-bore758.png` shows99% battery after reboot.
+The source-backed WLAN sequence review found vendor early-init module loading,
+post-fs-data filesystem-ready and macloader startup. The latter completes a
+CNSS handshake by writing the MAC sysfs handler; service exit alone does not
+complete it. The vendor rc also touches EFS and must not be copied/executed
+wholesale. No EFS data or permissions were changed in this work.
+`CalDB:0` allows calibration-file download to be disabled in source, so it
+does not prove a missing `wlfw_cal_db.bin`. No second radio trial was run.
+
+The host F2FS utility misdecoded inline files by36bytes because of extra inode
+attributes. Added an experimental inline-data decoder; it preserves explicit
+word indexes and refuses gaps, duplicates, and invalid geometry rather than
+shifting or inventing bytes. Eight tests include synthetic malformed fixtures
+and the two retained vendor rc hashes. Compressed extraction remains specific
+to the captured layout and is not a general/fully validated F2FS reader.
+
+Opening a popup hides Squeekboard, and terminal focus alone did not reliably
+restore it. Added a **Keyboard** command widget to active and template Omarchy
+bar JSON at19:13, invoking session D-Bus `sm.puri.OSK0.SetVisible true`.
+There is no new daemon or periodic command polling. Backed up battery-only
+configs at `/srv/s22/hardware/backups/osk-button-20260920T1913Z/`. Reload
+confirmed visible73x26 geometry at logicalx460,y0. At19:19, a synthetic tap
+through the exact idle `sec_touchscreen` at(.92,.011), raw(3767,45), revealed
+the keyboard; touch slots were released. Before/after screenshots are retained.
+This verifies the button/software touch path, **not physical finger sensing**.
+No new reboot was performed after adding the button.
+
+At19:22, uptime20min, model health`ok`, battery98% Charging29.7C, Hyprland
+configerrors empty, userdata about100GiB free, CACHE overlay34,088KiB free.
+Final installed hashes and bar geometry:
+`evidence/hardware-20260920/final-live-state.txt`.
+Keyboard remains visible beside the local chat. No GPU/NPU computation,
+Wi-Fi association, Bluetooth pairing, sound playback, camera capture,
+cellular call, or suspend acceptance is claimed. Normal BOOT remains the
+restored Samsung image; continue to use RECOVERY and preserve installed Linux.
+
+Final host verification: battery-present/absent fixtures, pinned candidate
+hashes/JSON,8 inline decoder tests,7 supervisor tests,25 stride assertions,
+all new shell syntax/Python compilation, and wrong-WLAN-release rejection
+passed. Parent found the worker's OSK patch hunk/baseline mismatch during
+strict reconstruction and corrected it. All six UI patches now apply with
+zero fuzz to copied original preimages, reproducing final Lua, Panel.qml and
+both JSON candidates byte-for-byte. Scope and failed hardware acceptance are
+explicit in `evidence/hardware-20260920/validation.txt`. Firmware/APKs/models,
+raw crash captures and private backups remain excluded from GitHub.

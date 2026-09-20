@@ -1,0 +1,23 @@
+/dev/block/by-name/userdata /vendor/firmware/calliope_dram.bin ext4 ro,noatime,errors=remount-ro,stripe=128 0 0
+/dev/block/by-name/userdata /vendor/firmware/calliope_sram.bin ext4 ro,noatime,errors=remount-ro,stripe=128 0 0
+/dev/block/by-name/userdata /vendor/firmware/abox_tplg.bin ext4 ro,noatime,errors=remount-ro,stripe=128 0 0
+/dev/block/by-name/userdata /vendor/firmware/abox_tplg.conf ext4 ro,noatime,errors=remount-ro,stripe=128 0 0
+/dev/block/by-name/userdata /vendor/firmware/qca6490 ext4 ro,noatime,errors=remount-ro,stripe=128 0 0
+/dev/block/by-name/userdata /vendor/firmware/wlan ext4 ro,noatime,errors=remount-ro,stripe=128 0 0
+/dev/block/by-name/userdata /vendor/firmware/wlan-connection-roaming.ini ext4 ro,noatime,errors=remount-ro,stripe=128 0 0
+/dev/block/by-name/userdata /vendor/firmware/wlan-connection-roaming-backup.ini ext4 ro,noatime,errors=remount-ro,stripe=128 0 0
+./qca6490/amss20.bin: OK
+./qca6490/bdwlan.elf: OK
+./qca6490/bdwlan.elf1: OK
+./qca6490/bdwlan.elf10: OK
+./qca6490/bdwlan.elf2: OK
+./qca6490/bdwlang.elf: OK
+./qca6490/bdwlang.elf1: OK
+./qca6490/bdwlang.elf10: OK
+./qca6490/bdwlang.elf2: OK
+./qca6490/m3.bin: OK
+./qca6490/regdb.bin: OK
+./wlan-connection-roaming-backup.ini: OK
+./wlan-connection-roaming.ini: OK
+./wlan/qcom_cfg.ini: OK
+{"status":"ok"}

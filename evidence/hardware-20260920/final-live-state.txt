@@ -1,0 +1,20 @@
+Sun Sep 20 19:22:06 UTC 2026
+ 19:22:06 up 20 min,  0 users,  load average: 17.17, 16.95, 12.79
+{"status":"ok"}Filesystem           1024-blocks    Used Available Capacity Mounted on
+/dev/block/by-name/userdata        109602836   4469544 105116908   4% /srv/s22
+98
+Charging
+297
+c350d2bea2171c83b3212ac7b03680ed58f26975e9e3c0ee7728d66e304c1e6c  /srv/s22/arch/root/.config/omarchy/shell.json
+c0dfb81cff1f33b93feca2d6c5c2e6d5a2abea044fc8cc654a28783ae25d4b44  /srv/s22/arch/opt/s22-ui/shell-trial.json
+4d85f72ab1bcd82e147b671adfdfa67d00a135ba6f0699b94d1b63d21bffbbec  /srv/s22/arch/root/hyprland-omarchy-ui.lua
+eb31e1600e3534c323daa6430be5646948afe7d75c46eb9a106a9062f0147e74  /srv/s22/arch/usr/local/bin/omarchy-battery-status
+b7179b5745c507ce185ccf09e591a2abc887632d60c6e511e7c1a1f92e7ab0c6  /srv/s22/arch/opt/omarchy-source/shell/plugins/panels/power/Panel.qml
+wlan_not_loaded
+--- no soundcards ---
+
+
+Filesystem           1024-blocks    Used Available Capacity Mounted on
+overlay                 596544    550168     34088  94% /
+[ 758] 260920 19:01:36 / KP (  1) /     / R / S901BXXSIFYI3 10073462 / 4343mV( 99%)(+) / 39[0x000] 39[0x000], 30 / 00000000000000 /  - /   -  / SOFT, PANIC > RECOVERY > BL:Recovery Mode Set by key, JUMP2K [drawLOGO]
+[{"id":"omarchy.clock","section":"center","x":218,"y":0,"width":104,"height":26,"visible":true,"itemVisible":true,"itemWidth":104,"itemHeight":26},{"id":"omarchy.menu","section":"left","x":8,"y":0,"width":27,"height":26,"visible":true,"itemVisible":true,"itemWidth":27,"itemHeight":26},{"id":"omarchy.workspaces","section":"left","x":35,"y":0,"width":106,"height":26,"visible":true,"itemVisible":true,"itemWidth":106,"itemHeight":26},{"id":"omarchy.audio","section":"center","x":322,"y":0,"width":27,"height":26,"visible":true,"itemVisible":true,"itemWidth":27,"itemHeight":26},{"id":"omarchy.power","section":"right","x":406,"y":0,"width":54,"height":26,"visible":true,"itemVisible":true,"itemWidth":54,"itemHeight":26},{"id":"s22.keyboard","section":"right","x":460,"y":0,"width":73,"height":26,"visible":true,"itemVisible":true,"itemWidth":73,"itemHeight":26}]
