@@ -2777,3 +2777,29 @@ Clang18 compiles sourceclosure but differs from captured Androidclang21/
 r563880c with CFI/ThinLTO/MODVERSIONS, so no phone-compatible build claim.
 Exacttoolchain retrieval is ongoing. New curated results are in
 evidence/main-driver-loop-20260922; rawlogs/vendorassets remainprivate.
+
+### Driver-loop continuation checkpoint — 2026-09-22
+
+Still BORE762, no additional reboot or partition write. Samsung Vulkan
+COMPUTE256 passed checksum99712 in2.389s. Archlibasound enumerated1736controls
+with O_RDONLY only. The optional control-node startup hook is installed and
+backedup, but not yet reboot-tested. BinaryBT PatchVer returned product0013,
+ROM0201, SoC400c0210 and mapped hpbtfw21.tlv/hpnv21.bab; no firmware/baud/HCI
+activation. USB/shared-WLAN vote and model health checks passed.
+
+Audio baseline PREPARE EINVAL was narrowed to missingbackendroute. Selecting
+only SPUS OUT2 and UAIF1 SPK toSIFS0 allowed PREPARE/drop/hw_free/close0
+(7.842s, noframes). Both restored0. Subsequentzero-stream test stalled after
+8successfulWRITEI_FRAMES; repeatedEAGAIN until10schilddeadline. ChildSIGTERM
+was correctly cleaned up, but aplay misleadingly returned0 whileprinting
+"Aborted by signal Terminated...". This is failedstreaming. Bothselectors
+restored0, AMPEnableoff, PCMclosed, ABOXreset0, sameboot/modelhealthy.
+Acceptance now rejects signal-aborted zeroexits, with8hostregressiontests.
+
+ExactAndroidClang21 fullImage/modules hostbuild passed with329modules and
+matching__versions for324commonoriginalmodules. Onlyclose_rangeclamp changed.
+No newkernel/moduledeployed; noNPUfirmwareboot/inference. Pi-to-rigQwen source
+review158.19s corroborated incompletePOWER_NOTIFY error/ownershiprepair.
+See docs/DRIVER_LOOP_CONTINUATION_2026-09-22.md and curatedacceptance.json.
+Private logs/vendorassets remain excluded. Scopedlocalcommit614dbff was
+cherry-picked into sanitizedpublichistory as10ff4ab.

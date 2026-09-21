@@ -8,12 +8,17 @@ Exynos 2200, codename `r0s`, unlocked bootloader. This is the S22, not S22+.
 **Audio card startup and Pi subprocess repair are now verified.** An audio-only
 RECOVERY update registered Rainbow-Prince with23 playback/53 capture PCMs;
 native ALSA enumerates1736 controls after the narrow control-node fix.
-Speaker/microphone routes are still untested. A targeted close_range
+Arch can also enumerate the control node read-only. A two-selector audio route
+now prepares, but zero-sample streaming stalls and is **not working playback**.
+Both selectors were restored; speaker/microphone acceptance remains open.
+A targeted close_range
 workaround lets Pi's local4B run captured-output subprocess tools; the actual
 tool test passed before and after reboot. BORE762 restored desktop,4B,
 Wi-Fi and private Pi web without buttons. Bluetooth also answered a native
-board-ID query; firmware/HCI are not yet initialized.
+board-ID and binary firmware-identity queries; firmware/HCI are not yet initialized.
 See [measured results, rollback and limits](docs/RUNTIME_AUDIO_RECOVERY_2026-09-22.md).
+The [latest continuation](docs/DRIVER_LOOP_CONTINUATION_2026-09-22.md) records
+the audio failure, fresh GPU shader pass, Bluetooth identity and host kernel build.
 
 **Private browser access to Pi now works over Tailscale.** The actual agent
 uses the existing local4B default, saves separate web history, and continues
