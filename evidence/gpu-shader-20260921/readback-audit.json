@@ -1,0 +1,20 @@
+{
+  "scope": "CP-DMA and setup-register readback only; not shader compute correctness",
+  "results": [
+    {
+      "file": "internal-readback.txt",
+      "descriptor_words_compared": 4,
+      "shader_words_compared": 18,
+      "exact_match": true,
+      "shader_executed": false
+    },
+    {
+      "file": "internal-register-readback.txt",
+      "descriptor_words_compared": 4,
+      "shader_words_compared": 18,
+      "exact_match": true,
+      "shader_executed": false,
+      "defined_registers_compared": 7
+    }
+  ]
+}
