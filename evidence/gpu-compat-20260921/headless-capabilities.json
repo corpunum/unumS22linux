@@ -1,0 +1,40 @@
+{
+  "started_at": "2026-09-21T15:55:49.596161+00:00",
+  "variant": "opencl-headless",
+  "name": "headless-capabilities",
+  "command": [
+    "/system/bin/opencl-capabilities",
+    "--capabilities"
+  ],
+  "returncode": 0,
+  "same_boot": true,
+  "kernel_capture_exit": 0,
+  "gpu_messages": [],
+  "helper_sha256": "21fcf21e62e5ab722dea16b19acf0aa0f127f6582c7acc0b5166889f5679b27d",
+  "read_only_views": [
+    "--proc",
+    "--sys"
+  ],
+  "elapsed_seconds": 0.338,
+  "phone_before": {
+    "pid1": "native-guardian",
+    "temperature": 31.2,
+    "profile": "qwen4b",
+    "model": "ok"
+  },
+  "phone_after": {
+    "pid1": "native-guardian",
+    "temperature": 31.2,
+    "profile": "qwen4b",
+    "model": "ok"
+  },
+  "backend_numerical_tests": null,
+  "operation_numerical_pass": null,
+  "operation_pass": null,
+  "reference_correct": null,
+  "cpu_fallback_used": null,
+  "numerical_checksum": null,
+  "numerical_device": null,
+  "numerical_compute_pass": false,
+  "clean_numerical_pass": false
+}

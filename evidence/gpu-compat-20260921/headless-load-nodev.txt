@@ -1,0 +1,11 @@
+ISOLATED uid=1000 caps=0 NoNewPrivs=1
+OPENCL_LIBRARY path=libSGPUOpenCL.so
+WARNING load executes vendor ELF constructors; this is not a dry-run
+STAGE dlopen
+linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+WARNING: linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+couldn't open /proc/self/stat: No such file or directory
+libc: couldn't open /proc/self/stat: No such file or directory
+libc: failed to connect to tombstoned: No such file or directory
+DEBUG: failed to open /proc/20711/task: No such file or directory
+DEBUG: failed to init unwinder object: Failed to parse maps

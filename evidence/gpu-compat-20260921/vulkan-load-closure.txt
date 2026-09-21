@@ -1,0 +1,7 @@
+ISOLATED uid=1000 caps=0 NoNewPrivs=1
+STAGE dlopen(vulkan HAL)
+HAL_HMI_OK path=/vendor/lib64/hw/vulkan.samsung.so symbol=HMI
+HAL_MODULE id=vulkan name=SGPU Vulkan Driver author=Samsung module_api=0x0001 hal_api=0x0100
+LOAD_ONLY PASS constructors_ran=1 open_called=0
+linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+WARNING: linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"

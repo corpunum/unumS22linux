@@ -1,0 +1,101 @@
+{
+  "started_at": "2026-09-21T16:33:13.735847+00:00",
+  "variant": "llama-vulkan",
+  "name": "llama-vulkan-qwen08-cpu-strict-repeat",
+  "command": [
+    "/system/bin/llama-bench",
+    "-m",
+    "/models/Qwen3.5-0.8B-Q4_0.gguf",
+    "-p",
+    "32",
+    "-n",
+    "32",
+    "-r",
+    "3",
+    "-ngl",
+    "0",
+    "--device",
+    "none",
+    "-nopo",
+    "1",
+    "-nkvo",
+    "1",
+    "-t",
+    "4",
+    "-b",
+    "32",
+    "-ub",
+    "32",
+    "-v",
+    "-o",
+    "json"
+  ],
+  "returncode": 0,
+  "same_boot": true,
+  "kernel_capture_exit": 0,
+  "gpu_messages": [],
+  "helper_sha256": "c4b7a67800d038f2e439ad0b07e19bfde867b390a8b219d78826a991ff82d9e3",
+  "bridge": "v4",
+  "read_only_views": [
+    "--proc",
+    "--sys"
+  ],
+  "elapsed_seconds": 5.07,
+  "phone_before": {
+    "pid1": "native-guardian",
+    "temperature": 31.7,
+    "profile": "qwen4b",
+    "model": "ok"
+  },
+  "phone_after": {
+    "pid1": "native-guardian",
+    "temperature": 31.7,
+    "profile": "qwen4b",
+    "model": "ok"
+  },
+  "backend_numerical_tests": null,
+  "operation_numerical_pass": null,
+  "operation_pass": null,
+  "reference_correct": null,
+  "cpu_fallback_used": null,
+  "numerical_checksum": null,
+  "numerical_device": "Samsung Xclipse 920",
+  "numerical_compute_pass": null,
+  "raw_output_private_only": true,
+  "benchmark_role": "cpu-control",
+  "warmup_class": "warmed-repeat",
+  "benchmark_results": [
+    {
+      "n_prompt": 32,
+      "n_gen": 0,
+      "avg_ts": 212.2805,
+      "stddev_ts": 55.391252,
+      "samples_ts": [
+        260.305,
+        224.853,
+        151.684
+      ]
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 32,
+      "avg_ts": 31.585579,
+      "stddev_ts": 2.336855,
+      "samples_ts": [
+        30.8009,
+        34.2138,
+        29.742
+      ]
+    }
+  ],
+  "text_output_observed": null,
+  "text_payload_sha256": null,
+  "text_reference_match": null,
+  "offloaded_layers": {
+    "loaded": 0,
+    "total": 25
+  },
+  "model_buffer_mib": 526.5,
+  "completion_eval_tokens_per_second": null,
+  "clean_numerical_pass": null
+}

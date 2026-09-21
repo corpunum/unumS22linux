@@ -1,0 +1,7 @@
+ISOLATED uid=1000 caps=0 NoNewPrivs=1
+OPENCL_LIBRARY path=libSGPUOpenCL.so
+WARNING load executes vendor ELF constructors; this is not a dry-run
+STAGE dlopen
+linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+WARNING: linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+DLOPEN_ERROR path=libSGPUOpenCL.so detail=dlopen failed: library "libsync.so" not found: needed by /vendor/lib64/libSGPUOpenCL.so in namespace (default)

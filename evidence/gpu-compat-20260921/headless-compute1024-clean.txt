@@ -1,0 +1,81 @@
+ISOLATED uid=1000 caps=0 NoNewPrivs=1
+OPENCL_LIBRARY path=libSGPUOpenCL.so
+WARNING load executes vendor ELF constructors; this is not a dry-run
+STAGE dlopen
+EXPORT_OK name=clGetPlatformIDs
+EXPORT_OK name=clGetPlatformInfo
+EXPORT_OK name=clGetDeviceIDs
+EXPORT_OK name=clGetDeviceInfo
+EXPORT_OK name=clCreateContext
+EXPORT_OK name=clReleaseContext
+EXPORT_OK name=clCreateCommandQueue
+EXPORT_OK name=clReleaseCommandQueue
+EXPORT_OK name=clCreateBuffer
+EXPORT_OK name=clReleaseMemObject
+EXPORT_OK name=clEnqueueWriteBuffer
+EXPORT_OK name=clEnqueueReadBuffer
+EXPORT_OK name=clCreateProgramWithSource
+EXPORT_OK name=clBuildProgram
+EXPORT_OK name=clGetProgramBuildInfo
+EXPORT_OK name=clReleaseProgram
+EXPORT_OK name=clCreateKernel
+EXPORT_OK name=clSetKernelArg
+EXPORT_OK name=clReleaseKernel
+EXPORT_OK name=clEnqueueNDRangeKernel
+EXPORT_OK name=clWaitForEvents
+EXPORT_OK name=clReleaseEvent
+STAGE clGetPlatformIDs(count)
+STAGE clGetPlatformIDs(list)
+STAGE clGetPlatformInfo(CL_PLATFORM_NAME)
+STAGE clGetPlatformInfo(CL_PLATFORM_NAME)
+STAGE clGetPlatformInfo(CL_PLATFORM_VENDOR)
+STAGE clGetPlatformInfo(CL_PLATFORM_VENDOR)
+STAGE clGetPlatformInfo(CL_PLATFORM_VERSION)
+STAGE clGetPlatformInfo(CL_PLATFORM_VERSION)
+PLATFORM index=0 name=Samsung Mobile GPU Platform vendor=Samsung Electronics Co., Ltd. api=OpenCL 3.0  (1.0)
+STAGE clGetDeviceIDs(GPU,count)
+STAGE clGetDeviceIDs(GPU,list)
+STAGE clGetDeviceInfo(CL_DEVICE_TYPE)
+STAGE clGetDeviceInfo(CL_DEVICE_NAME)
+STAGE clGetDeviceInfo(CL_DEVICE_NAME)
+STAGE clGetDeviceInfo(CL_DEVICE_VENDOR)
+STAGE clGetDeviceInfo(CL_DEVICE_VENDOR)
+STAGE clGetDeviceInfo(CL_DRIVER_VERSION)
+STAGE clGetDeviceInfo(CL_DRIVER_VERSION)
+STAGE clGetDeviceInfo(CL_DEVICE_VERSION)
+STAGE clGetDeviceInfo(CL_DEVICE_VERSION)
+STAGE clGetDeviceInfo(CL_DEVICE_OPENCL_C_VERSION)
+STAGE clGetDeviceInfo(CL_DEVICE_OPENCL_C_VERSION)
+DEVICE platform=0 index=0 name=Samsung Xclipse 920 vendor=Samsung Electronics Co., Ltd. type=0x4
+platform_name=Samsung Mobile GPU Platform
+platform_vendor=Samsung Electronics Co., Ltd.
+platform_api=OpenCL 3.0  (1.0)
+device_name=Samsung Xclipse 920
+device_vendor=Samsung Electronics Co., Ltd.
+device_type=0x4 GPU
+device_driver_version=3.541, f0078d4a11
+device_api=OpenCL 3.0
+device_opencl_c=OpenCL C 3.0
+STAGE clCreateContext
+STAGE clCreateCommandQueue
+STAGE clCreateBuffer
+STAGE clEnqueueWriteBuffer(fill-A5)
+STAGE clCreateProgramWithSource
+STAGE clBuildProgram
+STAGE clCreateKernel
+STAGE clSetKernelArg
+STAGE clEnqueueNDRangeKernel
+STAGE clWaitForEvents(kernel)
+STAGE clEnqueueReadBuffer
+STAGE clWaitForEvents(readback)
+COMPUTE count=1024 checksum=verified PASS
+STAGE clReleaseEvent(readback)
+STAGE clReleaseEvent(kernel)
+STAGE clReleaseKernel
+STAGE clReleaseProgram
+STAGE clReleaseMemObject
+STAGE clReleaseCommandQueue
+STAGE clReleaseContext
+STAGE dlclose(compute-complete)
+linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+WARNING: linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"

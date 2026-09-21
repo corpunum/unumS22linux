@@ -1,0 +1,9 @@
+ISOLATED uid=1000 caps=0 NoNewPrivs=1
+linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+WARNING: linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+VULKAN_BRIDGE_TRACE init:before-dlopen
+VULKAN_BRIDGE_TRACE init:after-dlopen
+VULKAN_BRIDGE_TRACE init:before-dlsym-HMI
+VULKAN_BRIDGE_TRACE init:after-dlsym-HMI
+VULKAN_BRIDGE_TRACE init:HMI-invalid
+libc: failed to connect to tombstoned: No such file or directory

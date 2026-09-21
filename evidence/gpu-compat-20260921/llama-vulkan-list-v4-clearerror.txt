@@ -1,0 +1,27 @@
+ISOLATED uid=1000 caps=0 NoNewPrivs=1
+Available devices:
+  Vulkan0: Samsung Xclipse 920 (6044 MiB, 5741 MiB free)
+linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+WARNING: linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+VULKAN_BRIDGE_TRACE init:before-dlopen
+VULKAN_BRIDGE_TRACE init:after-dlopen
+VULKAN_BRIDGE_TRACE init:before-dlsym-HMI
+VULKAN_BRIDGE_TRACE init:after-dlsym-HMI
+VULKAN_BRIDGE_TRACE HMI fields module=0xREDACTED error=(null) tag=0x48574d54 id=vulkan methods=0xREDACTED open=0xREDACTED
+VULKAN_BRIDGE_TRACE init:before-HMI-open
+VULKAN_BRIDGE_TRACE init:after-HMI-open
+VULKAN_BRIDGE_TRACE init:callbacks-valid
+VULKAN_BRIDGE_TRACE init:ready
+VULKAN_BRIDGE_TRACE EnumerateVersion:entry
+VULKAN_BRIDGE_TRACE EnumerateVersion:before-vendor-GIPA-null
+VULKAN_BRIDGE_TRACE EnumerateVersion:after-vendor-GIPA-null
+VULKAN_BRIDGE_TRACE EnumerateVersion:before-vendor-version
+VULKAN_BRIDGE_TRACE EnumerateExtensions:entry
+VULKAN_BRIDGE_TRACE EnumerateExtensions:before-vendor
+VULKAN_BRIDGE_TRACE EnumerateExtensions:entry
+VULKAN_BRIDGE_TRACE EnumerateExtensions:before-vendor
+VULKAN_BRIDGE_TRACE CreateInstance:entry
+VULKAN_BRIDGE_TRACE CreateInstance:before-vendor
+VULKAN_BRIDGE_TRACE CreateInstance:after-vendor
+ggml_vulkan: Found 1 Vulkan devices:
+ggml_vulkan: 0 = Samsung Xclipse 920 (Samsung Proprietary driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
