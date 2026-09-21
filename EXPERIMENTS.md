@@ -2471,3 +2471,24 @@ is claimed. Raw kernel captures stay private; public logs redact CPU pointers.
 Details: `docs/GPU_SHADER_DIAGNOSTICS_2026-09-21.md`,
 `evidence/gpu-shader-20260921/`, and
 `tools/omarchy-trial/radv-xclipse-shader-diagnostics.patch`.
+
+### 2026-09-21 — other-phone feasibility survey and README matrix
+
+At the owner's request, added a 25-entry phone table directly to README.md
+and a source/methodology note in docs/PHONE_PORTABILITY.md. Research used
+primary port documentation, the live postmarketOS26.06 release, Mesa driver
+documentation, PINE64/Purism documentation and official Omarchy ARM news.
+Many device feature matrices were available only as older indexed pmOS wiki
+snapshots because direct requests hit an anti-bot page; this freshness limit
+is explicit. A review date is not a current hardware retest.
+
+Only our SM-S901B/DS remains project-tested. The table separates established
+native ports, experimental/downstream entries and S22+/Ultra source-based
+hypotheses; it does not claim 25 supported devices or universal images.
+Snapdragon SM-G9600/DS S9 is explicitly separate from Exynos S9/S9+.
+Screen/touch/Wi-Fi status, graphics limitations, bootloader/variant checks,
+and lack of additional-phone Omarchy/GPU-model/NPU acceptance are documented.
+Omarchy now has official ARM computer initiatives; these are not smartphone
+compatibility announcements. No phone connection, flash, installation,
+benchmark, package/service change or hardware experiment occurred in this
+documentation-only round. Two Luna research/review workers assisted.
