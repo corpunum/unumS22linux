@@ -23,6 +23,7 @@ BINARY = ROOT / 'builds/bt-board-20260922/bt-qca6490-board-probe'
 DEST = '/srv/s22/bt-board-20260922/bt-qca6490-board-probe'
 SOURCE = ROOT / 'tools/hardware/bt-qca6490-board-probe.c'
 ACCEPTED_SOURCE = ROOT / 'tools/hardware/bt-version-transport-probe.c'
+NOTE = 'Raw version+board transport only; no baud, firmware, HCI, pairing or data acceptance.'
 
 
 def accepted_runner():
@@ -134,7 +135,7 @@ print('binary_hash_verified')
                    same_boot=before['boot_id'] == after['boot_id'], kernel_capture_exit=kernel.returncode,
                    after_metadata_exit=state.returncode, after_vote_check=check_after.returncode,
                    strace_capture_exit=captured.returncode, uart_output=result.stdout,
-                   note='Raw version+board transport only; no baud, firmware, HCI, pairing or data acceptance.')
+                   note=NOTE)
     (raw / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
     print(json.dumps({k: v for k, v in receipt.items() if k not in ('before', 'after', 'uart_output')}, indent=2))
     if not receipt['same_boot'] or state.returncode or check_after.returncode or kernel.returncode:
