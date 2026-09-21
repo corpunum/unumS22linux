@@ -1,7 +1,10 @@
 /* Host-only PatchVerReq identity candidate. No baud, firmware, NVM or HCI. */
+#pragma push_macro("main")
+#undef main
 #define main bt_version_probe_main
 #include "bt-version-transport-probe.c"
 #undef main
+#pragma pop_macro("main")
 
 #define VERSION_TIMEOUT_MS 2000
 #define MAX_OPAQUE_EVENTS 16U

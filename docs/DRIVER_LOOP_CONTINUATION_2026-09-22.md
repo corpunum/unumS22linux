@@ -91,3 +91,38 @@ the driver objects compiling does not prove firmware boot or inference.
 
 Curated measurements: [acceptance.json](../evidence/main-driver-loop-20260922/acceptance.json).
 Raw logs, traces, vendor assets and model files remain private.
+
+## Subsequent Bluetooth and audio measurements
+
+The full 195,848-byte Bluetooth RAM patch transferred in 806 packets, with
+final status0/subop1e acknowledgement (5.943 seconds). Its mode3 header and
+pinned QCA driver explain why the preceding 243-byte prefix test received no
+intermediate event. That timeout did not establish a rejected segment.
+
+A subsequent transfer verified the ACK before sending the HAL's GetBoardIdReq,
+without a reset or extra baud change. That query succeeded; overall4.299s.
+The 3 Mbaud transport was separately verified by exact controller identity
+before and after switching. Its baud reply ends in01, so conventional HCI
+zero-status success is not claimed. Each test released its Bluetooth power
+vote and preserved WLAN votes, USB, boot and the resident model. NVM board
+configuration, HCI registration and pairing remain unfinished.
+
+The instrumented audio zero-stream collected eight narrow status snapshots,
+seven while ALSA claimed RUNNING. Actual RDMA2 status registers0x1230/0x1238
+and ALSA hw_ptr stayed zero (appl_ptr8192), with PMactive/cacheN/service1.
+Single-record reads avoided a full register dump. The10s child deadline
+terminated the stalled stream; both selectors were restored, PCM closed,
+amps stayed off and ABOX reset_count remained zero. This distinguishes
+hardware nonprogress from merely missing ALSA pointer messages.
+
+A suspended-only offset1 read captured the existing firmware DRAM log without
+requesting a flush or SFR/SRAM dump. Only its hash/metadata are exported. The
+log shows RDMA2 open, prepare, start and source assignment but no demonstrated
+DMA progress. CP magic warnings are not established as the media failure's
+cause. Actual Pi/rig-Qwen source review completed in149.85s; its findings were
+independently checked, and an incorrect AMP-enable interpretation rejected.
+
+See [curated continuation receipts](../evidence/main-driver-loop-20260922/continuation.json)
+and [manifest](../evidence/main-driver-loop-20260922/continuation-manifest.json).
+Neither raw logs nor vendor payloads are public. No further reboot or partition
+write occurred during these tests.

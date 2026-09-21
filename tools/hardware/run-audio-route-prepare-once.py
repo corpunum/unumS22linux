@@ -18,8 +18,16 @@ import subprocess
 import time
 
 ROOT=Path(__file__).resolve().parents[2]
-WRAPPER=r'''import json,pathlib,re,subprocess,sys
-helper=sys.stdin.read()
+WRAPPER=r'''import json,pathlib,re,subprocess,sys,time
+request=json.loads(sys.stdin.read());helper=request['helper'];samples=[]
+observer=None
+if request.get('observer'):
+ namespace={'__name__':'progress_observer'};exec(request['observer'],namespace)
+ observer=namespace['snapshot']
+def sample():
+ if observer:
+  try:samples.append(observer(True))
+  except (OSError,ValueError) as error:samples.append({'error':str(error)})
 routes=('ABOX SPUS OUT2','ABOX UAIF1 SPK')
 def get(name):
  r=subprocess.run(['amixer','-c','0','cget','name='+name],capture_output=True,text=True,timeout=5)
@@ -45,16 +53,22 @@ try:
   assert get(name)[0]=='1'; muted()
  child=subprocess.Popen(['python3','-c',helper],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
  child_dead=False
- try:out,err=child.communicate(timeout=10)
- except subprocess.TimeoutExpired:
-  deadline_exceeded=True
-  child.terminate()
-  try:out,err=child.communicate(timeout=3)
+ end=time.monotonic()+10
+ while True:
+  try:
+   out,err=child.communicate(timeout=max(0.01,min(1 if observer else 10,end-time.monotonic())))
+   break
   except subprocess.TimeoutExpired:
-   child.kill();out,err=child.communicate(timeout=3)
+   if time.monotonic()<end:
+    sample();continue
+   deadline_exceeded=True;child.terminate()
+   try:out,err=child.communicate(timeout=3)
+   except subprocess.TimeoutExpired:
+    child.kill();out,err=child.communicate(timeout=3)
+   break
  child_dead=True
  result={'child_returncode':child.returncode,'child_stdout':out,'child_stderr':err,
-         'child_deadline_exceeded':deadline_exceeded}
+         'child_deadline_exceeded':deadline_exceeded,'progress_samples':samples}
 finally:
  result.update({'events':events,'child_exited':child_dead,'before':before,'restored':{}})
  if child_dead:
@@ -104,7 +118,9 @@ def classify(receipt, trace):
 
 def main():
     ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('name');ap.add_argument('--execute',action='store_true')
-    ap.add_argument('--zero-second',action='store_true');args=ap.parse_args()
+    ap.add_argument('--zero-second',action='store_true')
+    ap.add_argument('--sample-progress',action='store_true');args=ap.parse_args()
+    if args.sample_progress and not args.zero_second:ap.error('progress sampling requires --zero-second')
     if not re.fullmatch('[a-z0-9-]+',args.name):ap.error('unique lowercase trial name required')
     trial=load('hardware_trial',ROOT/'tools/gpu-compat/run-trial.py')
     silence=load('silence_probe',ROOT/'tools/hardware/run-audio-silence-once.py')
@@ -120,11 +136,13 @@ def main():
     boundary=max(map(float,re.findall(r'^\[\s*([0-9.]+)\]',kernel.stdout,re.M)),default=0)
     trace='/srv/s22/audio-early-20260922/'+args.name+'.strace'
     command=shlex.join(['strace','-f','-qq','-tt','-T','-s','160','-o',trace,
-                       '-e','trace=openat,close,ioctl,read,write','python3','-c',WRAPPER])
+                       '-e','trace=openat,close,ioctl,read,pread64,write','python3','-c',WRAPPER])
     helper_name='audio-zero-one-second.py' if args.zero_second else 'audio-pcm-prepare-only.py'
     helper=(ROOT/'tools/hardware'/helper_name).read_bytes()
+    observer=(ROOT/'tools/hardware/audio-progress-snapshot.py').read_bytes() if args.sample_progress else b''
+    payload=json.dumps({'helper':helper.decode(),'observer':observer.decode()}).encode()
     start=datetime.now(timezone.utc).isoformat();t=time.monotonic()
-    try:r=subprocess.run([str(ROOT/'tools/s22-ssh'),command],input=helper,capture_output=True,timeout=45)
+    try:r=subprocess.run([str(ROOT/'tools/s22-ssh'),command],input=payload,capture_output=True,timeout=45)
     except subprocess.TimeoutExpired:
         (raw/'unknown.txt').write_text('Host timeout; no automatic retry/reboot. Check child and route cleanup.\n');raise
     elapsed=time.monotonic()-t
@@ -139,6 +157,8 @@ def main():
              'before':before,'after':after,'same_boot':before['boot_id']==after['boot_id'],
              'after_audio_exit':post.returncode,'trace_capture_exit':captured.returncode,
              'kernel_capture_exit':kernel.returncode,'helper_sha256':hashlib.sha256(helper).hexdigest(),
+             'observer_sha256':hashlib.sha256(observer).hexdigest() if observer else None,
+             'supervisor_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
              'diagnostic_kind':'one-second-digital-zero' if args.zero_second else 'prepare-only',
              'result':json.loads(r.stdout) if r.returncode==0 else None}
     receipt['assessment']=classify(receipt,captured.stdout)

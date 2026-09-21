@@ -1,0 +1,12 @@
+{
+  "excluded": [
+    "raw logs",
+    "UUIDs",
+    "device IDs",
+    "vendor payload bytes"
+  ],
+  "files": {
+    "continuation.json": "2a2c15b92fbdb8a2cdaf8e5050372959482306267ffdd436a87269bca1096f91"
+  },
+  "format": "main-driver-loop-continuation-public-v1"
+}
