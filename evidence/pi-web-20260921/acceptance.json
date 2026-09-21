@@ -27,5 +27,6 @@
   "new_web_cold_boot_tested": false,
   "device_rebooted": false,
   "unresolved_trial_residue": "One rejected Arch-glibc tmux child remained stuck despite SIGKILL; lowered priority. Native-musl workaround does not fix that kernel compatibility fault.",
+  "failed_child_containment": {"nice": 10, "cpu_affinity": [0], "battery_c_before": 40.6, "battery_c_later": 38.5, "terminated": false},
   "private_evidence": "Browser frames, screenshots, session JSONL and tailnet identities are not published."
 }
