@@ -1,0 +1,13 @@
+diff --git a/fs/file.c b/fs/file.c
+--- a/fs/file.c
++++ b/fs/file.c
+@@ -726,2 +726,9 @@ static inline void __range_close(struct files_struct *cur_fds, unsigned int fd,
+ {
++	struct fdtable *fdt;
++
++	spin_lock(&cur_fds->file_lock);
++	fdt = files_fdtable(cur_fds);
++	max_fd = min(last_fd(fdt), max_fd);
++	spin_unlock(&cur_fds->file_lock);
++
+ 	while (fd <= max_fd) {

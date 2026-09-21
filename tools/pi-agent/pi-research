@@ -1,0 +1,19 @@
+#!/bin/bash
+# Isolated research Pi launcher. The parent must stage /home/alarm/.pi/research
+# before use; this path never changes the normal /home/alarm/.pi/agent config.
+set -euo pipefail
+if [[ $(id -u) == 0 ]]; then
+  exec /usr/bin/setpriv --reuid=1000 --regid=1000 --clear-groups \
+    --no-new-privs --bounding-set=-all --inh-caps=-all --ambient-caps=-all \
+    --reset-env /usr/bin/env HOME=/home/alarm USER=alarm LOGNAME=alarm \
+    PATH=/usr/local/bin:/usr/bin:/bin PI_CODING_AGENT_DIR=/home/alarm/.pi/research \
+    PI_OFFLINE=1 PI_TELEMETRY=0 TERM=xterm-256color \
+    /usr/local/bin/pi-research "$@"
+fi
+[[ $(id -u) == 1000 ]] || { echo 'This launcher is configured for alarm (UID 1000).' >&2; exit 1; }
+export PI_CODING_AGENT_DIR=/home/alarm/.pi/research
+export PI_OFFLINE=1 PI_TELEMETRY=0
+export TERM=${TERM:-xterm-256color}
+cd /home/alarm/Work/s22-agent
+exec /usr/local/libexec/s22-close-range-compat -- /usr/bin/setpriv --no-new-privs /opt/s22-pi/0.86.1/pi/pi --offline --no-approve --no-extensions \
+  --no-skills --no-prompt-templates --no-context-files "$@"

@@ -1,0 +1,297 @@
+{
+  "runtime_trials": {
+    "runtime-filter-first": {
+      "case": "filter",
+      "binary_sha256": "a54f82a7c3450942756b31666a99156357b128096207b7393e3e8efb4b1dfd10",
+      "source_sha256": "9cd3c724b7b476293ef284c5d827d77a6dce9f4944c7cb76928625a309f3539c",
+      "started_at": "2026-09-21T21:02:22.100088+00:00",
+      "returncode": 0,
+      "elapsed_seconds": 1.737,
+      "same_boot": true,
+      "strace_capture_exit": 0,
+      "kernel_capture_exit": 0,
+      "filtered_syscall": "clone3",
+      "new_pending_kill_count": 0
+    },
+    "runtime-posix-spawn-first": {
+      "case": "posix-spawn",
+      "binary_sha256": "a54f82a7c3450942756b31666a99156357b128096207b7393e3e8efb4b1dfd10",
+      "source_sha256": "9cd3c724b7b476293ef284c5d827d77a6dce9f4944c7cb76928625a309f3539c",
+      "started_at": "2026-09-21T21:03:07.118813+00:00",
+      "returncode": 0,
+      "elapsed_seconds": 1.547,
+      "same_boot": true,
+      "strace_capture_exit": 0,
+      "kernel_capture_exit": 0,
+      "filtered_syscall": "clone3",
+      "new_pending_kill_count": 0
+    },
+    "runtime-close-range-filter-first": {
+      "case": "filter",
+      "binary_sha256": "313aa94848bdc719ce6ad44c649e74736968da033aa18d38f2de5bfd9d245b36",
+      "source_sha256": "7e1ae826eabcf704c68aa5fb47b16b4a625e1ea1a7881b05a3865af15fc2aa61",
+      "started_at": "2026-09-21T21:08:04.324912+00:00",
+      "returncode": 0,
+      "elapsed_seconds": 1.314,
+      "same_boot": true,
+      "strace_capture_exit": 0,
+      "kernel_capture_exit": 0,
+      "filtered_syscall": "close_range",
+      "new_pending_kill_count": 0
+    },
+    "runtime-close-range-subprocess-first": {
+      "case": "subprocess",
+      "binary_sha256": "313aa94848bdc719ce6ad44c649e74736968da033aa18d38f2de5bfd9d245b36",
+      "source_sha256": "7e1ae826eabcf704c68aa5fb47b16b4a625e1ea1a7881b05a3865af15fc2aa61",
+      "started_at": "2026-09-21T21:08:53.010865+00:00",
+      "returncode": 0,
+      "elapsed_seconds": 2.049,
+      "same_boot": true,
+      "strace_capture_exit": 0,
+      "kernel_capture_exit": 0,
+      "filtered_syscall": "close_range",
+      "new_pending_kill_count": 0
+    },
+    "runtime-close-range-repeat": {
+      "case": "repeat",
+      "binary_sha256": "313aa94848bdc719ce6ad44c649e74736968da033aa18d38f2de5bfd9d245b36",
+      "source_sha256": "7e1ae826eabcf704c68aa5fb47b16b4a625e1ea1a7881b05a3865af15fc2aa61",
+      "started_at": "2026-09-21T21:09:36.686699+00:00",
+      "returncode": 0,
+      "elapsed_seconds": 2.31,
+      "same_boot": true,
+      "strace_capture_exit": 0,
+      "kernel_capture_exit": 0,
+      "filtered_syscall": "close_range",
+      "new_pending_kill_count": 0
+    },
+    "runtime-close-range-tmux": {
+      "case": "tmux",
+      "binary_sha256": "313aa94848bdc719ce6ad44c649e74736968da033aa18d38f2de5bfd9d245b36",
+      "source_sha256": "7e1ae826eabcf704c68aa5fb47b16b4a625e1ea1a7881b05a3865af15fc2aa61",
+      "started_at": "2026-09-21T21:10:48.393295+00:00",
+      "returncode": 0,
+      "elapsed_seconds": 2.021,
+      "same_boot": true,
+      "strace_capture_exit": 0,
+      "kernel_capture_exit": 0,
+      "filtered_syscall": "close_range",
+      "new_pending_kill_count": 0
+    },
+    "runtime-subprocess-first": {
+      "outcome": "host_timeout_after_16s",
+      "filter": "clone3_only",
+      "filtered_test": "captured-output subprocess.run",
+      "child_stuck_after_SIGKILL": true,
+      "subsequent_child_stack_observed": "__arm64_sys_close_range",
+      "retry_performed": false
+    }
+  },
+  "pi_tests": {
+    "pi-local-spawn": {
+      "elapsed_seconds": 72.43,
+      "returncode": 0,
+      "tool_calls": 1,
+      "tool_result": {
+        "uid": 1000,
+        "inherited_close_range_filter": true,
+        "captured_output": "PI_SPAWN_OK",
+        "child_returncode": 0
+      },
+      "provider": "s22-local",
+      "model": "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M"
+    },
+    "pi-local-postboot": {
+      "elapsed_seconds": 64.39,
+      "returncode": 0,
+      "tool_calls": 1,
+      "tool_result": {
+        "uid": 1000,
+        "inherited_close_range_filter": true,
+        "captured_output": "PI_SPAWN_OK",
+        "child_returncode": 0
+      },
+      "provider": "s22-local",
+      "model": "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M"
+    }
+  },
+  "audio": {
+    "machine_card": "Rainbow-Prince",
+    "firmware": {
+      "files": {
+        "abox_tplg.bin": {
+          "bytes": 1066664,
+          "exact": true,
+          "expected": {
+            "bytes": 1066664,
+            "sha256": "3690d21b6a7e91242ee423ea655604842969607c318769fe73fbc6db826eb9da"
+          },
+          "present": true,
+          "sha256": "3690d21b6a7e91242ee423ea655604842969607c318769fe73fbc6db826eb9da"
+        },
+        "abox_tplg.conf": {
+          "bytes": 109315,
+          "exact": true,
+          "expected": {
+            "bytes": 109315,
+            "sha256": "ddc3874ec797a085c8497a240d47b995fedbcc5c876483c94e2f236ecb79f782"
+          },
+          "present": true,
+          "sha256": "ddc3874ec797a085c8497a240d47b995fedbcc5c876483c94e2f236ecb79f782"
+        },
+        "calliope_dram.bin": {
+          "bytes": 2204800,
+          "exact": true,
+          "expected": {
+            "bytes": 2204800,
+            "sha256": "d2460b85f1e8ceabe6a23e103688932c03ca5aca6da0de5ed95ff78dfd8feccd"
+          },
+          "present": true,
+          "sha256": "d2460b85f1e8ceabe6a23e103688932c03ca5aca6da0de5ed95ff78dfd8feccd"
+        },
+        "calliope_sram.bin": {
+          "bytes": 165120,
+          "exact": true,
+          "expected": {
+            "bytes": 165120,
+            "sha256": "786ae058d4c439c01edf856abb52184a92e8d25e90b1b748e380186bed84796d"
+          },
+          "present": true,
+          "sha256": "786ae058d4c439c01edf856abb52184a92e8d25e90b1b748e380186bed84796d"
+        }
+      },
+      "root": "/proc/1/root/vendor/firmware"
+    },
+    "abox": {
+      "calliope_version": "6XH0",
+      "power/control": "auto",
+      "power/runtime_status": "suspended",
+      "reset_count": "0",
+      "service": "1"
+    },
+    "firmware_search_path": "/vendor/firmware",
+    "platform_bindings": [
+      {
+        "driver": "abox",
+        "path": "/sys/bus/platform/devices/18c50000.abox",
+        "runtime_status": "suspended",
+        "uevent": "DRIVER=abox\nOF_NAME=abox\nOF_FULLNAME=/abox@18c50000\nOF_COMPATIBLE_0=samsung,abox\nOF_COMPATIBLE_N=1\nMODALIAS=of:NaboxT(null)Csamsung,abox"
+      },
+      {
+        "driver": "abox-core",
+        "path": "/sys/bus/platform/devices/18c55000.abox-core",
+        "runtime_status": "unsupported",
+        "uevent": "DRIVER=abox-core\nOF_NAME=abox-core\nOF_FULLNAME=/abox@18c50000/abox-core@18c55000\nOF_COMPATIBLE_0=samsung,abox-core\nOF_COMPATIBLE_N=1\nMODALIAS=of:Nabox-coreT(null)Csamsung,abox-core"
+      },
+      {
+        "driver": "abox-tplg",
+        "path": "/sys/bus/platform/devices/0.abox-tplg",
+        "runtime_status": "unsupported",
+        "uevent": "DRIVER=abox-tplg\nOF_NAME=abox-tplg\nOF_FULLNAME=/abox@18c50000/abox-tplg@0\nOF_COMPATIBLE_0=samsung,abox-tplg\nOF_COMPATIBLE_N=1\nMODALIAS=of:Nabox-tplgT(null)Csamsung,abox-tplg"
+      },
+      {
+        "driver": "rainbow-sound",
+        "path": "/sys/bus/platform/devices/sound",
+        "runtime_status": "unsupported",
+        "uevent": "DRIVER=rainbow-sound\nOF_NAME=sound\nOF_FULLNAME=/sound\nOF_COMPATIBLE_0=samsung,rainbow-prince\nOF_COMPATIBLE_N=1\nMODALIAS=of:NsoundT(null)Csamsung,rainbow-prince"
+      }
+    ],
+    "machine_playback_pcm_count": 23,
+    "machine_capture_pcm_count": 53,
+    "deferred_devices_empty": true,
+    "physical_speaker_verified": false,
+    "physical_microphone_verified": false,
+    "mixer_writes": [],
+    "pcm_io_performed": false,
+    "enumerated_control_count": 1736,
+    "control_node": {
+      "apply": true,
+      "created": [
+        "controlC0"
+      ],
+      "mixer_writes": [],
+      "nodes": [
+        {
+          "major": 116,
+          "minor": 114,
+          "name": "controlC0",
+          "state": "missing"
+        }
+      ],
+      "pcm_opened": []
+    },
+    "directory_permissions": {
+      "directory": "/dev/snd",
+      "before_mode": "0777",
+      "after_mode": "0755",
+      "nodes_created": []
+    }
+  },
+  "bluetooth": {
+    "started_at": "2026-09-21T21:33:53.225462+00:00",
+    "elapsed": 0.905,
+    "returncode": 0,
+    "source_sha256": "60a2719d3c71dc17f7aa625a88b0563c7c3b7052a7fef3a0ddfd485105321e47",
+    "accepted_source_sha256": "b3a9a346facc24845655fa63c020687efc30ffd44c2a0a9ae7bf8ed149ec58a9",
+    "binary_sha256": "867bf63adc4402adc1e9e05c7e5d9f9885e07535ff246ac63c01be907c759569",
+    "same_boot": true,
+    "after_vote_check": 0,
+    "after_metadata_exit": 0,
+    "board_response_hex": "020000",
+    "firmware_downloaded": false,
+    "hci_accepted": false
+  },
+  "reboot": {
+    "new_boot": true,
+    "actual_mode": "recovery",
+    "continuous_uptime_seconds": 95.02,
+    "host_elapsed_seconds": 111.04,
+    "model_healthy": true,
+    "reboot_requests": 1,
+    "pending_kill_count": 0
+  },
+  "flash": {
+    "mode": "flash",
+    "partition_written": "recovery",
+    "bytes": 100663296,
+    "before_sha256": "1a827b43d29141efb47f530902dd4e4ee2b6d780515893c9ecd676ad27efd7d1",
+    "readback_sha256": "1c1b77a5e532e50b8274cfc68921aa9b1bfe6d4ae9a3459281be0cc033c5c3d5",
+    "reboot_performed": false
+  },
+  "wifi": {
+    "all_checks_passed": true,
+    "checks": {
+      "arch_app_dns": true,
+      "arch_shares_resolver_inode": true,
+      "cnss_mission_ready": true,
+      "dns_forced_wlan0": true,
+      "https_forced_wlan0_tls_verified": true,
+      "lease_dns_first": true,
+      "lease_private": true,
+      "native_app_dns": true,
+      "resident_model_healthy": true,
+      "usb_carrier": true,
+      "usb_default_preserved": true,
+      "wlan_default_metric_600": true,
+      "wpa2_ccmp_completed": true
+    },
+    "cnss_state": "State: 0x420107(QMI_WLFW_CONNECTED | FW_MEM_READY | FW_READY | DRIVER_PROBED | COLD_BOOT_CAL_DONE | PCI PROBE DONE)",
+    "not_tested": [
+      "USB_disconnected",
+      "suspend_resume",
+      "roaming",
+      "sustained_throughput"
+    ],
+    "timestamp_utc": "2026-09-21T21:27:38.895078+00:00",
+    "uptime_seconds": 111.28,
+    "reboot_observation_source": "audio-reboot/result.json plus fresh native readiness"
+  },
+  "limitations": [
+    "NPU boot/inference not tested",
+    "Bluetooth firmware/HCI not accepted",
+    "SIM/cellular not activated",
+    "No camera/GPS/suspend acceptance",
+    "Kernel clamp patch compiled only, not installed",
+    "Pi-only process filter, not a system-wide kernel repair"
+  ]
+}
