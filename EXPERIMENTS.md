@@ -2492,3 +2492,118 @@ Omarchy now has official ARM computer initiatives; these are not smartphone
 compatibility announcements. No phone connection, flash, installation,
 benchmark, package/service change or hardware experiment occurred in this
 documentation-only round. Two Luna research/review workers assisted.
+
+### 2026-09-21 — Samsung GPU compute and bounded Qwen GPU inference accepted
+
+Samsung OpenCL and Vulkan now execute real arithmetic shaders in isolated
+Bionic processes on native Linux, without Android services or a property
+server. Three consecutive fresh-process tests passed on each API with exact
+numerical readback and no new GPU fault. An earlier OpenCL test returned
+correct data but triggered a GPU timeout/reset; cold-start and long-duration
+reliability remain unresolved. This does not repair the separate failing RADV
+shader path or provide accelerated Hyprland.
+
+A minimal real Vulkan HAL bridge was added. Its initial loader failure was a
+stale dlerror value before HMI lookup, not a vendor constructor/GPU failure.
+Six selected llama.cpp MUL_MAT tests passed against CPU references. The
+Qwen3.5-0.8B Q4_0 model offloaded all 25 layers and produced the same 24-token
+deterministic completion as strict CPU execution. Three short warmed pp32/tg32
+samples measured GPU 322.72/38.20 tokens/s versus CPU 212.28/31.59. Cold
+completion was slower on GPU; these are not sustained or 4B benchmarks.
+The resident4B service remains CPU-only and the desktop software-rendered.
+
+Exact sources, hashes and bounded receipts are published in the four
+GPU_*_2026-09-21 research documents and evidence/gpu-compat-20260921.
+No reboot, partition write or production-service replacement occurred.
+
+### 2026-09-21 — Remaining hardware contracts and real motion-sensor samples
+
+Read-only live/source audits confirmed NPU, modem CPIF, Bluetooth power/UART,
+ABOX/audio, camera, touch and sensor kernel components are already present.
+Their presence does not establish usable hardware. The modem remains INIT;
+Bluetooth has no HCI controller; audio has no normal PCM card. Detailed
+source-matched prerequisites are in HARDWARE_REUSE_NEXT, Bluetooth preflight,
+and AUDIO_CELLULAR_PREFLIGHT research documents.
+
+The corrected host-only NCP-v25 scanner passes ten regressions. All 18
+recovered ENNC files contain inner structural candidates; neither exact ENNC
+payload boundaries nor compiler/firmware compatibility are proven. The ENN
+library closure and a no-call loader probe are prepared on the host, with
+missing dependencies explicit. No NPU device/ioctl or inference ran.
+
+The sensor hub was different: it lacked its exact DT-named firmware and the
+normal fs_ready startup. The real driver is drivers/staging/nanohub, with a
+bitmask enable interface. Recovered shub_pamir_rainbow.bin was staged only to
+userdata and the guardian's RAM firmware directory. At 16:57 UTC the kernel
+authenticated it through S2MPU and reached CHUB run state 2, revision 24122600.
+No Android service, reboot or partition write was required.
+
+Two accelerometer and two gyro trials each collected 25 real IIO frames with
+strictly increasing positive timestamps and varying axes. Frames were 14 and
+20 bytes respectively, matching pinned source. Each restored the enable mask
+and IIO buffer flag to off. Same boot, healthy4B and 30.3–30.4 C were retained.
+Five host decoder regressions pass. No physical orientation test is claimed.
+
+Important limitation: first accel enable requested saved calibration through
+the absent Android file-manager channel, timed out, then sent zero runtime
+offsets to the hub. No EFS/calibration-file or calibration-sysfs write was
+performed. The initial helper comment saying no calibration writes was too
+broad and was corrected. Restoring sampling controls does not undo this
+runtime command. Calibration, other sensors, desktop auto-rotation, sensor
+autostart, cold boot and suspend remain unaccepted. The hub remains running;
+firmware persists in userdata, but RAM staging is not yet boot policy.
+
+See SENSORHUB_WORKING_2026-09-21.md and curated hardware-reuse receipts.
+Raw kernel logs, timestamped samples and proprietary binaries remain private.
+
+### 2026-09-21 — Audio DSP boot, matching radio backup, real ENN loader
+
+At 17:12:32 UTC, exact recovered ABOX core/topology files were staged to new
+userdata and guardian-RAM locations and hash-verified. A bounded runtime-power
+trial booted authenticated Calliope firmware, version 6XH0, and registered 34
+dump/debug capture PCMs. No usable Rainbow machine card appeared. No PCM was
+opened or speaker/microphone tested. Power control was restored to auto;
+runtime suspended, reset count zero, same boot and healthy resident4B.
+Source review found incomplete work/IPC cleanup, so live sound/topology
+unbind/rebind was not attempted. A future clean-session probe order remains
+a separate recovery-reviewed experiment.
+
+The existing radio partition was copied read-only with target/size guards:
+80 MiB, matching phone/host SHA256
+386155dc00d3034b22139b01e402515e71f4a0672df761d665ce74155c7b962e.
+Its bounded CP TOC and embedded S901BXXSIFYI3 / S5133AP_RAINBOWR0 markers were
+inspected offline. No EFS/cpefs/cp_debug reads or partition writes. CP remains
+INIT: matching cbd/SIPC/RIL, SIM/data and voice acceptance are still missing.
+
+Four real missing ENN/HIDL objects were recovered from the verified private
+FYI3 system backup. The new isolated stage contains 36 files with 23 reachable
+DT_NEEDED names and no missing/ambiguous libraries or abort stubs. Parent
+review corrected NODEV on the private basic /dev and the interpreter's
+executable permission before testing. At 17:24:55 UTC the phone's Bionic loader
+loaded the actual ENN wrapper and resolved all six API symbols: exit0 in
+2.709 seconds. No ENN function, NPU/DRM/binder/dma-heap node, firmware or model
+was used. UID/GID1000, zero capabilities and NoNewPrivs were verified. Missing
+generated linker configuration only warned. Same boot, healthy4B, 30.2 C and
+no new GPU/NPU kernel messages. This accepts loading only, not initialization
+or inference. Public metadata receipts are in evidence/hardware-reuse-20260921;
+proprietary binaries, raw kernel traces and identities remain private.
+### 2026-09-21 — ENN initialization exposes direct NPU requests, not readiness
+
+At 17:33:53 UTC the separately staged no-device init probe called the exact
+no-argument EnnInitialize once and exited zero in 2.385 seconds. Matching
+binary disassembly established the W0 status ABI. Crucially, strace shows
+/dev/ion, both system DMA heaps, custom_mode_config.json and /dev/vertex10
+opens failing ENOENT inside the sandbox, yet the API returned zero. This is
+not hardware readiness. No accelerator node was exposed/opened successfully,
+no firmware boot or NPU ioctl occurred, and no model/buffer API was called.
+No Android service was started. This runtime has a direct-device initialization
+path; linked HIDL names alone do not prove mandatory binder services.
+
+The original loader root is preserved; the initializer has a separate 37-file
+root and manifest 2caadc6d0bba4fc866d132a83d5753cffec58dd3f2628863de56f8fc67e1da60.
+Probe SHA256 f19984676d7801bc324a37ea4d1976f819de1d9c1e1e00e2dabe7606cd9e51ce.
+Same boot, healthy resident CPU4B, 30.2 C and no new GPU/NPU kernel messages.
+Public npu-initialize.json records failed request paths without raw traces or
+identifiers. Next gate: source-backed allocator/NPU open-close lifecycle and
+firmware audit before device exposure, then model/buffer ABI and numerical
+inference. Zero initialization status must never be counted as NPU success.

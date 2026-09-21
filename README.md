@@ -85,9 +85,17 @@ and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 | Tailscale | Enrolled; remote SSH and Pi-to-rig use verified; recovery-reboot persistence passed |
 | CPU benchmark | 0.8B: 20.21 tok/s; 2B: 10.13 short / 5.47 at depth4096 |
 | GPU | Samsung OpenCL/Vulkan compute passes; llama.cpp Vulkan Qwen0.8B all-layer offload and CPU-matching text verified. Resident4B remains CPU; RADV/desktop acceleration and sustained stability remain unaccepted |
-| NPU | Vendor assets investigated; no working inference |
+| NPU | Real ENN library loads; isolated initialization traces direct NPU/allocator requests. Its zero return despite absent nodes is not readiness. No NPU inference; 18 NCP-v25 structural candidates identified |
+| Motion sensors | Sensor hub boots authenticated firmware; real accelerometer and gyro IIO samples pass twice each. Calibration, auto-rotation and sensor autostart remain unaccepted |
+| Audio DSP | Authenticated Calliope firmware boots, version6XH0; only 34 diagnostic capture PCMs, no usable speaker/microphone card |
+| Modem | Matching FYI3 radio firmware backed up read-only; CPIF remains INIT. SIM, mobile data and calls not working yet |
 | Connectivity | USB rescue retained; Wi-Fi association, DHCP, DNS and HTTPS passed after two automatic recovery-boot startups |
 | Other everyday hardware | Bluetooth, usable audio, cellular, camera and suspend remain unaccepted |
+
+New hardware evidence: [sensor hub and real motion samples](docs/research/SENSORHUB_WORKING_2026-09-21.md),
+[NPU runtime/graph boundary](docs/research/NPU_REUSE_NEXT_2026-09-21.md),
+[Bluetooth transport preflight](docs/research/HARDWARE_REUSE_BT_PREFLIGHT_2026-09-21.md),
+and [audio/cellular prerequisites](docs/research/AUDIO_CELLULAR_PREFLIGHT_2026-09-21.md).
 
 Short resident chat tests started streaming in 0.4–0.7 seconds. Those samples
 are not sustained agent benchmarks. The chat client does not execute commands.
