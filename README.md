@@ -14,11 +14,12 @@ Both selectors were restored; speaker/microphone acceptance remains open.
 A targeted close_range
 workaround lets Pi's local4B run captured-output subprocess tools; the actual
 tool test passed before and after reboot. BORE762 restored desktop,4B,
-Wi-Fi and private Pi web without buttons. Bluetooth also answered a native
-board-ID and binary firmware-identity queries; firmware/HCI are not yet initialized.
+Wi-Fi and private Pi web without buttons. Bluetooth now acknowledges the full
+195,848-byte RAM patch and answers the following board-ID query. Board
+configuration, HCI registration and pairing remain unfinished.
 See [measured results, rollback and limits](docs/RUNTIME_AUDIO_RECOVERY_2026-09-22.md).
 The [latest continuation](docs/DRIVER_LOOP_CONTINUATION_2026-09-22.md) records
-the audio failure, fresh GPU shader pass, Bluetooth identity and host kernel build.
+the audio DMA stall, fresh GPU shader pass, Bluetooth firmware transfer and host kernel build.
 
 **Private browser access to Pi now works over Tailscale.** The actual agent
 uses the existing local4B default, saves separate web history, and continues
@@ -108,9 +109,9 @@ and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 | GPU | Samsung OpenCL/Vulkan compute passes; llama.cpp Vulkan Qwen0.8B all-layer offload and CPU-matching text verified. Resident4B remains CPU; RADV/desktop acceleration and sustained stability remain unaccepted |
 | NPU | Real ENN loads; vertex10 open/close passed. BOOTUP audit found unbounded waits and unsafe error cleanup; no speculative patch or firmware-boot acceptance |
 | Sensors | Accelerometer/gyro and now magnetometer/light frames sampled twice each. Compass accuracy is zero and light response untested; calibration, auto-rotation and autostart remain unaccepted |
-| Audio DSP | Early firmware repair registers Rainbow-Prince;23 playback/53 capture PCMs and1736 controls. Control-node repair is session-only; speaker/mic routes and physical sound remain untested |
+| Audio DSP | Card and 1736 controls work; digital route prepares but actual RDMA does not advance. Speaker/mic remain unfinished; optional control-node startup hook awaits reboot validation |
 | Modem | Dependencies recovered; real Samsung RIL library loads in isolated phone runtime without a RIL call. CPIF remains INIT; SIM/data/calls not working |
-| Bluetooth | QCA6490/HSP2.1 answered native UART version and board-ID queries; WLAN preserved. Firmware/NVM initialization, HCI, pairing and audio remain unaccepted |
+| Bluetooth | Full QCA6490 RAM patch acknowledged; post-patch board query works, WLAN preserved. NVM board configuration, HCI and pairing remain unfinished |
 | Connectivity | USB rescue retained; Wi-Fi association, DHCP, DNS and HTTPS passed after two automatic recovery-boot startups |
 | Other everyday hardware | Usable audio, cellular, camera, GPS and suspend remain unaccepted |
 

@@ -2803,3 +2803,25 @@ review158.19s corroborated incompletePOWER_NOTIFY error/ownershiprepair.
 See docs/DRIVER_LOOP_CONTINUATION_2026-09-22.md and curatedacceptance.json.
 Private logs/vendorassets remain excluded. Scopedlocalcommit614dbff was
 cherry-picked into sanitizedpublichistory as10ff4ab.
+
+### 2026-09-22 — Bluetooth patch acknowledgement and actual audio DMA status
+
+BORE762 remained healthy through all tests; no additional reboot/image write.
+3 Mbaud UART transport passed exact identity checks before/after (2.923s).
+A 243-byte prefix trial timed out without intermediate ACK as expected for
+patch mode3. Full195848-byte RAM patch/806packets then received status0/subop1e
+ACK (5.943s). Follow-up transfer validated that ACK then successfully queried
+board ID, matching the private HAL's ordering (4.299s). Every trial restored
+UART/privateBTvote and preserved WLAN votes, USB, boot and model. NVM/HCI/pairing
+are not accepted. No persistent radio calibration or protected partition write.
+
+Audio zero-stream collected8 bounded status snapshots,7RUNNING; actual RDMA2
+status0x1230/0x1238 and ALSA hw_ptr stayed0, appl_ptr8192. PMactive/cacheN/service1.
+10s childdeadline ended stalledstream;16.062s total, bothselectors restored,
+PCMclosed, ampsOFF, reset0/modelhealthy. Single-record regmap reads avoidedfull
+registerdump. Passive suspended offset1 firmwareDRAMlogcopy avoidedflush/dumps;
+onlymetadata/hash public. Pi/rig-Qwen source review149.85s completed, but an
+incorrect AMP interpretation was rejected. NPUcandidate remains unaccepted.
+Hosttests:6 registerplanner,8 abortclassification,5 prepare-only plus native
+host Bluetooth framing/negative-reply/termios fixtures. Curated continuation
+receipts and sources published via isolated localcommit9d0c4a8/publicca8787b.
