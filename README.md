@@ -5,6 +5,12 @@ Exynos 2200, codename `r0s`, unlocked bootloader. This is the S22, not S22+.
 
 ## Current result — 2026-09-21
 
+**Private browser access to Pi now works over Tailscale.** The actual agent
+uses the existing local4B default, saves separate web history, and continues
+after closing the tab through native musl tmux. Real model replies and
+reconnects passed; optional startup is persisted but the new web hook has not
+been cold-reboot tested. See [browser access and limitations](docs/PI_WEB_TAILSCALE_2026-09-21.md).
+
 **Native Linux + Omarchy UI + Pi on a Samsung S22.** Pi now launches through
 Omarchy's agent integration with a local Qwen3.5-4B CPU model and an optional
 larger Qwen provider over Tailscale. Pi/Qwen are helping investigate GPU/NPU
@@ -85,7 +91,7 @@ and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 | Tailscale | Enrolled; remote SSH and Pi-to-rig use verified; recovery-reboot persistence passed |
 | CPU benchmark | 0.8B: 20.21 tok/s; 2B: 10.13 short / 5.47 at depth4096 |
 | GPU | Samsung OpenCL/Vulkan compute passes; llama.cpp Vulkan Qwen0.8B all-layer offload and CPU-matching text verified. Resident4B remains CPU; RADV/desktop acceleration and sustained stability remain unaccepted |
-| NPU | Real ENN library loads; isolated initialization traces direct NPU/allocator requests. Its zero return despite absent nodes is not readiness. No NPU inference; 18 NCP-v25 structural candidates identified |
+| NPU | Real ENN loads; guarded vertex10 open/fstat/close passed without firmware/ioctls. NPU-only versus DSP BOOTUP paths audited. Firmware boot and inference remain unaccepted |
 | Motion sensors | Sensor hub boots authenticated firmware; real accelerometer and gyro IIO samples pass twice each. Calibration, auto-rotation and sensor autostart remain unaccepted |
 | Audio DSP | Authenticated Calliope firmware boots, version6XH0; only 34 diagnostic capture PCMs, no usable speaker/microphone card |
 | Modem | Matching FYI3 radio firmware backed up read-only; CPIF remains INIT. SIM, mobile data and calls not working yet |
