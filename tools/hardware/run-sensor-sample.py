@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('sensor', choices=['accel', 'gyro'])
+    ap.add_argument('sensor', choices=['accel', 'gyro', 'mag', 'light'])
     ap.add_argument('name', help='unique lower-case trial name')
     args = ap.parse_args()
     if not re.fullmatch(r'[a-z0-9-]+', args.name):

@@ -31,6 +31,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <signal.h>
+#include <dirent.h>
 
 #define BT_H4_COMMAND 0x01
 #define BT_H4_EVENT 0x04
@@ -46,7 +47,11 @@
 #define CNSS_STATS_PATH "/sys/kernel/debug/cnss/stats"
 #define WLAN_MODULE_PATH "/sys/module/wlan"
 #define WLAN_INTERFACE_PATH "/sys/class/net/wlan0"
+#define ECM_CARRIER_PATH "/sys/class/net/ecm0/carrier"
+#define REGULATOR_SUMMARY_PATH "/sys/kernel/debug/regulator/regulator_summary"
+#define BLUETOOTH_CLASS_PATH "/sys/class/bluetooth"
 #define CNSS_QUIESCENT_STATE "State: 0x400000(PCI PROBE DONE)"
+#define CNSS_LIVE_STATE "State: 0x420107(QMI_WLFW_CONNECTED | FW_MEM_READY | FW_READY | DRIVER_PROBED | COLD_BOOT_CAL_DONE | PCI PROBE DONE)"
 
 /* Linux btpower.h: #define BT_CMD_PWR_CTRL 0xbfad. */
 #define BT_CMD_PWR_CTRL 0xbfadU
@@ -141,6 +146,115 @@ static int validate_wlan_baseline(void)
 				      state[length - 1] == '\r'))
 		state[--length] = '\0';
 	if (strcmp(state, CNSS_QUIESCENT_STATE) != 0)
+		return -EBUSY;
+	return 0;
+}
+
+static int read_small_file(const char *path, char *buf, size_t capacity)
+{
+	int fd = open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+	size_t used = 0;
+	if (fd < 0)
+		return -errno;
+	for (;;) {
+		char extra;
+		ssize_t length = used == capacity - 1 ? read(fd, &extra, 1) :
+			read(fd, buf + used, capacity - 1 - used);
+		if (length < 0 && errno == EINTR)
+			continue;
+		if (length < 0 || (length > 0 && used == capacity - 1)) {
+			int saved = length < 0 ? errno : EOVERFLOW;
+			(void)close(fd);
+			return -saved;
+		}
+		if (length == 0)
+			break;
+		used += (size_t)length;
+	}
+	(void)close(fd);
+	buf[used] = '\0';
+	return (int)used;
+}
+
+static bool has_hci_device(void)
+{
+	DIR *dir = opendir(BLUETOOTH_CLASS_PATH);
+	struct dirent *entry;
+	if (!dir)
+		return true; /* Missing evidence must not authorize device access. */
+	while ((entry = readdir(dir)) != NULL) {
+		if (strncmp(entry->d_name, "hci", 3) == 0) {
+			(void)closedir(dir);
+			return true;
+		}
+	}
+	(void)closedir(dir);
+	return false;
+}
+
+static bool votes_match(const char *summary, unsigned expected_bt)
+{
+	const char *cursor = summary;
+	unsigned rail = 0, bt = 0, cnss = 0, rails = 0, bts = 0, cnsss = 0;
+	while (*cursor) {
+		const char *end = strchr(cursor, '\n');
+		char line[512], name[128];
+		unsigned use;
+		if (!end)
+			end = cursor + strlen(cursor);
+		if ((size_t)(end - cursor) >= sizeof(line))
+			return false;
+		memcpy(line, cursor, (size_t)(end - cursor));
+		line[end - cursor] = '\0';
+		if (sscanf(line, "%127s %u", name, &use) == 2) {
+			if (use > 1024)
+				return false;
+			if (!strcmp(name, "vreg_wlan")) { rail = use; rails++; }
+			if (!strcmp(name, "bt_qca6490-vreg_wlan")) { bt = use; bts++; }
+			if (!strcmp(name, "qcom,cnss-qca6490-vreg_wlan")) {
+				cnss += use; cnsss++;
+			}
+		}
+		cursor = *end ? end + 1 : end;
+	}
+	/* The exact observed baseline: one CNSS vote, no BT vote, no other user.
+	 * Do not accept arbitrary shared-rail states or substrings of names. */
+	return rails == 1 && bts == 1 && cnsss == 2 &&
+		rail == 1 + expected_bt && bt == expected_bt && cnss == 1;
+}
+
+static bool live_votes_match(const char *summary) { return votes_match(summary, 0); }
+
+static int check_vote(unsigned expected_bt)
+{
+	char summary[65536];
+	int length = read_small_file(REGULATOR_SUMMARY_PATH, summary, sizeof(summary));
+	if (length < 0)
+		return length;
+	return votes_match(summary, expected_bt) ? 0 : -EBUSY;
+}
+
+/* Validate only the reviewed live-WLAN observation, never infer it. */
+static int validate_live_wlan_baseline(void)
+{
+	char stats[512], carrier[16], summary[65536];
+	int length;
+
+	if (access(WLAN_MODULE_PATH, F_OK) != 0 ||
+	    access(WLAN_INTERFACE_PATH, F_OK) != 0)
+		return -ENETDOWN;
+	length = read_small_file(CNSS_STATS_PATH, stats, sizeof(stats));
+	if (length < 0 || !strstr(stats, CNSS_LIVE_STATE))
+		return -EBUSY;
+	length = read_small_file(ECM_CARRIER_PATH, carrier, sizeof(carrier));
+	if (length < 0 || strcmp(carrier, "1\n") != 0)
+		return -ENETDOWN;
+	if (has_hci_device())
+		return -EALREADY;
+	length = read_small_file(REGULATOR_SUMMARY_PATH, summary, sizeof(summary));
+	if (length < 0)
+		return length;
+	if (!live_votes_match(summary))
 		return -EBUSY;
 	return 0;
 }
@@ -274,6 +388,12 @@ static void print_hex(const uint8_t *buf, size_t length)
 		printf("%s%02x", i ? " " : "", buf[i]);
 }
 
+static void stage_log(const char *message)
+{
+	fprintf(stderr, "stage=%s\n", message);
+	fflush(stderr);
+}
+
 /*
  * Read at most BT_MAX_CAPTURE_BYTES and BT_MAX_EVENTS.  A non-H4 byte is
  * printed and discarded so an unrelated line/noise cannot make this loop
@@ -365,9 +485,10 @@ static int configure_uart(int fd, struct termios *saved, bool *saved_valid)
 	return 0;
 }
 
-static void stock_uart_cleanup(int fd, const struct termios *saved)
+static int stock_uart_cleanup(int fd, const struct termios *saved)
 {
 	int modem_bits;
+	int rc = 0;
 
 	/* Matches the QTI HAL's Disconnect sequence: assert RTS, then flush. */
 	if (ioctl(fd, TIOCMGET, &modem_bits) == 0) {
@@ -377,12 +498,16 @@ static void stock_uart_cleanup(int fd, const struct termios *saved)
 	(void)tcflush(fd, TCIOFLUSH);
 	/* QTI DeInitTransport issues this private cleanup ioctl and ignores rc. */
 	(void)ioctl(fd, 0x54ee);
-	(void)tcsetattr(fd, TCSANOW, saved);
+	if (tcsetattr(fd, TCSANOW, saved) != 0)
+		rc = -errno;
+	return rc;
 }
 
-static void restore_uart_termios(int fd, const struct termios *saved)
+static int restore_uart_termios(int fd, const struct termios *saved)
 {
-	(void)tcsetattr(fd, TCSANOW, saved);
+	if (tcsetattr(fd, TCSANOW, saved) != 0)
+		return -errno;
+	return 0;
 }
 
 static int power_control(int fd, unsigned long state)
@@ -393,7 +518,7 @@ static int power_control(int fd, unsigned long state)
 
 static int run_device_probe(const char *uart_path, const char *power_path,
 				    unsigned power_major, unsigned power_minor,
-				    int timeout_ms)
+				    int timeout_ms, bool live_wlan_vote)
 {
 	struct termios saved;
 	struct sigaction old_int;
@@ -406,6 +531,7 @@ static int run_device_probe(const char *uart_path, const char *power_path,
 	bool power_opened = false;
 	bool power_may_be_on = false;
 	bool signals_installed = false;
+	bool uart_restore_failed = false;
 	int validation;
 
 	validation = install_signal_handlers(&old_int, &old_term);
@@ -415,6 +541,7 @@ static int run_device_probe(const char *uart_path, const char *power_path,
 		return validation;
 	}
 	signals_installed = true;
+	stage_log("validate");
 	validation = require_char_device(uart_path, EXPECTED_UART_PATH,
 					 EXPECTED_UART_MAJOR, EXPECTED_UART_MINOR);
 	if (validation != 0) {
@@ -431,7 +558,8 @@ static int run_device_probe(const char *uart_path, const char *power_path,
 		rc = validation;
 		goto cleanup;
 	}
-	validation = validate_wlan_baseline();
+	validation = live_wlan_vote ? validate_live_wlan_baseline() :
+		validate_wlan_baseline();
 	if (validation != 0) {
 		fprintf(stderr, "WLAN baseline rejected rc=%d (%s)\n", validation,
 			strerror(-validation));
@@ -445,25 +573,53 @@ static int run_device_probe(const char *uart_path, const char *power_path,
 		goto cleanup;
 	}
 	power_opened = true;
+	stage_log("btpower_open");
+	{
+		struct stat info;
+		if (fstat(power, &info) != 0 || !S_ISCHR(info.st_mode) ||
+		    major(info.st_rdev) != power_major || minor(info.st_rdev) != power_minor) {
+			fprintf(stderr, "btpower identity changed after open\n");
+			rc = -ENODEV;
+			goto cleanup;
+		}
+	}
 	uart = open(uart_path, O_RDWR | O_NOCTTY | O_CLOEXEC | O_NONBLOCK);
 	if (uart < 0) {
 		fprintf(stderr, "open UART %s: %s\n", uart_path, strerror(errno));
 		goto cleanup;
+	}
+	stage_log("uart_open");
+	{
+		struct stat info;
+		if (fstat(uart, &info) != 0 || !S_ISCHR(info.st_mode) ||
+		    major(info.st_rdev) != EXPECTED_UART_MAJOR ||
+		    minor(info.st_rdev) != EXPECTED_UART_MINOR || ioctl(uart, TIOCEXCL) != 0) {
+			fprintf(stderr, "UART identity/exclusive-open rejected\n");
+			rc = -ENODEV;
+			goto cleanup;
+		}
 	}
 	if (configure_uart(uart, &saved, &uart_saved) != 0) {
 		fprintf(stderr, "configure UART failed\n");
 		goto cleanup;
 	}
 	uart_configured = true;
+	stage_log("uart_configured");
 
 	/* The explicit power path is dedicated BT control, but its board rail is
 	 * also named vreg_wlan on r0s.  The caller must opt into that risk. */
 	if (power_control(power, 1) != 0) {
 		fprintf(stderr, "btpower on ioctl failed\n");
-		power_may_be_on = true;
+		/* The kernel's failed power-on path unwinds its own regulator vote;
+		 * do not issue a second power-off vote. Outcome remains unknown. */
+		goto cleanup;
+	}
+	if (live_wlan_vote && check_vote(1) != 0) {
+		fprintf(stderr, "power-on did not establish exact BT vote; no blind power-off, outcome unknown\n");
 		goto cleanup;
 	}
 	power_may_be_on = true;
+	stage_log("power_on");
 	if (write_bounded(uart, qti_get_app_version,
 			  sizeof(qti_get_app_version), timeout_ms) != 0) {
 		fprintf(stderr, "bounded H4 command write failed\n");
@@ -480,9 +636,14 @@ static int run_device_probe(const char *uart_path, const char *power_path,
 cleanup:
 	if (uart_saved) {
 		if (uart_configured)
-			stock_uart_cleanup(uart, &saved);
+			uart_restore_failed = stock_uart_cleanup(uart, &saved) != 0;
 		else
-			restore_uart_termios(uart, &saved);
+			uart_restore_failed = restore_uart_termios(uart, &saved) != 0;
+		if (uart_restore_failed) {
+			fprintf(stderr, "UART termios restoration failed; outcome unknown\n");
+			if (rc == 0)
+				rc = -EIO;
+		}
 	}
 	if (uart >= 0)
 		close(uart);
@@ -493,6 +654,12 @@ cleanup:
 				off_rc, strerror(-off_rc));
 			if (rc == 0)
 				rc = off_rc;
+		}
+		if (live_wlan_vote && check_vote(0) != 0) {
+			fprintf(stderr, "post-off regulator baseline not restored; no retry\n");
+			rc = -EIO;
+		} else {
+			stage_log("power_off_and_vote_restored");
 		}
 	}
 	if (power >= 0)
@@ -511,6 +678,22 @@ static int self_test(void)
 	static const uint8_t valid[] = {0x04, 0xff, 0x02, 0x19, 0x02};
 	static const uint8_t non_event[] = {0x01, 0x00, 0xfc, 0x01, 0x06};
 	struct bt_h4_event event;
+	static const char votes[] =
+		" vreg_wlan                        1    3      0 unknown     0mV\n"
+		"    bt_qca6490-vreg_wlan          0                                 0mA\n"
+		"    qcom,cnss-qca6490-vreg_wlan   1                                 0mA\n"
+		"    qcom,cnss-qca6490-vreg_wlan   0                                 0mA\n";
+	char altered[sizeof(votes)];
+	assert(live_votes_match(votes));
+	assert(!live_votes_match(""));
+	assert(!live_votes_match("vreg_wlan use1\nbt_qca6490-vreg_wlan use0\n"));
+	strcpy(altered, votes);
+	*strstr(altered, "0                                 0mA") = '1';
+	assert(!live_votes_match(altered));
+	strcpy(altered, votes);
+	*strstr(altered, "1    3") = '0';
+	assert(!live_votes_match(altered));
+	assert(!live_votes_match(strchr(votes, '\n') + 1));
 
 	assert(sizeof(qti_get_app_version) == 5);
 	assert(qti_get_app_version[0] == BT_H4_COMMAND);
@@ -533,11 +716,13 @@ static void usage(const char *argv0)
 	fprintf(stderr,
 		"usage: %s --self-test\n"
 		"       %s --execute --allow-shared-wlan-rail --uart PATH "
-		"--btpower PATH --btpower-rdev MAJOR:MINOR [--timeout-ms N]\n"
+		"--btpower PATH --btpower-rdev MAJOR:MINOR [--live-wlan-vote] "
+		"[--timeout-ms N]\n"
 		"device identity: UART must be /dev/ttySAC1 (204:65); "
 		"btpower rdev must come from a read-only preflight\n"
-		"WLAN baseline: no /sys/module/wlan or wlan0 and CNSS stats "
-		"must equal 'State: 0x400000(PCI PROBE DONE)'\n"
+		"default WLAN baseline: no wlan module/interface and CNSS idle state; "
+		"--live-wlan-vote requires CNSS 0x420107, ecm0 carrier 1, no hci, "
+		"and regulator-summary vote checks\n"
 		"default: refuse device access; no hciattach/rfkill/firmware load\n",
 		argv0, argv0);
 }
@@ -552,15 +737,23 @@ int main(int argc, char **argv)
 	int timeout_ms = 1000;
 	bool execute = false;
 	bool allow_shared_wlan_rail = false;
+	bool live_wlan_vote = false;
 	int i;
 
 	if (argc == 2 && strcmp(argv[1], "--self-test") == 0)
 		return self_test();
+	if (argc == 2 && strcmp(argv[1], "--check-live-wlan") == 0) {
+		int check = validate_live_wlan_baseline();
+		printf("live_wlan_metadata_only=%d\n", check);
+		return check ? 1 : 0;
+	}
 	for (i = 1; i < argc; ++i) {
 		if (strcmp(argv[i], "--execute") == 0)
 			execute = true;
 		else if (strcmp(argv[i], "--allow-shared-wlan-rail") == 0)
 			allow_shared_wlan_rail = true;
+		else if (strcmp(argv[i], "--live-wlan-vote") == 0)
+			live_wlan_vote = true;
 		else if (strcmp(argv[i], "--uart") == 0 && i + 1 < argc)
 			uart_path = argv[++i];
 		else if (strcmp(argv[i], "--btpower") == 0 && i + 1 < argc)
@@ -581,5 +774,5 @@ int main(int argc, char **argv)
 		return 2;
 	}
 	return run_device_probe(uart_path, power_path, power_major, power_minor,
-					timeout_ms);
+				 timeout_ms, live_wlan_vote);
 }

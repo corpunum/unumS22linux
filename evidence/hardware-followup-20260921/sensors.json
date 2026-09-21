@@ -1,0 +1,225 @@
+{
+  "limitations": [
+    "Magnetometer accuracy reports zero: calibrated compass not accepted.",
+    "Light lux remained 1; physical illumination response not tested.",
+    "Enable mask and buffer flags restored; no desktop integration or autostart."
+  ],
+  "trials": [
+    {
+      "kernel_capture_exit": 0,
+      "name": "magnetometer-native-first",
+      "resident_4b_healthy": true,
+      "returncode": 0,
+      "same_boot": true,
+      "sampling": {
+        "data_injection": false,
+        "distinct_vectors": 24,
+        "field_ranges": {
+          "accuracy": [
+            0,
+            0
+          ],
+          "overflow": [
+            0,
+            0
+          ],
+          "x": [
+            -166,
+            -153
+          ],
+          "y": [
+            3465,
+            3482
+          ],
+          "z": [
+            -2513,
+            -2470
+          ]
+        },
+        "frame_bytes": 22,
+        "iio_name": "geomagnetic_sensor",
+        "partial_bytes": 0,
+        "reporting_mode": "continuous",
+        "samples": 24,
+        "sensor": "mag",
+        "state_restored": true,
+        "timestamps_strictly_increasing": true,
+        "units": "raw driver units, calibration/orientation not accepted"
+      },
+      "source_sha256": "9672ace72c574d96b16490d8250f1231c6de3f52bd4ede9378fc39323a1ff6b8",
+      "started_at": "2026-09-21T20:25:59.831774+00:00"
+    },
+    {
+      "kernel_capture_exit": 0,
+      "name": "magnetometer-native-repeat",
+      "resident_4b_healthy": true,
+      "returncode": 0,
+      "same_boot": true,
+      "sampling": {
+        "data_injection": false,
+        "distinct_vectors": 24,
+        "field_ranges": {
+          "accuracy": [
+            0,
+            0
+          ],
+          "overflow": [
+            0,
+            0
+          ],
+          "x": [
+            -177,
+            -139
+          ],
+          "y": [
+            3452,
+            3483
+          ],
+          "z": [
+            -2511,
+            -2472
+          ]
+        },
+        "frame_bytes": 22,
+        "iio_name": "geomagnetic_sensor",
+        "partial_bytes": 0,
+        "reporting_mode": "continuous",
+        "samples": 24,
+        "sensor": "mag",
+        "state_restored": true,
+        "timestamps_strictly_increasing": true,
+        "units": "raw driver units, calibration/orientation not accepted"
+      },
+      "source_sha256": "9672ace72c574d96b16490d8250f1231c6de3f52bd4ede9378fc39323a1ff6b8",
+      "started_at": "2026-09-21T20:27:36.369861+00:00"
+    },
+    {
+      "kernel_capture_exit": 0,
+      "name": "light-native-first",
+      "resident_4b_healthy": true,
+      "returncode": 0,
+      "same_boot": true,
+      "sampling": {
+        "data_injection": false,
+        "distinct_vectors": 1,
+        "field_ranges": {
+          "b": [
+            0,
+            0
+          ],
+          "brightness": [
+            128,
+            128
+          ],
+          "cct": [
+            0,
+            0
+          ],
+          "g": [
+            0,
+            0
+          ],
+          "gain": [
+            0,
+            0
+          ],
+          "integration_time": [
+            0,
+            0
+          ],
+          "lux": [
+            1,
+            1
+          ],
+          "min_lux_flag": [
+            0,
+            0
+          ],
+          "r": [
+            16,
+            16
+          ],
+          "w": [
+            0,
+            0
+          ]
+        },
+        "frame_bytes": 38,
+        "iio_name": "light_sensor",
+        "partial_bytes": 0,
+        "reporting_mode": "on-change",
+        "samples": 16,
+        "sensor": "light",
+        "state_restored": true,
+        "timestamps_strictly_increasing": true,
+        "units": "raw driver units, calibration/orientation not accepted"
+      },
+      "source_sha256": "9672ace72c574d96b16490d8250f1231c6de3f52bd4ede9378fc39323a1ff6b8",
+      "started_at": "2026-09-21T20:25:24.222161+00:00"
+    },
+    {
+      "kernel_capture_exit": 0,
+      "name": "light-native-repeat",
+      "resident_4b_healthy": true,
+      "returncode": 0,
+      "same_boot": true,
+      "sampling": {
+        "data_injection": false,
+        "distinct_vectors": 2,
+        "field_ranges": {
+          "b": [
+            0,
+            0
+          ],
+          "brightness": [
+            128,
+            128
+          ],
+          "cct": [
+            0,
+            0
+          ],
+          "g": [
+            0,
+            0
+          ],
+          "gain": [
+            0,
+            0
+          ],
+          "integration_time": [
+            0,
+            0
+          ],
+          "lux": [
+            1,
+            1
+          ],
+          "min_lux_flag": [
+            0,
+            0
+          ],
+          "r": [
+            0,
+            16
+          ],
+          "w": [
+            0,
+            0
+          ]
+        },
+        "frame_bytes": 38,
+        "iio_name": "light_sensor",
+        "partial_bytes": 0,
+        "reporting_mode": "on-change",
+        "samples": 16,
+        "sensor": "light",
+        "state_restored": true,
+        "timestamps_strictly_increasing": true,
+        "units": "raw driver units, calibration/orientation not accepted"
+      },
+      "source_sha256": "9672ace72c574d96b16490d8250f1231c6de3f52bd4ede9378fc39323a1ff6b8",
+      "started_at": "2026-09-21T20:27:42.917919+00:00"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Supervise one reviewed ENN loader or no-device initialization attempt.
+"""Supervise one reviewed vendor loader or no-device initialization attempt.
 
 This host-side wrapper is preparation only until the parent invokes it.  It
 does not contact the phone during import or with ``--plan``.  A real run
@@ -81,12 +81,18 @@ def main() -> int:
     parser.add_argument("--proc", action="store_true", help="mount read-only proc inside the chroot")
     parser.add_argument("--deadline", type=int, default=20, choices=range(1, 61), metavar="1..60")
     parser.add_argument("--plan", action="store_true", help="print local receipt plan without phone access")
-    parser.add_argument("--init-only", action="store_true", help="run the separately reviewed no-device initializer")
+    choice = parser.add_mutually_exclusive_group()
+    choice.add_argument("--init-only", action="store_true", help="run the separately reviewed no-device initializer")
+    choice.add_argument("--cellular-loader", action="store_true", help="load RIL and resolve RIL_Init without calling it")
     args = parser.parse_args()
     if args.init_only:
         STAGE = ROOT / "rootfs/npu-init-20260921"
         REMOTE_STAGE = "/srv/s22/npu-init-20260921"
     probe = "bin/enn-init-probe" if args.init_only else "bin/enn-dlopen-probe"
+    if args.cellular_loader:
+        STAGE = ROOT / "rootfs/cellular-loader-20260921"
+        REMOTE_STAGE = "/srv/s22/cellular-loader-20260921"
+        probe = "bin/cellular-dlopen-probe"
     if not re.fullmatch(r"[a-z0-9-]+", args.name):
         parser.error("name must contain only lowercase letters, digits and hyphens")
     manifest = json.loads((STAGE / "manifests/files.json").read_text())
@@ -98,12 +104,13 @@ def main() -> int:
         "read_only_proc": args.proc,
         "devices": ["null", "zero", "random", "urandom"],
         "devices_exposed": False,
+        "private_network_namespace": args.cellular_loader,
         "strace_events": ["%file", "ioctl", "connect", "clone", "clone3"],
         "manifest_sha256": hashlib.sha256((STAGE / "manifests/files.json").read_bytes()).hexdigest(),
         "closure_missing": closure["missing"],
         "closure_ambiguous": closure["ambiguous"],
         "probe_sha256": next(x["sha256"] for x in manifest["files"] if x["path"] == probe),
-        "exec_calls": "EnnInitialize once; no model, buffer, deinit or dlclose" if args.init_only else "dlopen and dlsym only; no ENN function calls",
+        "exec_calls": "dlopen and RIL_Init lookup only; no RIL call" if args.cellular_loader else "EnnInitialize once; no model, buffer, deinit or dlclose" if args.init_only else "dlopen and dlsym only; no ENN function calls",
     }
     if args.plan:
         print(json.dumps(plan, indent=2))
@@ -167,7 +174,7 @@ def main() -> int:
             line for line in delta if re.search(r"GPU|gpu|NPU|npu|TCP|fault|timeout|reset", line)
         ],
         "helper_sha256": hashlib.sha256(helper.encode()).hexdigest(),
-        "note": "Initialization diagnostic without hardware nodes; not firmware boot or inference." if args.init_only else "No-call loader diagnostic; success does not prove ENN initialization, model load, or inference.",
+        "note": "No-call RIL loader without modem, binder, EFS or CP access; not cellular operation." if args.cellular_loader else "Initialization diagnostic without hardware nodes; not firmware boot or inference." if args.init_only else "No-call loader diagnostic; success does not prove ENN initialization, model load, or inference.",
     }
     (raw / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
     print(json.dumps(receipt, indent=2))

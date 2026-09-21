@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded LSM6DSO IIO sample trial; restore sensor mask and buffer state.
+"""Bounded source-matched nanohub IIO trial; restore mask and buffer state.
 
 Execute via native Alpine Python on the phone, not Arch Python. This uses
 the exact drivers/staging/nanohub ABI: a bitmask enable control, six-byte
@@ -25,6 +25,17 @@ import time
 SENSORS = {
     'accel': ('accelerometer_sensor', 0, '<hhhQ'),
     'gyro': ('gyro_sensor', 1, '<iiiQ'),
+    # sensor_list.h IDs/report_data_len and packed sensor_value in ssp.h.
+    # These are sensor IDs, NOT the dynamically assigned IIO node numbers.
+    'mag': ('geomagnetic_sensor', 4, '<iiiBBQ'),
+    'light': ('light_sensor', 9, '<IiIIIIHHBBQ'),
+}
+FIELDS = {
+    'accel': ('x', 'y', 'z'),
+    'gyro': ('x', 'y', 'z'),
+    'mag': ('x', 'y', 'z', 'accuracy', 'overflow'),
+    'light': ('lux', 'cct', 'r', 'g', 'b', 'w', 'gain', 'integration_time',
+              'brightness', 'min_lux_flag'),
 }
 
 
@@ -69,6 +80,7 @@ def main():
     if original_buffer != '0':
         raise RuntimeError('IIO buffer already active')
     signal.signal(signal.SIGTERM, terminate)
+    signal.signal(signal.SIGINT, terminate)
     fd = os.open(node, os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC)
     samples = []
     pending = bytearray()
@@ -76,7 +88,10 @@ def main():
     try:
         buffer.write_text('1\n')
         # No driver sample queue is accepted as fresh evidence before enable.
+        drain_deadline = time.monotonic() + 1
         while True:
+            if time.monotonic() >= drain_deadline:
+                raise RuntimeError('IIO queue did not drain; refusing sensor enable')
             try:
                 if not os.read(fd, size * 64):
                     break
@@ -114,8 +129,16 @@ def main():
                   sample_frames=samples, partial_bytes=len(pending),
                   state_restored=restored, data_injection=False,
                   units='raw driver units, calibration/orientation not accepted')
+    result['field_ranges'] = {
+        field: [min(row[i] for row in samples), max(row[i] for row in samples)]
+        for i, field in enumerate(FIELDS[args.sensor])
+    } if samples else {}
+    result['reporting_mode'] = 'on-change' if args.sensor == 'light' else 'continuous'
+    # The ambient light driver is on-change; a stationary scene can yield
+    # only one sample. Two separate enable cycles are tested independently.
+    minimum = 1 if args.sensor == 'light' else 5
     print(json.dumps(result, indent=2))
-    if not restored or len(samples)<5 or not monotonic or pending:
+    if not restored or len(samples)<minimum or not monotonic or pending:
         raise RuntimeError('Sampling acceptance failed; no automatic retry')
 
 

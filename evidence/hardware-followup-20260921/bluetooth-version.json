@@ -1,0 +1,21 @@
+{
+  "after_metadata_exit": 0,
+  "after_vote_check": 0,
+  "binary_sha256": "6948601df530376653602903431a174e08e538770cf3347827d0de347183f56d",
+  "command_complete_validated_by_exporter": true,
+  "controller_version": "VRelease 19.0201 PF=QCA6490 BUILD=BTFW.HSP.2.1-00124-ROM-1 LMP=0x38E6 SoCID=0x400C0210",
+  "elapsed": 2.55,
+  "event_bytes": 95,
+  "kernel_capture_exit": 0,
+  "limitations": [
+    "Raw UART exchange only; no patch/NVM download, HCI, pairing or audio.",
+    "Driver logged GPIO503 request EBUSY for its already-owned GPIO; exchange completed.",
+    "Power-off and independent WLAN regulator vote restored."
+  ],
+  "resident_4b_healthy": true,
+  "returncode": 0,
+  "same_boot": true,
+  "source_sha256": "b3a9a346facc24845655fa63c020687efc30ffd44c2a0a9ae7bf8ed149ec58a9",
+  "started_at": "2026-09-21T20:31:46.654866+00:00",
+  "strace_capture_exit": 0
+}

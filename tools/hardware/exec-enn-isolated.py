@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a root-specific ENN loader or initialization diagnostic in isolation.
+"""Run a root-specific vendor loader or ENN init diagnostic in isolation.
 
 This helper is intended for the supervised phone attempt.  It does not run an
 ARM ELF on the host, expose hardware nodes, or start an Android service.
@@ -16,6 +16,7 @@ import stat
 import sys
 
 CLONE_NEWNS = 0x00020000
+CLONE_NEWNET = 0x40000000
 MS_RDONLY = 1
 MS_NOSUID = 2
 MS_NODEV = 4
@@ -35,7 +36,8 @@ def main() -> int:
         fail("usage: exec-enn-isolated.py ROOT [--proc] ROOT_SPECIFIC_PROBE")
     root = Path(sys.argv[1]).resolve()
     roots = {Path("/srv/s22/npu-compat-20260921"): "/bin/enn-dlopen-probe",
-             Path("/srv/s22/npu-init-20260921"): "/bin/enn-init-probe"}
+             Path("/srv/s22/npu-init-20260921"): "/bin/enn-init-probe",
+             Path("/srv/s22/cellular-loader-20260921"): "/bin/cellular-dlopen-probe"}
     if root not in roots:
         fail(f"unexpected isolated root: {root}")
     argv = sys.argv[2:]
@@ -60,7 +62,12 @@ def main() -> int:
             fail(f"special file forbidden before private device setup: {path}")
 
     libc = ctypes.CDLL(None, use_errno=True)
-    if libc.unshare(CLONE_NEWNS) != 0:
+    namespaces = CLONE_NEWNS
+    if root == Path("/srv/s22/cellular-loader-20260921"):
+        # Constructors may use sockets even though the probe calls no RIL API.
+        # Isolate network interfaces and abstract Unix sockets from the host.
+        namespaces |= CLONE_NEWNET
+    if libc.unshare(namespaces) != 0:
         raise OSError(ctypes.get_errno(), "private mount namespace failed")
     if libc.mount(None, b"/", None, MS_REC | MS_PRIVATE, None) != 0:
         raise OSError(ctypes.get_errno(), "private mount propagation failed")
