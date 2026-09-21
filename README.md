@@ -91,12 +91,17 @@ and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 | Tailscale | Enrolled; remote SSH and Pi-to-rig use verified; recovery-reboot persistence passed |
 | CPU benchmark | 0.8B: 20.21 tok/s; 2B: 10.13 short / 5.47 at depth4096 |
 | GPU | Samsung OpenCL/Vulkan compute passes; llama.cpp Vulkan Qwen0.8B all-layer offload and CPU-matching text verified. Resident4B remains CPU; RADV/desktop acceleration and sustained stability remain unaccepted |
-| NPU | Real ENN loads; guarded vertex10 open/fstat/close passed without firmware/ioctls. NPU-only versus DSP BOOTUP paths audited. Firmware boot and inference remain unaccepted |
-| Motion sensors | Sensor hub boots authenticated firmware; real accelerometer and gyro IIO samples pass twice each. Calibration, auto-rotation and sensor autostart remain unaccepted |
+| NPU | Real ENN loads; vertex10 open/close passed. BOOTUP audit found unbounded waits and unsafe error cleanup; no speculative patch or firmware-boot acceptance |
+| Sensors | Accelerometer/gyro and now magnetometer/light frames sampled twice each. Compass accuracy is zero and light response untested; calibration, auto-rotation and autostart remain unaccepted |
 | Audio DSP | Authenticated Calliope firmware boots, version6XH0; only 34 diagnostic capture PCMs, no usable speaker/microphone card |
-| Modem | Matching FYI3 radio firmware backed up read-only; CPIF remains INIT. SIM, mobile data and calls not working yet |
+| Modem | Dependencies recovered; real Samsung RIL library loads in isolated phone runtime without a RIL call. CPIF remains INIT; SIM/data/calls not working |
+| Bluetooth | QCA6490/HSP2.1 answered native UART version query; WLAN preserved. Firmware/NVM initialization, HCI, pairing and audio remain unaccepted |
 | Connectivity | USB rescue retained; Wi-Fi association, DHCP, DNS and HTTPS passed after two automatic recovery-boot startups |
-| Other everyday hardware | Bluetooth, usable audio, cellular, camera and suspend remain unaccepted |
+| Other everyday hardware | Usable audio, cellular, camera, GPS and suspend remain unaccepted |
+
+Latest [hardware follow-up and evidence](docs/HARDWARE_FOLLOWUP_2026-09-21.md):
+Bluetooth transport, additional sensor frames, isolated RIL loading, and13/13
+post-experiment Wi-Fi checks. No reboot or partition write in this round.
 
 New hardware evidence: [sensor hub and real motion samples](docs/research/SENSORHUB_WORKING_2026-09-21.md),
 [NPU runtime/graph boundary](docs/research/NPU_REUSE_NEXT_2026-09-21.md),

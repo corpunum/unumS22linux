@@ -2657,3 +2657,51 @@ excluded. Hardened the host-only Bluetooth raw-version probe; live lstat
 confirmed btpower503:0 and ttySAC1 204:65. Its quiescent-WLAN precondition
 deliberately fails on this working Wi-Fi session, so no BT power/UART action
 was performed. Hardware issues remain open; no partition write or reboot.
+
+### 2026-09-21 — native BT version, extra sensor frames, real RIL loading
+
+Skipped marketplace plugin as requested. Read the full experiment log;
+preserved guardian/Omarchy/qwen4b session and independent USB SSH. Three
+bounded Luna workers handled NPU source review, BT/audio audit and cellular
+dependency recovery; parent reviewed artifacts and ran all new device trials.
+
+Added exact SSP magnetometer bit4/22-byte and light bit9/38-byte decoders.
+Magnetometer sampled24 changing vectors twice; light sampled16 frames twice;
+timestamps increasing, no partial frames or injection, masks/buffers restored.
+Mag accuracy0 and light lux1 mean neither calibrated compass nor physical
+light response is accepted. All9 host decoder tests pass.
+
+Source review proved an independent CNSS regulator vote; balanced BT power
+could be tested without stopping Wi-Fi. At20:31:46UTC the native UART115200
+five-byte QTI version query completed in2.550s and returned a95-byte Command
+Complete with opcodefc00, status0, subop06, QCA6490/HSP2.1 and SoCID400C0210.
+Restored BT-off/CNSS-on votes and termios, no residual UART/power fds; same
+boot and healthy4B. GPIO503 EBUSY warning was preserved in raw kernel capture:
+the btpower driver already owned it. No firmware/NVM download or HCI attach.
+Parent fixed seq_file reads and numeric regulator parsing before the run;
+accepted C source SHA b3a9a346facc24845655fa63c020687efc30ffd44c2a0a9ae7bf8ed149ec58a9,
+binary6948601df530376653602903431a174e08e538770cf3347827d0de347183f56d.
+
+Recovered all six missing radio system libraries plus their ICU/suspend
+dependencies from the verified private super backup, using a temporary
+read-only dm view, not mounting the filesystem or writing a partition.
+At20:41:11UTC the real libsec-ril.so loaded and RIL_Init resolved on-phone in
+1.109s, exit0. Constructors ran in private network/mount namespaces with
+UID1000/caps0/NNP, no proc or modem/binder/EFS access; no RIL API or dlclose,
+_exit used.127 staged files hash-verified. No post-exec ioctl/clone; logging
+socket connection failed ENOENT. CP remained inactive. Protected NV handling
+and Samsung service integration are still required, not bypassed.
+
+Rejected and removed only our new unsound NPU unwind patch/test drafts:
+moving POWER ownership early could double-drop refs; POWER_NOTIFY has an
+unbounded wait. Retained ABI-only verifier refuses device execution. Exact
+4K-page kernel config includes NPU BOOT ioctl/DSP VS4L but no secure mode.
+AIE.bin is the normal NPU firmware; missing test vectors.bin is not a BOOTUP
+blocker. No NPU firmware or ioctl was attempted. Audio machine-card startup
+requires early firmware/probe ordering; unsafe live rebind was not attempted.
+
+Post-experiment Wi-Fi at20:42:32UTC passed13/13 checks including forced-wlan
+DNS and TLS HTTPS. No reboot, partition writes, CP activation or service
+autostart changes; previous stuck Arch child remains unresolved. Public
+metadata only in evidence/hardware-followup-20260921; raw logs/vendor bytes
+stay private. See docs/HARDWARE_FOLLOWUP_2026-09-21.md for unaccepted paths.
