@@ -1,0 +1,82 @@
+Mon Sep 21 04:45:53 UTC 2026
+loader_api=1.4.347
+sgpu: gpu_info address32_hi=0xffff8000 gfx_level=13 family=81
+sgpu: bo_alloc heap=2 flags=0x81 size=4096 align=8
+sgpu: mapped bo handle=1 va=0xffff800100000000 size=4096 bo_flags=42
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: mapped bo handle=2 va=0xffff800100001000 size=81920 bo_flags=42
+sgpu: amdgpu_bo_cpu_map ret=0 data=CPU_POINTER_REDACTED
+sgpu: ib_mapped=CPU_POINTER_REDACTED bo_va=0xffff800100001000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=704 align=4096
+sgpu: mapped bo handle=3 va=0xffff800100015000 size=704 bo_flags=c3
+sgpu: amdgpu_bo_cpu_map ret=0 data=CPU_POINTER_REDACTED
+sgpu: bo_alloc heap=2 flags=0x85 size=4096 align=65536
+sgpu: mapped bo handle=2 va=0xffff800100010000 size=4096 bo_flags=43
+sgpu: LITERAL_DESCRIPTOR_DIAGNOSTIC active; exact SMEM-bypass shader only, not general compiler support; code_dw=23 exec_size=72
+sgpu: shader code_dw=23 exec_size=72 words=be800303,be8403ff,00010000,be8503ff,00008001,be8603ff,00000400,be8703ff,31016fac,d7460000,04010c00,d5430001,021e0083,34000082,bf8cc07f,e0701000,80010100,bf810000,bf9f0000,bf9f0000,bf9f0000,bf9f0000,bf9f0000
+sgpu: bo_alloc heap=6 flags=0x80 size=262144 align=256
+sgpu: mapped bo handle=4 va=0xffff800000000000 size=262144 bo_flags=1c0
+sgpu: amdgpu_bo_cpu_map ret=0 data=CPU_POINTER_REDACTED
+sgpu: bo_alloc heap=6 flags=0x80 size=32 align=32
+sgpu: mapped bo handle=5 va=0xffff800000040000 size=32 bo_flags=1c0
+sgpu: amdgpu_bo_cpu_map ret=0 data=CPU_POINTER_REDACTED
+sgpu: amdgpu_bo_cpu_map ret=0 data=CPU_POINTER_REDACTED
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: mapped bo handle=6 va=0xffff800100016000 size=81920 bo_flags=42
+sgpu: amdgpu_bo_cpu_map ret=0 data=CPU_POINTER_REDACTED
+sgpu: ib_mapped=CPU_POINTER_REDACTED bo_va=0xffff800100016000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=16384 align=4096
+sgpu: mapped bo handle=7 va=0xffff800000041000 size=16384 bo_flags=143
+sgpu: amdgpu_bo_cpu_map ret=0 data=CPU_POINTER_REDACTED
+sgpu: LITERAL_DESCRIPTOR_DIAGNOSTIC validated exact descriptor/output layout; dispatch is diagnostic only
+sgpu: shader pointer reg=0xb908 count=1 use32=1
+sgpu: shader pointer va=0xffff800000040000 use32=1 address32_hi=0xffff8000 reconstructed=0xffff800000040000
+sgpu: compute shader va=0xffff800000000000 rsrc1=602c0001 rsrc2=00000086 rsrc3=00000000 user_data_0=b900
+sgpu: dispatch wave_size=64 initiator=00002041
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: mapped bo handle=8 va=0xffff80010002a000 size=81920 bo_flags=42
+sgpu: amdgpu_bo_cpu_map ret=0 data=CPU_POINTER_REDACTED
+sgpu: ib_mapped=CPU_POINTER_REDACTED bo_va=0xffff80010002a000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: mapped bo handle=9 va=0xffff80010003e000 size=81920 bo_flags=42
+sgpu: amdgpu_bo_cpu_map ret=0 data=CPU_POINTER_REDACTED
+sgpu: ib_mapped=CPU_POINTER_REDACTED bo_va=0xffff80010003e000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: mapped bo handle=10 va=0xffff800100052000 size=81920 bo_flags=42
+sgpu: amdgpu_bo_cpu_map ret=0 data=CPU_POINTER_REDACTED
+sgpu: ib_mapped=CPU_POINTER_REDACTED bo_va=0xffff800100052000
+sgpu: cs created ok ip_type=0
+sgpu: bo_number=8 bo_info_size=8
+sgpu: submit bo handle=6 priority=31
+sgpu: submit bo handle=7 priority=30
+sgpu: submit bo handle=4 priority=31
+sgpu: submit bo handle=2 priority=14
+sgpu: submit bo handle=5 priority=30
+sgpu: submit bo handle=9 priority=31
+sgpu: submit bo handle=3 priority=31
+sgpu: submit bo handle=10 priority=31
+sgpu: submit ip=0 ring=0 num_chunks=4
+  chunk[0] id=1
+  chunk[1] id=1
+  chunk[2] id=9
+  chunk[3] id=6
+sgpu: fence poll ret=0 expired=1 seq=1
+sgpu: amdgpu_bo_cpu_map ret=0 data=CPU_POINTER_REDACTED
+device=AMD Radeon Graphics (RADV VANGOGH) type=2 api=1.3.296 driver=100675588
+mismatch[0]=2779096485 want=7
+compute_exit=4
++[29114.556548]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: [gfxhub] pasid parsing with vmid 1
++[29114.556566]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: [gfxhub] page fault (src_id:0 ring:160 vmid:1 pasid:32774, for process gpu-compute-pro pid 28467 thread gpu-compute-pro pid 28467)
++[29114.556574]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu:   in page starting at address 0x0000ff7072d14000 from client 27
++[29114.556586]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: GCVM_L2_PROTECTION_FAULT_STATUS:0x00141140
++[29114.556592]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 Faulty UTCL2 client ID: TCP (0x8)
++[29114.556598]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 MORE_FAULTS: 0x0
++[29114.556604]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 WALKER_ERROR: 0x0
++[29114.556610]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 PERMISSION_FAULTS: 0x4
++[29114.556616]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 MAPPING_ERROR: 0x1
++[29114.556621]I[0:      swapper/0:    0] sgpu 16e00000.sgpu: amdgpu: 	 RW: 0x1
+{"status":"ok"}

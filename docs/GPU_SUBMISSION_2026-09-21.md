@@ -5,6 +5,10 @@ native GPU transfer runs passed exact 256-word readback with real kernel fences.
 The compute shader still fails. Hyprland remains software-rendered and the
 resident Qwen model remains CPU-only. NPU inference was not tested in this round.
 
+Follow-up: [shader diagnostics at 04:28–04:49 UTC](GPU_SHADER_DIAGNOSTICS_2026-09-21.md)
+confirmed CP-visible descriptor/code bytes and setup registers, but the tested
+shader changes still failed. No GPU acceleration has been enabled.
+
 Runs were at 21:57–22:12 UTC on September 20 (September 21 in Athens), on the
 same native RECOVERY boot, BORE760. No reboot, image flash, module replacement,
 partition write, desktop restart or model restart was performed.
@@ -101,9 +105,11 @@ Address tracing shows a consistent descriptor-set pointer
 `address32_hi=0xffff8000`, and output descriptor for
 `0xffff800100010000`. The complete encoded shader is recorded. Neither an
 address truncation, altered SH_MEM register, low-VA policy nor speculative
-cache workaround has been accepted. Next work should compare GPU-visible
-descriptor/command contents with these CPU-side bytes before another shader
-workload; do not repeat model offload attempts against this known failure.
+cache workaround has been accepted. The subsequent diagnostic round compared
+GPU-visible descriptor/code contents and setup registers with these CPU-side
+bytes; they matched, but shader correctness remained unresolved. See the
+follow-up report above; do not repeat model offload attempts against this
+known failure.
 
 ## Reproduction on this workstation
 

@@ -2422,3 +2422,52 @@ normal TLS verification; BORE remained760, CPU model healthok, and Hyprland,
 Quickshell and Squeekboard were running. Candidate hash matched. Host probe
 compiled with -Wall/-Wextra/-Werror and three argument-rejection checks passed
 before Vulkan loading; no host GPU workload was run.
+
+### 2026-09-21 04:28–04:49UTC — shader isolation, no shader fix accepted
+
+Continued with bounded Luna source/audit workers and root-controlled phone
+tests. Same native BORE760 throughout; no phone reboot, image/partition write,
+module replacement, desktop/model restart, or boot-service change. Candidate
+staging is userdata `/srv/s22/gpu-shader-20260921`; all diagnostic ICD/env
+selection is per process. Original transfer-capable ICD/staging is preserved.
+
+Built an opt-in CP-DMA diagnostic which intercepts the exact probe dispatch,
+copies the actual GPU descriptor and code allocation to its output, and does
+not execute the shader. Real fence completed. All4 descriptor words and all18
+ISA words exactly matched CPU-side contents; a later diagnostic also read back
+the expected descriptor pointer and program/resource/thread registers. Host
+comparison independently checked both readbacks. This is not compute success.
+
+Wave32 was confirmed in the recorded dispatch packet and still timed out with
+a TCP write fault. An exact-shader explicit-zero SMEM offset substitution
+completed its real fence but left output A5 and faulted in TCP. A legal low-VA
+allocator policy with consistent address32_hi=0 recorded coherent addresses
+but timed out; the kernel automatically reset the GPU. Neither was accepted.
+
+At04:45:53 an exact-probe literal-descriptor shader removed the scalar load,
+using LLVM-verified instructions and validation of the actual bound output VA
+before submission. It also failed: expired=1, first output A5 instead of7,
+exit4, TCP write fault0x0000ff7072d14000. This is not evidence that these
+substituted instructions executed correctly or that SMEM alone is the cause.
+At04:47:59 a separate allocator policy moved only32-bit shader/descriptor BOs
+low while preserving high command/output buffers. It still timed out and
+triggered automatic resets; subsequent CPF faults do not establish the initial
+cause. No manual reset was issued. Zero shader correctness passes this round.
+
+Final diagnostic ICD51145f8dccf90d4253e5449532a2704fa1a41797fe91243e48e1dc4cf63c7fb5
+and probe bfb99ebf8fb29b109d37f03b2a4a678b6983fd25154bb349bf3366151bf43ab4
+remain isolated local artifacts, not production replacements. Failed modes
+default off and are retained only in the reproducible diagnostic patch.
+Patch applies cleanly to pinned Mesa d1b295e8c61c013c454e8015983a1d6b6df82bf2;
+cross-build/source checks passed. Probe host-Werror compile plus missing-arg
+and all6 conflicting-mode-pair rejections passed before Vulkan loading.
+
+At04:49:35 original ICD ffc1f7ea42afa180d924875b1ef9655511c8a560c46c9077ae8f89e1b7f5f5d0
+again passed all256 transfer words, real fence/exit0, checksum0xd1cc9f9595a48f83,
+with no new GPU errors in the captured kernel delta. BORE760/RECOVERY,
+uptime29336s, CPU model healthok, WPA COMPLETED, compositor/bar/keyboard running,
+battery30.1C. No GPU/NPU model acceleration or new everyday-hardware acceptance
+is claimed. Raw kernel captures stay private; public logs redact CPU pointers.
+Details: `docs/GPU_SHADER_DIAGNOSTICS_2026-09-21.md`,
+`evidence/gpu-shader-20260921/`, and
+`tools/omarchy-trial/radv-xclipse-shader-diagnostics.patch`.

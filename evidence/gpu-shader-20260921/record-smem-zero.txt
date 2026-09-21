@@ -1,0 +1,38 @@
+2c1d3a5485c3fb605ce3c51e0e46ff5d7d4a31a08a40ed2274ca4b6e46a500b0  lib/libvulkan_radeon_candidate.so
+loader_api=1.4.347
+sgpu: gpu_info address32_hi=0xffff8000 gfx_level=13 family=81
+sgpu: bo_alloc heap=2 flags=0x81 size=4096 align=8
+sgpu: mapped bo handle=1 va=0xffff800100000000 size=4096 bo_flags=42
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: mapped bo handle=2 va=0xffff800100001000 size=81920 bo_flags=42
+sgpu: amdgpu_bo_cpu_map ret=0 data=CPU_POINTER_REDACTED
+sgpu: ib_mapped=CPU_POINTER_REDACTED bo_va=0xffff800100001000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=704 align=4096
+sgpu: mapped bo handle=3 va=0xffff800100015000 size=704 bo_flags=c3
+sgpu: amdgpu_bo_cpu_map ret=0 data=CPU_POINTER_REDACTED
+sgpu: bo_alloc heap=2 flags=0x85 size=4096 align=65536
+sgpu: mapped bo handle=2 va=0xffff800100010000 size=4096 bo_flags=43
+sgpu: SMEM_ZERO_DIAGNOSTIC active; exact probe only, not general shader support
+sgpu: shader code_dw=19 exec_size=56 words=be800303,be810380,b0038000,f4080101,02000000,d7460000,04010c00,d5430001,021e0083,34000082,bf8cc07f,e0701000,80010100,bf810000,bf9f0000,bf9f0000,bf9f0000,bf9f0000,bf9f0000
+sgpu: bo_alloc heap=6 flags=0x80 size=262144 align=256
+sgpu: mapped bo handle=4 va=0xffff800000000000 size=262144 bo_flags=1c0
+sgpu: amdgpu_bo_cpu_map ret=0 data=CPU_POINTER_REDACTED
+sgpu: bo_alloc heap=6 flags=0x80 size=32 align=32
+device=AMD Radeon Graphics (RADV VANGOGH) type=2 api=1.3.296 driver=100675588
+RECORD_ONLY: vkCmdDispatch and vkEndCommandBuffer recorded; NO vkCreateFence/vkQueueSubmit; NOT a correctness pass
+record_exit=0
+sgpu: mapped bo handle=5 va=0xffff800000040000 size=32 bo_flags=1c0
+sgpu: amdgpu_bo_cpu_map ret=0 data=CPU_POINTER_REDACTED
+sgpu: bo_alloc heap=2 flags=0x81 size=81920 align=256
+sgpu: mapped bo handle=6 va=0xffff800100016000 size=81920 bo_flags=42
+sgpu: amdgpu_bo_cpu_map ret=0 data=CPU_POINTER_REDACTED
+sgpu: ib_mapped=CPU_POINTER_REDACTED bo_va=0xffff800100016000
+sgpu: cs created ok ip_type=0
+sgpu: bo_alloc heap=2 flags=0x85 size=16384 align=4096
+sgpu: mapped bo handle=7 va=0xffff800000041000 size=16384 bo_flags=143
+sgpu: amdgpu_bo_cpu_map ret=0 data=CPU_POINTER_REDACTED
+sgpu: shader pointer reg=0xb908 count=1 use32=1
+sgpu: shader pointer va=0xffff800000040000 use32=1 address32_hi=0xffff8000 reconstructed=0xffff800000040000
+sgpu: compute shader va=0xffff800000000000 rsrc1=602c0001 rsrc2=00000086 rsrc3=00000000 user_data_0=b900
+sgpu: dispatch wave_size=64 initiator=00002041
