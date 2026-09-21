@@ -1,0 +1,40 @@
+{
+  "started_at": "2026-09-21T16:06:17.211598+00:00",
+  "variant": "vulkan-headless",
+  "name": "vulkan-load-nodev",
+  "command": [
+    "/system/bin/vulkan-hal-probe",
+    "--load-only"
+  ],
+  "returncode": 1,
+  "same_boot": true,
+  "kernel_capture_exit": 0,
+  "gpu_messages": [],
+  "helper_sha256": "21fcf21e62e5ab722dea16b19acf0aa0f127f6582c7acc0b5166889f5679b27d",
+  "read_only_views": [
+    "--proc",
+    "--sys"
+  ],
+  "elapsed_seconds": 1.328,
+  "phone_before": {
+    "pid1": "native-guardian",
+    "temperature": 30.7,
+    "profile": "qwen4b",
+    "model": "ok"
+  },
+  "phone_after": {
+    "pid1": "native-guardian",
+    "temperature": 30.8,
+    "profile": "qwen4b",
+    "model": "ok"
+  },
+  "backend_numerical_tests": null,
+  "operation_numerical_pass": null,
+  "operation_pass": null,
+  "reference_correct": null,
+  "cpu_fallback_used": null,
+  "numerical_checksum": null,
+  "numerical_device": null,
+  "numerical_compute_pass": false,
+  "clean_numerical_pass": false
+}

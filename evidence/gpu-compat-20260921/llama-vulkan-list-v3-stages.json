@@ -1,0 +1,41 @@
+{
+  "started_at": "2026-09-21T16:27:24.585222+00:00",
+  "variant": "llama-vulkan",
+  "name": "llama-vulkan-list-v3-stages",
+  "command": [
+    "/system/bin/llama-bench",
+    "--list-devices"
+  ],
+  "returncode": 255,
+  "same_boot": true,
+  "kernel_capture_exit": 0,
+  "gpu_messages": [],
+  "helper_sha256": "56ae92f51f5e8c66e6103bb0e1e6b7e06bed845336dc514370355ba5b096f6db",
+  "bridge": "v3",
+  "read_only_views": [
+    "--proc",
+    "--sys"
+  ],
+  "elapsed_seconds": 0.353,
+  "phone_before": {
+    "pid1": "native-guardian",
+    "temperature": 30.4,
+    "profile": "qwen4b",
+    "model": "ok"
+  },
+  "phone_after": {
+    "pid1": "native-guardian",
+    "temperature": 30.4,
+    "profile": "qwen4b",
+    "model": "ok"
+  },
+  "backend_numerical_tests": null,
+  "operation_numerical_pass": null,
+  "operation_pass": null,
+  "reference_correct": null,
+  "cpu_fallback_used": null,
+  "numerical_checksum": null,
+  "numerical_device": null,
+  "numerical_compute_pass": null,
+  "clean_numerical_pass": null
+}

@@ -1,0 +1,37 @@
+{
+  "started_at": "2026-09-21T15:40:19.769146+00:00",
+  "variant": "opencl-real",
+  "name": "real-load-nodev",
+  "command": [
+    "/system/bin/opencl-probe",
+    "--load-only"
+  ],
+  "returncode": 1,
+  "same_boot": true,
+  "kernel_capture_exit": 0,
+  "gpu_messages": [],
+  "helper_sha256": "0c69d5d06f4c190a1fb25da86813f6b0636ec34ad29b2aaed0e6516d9d33fe55",
+  "read_only_views": [],
+  "elapsed_seconds": null,
+  "phone_before": {
+    "pid1": "native-guardian",
+    "temperature": 31.4,
+    "profile": "qwen4b",
+    "model": "ok"
+  },
+  "phone_after": {
+    "pid1": "native-guardian",
+    "temperature": 31.4,
+    "profile": "qwen4b",
+    "model": "ok"
+  },
+  "backend_numerical_tests": null,
+  "operation_numerical_pass": null,
+  "operation_pass": null,
+  "reference_correct": null,
+  "cpu_fallback_used": null,
+  "numerical_checksum": null,
+  "numerical_device": null,
+  "numerical_compute_pass": false,
+  "clean_numerical_pass": false
+}

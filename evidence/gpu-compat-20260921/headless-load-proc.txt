@@ -1,0 +1,30 @@
+ISOLATED uid=1000 caps=0 NoNewPrivs=1
+OPENCL_LIBRARY path=libSGPUOpenCL.so
+WARNING load executes vendor ELF constructors; this is not a dry-run
+STAGE dlopen
+EXPORT_OK name=clGetPlatformIDs
+EXPORT_OK name=clGetPlatformInfo
+EXPORT_OK name=clGetDeviceIDs
+EXPORT_OK name=clGetDeviceInfo
+EXPORT_OK name=clCreateContext
+EXPORT_OK name=clReleaseContext
+EXPORT_OK name=clCreateCommandQueue
+EXPORT_OK name=clReleaseCommandQueue
+EXPORT_OK name=clCreateBuffer
+EXPORT_OK name=clReleaseMemObject
+EXPORT_OK name=clEnqueueWriteBuffer
+EXPORT_OK name=clEnqueueReadBuffer
+EXPORT_OK name=clCreateProgramWithSource
+EXPORT_OK name=clBuildProgram
+EXPORT_OK name=clGetProgramBuildInfo
+EXPORT_OK name=clReleaseProgram
+EXPORT_OK name=clCreateKernel
+EXPORT_OK name=clSetKernelArg
+EXPORT_OK name=clReleaseKernel
+EXPORT_OK name=clEnqueueNDRangeKernel
+EXPORT_OK name=clWaitForEvents
+EXPORT_OK name=clReleaseEvent
+LOAD_ONLY PASS exports=all-required
+STAGE dlclose(load-only)
+linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+WARNING: linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"

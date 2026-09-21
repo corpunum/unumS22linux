@@ -9,20 +9,38 @@ Exynos 2200, codename `r0s`, unlocked bootloader. This is the S22, not S22+.
 Omarchy's agent integration with a local Qwen3.5-4B CPU model and an optional
 larger Qwen provider over Tailscale. Pi/Qwen are helping investigate GPU/NPU
 drivers, including an offline trace checker and supervised evidence review;
-**GPU compute and NPU inference are not fixed**. Recovery reboot BORE761
+**resident 4B model inference and desktop 3D remain CPU/software-rendered**.
+Recovery reboot BORE761
 restored Pi,4B, Wi-Fi and Tailscale without buttons. Driver contributors welcome!
 See the [Pi/agent milestone and limitations](docs/PI_AGENT_STATUS_2026-09-21.md)
 and [publication/privacy review](docs/PUBLICATION.md). This is an experimental
 community port, not official Omarchy phone support or a complete distribution.
 
-GPU update: restored resource-buffer submission and repaired inconsistent
-timeline-fence handling. Isolated native GPU transfer tests pass exact
-readback and real fence completion. Subsequent shader/descriptor readback and
-five shader/addressing experiments did not fix computation. **Compute shaders still fail**, so the
-desktop and model remain on CPU/software rendering. No reboot or flash was
-needed, and Wi-Fi/desktop/model remain running. See
+**Bounded GPU update:** Samsung's OpenCL and Vulkan drivers now execute verified
+compute in an isolated Bionic compatibility runtime on native Linux. Each path passed three consecutive
+fresh-process shader tests with every output verified and no new GPU faults.
+Vulkan ran the original 256-word SPIR-V shader that still fails on RADV.
+An initial OpenCL run returned correct results but triggered an automatic GPU
+timeout/reset; its cause and cold-start reliability remain unresolved.
+OpenCL reports **4 GiB shared GPU memory**, a **1 GiB maximum allocation**,
+FP16 and subgroups. This is not dedicated VRAM or reserved memory.
+No Android services or property server were started. No phone reboot or
+partition write was needed. See the [OpenCL evidence](docs/research/GPU_OPENCL_WORKING_2026-09-21.md)
+and [Vulkan evidence](docs/research/GPU_VULKAN_WORKING_2026-09-21.md).
+
+**Qwen3.5-0.8B Q4_0 also runs on the GPU:** all 25 layers offloaded, six selected
+llama.cpp matrix tests passed against CPU references, and a deterministic
+24-token continuation exactly matched the CPU output. A short warmed benchmark
+(three repeats, four CPU threads, prompt/generation 32 tokens) measured GPU
+322.72 prompt / 38.20 decode tokens/s versus CPU-only 212.28 / 31.59.
+Cold-start and real completion timings differ; this is not a sustained-speed
+claim or a benchmark of the resident 4B model. See [model evidence](docs/research/GPU_LLAMA_VULKAN_2026-09-21.md).
+
+**Hyprland is still software-rendered and the resident 4B service still uses CPU.** The
+separate experimental native RADV path has working transfers/fences but its
+arithmetic shaders still fail; Samsung driver reuse does not fix RADV. See
 [GPU repair evidence and limitations](docs/GPU_SUBMISSION_2026-09-21.md) and
-[latest shader diagnostics](docs/GPU_SHADER_DIAGNOSTICS_2026-09-21.md).
+[shader diagnostics](docs/GPU_SHADER_DIAGNOSTICS_2026-09-21.md).
 
 **Earlier Wi-Fi recovery-boot acceptance (2026-09-20 20:41 UTC):** native Linux was running in RECOVERY
 BORE760 with the persistent desktop and CPU model. **Wi-Fi now autostarts:**
@@ -66,7 +84,7 @@ and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 | Pi/agents | Unprivileged Pi0.86.1 through Omarchy's launcher; local4B and optional rig Qwen; supervised driver review, not autonomous repair |
 | Tailscale | Enrolled; remote SSH and Pi-to-rig use verified; recovery-reboot persistence passed |
 | CPU benchmark | 0.8B: 20.21 tok/s; 2B: 10.13 short / 5.47 at depth4096 |
-| GPU | Experimental RADV: real-fence transfer/readback passes; shader compute still fails; no model acceleration |
+| GPU | Samsung OpenCL/Vulkan compute passes; llama.cpp Vulkan Qwen0.8B all-layer offload and CPU-matching text verified. Resident4B remains CPU; RADV/desktop acceleration and sustained stability remain unaccepted |
 | NPU | Vendor assets investigated; no working inference |
 | Connectivity | USB rescue retained; Wi-Fi association, DHCP, DNS and HTTPS passed after two automatic recovery-boot startups |
 | Other everyday hardware | Bluetooth, usable audio, cellular, camera and suspend remain unaccepted |
@@ -104,9 +122,9 @@ has a verified Arch ARM + Hyprland + Omarchy installation from this project.**
 
 | Phone / exact target | SoC | Native Linux evidence / route | Screen / touch / Wi-Fi | Graphics and Omarchy assessment |
 | --- | --- | --- | --- | --- |
-| **Galaxy S22 SM-S901B/DS** — `r0s` | Exynos 2200 | **Measured here:** vendor-kernel RECOVERY handoff to Alpine + persistent Arch userspace | Y / ? / Y; physical finger input unverified | Hyprland + Omarchy UI demonstrated with software rendering; GPU compute fails |
+| **Galaxy S22 SM-S901B/DS** — `r0s` | Exynos 2200 | **Measured here:** vendor-kernel RECOVERY handoff to Alpine + persistent Arch userspace | Y / ? / Y; physical finger input unverified | Software-rendered Hyprland + Omarchy UI; Samsung OpenCL/Vulkan compute and Qwen0.8B GPU inference verified through isolated Bionic runtime |
 | Galaxy S22+ SM-S906B — `g0s` | Exynos 2200 | **Hypothesis only:** related kernel target; separate images/bring-up required [details][s22-relatives] | ? / ? / ? | Closest porting relative, not an easier/proven GPU solution |
-| Galaxy S22 Ultra SM-S908B — `b0s` | Exynos 2200 | **Hypothesis only:** related kernel target; panel/touch/pen differ [details][s22-relatives] | ? / ? / ? | Same unresolved GPU family; no transfer of S22 acceptance |
+| Galaxy S22 Ultra SM-S908B — `b0s` | Exynos 2200 | **Hypothesis only:** related kernel target; panel/touch/pen differ [details][s22-relatives] | ? / ? / ? | Related GPU family; no transfer of S22 acceptance |
 | [OnePlus 6][op6] — `enchilada` | Snapdragon 845 | Existing native pmOS port; 26.06 community | Y / Y / P | Adreno 630 3D reported working; **first-choice additional trial** |
 | [OnePlus 6T][op6t] — `fajita` | Snapdragon 845 | Existing native pmOS port; 26.06 community | Y / Y / Y | 3D reported working; strong trial candidate; check carrier/unlock and audio variant |
 | [POCO F1 / Pocophone F1][poco-f1] — `beryllium` | Snapdragon 845 | Existing native pmOS port; 26.06 community | Y / Y / P | 3D reported working; strong trial candidate; match EBBG/Tianma panel |

@@ -1,0 +1,17 @@
+ISOLATED uid=1000 caps=0 NoNewPrivs=1
+STAGE dlopen(vulkan HAL)
+HAL_HMI_OK path=/vendor/lib64/hw/vulkan.samsung.so symbol=HMI
+HAL_MODULE id=vulkan name=SGPU Vulkan Driver author=Samsung module_api=0x0001 hal_api=0x0100
+STAGE HMI.common.methods->open(vk0)
+HAL_DEVICE_OK tag=0x48574454 version=0x00010000
+STAGE HAL CreateInstance
+STAGE vkEnumeratePhysicalDevices
+PHYSICAL_DEVICE index=0 name=Samsung Xclipse 920 type=1 api=1.3.279 driver=100675593 queues=2
+GPU_SELECTED name=Samsung Xclipse 920 type=1 queue_family=0
+STAGE vkCreateDevice
+STAGE vkQueueSubmit
+STAGE vkWaitForFences(3s)
+COMPUTE256 checksum=99712 device=Samsung Xclipse 920 PASS
+HAL_DEVICE_CLOSE return=0
+linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+WARNING: linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"

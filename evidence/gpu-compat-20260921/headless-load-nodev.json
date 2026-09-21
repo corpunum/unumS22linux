@@ -1,0 +1,37 @@
+{
+  "started_at": "2026-09-21T15:43:15.009365+00:00",
+  "variant": "opencl-headless",
+  "name": "headless-load-nodev",
+  "command": [
+    "/system/bin/opencl-probe",
+    "--load-only"
+  ],
+  "returncode": 255,
+  "same_boot": true,
+  "kernel_capture_exit": 0,
+  "gpu_messages": [],
+  "helper_sha256": "8b381902102b487578b540655e724c537aea74247ef94a0213039196f1bd91ff",
+  "read_only_views": [],
+  "elapsed_seconds": null,
+  "phone_before": {
+    "pid1": "native-guardian",
+    "temperature": 31.5,
+    "profile": "qwen4b",
+    "model": "ok"
+  },
+  "phone_after": {
+    "pid1": "native-guardian",
+    "temperature": 31.5,
+    "profile": "qwen4b",
+    "model": "ok"
+  },
+  "backend_numerical_tests": null,
+  "operation_numerical_pass": null,
+  "operation_pass": null,
+  "reference_correct": null,
+  "cpu_fallback_used": null,
+  "numerical_checksum": null,
+  "numerical_device": null,
+  "numerical_compute_pass": false,
+  "clean_numerical_pass": false
+}

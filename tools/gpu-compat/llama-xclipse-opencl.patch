@@ -1,0 +1,33 @@
+diff --git a/ggml/src/ggml-opencl/ggml-opencl.cpp b/ggml/src/ggml-opencl/ggml-opencl.cpp
+--- a/ggml/src/ggml-opencl/ggml-opencl.cpp
++++ b/ggml/src/ggml-opencl/ggml-opencl.cpp
+@@ -112,7 +112,8 @@ static std::pair<uint32_t, uint32_t> fastdiv_values(uint32_t d) {
+ enum GPU_FAMILY {
+     ADRENO,
+     INTEL,
++    XCLIPSE,
+     UNKNOWN,
+ };
+ 
+ enum ADRENO_GPU_GEN {
+@@ -5781,5 +5781,8 @@ static bool ggml_opencl_is_device_supported(ggml_backend_dev_t dev) {
+     } else if (strstr(dev_ctx->device_name.c_str(), "Intel")) {
+         dev_ctx->gpu_family = GPU_FAMILY::INTEL;
++    } else if (strstr(dev_ctx->device_name.c_str(), "Xclipse") ||
++               strstr(dev_ctx->device_version.c_str(), "Xclipse")) {
++        dev_ctx->gpu_family = GPU_FAMILY::XCLIPSE;
+     } else {
+         GGML_LOG_WARN("ggml_opencl: unsupported GPU '%s'.\n", dev_ctx->device_name.c_str());
+         dev_ctx->gpu_family = GPU_FAMILY::UNKNOWN;
+@@ -10712,3 +10712,10 @@
+         cl_mem_properties props[] = { 0x41A6 /* CL_LARGE_BUFFER_QCOM */, 1, 0 };
+-        mem = clCreateBufferWithProperties(backend_ctx->context, props, CL_MEM_READ_WRITE, size, NULL, &err);
++        using create_buffer_with_properties_fn = cl_mem (*)(cl_context, const cl_mem_properties *, cl_mem_flags, size_t, void *, cl_int *);
++        auto create_buffer_with_properties = reinterpret_cast<create_buffer_with_properties_fn>(
++            clGetExtensionFunctionAddress("clCreateBufferWithProperties"));
++        if (create_buffer_with_properties != nullptr) {
++            mem = create_buffer_with_properties(backend_ctx->context, props, CL_MEM_READ_WRITE, size, NULL, &err);
++        } else {
++            err = CL_INVALID_OPERATION;
++        }
+     }
