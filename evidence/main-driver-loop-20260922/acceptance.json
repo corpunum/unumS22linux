@@ -201,8 +201,19 @@
     "deferred_devices_empty": true,
     "physical_speaker_verified": false,
     "physical_microphone_verified": false,
-    "mixer_writes": [],
-    "pcm_io_performed": false,
+    "mixer_writes": [
+      {
+        "control": "ABOX SPUS OUT2",
+        "temporary_value": 1,
+        "restored_value": 0
+      },
+      {
+        "control": "ABOX UAIF1 SPK",
+        "temporary_value": 1,
+        "restored_value": 0
+      }
+    ],
+    "pcm_io_performed": true,
     "enumerated_control_count": 1736,
     "control_node": {
       "apply": true,
@@ -225,6 +236,143 @@
       "before_mode": "0777",
       "after_mode": "0755",
       "nodes_created": []
+    },
+    "arch_control_read": {
+      "library": "libasound.so.2",
+      "card": "hw:0",
+      "control_count": 1736,
+      "open_mode": "SND_CTL_READONLY",
+      "pcm_opened": false,
+      "mixer_written": false,
+      "elapsed_seconds": 0.756,
+      "source_sha256": "82a1f820ff0ff23f0357ca165a555886715e4951803d10d75f9be6fdb2503f7a",
+      "session_only": true
+    },
+    "arch_control_bind": {
+      "already_mounted": false,
+      "apply": true,
+      "mixer_writes": [],
+      "pcm_exposed": [],
+      "rdev": "116:114",
+      "session_only": true,
+      "source": "/dev/snd/controlC0",
+      "target": "/mnt/omarchy-trial/dev/snd/controlC0",
+      "source_sha256": "998a3f36349bff691066b29e3c8a6483a62fd7563a1635a3aa0a8edc4e646aac"
+    },
+    "control_startup_install": {
+      "before_sha256": "5d5ce794f683ece35eabf432261f7a7f0ccc1db815763bcc65bd7870ffb524a0",
+      "after_sha256": "e75c94d4cdb2f9c2e4c8fd1f5fc8397d17e11135e6867a7babf8381bfd7b2d8c",
+      "backup": "/srv/s22/audio-control-startup-20260922",
+      "installed": true,
+      "rebooted": false,
+      "startup_reboot_tested": false
+    },
+    "control_startup_live": {
+      "returncode": 0,
+      "elapsed_seconds": 0.426,
+      "stdout": "{\"prepared_control\": \"/dev/snd/controlC0\", \"pcm_opened\": false, \"mixer_written\": false}\n",
+      "stderr": ""
+    },
+    "silence_probe": {
+      "started_at": "2026-09-21T22:19:38.896285+00:00",
+      "elapsed_seconds": 0.443,
+      "returncode": 1,
+      "same_boot": true,
+      "post_audio_preflight_exit": 0,
+      "trace_capture_exit": 0,
+      "kernel_capture_exit": 0,
+      "samples": "digital zero only",
+      "duration_seconds": 1,
+      "mixer_writes": [],
+      "microphone_capture": false,
+      "acoustic_acceptance": false,
+      "automatic_retry": false,
+      "hw_params_accepted": true,
+      "prepare_errno": "EINVAL",
+      "kernel_diagnosis": "no backend DAIs enabled for RDMA2",
+      "audio_frames_submitted": 0,
+      "playback_accepted": false,
+      "amp_enable_switches_after": "both off"
+    },
+    "digital_route_trials": {
+      "audio-two-route-prepare-first": {
+        "started_at": "2026-09-21T22:27:09.669351+00:00",
+        "elapsed_seconds": 7.842,
+        "same_boot": true,
+        "helper_sha256": "8efca4cdc880cdd6919b48f496dbf8e1c499afe354980ef2147dde740ea7957e",
+        "child_returncode": 0,
+        "temporary_controls": [
+          {
+            "control": "ABOX SPUS OUT2",
+            "value": 1,
+            "returncode": 0
+          },
+          {
+            "control": "ABOX UAIF1 SPK",
+            "value": 1,
+            "returncode": 0
+          }
+        ],
+        "restored": {
+          "ABOX UAIF1 SPK": {
+            "returncode": 0,
+            "value": "0"
+          },
+          "ABOX SPUS OUT2": {
+            "returncode": 0,
+            "value": "0"
+          }
+        },
+        "assessment": {
+          "diagnostic_completed": true,
+          "cleanup_verified": true,
+          "child_interrupted": false,
+          "prepare_accepted": true,
+          "successful_write_ioctls": 0,
+          "write_eagain_count": 0,
+          "physical_playback_verified": false,
+          "outcome": "completed"
+        }
+      },
+      "audio-two-route-zero-first": {
+        "started_at": "2026-09-21T22:29:17.188627+00:00",
+        "elapsed_seconds": 15.363,
+        "same_boot": true,
+        "helper_sha256": "76ca8774d669a999d810b8abd950d620b2ee46b9e2712f52b5390a7705fc9511",
+        "child_returncode": 0,
+        "temporary_controls": [
+          {
+            "control": "ABOX SPUS OUT2",
+            "value": 1,
+            "returncode": 0
+          },
+          {
+            "control": "ABOX UAIF1 SPK",
+            "value": 1,
+            "returncode": 0
+          }
+        ],
+        "restored": {
+          "ABOX UAIF1 SPK": {
+            "returncode": 0,
+            "value": "0"
+          },
+          "ABOX SPUS OUT2": {
+            "returncode": 0,
+            "value": "0"
+          }
+        },
+        "assessment": {
+          "diagnostic_completed": false,
+          "cleanup_verified": true,
+          "child_interrupted": true,
+          "prepare_accepted": true,
+          "successful_write_ioctls": 8,
+          "write_eagain_count": 80,
+          "physical_playback_verified": false,
+          "outcome": "interrupted"
+        }
+      }
     }
   },
   "bluetooth": {
@@ -239,7 +387,23 @@
     "after_metadata_exit": 0,
     "board_response_hex": "020000",
     "firmware_downloaded": false,
-    "hci_accepted": false
+    "hci_accepted": false,
+    "patch_version": {
+      "started_at": "2026-09-21T22:13:54.674497+00:00",
+      "elapsed": 3.016,
+      "source_sha256": "d3dbfa4b5548598c9dfc6e4ba6da9dfae6cbb36934d649e94d517f303ee99e3e",
+      "binary_sha256": "4fa5da1e12c49cbe40a3eab641dd14b542f6abecee4e2dc5ab4d0b2ae2765266",
+      "same_boot": true,
+      "after_vote_check": 0,
+      "after_metadata_exit": 0,
+      "kernel_capture_exit": 0,
+      "response_hex": "040e120100fc00190c13000000e638010210020c40",
+      "product_id": "0x13",
+      "rom_version": "0x201",
+      "soc_id": "0x400c0210",
+      "packed_map_key": "0x400c021000130201",
+      "firmware_transmitted": false
+    }
   },
   "reboot": {
     "new_boot": true,
@@ -249,6 +413,40 @@
     "model_healthy": true,
     "reboot_requests": 1,
     "pending_kill_count": 0
+  },
+  "gpu_post_recovery": {
+    "started_at": "2026-09-21T21:51:47.026481+00:00",
+    "variant": "vulkan-headless",
+    "name": "vulkan-compute256-boot762",
+    "returncode": 0,
+    "same_boot": true,
+    "kernel_capture_exit": 0,
+    "gpu_messages": [],
+    "helper_sha256": "c4b7a67800d038f2e439ad0b07e19bfde867b390a8b219d78826a991ff82d9e3",
+    "elapsed_seconds": 2.389,
+    "checksum": 99712,
+    "device": "Samsung Xclipse 920",
+    "numerical_shader_pass": true,
+    "model_offload_tested_this_boot": false,
+    "hyprland_acceleration_tested": false
+  },
+  "npu_qwen_source_review": {
+    "returncode": 0,
+    "elapsed_seconds": 158.19,
+    "errors": [],
+    "tool_count": 1,
+    "agent_end": true,
+    "host_timeout": false,
+    "pi_profile": "research-timeout",
+    "pi_launcher": "/usr/local/bin/pi-research",
+    "model_ids": [
+      "openai/qwen3.8-flash-next-uncensored-lean"
+    ],
+    "provider_ids": [
+      "s22-rig"
+    ],
+    "timeout_layer": null,
+    "ok": true
   },
   "flash": {
     "mode": "flash",

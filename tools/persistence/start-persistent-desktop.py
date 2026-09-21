@@ -33,6 +33,11 @@ DEPLOYMENT = MOUNT / ".persistent-ready.json"
 RUNTIME_READY = Path("/run/s22-persistent-ready.json")
 CHROOT = Path("/mnt/omarchy-trial")
 LOCK = Path("/run/s22-persistent-desktop.lock")
+SOUND_CARD_SYSFS = Path("/sys/class/sound/card0")
+SOUND_CONTROL_SYSFS = Path("/sys/class/sound/controlC0")
+SOUND_SYSFS_DEVICES = Path("/sys/devices")
+SOUND_DIR = Path("/dev/snd")
+SOUND_CONTROL = SOUND_DIR / "controlC0"
 STRIDE_ENABLED = Path("/etc/s22-linear-stride-enabled")
 WIFI_ENABLED = Path('/etc/s22-wifi-enabled')
 WIFI_DISABLED = Path('/etc/s22-wifi-disabled')
@@ -269,6 +274,82 @@ def bind_file(src: Path, dst: Path, *, readonly: bool = False) -> None:
         except BaseException:
             command('umount', str(dst), check=False)
             raise
+
+
+def validate_optional_audio_control(*, card_sysfs: Path = SOUND_CARD_SYSFS,
+                                    control_sysfs: Path = SOUND_CONTROL_SYSFS,
+                                    sysfs_devices: Path = SOUND_SYSFS_DEVICES,
+                                    sound_dir: Path = SOUND_DIR,
+                                    control_node: Path = SOUND_CONTROL,
+                                    require_node: bool = True) -> Path | None:
+    """Return the one verified ALSA control node, or raise ``Failure``.
+
+    The class entries are expected to be symlinks, so they are resolved and
+    then constrained beneath /sys/devices.  This is deliberately narrower
+    than exposing /dev/snd: no PCM or mixer-state node is created or bound.
+    """
+    devices = sysfs_devices.resolve(strict=True)
+    card = card_sysfs.resolve(strict=True)
+    expected_card = devices / "platform/sound/sound/card0"
+    if card != expected_card:
+        raise Failure(f"unexpected sound card ancestry: {card}")
+    try:
+        card_id = (card_sysfs / "id").read_text().strip()
+    except OSError as exc:
+        raise Failure(f"cannot read sound card identity: {exc}") from exc
+    if card_id != "RainbowPrince":
+        raise Failure(f"unexpected sound card identity: {card_id!r}")
+    control = control_sysfs.resolve(strict=True)
+    if control != card / "controlC0":
+        raise Failure(f"unexpected sound control ancestry: {control}")
+    try:
+        dev = (control_sysfs / "dev").read_text().strip()
+        event = dict(line.split("=", 1) for line in
+                     (control_sysfs / "uevent").read_text().splitlines() if "=" in line)
+    except OSError as exc:
+        raise Failure(f"cannot read sound control identity: {exc}") from exc
+    if dev != "116:114" or event.get("MAJOR") != "116" or event.get("MINOR") != "114":
+        raise Failure(f"unexpected controlC0 sysfs identity: dev={dev!r}")
+    if event.get("DEVNAME") != "snd/controlC0":
+        raise Failure(f"unexpected controlC0 DEVNAME: {event.get('DEVNAME')!r}")
+    if not require_node:
+        return None
+
+    try:
+        directory = sound_dir.lstat()
+    except OSError as exc:
+        raise Failure(f"missing ALSA directory {sound_dir}: {exc}") from exc
+    mode = stat.S_IMODE(directory.st_mode)
+    if not stat.S_ISDIR(directory.st_mode) or directory.st_uid != 0 or mode not in (0o755, 0o777):
+        raise Failure(f"unsafe ALSA directory {sound_dir} (uid={directory.st_uid}, mode={mode:o})")
+    if mode == 0o777:
+        os.chmod(sound_dir, 0o755)
+
+    try:
+        node = control_node.lstat()
+    except OSError as exc:
+        raise Failure(f"missing ALSA control node {control_node}: {exc}") from exc
+    if (not stat.S_ISCHR(node.st_mode) or node.st_uid != 0 or
+            stat.S_IMODE(node.st_mode) not in (0o600, 0o640, 0o660) or
+            os.major(node.st_rdev) != 116 or os.minor(node.st_rdev) != 114):
+        raise Failure(f"unsafe ALSA control node {control_node}")
+    return control_node
+
+
+def prepare_optional_audio_control() -> Path | None:
+    """Trigger and validate controlC0 without making audio required startup."""
+    try:
+        # Validate the card's immutable platform identity before asking udev to
+        # materialize the control node.  The post-trigger check repeats the
+        # card check and then verifies controlC0's device identity.
+        validate_optional_audio_control(require_node=False)
+        command('udevadm', 'trigger', '--action=add', '--subsystem-match=sound',
+                '--sysname-match=controlC0')
+        command('udevadm', 'settle', '--timeout=10')
+        return validate_optional_audio_control()
+    except (Failure, OSError, ValueError, subprocess.SubprocessError) as exc:
+        say(f"optional ALSA control unavailable; continuing without it: {exc}")
+        return None
 
 
 def terminate(proc: subprocess.Popen[str] | None, timeout: float = 3.0) -> None:
@@ -509,6 +590,9 @@ def main() -> int:
             RUNTIME_READY.unlink(missing_ok=True)
             if command('pidof', 'udevd', check=False).returncode:
                 command('/sbin/udevd', '--daemon')
+            # Sound is optional for desktop startup.  Trigger only the
+            # verified control node; PCM nodes and mixer state remain hidden.
+            audio_control = prepare_optional_audio_control()
             command('udevadm', 'trigger', '--action=add', '--subsystem-match=input')
             command('udevadm', 'trigger', '--subsystem-match=drm')
             command('udevadm', 'settle', '--timeout=10')
@@ -533,6 +617,18 @@ def main() -> int:
             for name in ("null", "zero", "random", "urandom"):
                 bind_file(Path("/dev") / name, CHROOT / "dev" / name)
                 owned_mounts.append(CHROOT / "dev" / name)
+            if audio_control is not None:
+                audio_target = CHROOT / "dev/snd/controlC0"
+                try:
+                    bind_file(audio_control, audio_target)
+                except (Failure, OSError, ValueError, subprocess.SubprocessError) as exc:
+                    # bind_file may have created its private placeholder before
+                    # mount(2) failed; never leave that non-device in /dev.
+                    if not is_mounted(audio_target) and audio_target.exists() and not audio_target.is_symlink():
+                        audio_target.unlink()
+                    say(f"optional ALSA control bind unavailable; continuing without it: {exc}")
+                else:
+                    owned_mounts.append(audio_target)
             for name, target in {'ptmx':'pts/ptmx','fd':'/proc/self/fd',
                                  'stdin':'/proc/self/fd/0','stdout':'/proc/self/fd/1',
                                  'stderr':'/proc/self/fd/2'}.items():
