@@ -127,10 +127,57 @@ and `CheckForUartFailureCode` also interprets it (`0x60c68`–`0x60cfc`). Its
 driver ABI remains unidentified in the pinned kernel source.
 
 This resolves the initial baud and power ABI, but not a source-complete
-minimal probe:
-the QTI HAL also requires Android property/log/HIDL dependencies, its
-controller-version response gates later patch/NVM operations, and the
-transport has recovery timers and controller reset paths. No C probe was
-created because bypassing those state transitions would not be source-backed.
+minimal QTI state machine: the HAL also requires Android property/log/HIDL
+dependencies, its controller-version response gates later patch/NVM
+operations, and the transport has recovery timers and controller reset paths.
 No phone UART, `/dev/btpower`, ioctl, rfkill, firmware, module, service, or
 vendor ELF was opened, executed, or modified during this audit.
+
+## Shared-rail audit and bounded raw transport artifact
+
+The exact r0s DT is not hypothetical about power sharing. In
+`arch/arm64/boot/dts/samsung/r0s/r0s_eur_openx_w01_r27.dts`, the
+`vreg_wlan` fixed regulator is the rail used by the `qcom,cnss-qca6490`
+WLAN node (`wlan,regulator_name = "vreg_wlan"`) and by the `bt_qca6490`
+node. The same DT has separate WLAN and BT enable GPIOs:
+`wlan-en-gpio = <... 0x12 ...>` and `qcom,bt-en-gpio = <... 0x11 ...>`;
+the BT node also carries three positional `gpios` entries for BT enable,
+BT wake, and host wake. The pinned `cnss2/main.c` independently calls
+`regulator_get(..., "vreg_wlan")`, while the active Samsung `btpower.c`
+path calls `regulator_get(..., "vreg_wlan")` and then
+`regulator_enable/disable`. Therefore BT power is not proven independent of
+WLAN: regulator reference counting may preserve a live WLAN consumer, but
+the probe must treat the shared rail and GPIO timing as a parent-reviewed
+risk. The kernel source also documents a QCA6490 minimum 100 ms separation
+between BT_EN off and WLAN_EN on in `cnss2/power.c`; this is an additional
+reason not to run an ad-hoc power cycle while WLAN is active.
+
+The host-only artifact
+`tools/hardware/bt-version-transport-probe.c` is intentionally narrower
+than the QTI state machine. It has no default device path: `--self-test` is
+the only default-safe operation, and device access requires
+`--execute`, `--allow-shared-wlan-rail`, and an explicit `--btpower-rdev`
+copied from a new read-only device preflight. Parent `lstat` on the current
+boot confirmed `/dev/ttySAC1` character major 204/minor 65 and `/dev/btpower`
+character major 503/minor 0. The latter must be rechecked per boot, not
+hardcoded as a universal driver number. The probe also refuses to proceed
+unless the read-only CNSS baseline is exactly
+`State: 0x400000(PCI PROBE DONE)`, `/sys/module/wlan` is absent, and
+`/sys/class/net/wlan0` is absent. These are the already source-backed
+quiescent-WLAN checks from `tools/hardware/wifi-bringup-once.py`, not an
+assumption that a shared regulator is independent. If a parent authorizes it,
+the probe configures 115200 8N1 with hardware flow control, sends exactly
+`01 00 fc 01 06`, reads only generic H4 event framing under a 1-second
+deadline, caps the raw capture at 1024 bytes/eight events, prints event code
+and payload as `UNKNOWN`, then performs QTI-compatible RTS/flush/`0x54ee`
+cleanup and attempts `BT_CMD_PWR_CTRL(0)` even after a transport error. It
+never sends firmware, changes rfkill, invokes hciattach, or interprets a
+version response. SIGINT/SIGTERM only set a `sig_atomic_t` cancellation flag;
+the normal path then restores any saved termios and attempts the bounded
+power-off cleanup. `tools/hardware/test-bt-version-transport.sh` compiles it
+with `-Wall -Wextra -Werror` and passes the parser/constants self-test plus
+both device-identity refusal tests on the host.
+
+The current phone has working WLAN, so it deliberately does not satisfy the
+quiescent-radio requirement. No Bluetooth device was opened and no power
+sequence was attempted; preserving the live remote network takes priority.

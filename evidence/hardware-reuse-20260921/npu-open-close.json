@@ -1,0 +1,28 @@
+{
+  "schema": "s22-npu-open-close-20260921",
+  "started_at": "2026-09-21T18:59:02.302928+00:00",
+  "kernel_commit": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+  "device": "/dev/vertex10",
+  "rdev": "82:10",
+  "operation": "open(O_RDONLY|O_CLOEXEC), fstat, close",
+  "returncode": 0,
+  "elapsed_seconds": 1.253,
+  "open_syscall_seconds": 0.006186,
+  "close_syscall_seconds": 0.002201,
+  "opened_rdev_checked_and_closed": true,
+  "residual_vertex_fds": 0,
+  "same_boot": true,
+  "guardian_healthy": true,
+  "resident_qwen4b_healthy": true,
+  "battery_temperature_before_c": 33.7,
+  "battery_temperature_after_c": 33.5,
+  "npu_ioctl_issued": false,
+  "firmware_boot_requested": false,
+  "model_or_buffer_requested": false,
+  "inference_accepted": false,
+  "new_npu_kernel_messages": [
+    "NPU:success in DebugFS registration (fw-log-SRAM) : Mode 0400",
+    "NPU:register fw-log-SRAM debugfs_state enabled"
+  ],
+  "limitations": "Driver open allocates software/session/scheduler state. This is not a metadata-only action, firmware boot, ENN readiness, or NPU inference. Full kernel/strace and host/device identities remain private."
+}
