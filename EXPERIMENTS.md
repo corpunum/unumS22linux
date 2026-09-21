@@ -2705,3 +2705,75 @@ DNS and TLS HTTPS. No reboot, partition writes, CP activation or service
 autostart changes; previous stuck Arch child remains unresolved. Public
 metadata only in evidence/hardware-followup-20260921; raw logs/vendor bytes
 stay private. See docs/HARDWARE_FOLLOWUP_2026-09-21.md for unaccepted paths.
+
+### 2026-09-21/22 — close_range root cause, Pi repair and queued audio boot
+
+Three Luna workers and controlled phone-Pi/Qwen reviews continued the main
+driver work. No unreviewed model commands were executed. The pinned kernel
+fs/file.c __range_close lacks the fdtable maximum clamp: unsigned fd wraps
+at UINT_MAX and the loop cannot terminate. A clone3-only ENOSYS filter did
+not fix captured-output Python subprocess; it left one additional pending-
+SIGKILL task (16535), contained on CPU0/nice19. Its stack directly showed
+__arm64_sys_close_range. The earlier Arch tmux child remains pending too.
+No further unfiltered repeats were attempted.
+
+A per-process close_range-only ENOSYS filter passed the same subprocess,
+ten repetitions, and isolated Arch tmux create/query/cleanup. Strace showed
+clone3 succeeds and close_range falls back to ordinary close operations.
+Eight host wrapper tests pass. Fresh canonical pi/pi-research launchers now
+inherit this filter; originals are backed up, configs/default4B unchanged.
+The local4B model actually invoked the runtime spawn check via one Pi bash
+tool: UID1000, inherited filter, child exit0 and PI_SPAWN_OK, 72.43 seconds.
+Old running processes are not retroactively fixed. The separate kernel
+clamp patch compiled fs/file.o; no new kernel is deployed. Qwen source
+reviews supplied suggestions, not accepted proof; incorrect alternatives
+were rejected against exact source and live traces.
+
+Audio candidate builds/audio-early-20260922/recovery.img adds only the four
+hash-verified ABOX firmware/topology files to early vendor/firmware. All939
+original ramdisk records, kernel, DTB and recovery-DTBO are unchanged from
+native_handoff_v3. Header fields and AVB descriptor verification passed.
+Candidate SHA256 1c1b77a5e532e50b8274cfc68921aa9b1bfe6d4ae9a3459281be0cc033c5c3d5.
+Exact live RECOVERY is sda16/259:0/100663296bytes and hashes to known V3
+1a827b43d29141efb47f530902dd4e4ee2b6d780515893c9ecd676ad27efd7d1.
+Staged candidate and an exact on-device rollback copy under private
+/srv/s22/audio-early-20260922; stage receipt says partition_written=false.
+Known-good Lineage recovery is also available on host. User authorized
+late restarts; planned next action is RECOVERY-only write/readback then
+one software recovery reboot, not normal boot. Host auto-ACK is active.
+No audio readiness, NPU inference or full Bluetooth capability claimed.
+
+At21:25UTC the explicit RECOVERY write completed with full readback exactly
+matching the candidate; no other block partition was written. One software
+recovery reboot followed. BORE762 proves RECOVERY/INFORM3(12345674), with
+native USB SSH observed at host35.79s/phone19.59s and ACK already set. The
+acceptance sample reached95.02s continuous uptime, healthy persistent4B/
+desktop and zero pending-SIGKILL tasks. Both stuck tasks are cleared.
+
+The audio startup change worked: Rainbow-Prince card0 now registers with
+23 playback and53 capture PCM entries. ABOX/core/topology/machine bindings
+exist, Calliope6XH0, all4 early firmware hashes exact, deferred list empty.
+No mixer writes or PCM I/O yet. The next userspace blocker is missing
+/dev/snd/controlC0 although sysfs advertises116:114; native amixer therefore
+reports Invalidcard0. Do not confuse registration with audible sound.
+
+Post-boot WLAN at21:27:38UTC passed13/13 checks including forced-WLAN DNS/TLS.
+Fresh default4B Pi repeated its real bash/spawn test in64.39s, UID1000,
+inherited close_range filter, childexit0/PI_SPAWN_OK, no model/toolerrors.
+Private web backend autostarted. First tailnet HTTP connection timed out;
+after a successful peer ping, IPv4 and normal-hostname HTTP both returned200.
+
+At21:33:53UTC the version-then-board Bluetooth probe passed in0.905s:
+11-byte command complete, opcodefc00/status0/subop23, payload02 00 00.
+Both C sources and binary are hashed in the private receipt. WLAN/CNSS votes
+restored, no residual devicefds, sameboot/healthy4B. No firmware/NVM/baud/HCI
+change. The board reply narrows firmware selection but does not prove it.
+
+NPU result-propagation candidate was rejected after caller audit: returning
+failure before POWER ownership would expose an existing boot-ref leak. No
+applyable NPU patch or firmwareboot is claimed. ActualNPUobjectbuild target
+is drivers/vision/npu.o; the earlier missingcoreMakefile diagnosis was wrong.
+Clang18 compiles sourceclosure but differs from captured Androidclang21/
+r563880c with CFI/ThinLTO/MODVERSIONS, so no phone-compatible build claim.
+Exacttoolchain retrieval is ongoing. New curated results are in
+evidence/main-driver-loop-20260922; rawlogs/vendorassets remainprivate.
