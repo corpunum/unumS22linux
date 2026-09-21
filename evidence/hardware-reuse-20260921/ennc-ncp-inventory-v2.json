@@ -1,0 +1,882 @@
+{
+  "files_scanned": 18,
+  "files_with_ennc_header": 18,
+  "files_with_ncp_magic": 18,
+  "format": "offline-ennc-ncp-v25-inventory-v2",
+  "limitations": [
+    "ENNC is not unpacked; NCP magic occurrences are only candidate offsets.",
+    "No model contents are emitted and no candidate is certified executable.",
+    "No NPU device, ioctl, firmware, ENN library, or phone path is used."
+  ],
+  "ncp_magic": "0x0c0ffee0",
+  "ncp_version": 25,
+  "records": [
+    {
+      "candidates": [
+        {
+          "body_offset": 944,
+          "body_range": "pass",
+          "body_size": 20873664,
+          "counts": {
+            "address": 9,
+            "group": 2,
+            "interrupt": 0,
+            "llc": 13,
+            "memory": 9,
+            "power": 0,
+            "thread": 2
+          },
+          "cross_checks": "pass",
+          "header_size": 944,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 2048,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 32,
+          "offset": 0
+        }
+      ],
+      "name": "18_fp16_wo_swwa_1217.nnc__2f8",
+      "ncp_magic_offsets": [
+        2048
+      ],
+      "sha256": "63a66c12d0497e341ef7166270a7493d34d6816c553210702277c61b29c781fc",
+      "size": 37630164
+    },
+    {
+      "candidates": [
+        {
+          "body_offset": 944,
+          "body_range": "pass",
+          "body_size": 5698032,
+          "counts": {
+            "address": 9,
+            "group": 2,
+            "interrupt": 0,
+            "llc": 13,
+            "memory": 9,
+            "power": 0,
+            "thread": 2
+          },
+          "cross_checks": "pass",
+          "header_size": 944,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 1584,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 32,
+          "offset": 0
+        }
+      ],
+      "name": "56_HDR_fp16_wo_swwa.nnc__1c2",
+      "ncp_magic_offsets": [
+        1584
+      ],
+      "sha256": "f02b7ad635f975140ada7294e4f7fbbd8856ed93b2711537e33ab0cfa769e947",
+      "size": 39527780
+    },
+    {
+      "candidates": [
+        {
+          "body_offset": 880,
+          "body_range": "pass",
+          "body_size": 6999120,
+          "counts": {
+            "address": 9,
+            "group": 1,
+            "interrupt": 0,
+            "llc": 13,
+            "memory": 9,
+            "power": 0,
+            "thread": 1
+          },
+          "cross_checks": "pass",
+          "header_size": 880,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 1548,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 32,
+          "offset": 0
+        }
+      ],
+      "name": "B2BSFNet.nnc__34a",
+      "ncp_magic_offsets": [
+        1548
+      ],
+      "sha256": "cda398cfd7e23ca7b5636b886d565611781a1bf9467f651c3a2104f28262a471",
+      "size": 15481456
+    },
+    {
+      "candidates": [
+        {
+          "body_offset": 880,
+          "body_range": "pass",
+          "body_size": 6999120,
+          "counts": {
+            "address": 9,
+            "group": 1,
+            "interrupt": 0,
+            "llc": 13,
+            "memory": 9,
+            "power": 0,
+            "thread": 1
+          },
+          "cross_checks": "pass",
+          "header_size": 880,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 1564,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 32,
+          "offset": 0
+        }
+      ],
+      "name": "B2BSFNet.nnc__34f",
+      "ncp_magic_offsets": [
+        1564
+      ],
+      "sha256": "a2ad50f99786b103331a4f7e437a77f65b037495f4fc46e221b1a29be7d19914",
+      "size": 15481476
+    },
+    {
+      "candidates": [
+        {
+          "body_offset": 880,
+          "body_range": "pass",
+          "body_size": 6999120,
+          "counts": {
+            "address": 9,
+            "group": 1,
+            "interrupt": 0,
+            "llc": 13,
+            "memory": 9,
+            "power": 0,
+            "thread": 1
+          },
+          "cross_checks": "pass",
+          "header_size": 880,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 1564,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 32,
+          "offset": 0
+        }
+      ],
+      "name": "B2BSFNet.nnc__354",
+      "ncp_magic_offsets": [
+        1564
+      ],
+      "sha256": "3d5a1b39c6e59a04b6fd3cd89e58c0b007711bd2cbdc75eb040f861428b88613",
+      "size": 15481472
+    },
+    {
+      "candidates": [
+        {
+          "body_offset": 768,
+          "body_range": "pass",
+          "body_size": 212736,
+          "counts": {
+            "address": 9,
+            "group": 1,
+            "interrupt": 0,
+            "llc": 4,
+            "memory": 9,
+            "power": 0,
+            "thread": 1
+          },
+          "cross_checks": "pass",
+          "header_size": 768,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 7380,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 32,
+          "offset": 0
+        }
+      ],
+      "name": "OD_V3.4.3_08_31_QVGA_PAMIR_ENN_BGRA.nnc__3f4",
+      "ncp_magic_offsets": [
+        7380
+      ],
+      "sha256": "b09b25c2c54632de6cdffed523809871100c662d0679ca918fcb3b52212af61f",
+      "size": 4362472
+    },
+    {
+      "candidates": [
+        {
+          "body_offset": 816,
+          "body_range": "pass",
+          "body_size": 134256,
+          "counts": {
+            "address": 9,
+            "group": 1,
+            "interrupt": 0,
+            "llc": 8,
+            "memory": 9,
+            "power": 0,
+            "thread": 1
+          },
+          "cross_checks": "pass",
+          "header_size": 816,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 2192,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 32,
+          "offset": 0
+        }
+      ],
+      "name": "OD_V3.5.2_08_31_VGA_PAMIR_ENN_BGRA.nnc__3f5",
+      "ncp_magic_offsets": [
+        2192
+      ],
+      "sha256": "236a55b9db33673bf28d1b458e878173881c1ee6cc8cf22a2df030077d230e17",
+      "size": 1111204
+    },
+    {
+      "candidates": [
+        {
+          "body_offset": 736,
+          "body_range": "pass",
+          "body_size": 249792,
+          "counts": {
+            "address": 9,
+            "group": 1,
+            "interrupt": 0,
+            "llc": 2,
+            "memory": 9,
+            "power": 0,
+            "thread": 1
+          },
+          "cross_checks": "pass",
+          "header_size": 736,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 2668,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 36,
+          "offset": 0
+        }
+      ],
+      "name": "PhotoParsing5_AF_FACE_128_DSP_iter_295118_v2_4_32output_O2_SingleCore.nnc__35a",
+      "ncp_magic_offsets": [
+        2668
+      ],
+      "sha256": "0986ae2a8b1ec0e8d5c4cc5c790c3db84a7e48a511fb9937b9b9994d813c5355",
+      "size": 3448624
+    },
+    {
+      "candidates": [
+        {
+          "body_offset": 784,
+          "body_range": "pass",
+          "body_size": 321072,
+          "counts": {
+            "address": 9,
+            "group": 1,
+            "interrupt": 0,
+            "llc": 5,
+            "memory": 9,
+            "power": 0,
+            "thread": 1
+          },
+          "cross_checks": "pass",
+          "header_size": 784,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 2184,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 32,
+          "offset": 0
+        }
+      ],
+      "name": "PhotoParsing5_AWB_FACE_256_LSI_NPU_iter_300000_v2_3_64output_O1_SingleCore.nnc__35b",
+      "ncp_magic_offsets": [
+        2184
+      ],
+      "sha256": "4946796089cf143c6d1ccba319fa7247e8e7058bbfa609408a7d976fb9243f89",
+      "size": 3636448
+    },
+    {
+      "candidates": [
+        {
+          "body_offset": 784,
+          "body_range": "pass",
+          "body_size": 326304,
+          "counts": {
+            "address": 9,
+            "group": 1,
+            "interrupt": 0,
+            "llc": 5,
+            "memory": 9,
+            "power": 0,
+            "thread": 1
+          },
+          "cross_checks": "pass",
+          "header_size": 784,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 2184,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 32,
+          "offset": 0
+        }
+      ],
+      "name": "PhotoParsing6_AWB_FACE_256_LSI_NPU_iter_300000_v2_6_64output_O1_SingleCore.nnc__35c",
+      "ncp_magic_offsets": [
+        2184
+      ],
+      "sha256": "089596e548187022330e268ef3f530cb665ac74e71d8a58c8d8ea9e273097faf",
+      "size": 3640544
+    },
+    {
+      "candidates": [
+        {
+          "body_offset": 880,
+          "body_range": "pass",
+          "body_size": 277056,
+          "counts": {
+            "address": 9,
+            "group": 1,
+            "interrupt": 0,
+            "llc": 13,
+            "memory": 9,
+            "power": 0,
+            "thread": 1
+          },
+          "cross_checks": "pass",
+          "header_size": 880,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 2248,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 32,
+          "offset": 0
+        }
+      ],
+      "name": "SRIBMidas_aiHDR_Global_INT16_V430_1024_parmir_eden411.nnc__275",
+      "ncp_magic_offsets": [
+        2248
+      ],
+      "sha256": "e9c29d5ba362e3a1fa0b02320ddeca11ccea93b5f8998e8e52b216a7130a9a89",
+      "size": 3215944
+    },
+    {
+      "candidates": [
+        {
+          "body_offset": 880,
+          "body_range": "pass",
+          "body_size": 1752576,
+          "counts": {
+            "address": 9,
+            "group": 1,
+            "interrupt": 0,
+            "llc": 13,
+            "memory": 9,
+            "power": 0,
+            "thread": 1
+          },
+          "cross_checks": "pass",
+          "header_size": 880,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 2212,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 36,
+          "offset": 0
+        }
+      ],
+      "name": "SRIBMidas_aiHDR_Local_INT16_V430_1024_parmir_eden411.nnc__276",
+      "ncp_magic_offsets": [
+        2212
+      ],
+      "sha256": "53acb91de8f423d03b274b5aa70e20a019e94bb35e8d52b9df67eccbd3d15192",
+      "size": 5416496
+    },
+    {
+      "candidates": [
+        {
+          "body_offset": 880,
+          "body_range": "pass",
+          "body_size": 379200,
+          "counts": {
+            "address": 9,
+            "group": 1,
+            "interrupt": 0,
+            "llc": 13,
+            "memory": 9,
+            "power": 0,
+            "thread": 1
+          },
+          "cross_checks": "pass",
+          "header_size": 880,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 16660,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 32,
+          "offset": 0
+        }
+      ],
+      "name": "SRIB_HumanSegVideo_INT8_V102_ex2200_enn200c_vendor.nnc__2ee",
+      "ncp_magic_offsets": [
+        16660
+      ],
+      "sha256": "13c631afc4893ceeb3d11e5e157c504e9e91b388ff4af53a76a13d87402ffa21",
+      "size": 1770792
+    },
+    {
+      "candidates": [
+        {
+          "body_offset": 944,
+          "body_range": "pass",
+          "body_size": 8763840,
+          "counts": {
+            "address": 9,
+            "group": 2,
+            "interrupt": 0,
+            "llc": 13,
+            "memory": 9,
+            "power": 0,
+            "thread": 2
+          },
+          "cross_checks": "pass",
+          "header_size": 944,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 1940,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 32,
+          "offset": 0
+        }
+      ],
+      "name": "denoise_model_e2265_NoiseModel_DCT2_y_ygamma_O2_MultiCore.nnc__1c4",
+      "ncp_magic_offsets": [
+        1940
+      ],
+      "sha256": "f5260ee24f077a2d85f13b7c564e23284e3475d040bed7f96d5c428548927fd0",
+      "size": 44585000
+    },
+    {
+      "candidates": [
+        {
+          "body_offset": 944,
+          "body_range": "pass",
+          "body_size": 5699664,
+          "counts": {
+            "address": 9,
+            "group": 2,
+            "interrupt": 0,
+            "llc": 13,
+            "memory": 9,
+            "power": 0,
+            "thread": 2
+          },
+          "cross_checks": "pass",
+          "header_size": 944,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 1888,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 32,
+          "offset": 0
+        }
+      ],
+      "name": "denoise_model_e2500_DCTloss2_y_ygamma_O2_MultiCore.nnc__1c6",
+      "ncp_magic_offsets": [
+        1888
+      ],
+      "sha256": "7b4e67b5a98f9f3d71e65896727c3ae05405affd2f45f3291c8544e801a4abe5",
+      "size": 39527988
+    },
+    {
+      "candidates": [
+        {
+          "body_offset": 880,
+          "body_range": "pass",
+          "body_size": 7159248,
+          "counts": {
+            "address": 9,
+            "group": 1,
+            "interrupt": 0,
+            "llc": 13,
+            "memory": 9,
+            "power": 0,
+            "thread": 1
+          },
+          "cross_checks": "pass",
+          "header_size": 880,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 1568,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 32,
+          "offset": 0
+        }
+      ],
+      "name": "denoise_model_e374_832X1088X4.nnc__360",
+      "ncp_magic_offsets": [
+        1568
+      ],
+      "sha256": "2be4a8f95642714144f9e552212bf54b0bc997fc3562d0ff26a1f2de50ec844b",
+      "size": 16705172
+    },
+    {
+      "candidates": [
+        {
+          "body_offset": 880,
+          "body_range": "pass",
+          "body_size": 7001088,
+          "counts": {
+            "address": 9,
+            "group": 1,
+            "interrupt": 0,
+            "llc": 13,
+            "memory": 9,
+            "power": 0,
+            "thread": 1
+          },
+          "cross_checks": "pass",
+          "header_size": 880,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 1944,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 32,
+          "offset": 0
+        }
+      ],
+      "name": "denoise_model_e89_832X1088X4_v9_1_IS_C3P123_v8_2ref_SC_ELL_v2.nnc__362",
+      "ncp_magic_offsets": [
+        1944
+      ],
+      "sha256": "9ebb4452f3247981ce3f808b07b44367d2ae4bd2afdf5be34a4183198982abe1",
+      "size": 16836620
+    },
+    {
+      "candidates": [
+        {
+          "body_offset": 880,
+          "body_range": "pass",
+          "body_size": 7001088,
+          "counts": {
+            "address": 9,
+            "group": 1,
+            "interrupt": 0,
+            "llc": 13,
+            "memory": 9,
+            "power": 0,
+            "thread": 1
+          },
+          "cross_checks": "pass",
+          "header_size": 880,
+          "indeterminate_zero_ranges": [],
+          "magic1": "0x0c0ffee0",
+          "magic2": "0xc0dec0de",
+          "magic_version": true,
+          "offset": 1944,
+          "ranges": {
+            "address": "pass",
+            "group": "pass",
+            "interrupt": "ignored_zero_entry",
+            "llc": "pass",
+            "memory": "pass",
+            "power": "ignored_zero_entry",
+            "thread": "pass"
+          },
+          "status": "structural_candidate_only",
+          "version": 25
+        }
+      ],
+      "ennc_headers_in_first_64_bytes": [
+        {
+          "header_size_word": 32,
+          "offset": 0
+        }
+      ],
+      "name": "denoise_model_e89_832X1088X4_v9_1_IS_C3P123_v8_2ref_SC_ELL_v2.nnc__362.recovered",
+      "ncp_magic_offsets": [
+        1944
+      ],
+      "sha256": "9ebb4452f3247981ce3f808b07b44367d2ae4bd2afdf5be34a4183198982abe1",
+      "size": 16836620
+    }
+  ],
+  "source_header": "lineage/android_kernel_samsung_s5e9925/drivers/vision/npu/core/include/ncp_header_v25.h",
+  "source_validator": "lineage/android_kernel_samsung_s5e9925/drivers/vision/npu/core/npu-util-common.c",
+  "structural_candidates": 18
+}

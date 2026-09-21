@@ -1,0 +1,172 @@
+{
+  "limitations": [
+    "Raw samples only; calibration, desktop integration and autostart remain unaccepted.",
+    "First accel enable replayed zero runtime calibration after the absent file-manager client timed out.",
+    "Restored state means enable mask and buffer flags only; the hub remains running."
+  ],
+  "startup": {
+    "after": {
+      "accel_raw": "0,0,0",
+      "dt_os_name": "sensorhub/shub_pamir_rainbow.bin",
+      "enable": "0",
+      "firmware_search_path": "/vendor/firmware",
+      "fs_ready": "1",
+      "fw_name": "",
+      "light_raw": "0,0,0,0,0,0",
+      "mcu_name": "S5E9925_CHUB",
+      "mcu_rev": "CHUB0125062600,CHUB0124122600",
+      "sensor_state": "101 1110110111 0111001100 0111110000 0111111101 1010111111"
+    },
+    "before": {
+      "accel_raw": "0,0,0",
+      "dt_os_name": "sensorhub/shub_pamir_rainbow.bin",
+      "enable": "0",
+      "firmware_search_path": "/vendor/firmware",
+      "fs_ready": "0",
+      "fw_name": "",
+      "light_raw": "0,0,0,0,0,0",
+      "mcu_name": "S5E9925_CHUB",
+      "mcu_rev": "CHUB0125062600,CHUB010",
+      "sensor_state": ""
+    },
+    "firmware_sha256": "eb8396f5b3cc904638e68c5b72c20768e3b8852bc0adcbc663e51942bea86679",
+    "kernel_capture_exit": 0,
+    "model_healthy": true,
+    "note": "Hub startup only; sensor samples and calibration not accepted.",
+    "returncode": 0,
+    "same_boot": true,
+    "size": 929560,
+    "started_at": "2026-09-21T16:57:04.200858+00:00",
+    "temperature": 30.4
+  },
+  "trials": [
+    {
+      "kernel_capture_exit": 0,
+      "model_healthy": true,
+      "name": "accel-first",
+      "returncode": 0,
+      "same_boot": true,
+      "sampling": {
+        "axes_max": [
+          -7,
+          -15,
+          4063
+        ],
+        "axes_min": [
+          -31,
+          -34,
+          4043
+        ],
+        "data_injection": false,
+        "distinct_vectors": 25,
+        "frame_bytes": 14,
+        "iio_name": "accelerometer_sensor",
+        "partial_bytes": 0,
+        "samples": 25,
+        "sensor": "accel",
+        "state_restored": true,
+        "timestamps_strictly_increasing": true,
+        "units": "raw driver units, calibration/orientation not accepted"
+      },
+      "source_sha256": "41b14bc7ea95089875c390793a34a5945119ddf4874dac0989d6bf6a6c99b9de",
+      "started_at": "2026-09-21T17:01:36.178195+00:00",
+      "temperature": 30.4
+    },
+    {
+      "kernel_capture_exit": 0,
+      "model_healthy": true,
+      "name": "gyro-first",
+      "returncode": 0,
+      "same_boot": true,
+      "sampling": {
+        "axes_max": [
+          -124,
+          1087,
+          1031
+        ],
+        "axes_min": [
+          -1124,
+          87,
+          -438
+        ],
+        "data_injection": false,
+        "distinct_vectors": 9,
+        "frame_bytes": 20,
+        "iio_name": "gyro_sensor",
+        "partial_bytes": 0,
+        "samples": 25,
+        "sensor": "gyro",
+        "state_restored": true,
+        "timestamps_strictly_increasing": true,
+        "units": "raw driver units, calibration/orientation not accepted"
+      },
+      "source_sha256": "41b14bc7ea95089875c390793a34a5945119ddf4874dac0989d6bf6a6c99b9de",
+      "started_at": "2026-09-21T17:01:50.505210+00:00",
+      "temperature": 30.4
+    },
+    {
+      "kernel_capture_exit": 0,
+      "model_healthy": true,
+      "name": "accel-second",
+      "returncode": 0,
+      "same_boot": true,
+      "sampling": {
+        "axes_max": [
+          -12,
+          -15,
+          4065
+        ],
+        "axes_min": [
+          -25,
+          -32,
+          4048
+        ],
+        "data_injection": false,
+        "distinct_vectors": 25,
+        "frame_bytes": 14,
+        "iio_name": "accelerometer_sensor",
+        "partial_bytes": 0,
+        "samples": 25,
+        "sensor": "accel",
+        "state_restored": true,
+        "timestamps_strictly_increasing": true,
+        "units": "raw driver units, calibration/orientation not accepted"
+      },
+      "source_sha256": "41b14bc7ea95089875c390793a34a5945119ddf4874dac0989d6bf6a6c99b9de",
+      "started_at": "2026-09-21T17:02:43.266823+00:00",
+      "temperature": 30.3
+    },
+    {
+      "kernel_capture_exit": 0,
+      "model_healthy": true,
+      "name": "gyro-second",
+      "returncode": 0,
+      "same_boot": true,
+      "sampling": {
+        "axes_max": [
+          485,
+          639,
+          562
+        ],
+        "axes_min": [
+          -747,
+          -361,
+          -438
+        ],
+        "data_injection": false,
+        "distinct_vectors": 6,
+        "frame_bytes": 20,
+        "iio_name": "gyro_sensor",
+        "partial_bytes": 0,
+        "samples": 25,
+        "sensor": "gyro",
+        "state_restored": true,
+        "timestamps_strictly_increasing": true,
+        "units": "raw driver units, calibration/orientation not accepted"
+      },
+      "source_sha256": "41b14bc7ea95089875c390793a34a5945119ddf4874dac0989d6bf6a6c99b9de",
+      "started_at": "2026-09-21T17:02:49.804257+00:00",
+      "temperature": 30.3
+    }
+  ]
+}

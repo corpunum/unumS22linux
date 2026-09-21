@@ -1,0 +1,18 @@
+{
+  "excluded": [
+    "firmware bytes",
+    "raw kernel logs",
+    "device identifiers",
+    "raw timestamped sensor frames"
+  ],
+  "files": {
+    "audio.json": "3f2fbd1aab1157be77d0ea79be95702ee6573d74ef747428d952a93602b23852",
+    "enn-loader-preflight.json": "b9c968599f48e803cecdbe05a58cf11a2761c24cd3bb472eb77068aa0daadf47",
+    "ennc-ncp-inventory-v2.json": "5ef523465c4ba4b767a1a538e9e8474afbe8f32fb382d3eec683f090b53ab04c",
+    "npu-initialize.json": "dd42f04a6ce6be98fff72e39fd41251abc87c81da228cace2bbcb52db07b2751",
+    "npu-loader.json": "35651503f5f187cf2077841311a5cd32f25d24df17a0618fab652ea14d83efcd",
+    "radio.json": "39ca0a6e9e96dc18d116a739caeae2cadcac83ca176dadd7bc6ad81fd5e6a851",
+    "sensors.json": "a092ee63ce7daeba3169b76973f0de30e7d386192d5e63dfb01d129f3b67f770"
+  },
+  "format": "s22-hardware-reuse-public-v1"
+}

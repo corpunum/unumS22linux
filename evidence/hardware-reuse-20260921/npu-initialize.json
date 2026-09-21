@@ -1,0 +1,65 @@
+{
+  "closure_ambiguous": {},
+  "closure_missing": [],
+  "deadline_seconds": 20,
+  "devices": [
+    "null",
+    "zero",
+    "random",
+    "urandom"
+  ],
+  "elapsed_seconds": 2.385,
+  "exec_calls": "EnnInitialize once; no model, buffer, deinit or dlclose",
+  "hardware_devices_exposed": false,
+  "hardware_requests": [
+    {
+      "all_absent": true,
+      "attempts": 6,
+      "path": "/dev/ion"
+    },
+    {
+      "all_absent": true,
+      "attempts": 6,
+      "path": "/dev/dma_heap/system-uncached"
+    },
+    {
+      "all_absent": true,
+      "attempts": 6,
+      "path": "/dev/dma_heap/system"
+    },
+    {
+      "all_absent": true,
+      "attempts": 1,
+      "path": "/dev/vertex10"
+    },
+    {
+      "all_absent": true,
+      "attempts": 1,
+      "path": "/vendor/etc/enn/custom_mode_config.json"
+    }
+  ],
+  "helper_sha256": "1bc99740573140a2860837d7ea4b8b6c8d1af613625ef49bb21bd80224252189",
+  "initialize_returned_zero": true,
+  "kernel_capture_exit": 0,
+  "limitations": [
+    "Zero return despite unavailable allocator and NPU nodes is not hardware readiness.",
+    "Direct device opens were attempted and failed inside the sandbox; no NPU ioctl or firmware boot.",
+    "No model, buffer or deinitialize API called; process used _exit."
+  ],
+  "manifest_sha256": "2caadc6d0bba4fc866d132a83d5753cffec58dd3f2628863de56f8fc67e1da60",
+  "name": "init-first",
+  "new_gpu_or_npu_kernel_messages": 0,
+  "note": "Initialization diagnostic without hardware nodes; not firmware boot or inference.",
+  "probe_sha256": "f19984676d7801bc324a37ea4d1976f819de1d9c1e1e00e2dabe7606cd9e51ce",
+  "read_only_proc": true,
+  "resident_cpu_4b_healthy": true,
+  "returncode": 0,
+  "same_boot": true,
+  "staged": {
+    "files": 37,
+    "manifest_sha256": "2caadc6d0bba4fc866d132a83d5753cffec58dd3f2628863de56f8fc67e1da60"
+  },
+  "started_at": "2026-09-21T17:33:53.817956+00:00",
+  "strace_capture_exit": 0,
+  "temperature_c": 30.2
+}
