@@ -1,0 +1,38 @@
+{
+  "all_symbols_resolved": true,
+  "closure_ambiguous": {},
+  "closure_missing": [],
+  "deadline_seconds": 20,
+  "devices": [
+    "null",
+    "zero",
+    "random",
+    "urandom"
+  ],
+  "elapsed_seconds": 2.709,
+  "exec_calls": "dlopen and dlsym only; no ENN function calls",
+  "hardware_devices_exposed": false,
+  "helper_sha256": "7d6a8f29a3176d0e29e9783fb5c625284b9872b1bff84cb51fb12e3f361696d7",
+  "kernel_capture_exit": 0,
+  "manifest_sha256": "c50b658fcf83a4fa8691e269b6b39f3bc2b71e39179b4241e4c1ec3f2fbc1129",
+  "name": "loader-first",
+  "new_gpu_or_npu_kernel_messages": 0,
+  "note": "No-call loader diagnostic; success does not prove ENN initialization, model load, or inference.",
+  "probe_sha256": "70383afb4f3aaa110624a8e6b2a26f8a82b6297e4355175d7ab9cd8e904bf25d",
+  "read_only_proc": true,
+  "resident_cpu_4b_healthy": true,
+  "resolved_symbol_count": 6,
+  "returncode": 0,
+  "runtime_acceptance": "Library loading and six symbol lookups only; no ENN API calls or NPU inference.",
+  "same_boot": true,
+  "staged": {
+    "files": 36,
+    "manifest_sha256": "c50b658fcf83a4fa8691e269b6b39f3bc2b71e39179b4241e4c1ec3f2fbc1129"
+  },
+  "started_at": "2026-09-21T17:24:55.756476+00:00",
+  "strace_capture_exit": 0,
+  "temperature_c": 30.2,
+  "warnings": [
+    "Generated /linkerconfig/ld.config.txt absent; loader completed successfully."
+  ]
+}

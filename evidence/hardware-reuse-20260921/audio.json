@@ -1,0 +1,56 @@
+{
+  "after": {
+    "calliope_version": "6XH0",
+    "cards": "0 [aboxvdma       ]: abox_vdma - abox_vdma\n                      abox_vdma\n 1 [aboxdump       ]: abox_dump - abox_dump\n                      abox_dump",
+    "pcm_entries": 34,
+    "power_control": "auto",
+    "reset_count": "0",
+    "runtime_status": "suspended"
+  },
+  "before": {
+    "calliope_version": "",
+    "cards": "0 [aboxvdma       ]: abox_vdma - abox_vdma\n                      abox_vdma\n 1 [aboxdump       ]: abox_dump - abox_dump\n                      abox_dump",
+    "pcm_entries": 0,
+    "power_control": "auto",
+    "reset_count": "0",
+    "runtime_status": "suspended"
+  },
+  "during_active": {
+    "calliope_version": "6XH0",
+    "cards": "0 [aboxvdma       ]: abox_vdma - abox_vdma\n                      abox_vdma\n 1 [aboxdump       ]: abox_dump - abox_dump\n                      abox_dump",
+    "pcm_entries": 34,
+    "power_control": "on",
+    "reset_count": "0",
+    "runtime_status": "active"
+  },
+  "firmware": {
+    "abox_tplg.bin": {
+      "sha256": "3690d21b6a7e91242ee423ea655604842969607c318769fe73fbc6db826eb9da",
+      "size": 1066664
+    },
+    "abox_tplg.conf": {
+      "sha256": "ddc3874ec797a085c8497a240d47b995fedbcc5c876483c94e2f236ecb79f782",
+      "size": 109315
+    },
+    "calliope_dram.bin": {
+      "sha256": "d2460b85f1e8ceabe6a23e103688932c03ca5aca6da0de5ed95ff78dfd8feccd",
+      "size": 2204800
+    },
+    "calliope_sram.bin": {
+      "sha256": "786ae058d4c439c01edf856abb52184a92e8d25e90b1b748e380186bed84796d",
+      "size": 165120
+    }
+  },
+  "limitations": [
+    "DSP boot and dump/debug PCM registration only; no usable Rainbow machine card.",
+    "No PCM opened, speaker playback or microphone capture attempted.",
+    "No live rebind, module reload or boot-autostart acceptance."
+  ],
+  "observe_seconds": 15.0,
+  "restore_error": null,
+  "restored_power_control": true,
+  "same_boot": true,
+  "start_error": null,
+  "start_performed": true,
+  "started_at": "2026-09-21T17:12:32.509444+00:00"
+}

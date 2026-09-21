@@ -1,0 +1,396 @@
+{
+  "ambiguous_sonames": [],
+  "api": {
+    "class": "ELF64",
+    "defined_api_symbols": [
+      {
+        "demangled": "enn::api::EnnOpenModel(char const*, unsigned long*)",
+        "raw": "_ZN3enn3api12EnnOpenModelEPKcPm"
+      },
+      {
+        "demangled": "enn::api::EnnGetMetaInfo(_enn_meta_type_id_e, unsigned long, char*)",
+        "raw": "_ZN3enn3api14EnnGetMetaInfoE19_enn_meta_type_id_emPc"
+      },
+      {
+        "demangled": "enn::api::EnnOpenModelFromMemory(char const*, unsigned int, unsigned long*)",
+        "raw": "_ZN3enn3api22EnnOpenModelFromMemoryEPKcjPm"
+      },
+      {
+        "demangled": "enn::api::EnnCloseModel(unsigned long)",
+        "raw": "_ZN3enn3api13EnnCloseModelEm"
+      },
+      {
+        "demangled": "enn::api::EnnInitialize()",
+        "raw": "_ZN3enn3api13EnnInitializeEv"
+      },
+      {
+        "demangled": "enn::api::EnnDeinitialize()",
+        "raw": "_ZN3enn3api15EnnDeinitializeEv"
+      }
+    ],
+    "defined_export_symbols": [
+      {
+        "demangled": "entries:",
+        "raw": "entries:"
+      },
+      {
+        "demangled": "Name",
+        "raw": "Name"
+      },
+      {
+        "demangled": "enn::api::EnnOpenModel(char const*, unsigned long*)",
+        "raw": "_ZN3enn3api12EnnOpenModelEPKcPm"
+      },
+      {
+        "demangled": "enn::api::EnnGetMetaInfo(_enn_meta_type_id_e, unsigned long, char*)",
+        "raw": "_ZN3enn3api14EnnGetMetaInfoE19_enn_meta_type_id_emPc"
+      },
+      {
+        "demangled": "enn::api::EnnOpenModelFromMemory(char const*, unsigned int, unsigned long*)",
+        "raw": "_ZN3enn3api22EnnOpenModelFromMemoryEPKcjPm"
+      },
+      {
+        "demangled": "enn::api::EnnReleaseBuffers(_ennBuffer**, int)",
+        "raw": "_ZN3enn3api17EnnReleaseBuffersEPP10_ennBufferi"
+      },
+      {
+        "demangled": "enn::api::EnnSetExecMsgRate(unsigned int)",
+        "raw": "_ZN3enn3api17EnnSetExecMsgRateEj"
+      },
+      {
+        "demangled": "enn::api::EnnExecuteModelAsync(unsigned long, int)",
+        "raw": "_ZN3enn3api20EnnExecuteModelAsyncEmi"
+      },
+      {
+        "demangled": "enn::api::EnnSetExecMsgAlwaysOff()",
+        "raw": "_ZN3enn3api22EnnSetExecMsgAlwaysOffEv"
+      },
+      {
+        "demangled": "enn::api::EnnSetPreferenceCoreAffinity(unsigned int)",
+        "raw": "_ZN3enn3api28EnnSetPreferenceCoreAffinityEj"
+      },
+      {
+        "demangled": "enn::api::EnnDspGetSessionId(unsigned long, int*)",
+        "raw": "_ZN3enn3api18EnnDspGetSessionIdEmPi"
+      },
+      {
+        "demangled": "enn::api::EnnGetPreferencePerfConfigId(unsigned int*)",
+        "raw": "_ZN3enn3api28EnnGetPreferencePerfConfigIdEPj"
+      },
+      {
+        "demangled": "enn::api::EnnSetFastIpc()",
+        "raw": "_ZN3enn3api13EnnSetFastIpcEv"
+      },
+      {
+        "demangled": "enn::api::EnnExecuteModel(unsigned long, int)",
+        "raw": "_ZN3enn3api15EnnExecuteModelEmi"
+      },
+      {
+        "demangled": "enn::api::EnnUnsetFastIpc()",
+        "raw": "_ZN3enn3api15EnnUnsetFastIpcEv"
+      },
+      {
+        "demangled": "enn::api::EnnReleaseBuffer(_ennBuffer*)",
+        "raw": "_ZN3enn3api16EnnReleaseBufferEP10_ennBuffer"
+      },
+      {
+        "demangled": "enn::api::EnnSetBufferByIndex(unsigned long, _enn_buf_dir_e, unsigned int, _ennBuffer*, int)",
+        "raw": "_ZN3enn3api19EnnSetBufferByIndexEm14_enn_buf_dir_ejP10_ennBufferi"
+      },
+      {
+        "demangled": "enn::api::EnnAllocateAllBuffers(unsigned long, _ennBuffer***, _NumberOfBuffersInfo*, int, bool)",
+        "raw": "_ZN3enn3api21EnnAllocateAllBuffersEmPPP10_ennBufferP20_NumberOfBuffersInfoib"
+      },
+      {
+        "demangled": "enn::api::EnnSetPreferenceTimeOut(unsigned int)",
+        "raw": "_ZN3enn3api23EnnSetPreferenceTimeOutEj"
+      },
+      {
+        "demangled": "enn::api::EnnGetPreferencePriority(unsigned int*)",
+        "raw": "_ZN3enn3api24EnnGetPreferencePriorityEPj"
+      },
+      {
+        "demangled": "enn::api::EnnSetPreferencePriority(unsigned int)",
+        "raw": "_ZN3enn3api24EnnSetPreferencePriorityEj"
+      },
+      {
+        "demangled": "enn::api::EnnGetBuffersInfo(_NumberOfBuffersInfo*, unsigned long)",
+        "raw": "_ZN3enn3api17EnnGetBuffersInfoEP20_NumberOfBuffersInfom"
+      },
+      {
+        "demangled": "enn::api::EnnGetPreferenceCoreAffinity(unsigned int*)",
+        "raw": "_ZN3enn3api28EnnGetPreferenceCoreAffinityEPj"
+      },
+      {
+        "demangled": "enn::api::EnnBufferCommit(unsigned long, int)",
+        "raw": "_ZN3enn3api15EnnBufferCommitEmi"
+      },
+      {
+        "demangled": "enn::api::EnnCreateBuffer(_ennBuffer**, unsigned int, bool)",
+        "raw": "_ZN3enn3api15EnnCreateBufferEPP10_ennBufferjb"
+      },
+      {
+        "demangled": "enn::api::EnnSetExecMsgAlwaysOn()",
+        "raw": "_ZN3enn3api21EnnSetExecMsgAlwaysOnEv"
+      },
+      {
+        "demangled": "enn::api::EnnGetPreferencePresetId(unsigned int*)",
+        "raw": "_ZN3enn3api24EnnGetPreferencePresetIdEPj"
+      },
+      {
+        "demangled": "enn::api::EnnGetPreferenceTriggerMode(unsigned int*)",
+        "raw": "_ZN3enn3api27EnnGetPreferenceTriggerModeEPj"
+      },
+      {
+        "demangled": "enn::api::EnnGetPreferenceTargetLatency(unsigned int*)",
+        "raw": "_ZN3enn3api29EnnGetPreferenceTargetLatencyEPj"
+      },
+      {
+        "demangled": "enn::api::EnnCloseModel(unsigned long)",
+        "raw": "_ZN3enn3api13EnnCloseModelEm"
+      },
+      {
+        "demangled": "enn::api::EnnInitialize()",
+        "raw": "_ZN3enn3api13EnnInitializeEv"
+      },
+      {
+        "demangled": "enn::api::EnnSecureClose()",
+        "raw": "_ZN3enn3api14EnnSecureCloseEv"
+      },
+      {
+        "demangled": "enn::api::EnnExecuteCommand(char const*, char const*, char const*, char const*, char const*, char const*)",
+        "raw": "_ZN3enn3api17EnnExecuteCommandEPKcS2_S2_S2_S2_S2_"
+      },
+      {
+        "demangled": "enn::api::EnnCreateBufferFromFd(_ennBuffer**, unsigned int, unsigned int, unsigned int)",
+        "raw": "_ZN3enn3api21EnnCreateBufferFromFdEPP10_ennBufferjjj"
+      },
+      {
+        "demangled": "enn::api::EnnExecuteModelFastIpc(unsigned long, int)",
+        "raw": "_ZN3enn3api22EnnExecuteModelFastIpcEmi"
+      },
+      {
+        "demangled": "enn::api::EnnGetFileDescriptorFromEnnBuffer(_ennBuffer*, int*)",
+        "raw": "_ZN3enn3api33EnnGetFileDescriptorFromEnnBufferEP10_ennBufferPi"
+      },
+      {
+        "demangled": "enn::api::EnnExecuteModelWait(unsigned long, int)",
+        "raw": "_ZN3enn3api19EnnExecuteModelWaitEmi"
+      },
+      {
+        "demangled": "enn::api::EnnGetPreferenceTimeOut(unsigned int*)",
+        "raw": "_ZN3enn3api23EnnGetPreferenceTimeOutEPj"
+      },
+      {
+        "demangled": "enn::api::EnnGetPreferencePerfMode(unsigned int*)",
+        "raw": "_ZN3enn3api24EnnGetPreferencePerfModeEPj"
+      },
+      {
+        "demangled": "enn::api::EnnSetPreferencePerfMode(unsigned int)",
+        "raw": "_ZN3enn3api24EnnSetPreferencePerfModeEj"
+      },
+      {
+        "demangled": "enn::api::EnnSetBufferByLabel(unsigned long, char const*, _ennBuffer*, int)",
+        "raw": "_ZN3enn3api19EnnSetBufferByLabelEmPKcP10_ennBufferi"
+      },
+      {
+        "demangled": "enn::api::EnnResetPreferenceAsDefault()",
+        "raw": "_ZN3enn3api27EnnResetPreferenceAsDefaultEv"
+      },
+      {
+        "demangled": "enn::api::EnnSetBuffers(unsigned long, _ennBuffer**, int, int)",
+        "raw": "_ZN3enn3api13EnnSetBuffersEmPP10_ennBufferii"
+      },
+      {
+        "demangled": "enn::api::EnnDeinitialize()",
+        "raw": "_ZN3enn3api15EnnDeinitializeEv"
+      },
+      {
+        "demangled": "enn::api::EnnGenerateBufferSpace(unsigned long, int)",
+        "raw": "_ZN3enn3api22EnnGenerateBufferSpaceEmi"
+      },
+      {
+        "demangled": "enn::api::EnnGetBufferInfoByIndex(_ennBufferInfo*, unsigned long, _enn_buf_dir_e, unsigned int)",
+        "raw": "_ZN3enn3api23EnnGetBufferInfoByIndexEP14_ennBufferInfom14_enn_buf_dir_ej"
+      },
+      {
+        "demangled": "enn::api::EnnSetPreferencePresetId(unsigned int)",
+        "raw": "_ZN3enn3api24EnnSetPreferencePresetIdEj"
+      },
+      {
+        "demangled": "enn::api::EnnSetPreferenceTriggerMode(unsigned int)",
+        "raw": "_ZN3enn3api27EnnSetPreferenceTriggerModeEj"
+      },
+      {
+        "demangled": "enn::api::EnnSetPreferencePerfConfigId(unsigned int)",
+        "raw": "_ZN3enn3api28EnnSetPreferencePerfConfigIdEj"
+      },
+      {
+        "demangled": "enn::api::EnnSetPreferenceTargetLatency(unsigned int)",
+        "raw": "_ZN3enn3api29EnnSetPreferenceTargetLatencyEj"
+      },
+      {
+        "demangled": "enn::api::EnnSecureOpen(unsigned int, unsigned long*)",
+        "raw": "_ZN3enn3api13EnnSecureOpenEjPm"
+      },
+      {
+        "demangled": "enn::api::EnnGetBufferInfoByLabel(_ennBufferInfo*, unsigned long, char const*)",
+        "raw": "_ZN3enn3api23EnnGetBufferInfoByLabelEP14_ennBufferInfomPKc"
+      }
+    ],
+    "machine": "AArch64",
+    "needed": [
+      "libenn_user_lib.so",
+      "libc++.so",
+      "libc.so",
+      "libm.so",
+      "libdl.so"
+    ],
+    "path": "rootfs/npu-vendor-assets-decompressed/libenn_public_api_cpp_lib__7c1",
+    "sha256": "2d5d7bb1a3df54d224adcd7520a466ce74b578d33e27878bdc1244b003da74a9",
+    "size": 19512,
+    "soname": "libenn_public_api_cpp_lib.so"
+  },
+  "closure": [
+    {
+      "ambiguous_aliases": false,
+      "paths": [
+        "rootfs/npu-vendor-assets-decompressed/libenn_public_api_cpp_lib.so__7c1",
+        "rootfs/npu-vendor-assets-decompressed/libenn_public_api_cpp_lib__7c1"
+      ],
+      "selected": "rootfs/npu-vendor-assets-decompressed/libenn_public_api_cpp_lib__7c1",
+      "selection": "exact_api_path",
+      "sha256_by_path": {
+        "rootfs/npu-vendor-assets-decompressed/libenn_public_api_cpp_lib.so__7c1": "2d5d7bb1a3df54d224adcd7520a466ce74b578d33e27878bdc1244b003da74a9",
+        "rootfs/npu-vendor-assets-decompressed/libenn_public_api_cpp_lib__7c1": "2d5d7bb1a3df54d224adcd7520a466ce74b578d33e27878bdc1244b003da74a9"
+      },
+      "soname": "libenn_public_api_cpp_lib.so"
+    },
+    {
+      "ambiguous_aliases": false,
+      "paths": [
+        "rootfs/npu-vendor-assets-decompressed/libenn_user_lib.so__7c8"
+      ],
+      "selected": "rootfs/npu-vendor-assets-decompressed/libenn_user_lib.so__7c8",
+      "selection": "first_identical_bytes",
+      "sha256_by_path": {
+        "rootfs/npu-vendor-assets-decompressed/libenn_user_lib.so__7c8": "8c60e7af00e9f98ac8e7079feccf5cabe8f7ce4c3fb6925e43fcaf9edd21de90"
+      },
+      "soname": "libenn_user_lib.so"
+    },
+    {
+      "ambiguous_aliases": false,
+      "paths": [
+        "rootfs/npu-vendor-assets-decompressed/libenn_common_utils.so__7b6"
+      ],
+      "selected": "rootfs/npu-vendor-assets-decompressed/libenn_common_utils.so__7b6",
+      "selection": "first_identical_bytes",
+      "sha256_by_path": {
+        "rootfs/npu-vendor-assets-decompressed/libenn_common_utils.so__7b6": "19668eaac0d8a893b5e3fc6914bf42c8c2eac66474479b254921de42adaf22d6"
+      },
+      "soname": "libenn_common_utils.so"
+    },
+    {
+      "ambiguous_aliases": false,
+      "paths": [
+        "rootfs/npu-vendor-assets-decompressed/libenn_engine_lib.so__7bb"
+      ],
+      "selected": "rootfs/npu-vendor-assets-decompressed/libenn_engine_lib.so__7bb",
+      "selection": "first_identical_bytes",
+      "sha256_by_path": {
+        "rootfs/npu-vendor-assets-decompressed/libenn_engine_lib.so__7bb": "7f92af3c5ad2d38cbc34dfe699ceb01e2b7f839e36f0f068c581f4817587d65f"
+      },
+      "soname": "libenn_engine_lib.so"
+    },
+    {
+      "ambiguous_aliases": false,
+      "paths": [
+        "rootfs/npu-vendor-assets-decompressed/libenn_model.so__7be"
+      ],
+      "selected": "rootfs/npu-vendor-assets-decompressed/libenn_model.so__7be",
+      "selection": "first_identical_bytes",
+      "sha256_by_path": {
+        "rootfs/npu-vendor-assets-decompressed/libenn_model.so__7be": "30283cca8479f88cc0aa463b570df218fafac6192ddb583f7c29833b4b805b53"
+      },
+      "soname": "libenn_model.so"
+    },
+    {
+      "ambiguous_aliases": false,
+      "paths": [
+        "rootfs/npu-vendor-assets-decompressed/libenn_user_driver_cpu.so__7c4"
+      ],
+      "selected": "rootfs/npu-vendor-assets-decompressed/libenn_user_driver_cpu.so__7c4",
+      "selection": "first_identical_bytes",
+      "sha256_by_path": {
+        "rootfs/npu-vendor-assets-decompressed/libenn_user_driver_cpu.so__7c4": "eebea845c302db025a90632eafba94b88e7494c1b7f011257d4e42139c028bdc"
+      },
+      "soname": "libenn_user_driver_cpu.so"
+    },
+    {
+      "ambiguous_aliases": false,
+      "paths": [
+        "rootfs/npu-vendor-assets-decompressed/libenn_user_driver_gpu_lib.so__7c6"
+      ],
+      "selected": "rootfs/npu-vendor-assets-decompressed/libenn_user_driver_gpu_lib.so__7c6",
+      "selection": "first_identical_bytes",
+      "sha256_by_path": {
+        "rootfs/npu-vendor-assets-decompressed/libenn_user_driver_gpu_lib.so__7c6": "06e3fa82d15b3e2f92fdc42d93da3b54db7d59a3d98f9d0cb97ccc2a31e0a8e5"
+      },
+      "soname": "libenn_user_driver_gpu_lib.so"
+    },
+    {
+      "ambiguous_aliases": false,
+      "paths": [
+        "rootfs/npu-vendor-assets-decompressed/libenn_user_driver_unified.so__7c7"
+      ],
+      "selected": "rootfs/npu-vendor-assets-decompressed/libenn_user_driver_unified.so__7c7",
+      "selection": "first_identical_bytes",
+      "sha256_by_path": {
+        "rootfs/npu-vendor-assets-decompressed/libenn_user_driver_unified.so__7c7": "97df2380de3553ebf2a15a33b13459ed978576b335d86c8c4397e45266d1921d"
+      },
+      "soname": "libenn_user_driver_unified.so"
+    }
+  ],
+  "entrypoint_assessment": {
+    "exported_initialize": true,
+    "exported_memory_model_open": true,
+    "exported_metadata_query": true,
+    "exported_model_open": true,
+    "reason": "No public matching header/ABI structs; initialization/model-open may reach vendor services, firmware, buffers, or /dev/vertex10.",
+    "safe_host_call": false,
+    "smallest_known_model_entry": "EnnOpenModelFromMemory(const char *, uint32, handle *)",
+    "smallest_known_runtime_entry": "EnnInitialize()",
+    "version_or_device_query_candidates": [],
+    "version_or_device_query_found": false
+  },
+  "format": "enn-loader-preflight-v1",
+  "guards": {
+    "dlopen_attempted": false,
+    "npu_ioctl_attempted": false,
+    "phone_accessed": false,
+    "vendor_elf_executed": false
+  },
+  "limitations": [
+    "DT_NEEDED closure is a static dependency graph, not proof every library or service is called.",
+    "Unresolved names may be supplied by the Android system/vendor image; this tool does not fabricate them.",
+    "The AArch64 API symbol signatures are demangled observations, not a substitute for matching headers.",
+    "Version/device candidates are reported from the full defined dynamic-symbol set; absence is not proof that an unexported query does not exist.",
+    "SONAME aliases with different bytes are marked ambiguous and are not traversed into the closure."
+  ],
+  "same_abi_assets": 24,
+  "unresolved_needed_names": [
+    "android.hidl.memory@1.0.so",
+    "libOpenCL.so",
+    "libc++.so",
+    "libc.so",
+    "libcutils.so",
+    "libdl.so",
+    "libdmabufheap.so",
+    "libhidlbase.so",
+    "libhidlmemory.so",
+    "liblog.so",
+    "libm.so",
+    "libutils.so",
+    "vendor.samsung_slsi.hardware.enn@1.0.so"
+  ]
+}

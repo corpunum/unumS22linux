@@ -1,0 +1,82 @@
+{
+  "backup": {
+    "bytes": 83886080,
+    "complete": true,
+    "device": "radio",
+    "host_sha256": "386155dc00d3034b22139b01e402515e71f4a0672df761d665ce74155c7b962e",
+    "modem_state": "INIT",
+    "phone_partition_writes": false,
+    "sha256": "386155dc00d3034b22139b01e402515e71f4a0672df761d665ce74155c7b962e"
+  },
+  "board_marker_present": true,
+  "build_markers": [
+    "S901BXXSIFYI3"
+  ],
+  "bytes": 83886080,
+  "entries": [
+    {
+      "bytes": 1040,
+      "crc_checked": false,
+      "file_bounds_valid": true,
+      "image_offset": 0,
+      "name": "TOC",
+      "table_offset": 0
+    },
+    {
+      "bytes": 16172,
+      "crc_checked": false,
+      "file_bounds_valid": true,
+      "image_offset": 1056,
+      "name": "BOOT",
+      "table_offset": 32
+    },
+    {
+      "bytes": 66300780,
+      "crc_checked": false,
+      "file_bounds_valid": true,
+      "image_offset": 17248,
+      "name": "MAIN",
+      "table_offset": 64
+    },
+    {
+      "bytes": 6226932,
+      "crc_checked": false,
+      "file_bounds_valid": true,
+      "image_offset": 66318048,
+      "name": "VSS",
+      "table_offset": 96
+    },
+    {
+      "bytes": 1048576,
+      "crc_checked": false,
+      "file_bounds_valid": true,
+      "image_offset": 0,
+      "name": "NV",
+      "table_offset": 128
+    },
+    {
+      "bytes": 524288,
+      "crc_checked": false,
+      "file_bounds_valid": true,
+      "image_offset": 524288,
+      "name": "OFFSET",
+      "table_offset": 160
+    },
+    {
+      "bytes": 732,
+      "crc_checked": false,
+      "file_bounds_valid": true,
+      "image_offset": 72544992,
+      "name": "INFO",
+      "table_offset": 192
+    }
+  ],
+  "header_layout_source": "drivers/soc/samsung/cpif/shm_ipc.c:struct cp_toc",
+  "limitations": [
+    "Bounded header metadata only; no CRC or signature validation.",
+    "Build markers are embedded strings, not proof of successful modem boot.",
+    "No CP firmware loading, RIL, SIM read, data session, call or SMS."
+  ],
+  "sha256": "386155dc00d3034b22139b01e402515e71f4a0672df761d665ce74155c7b962e",
+  "table_entry_bytes": 32
+}
