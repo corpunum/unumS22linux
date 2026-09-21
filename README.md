@@ -3,13 +3,23 @@
 Native Linux experiments on the **Samsung Galaxy S22 SM-S901B/DS**,
 Exynos 2200, codename `r0s`, unlocked bootloader. This is the S22, not S22+.
 
-## Current result — 2026-09-21
+## Current result — 2026-09-22
+
+**Audio card startup and Pi subprocess repair are now verified.** An audio-only
+RECOVERY update registered Rainbow-Prince with23 playback/53 capture PCMs;
+native ALSA enumerates1736 controls after the narrow control-node fix.
+Speaker/microphone routes are still untested. A targeted close_range
+workaround lets Pi's local4B run captured-output subprocess tools; the actual
+tool test passed before and after reboot. BORE762 restored desktop,4B,
+Wi-Fi and private Pi web without buttons. Bluetooth also answered a native
+board-ID query; firmware/HCI are not yet initialized.
+See [measured results, rollback and limits](docs/RUNTIME_AUDIO_RECOVERY_2026-09-22.md).
 
 **Private browser access to Pi now works over Tailscale.** The actual agent
 uses the existing local4B default, saves separate web history, and continues
 after closing the tab through native musl tmux. Real model replies and
-reconnects passed; optional startup is persisted but the new web hook has not
-been cold-reboot tested. See [browser access and limitations](docs/PI_WEB_TAILSCALE_2026-09-21.md).
+reconnects passed; optional startup was observed after recovery reboot BORE762.
+See [browser access and limitations](docs/PI_WEB_TAILSCALE_2026-09-21.md).
 
 **Native Linux + Omarchy UI + Pi on a Samsung S22.** Pi now launches through
 Omarchy's agent integration with a local Qwen3.5-4B CPU model and an optional
@@ -93,13 +103,13 @@ and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 | GPU | Samsung OpenCL/Vulkan compute passes; llama.cpp Vulkan Qwen0.8B all-layer offload and CPU-matching text verified. Resident4B remains CPU; RADV/desktop acceleration and sustained stability remain unaccepted |
 | NPU | Real ENN loads; vertex10 open/close passed. BOOTUP audit found unbounded waits and unsafe error cleanup; no speculative patch or firmware-boot acceptance |
 | Sensors | Accelerometer/gyro and now magnetometer/light frames sampled twice each. Compass accuracy is zero and light response untested; calibration, auto-rotation and autostart remain unaccepted |
-| Audio DSP | Authenticated Calliope firmware boots, version6XH0; only 34 diagnostic capture PCMs, no usable speaker/microphone card |
+| Audio DSP | Early firmware repair registers Rainbow-Prince;23 playback/53 capture PCMs and1736 controls. Control-node repair is session-only; speaker/mic routes and physical sound remain untested |
 | Modem | Dependencies recovered; real Samsung RIL library loads in isolated phone runtime without a RIL call. CPIF remains INIT; SIM/data/calls not working |
-| Bluetooth | QCA6490/HSP2.1 answered native UART version query; WLAN preserved. Firmware/NVM initialization, HCI, pairing and audio remain unaccepted |
+| Bluetooth | QCA6490/HSP2.1 answered native UART version and board-ID queries; WLAN preserved. Firmware/NVM initialization, HCI, pairing and audio remain unaccepted |
 | Connectivity | USB rescue retained; Wi-Fi association, DHCP, DNS and HTTPS passed after two automatic recovery-boot startups |
 | Other everyday hardware | Usable audio, cellular, camera, GPS and suspend remain unaccepted |
 
-Latest [hardware follow-up and evidence](docs/HARDWARE_FOLLOWUP_2026-09-21.md):
+Previous [hardware follow-up and evidence](docs/HARDWARE_FOLLOWUP_2026-09-21.md):
 Bluetooth transport, additional sensor frames, isolated RIL loading, and13/13
 post-experiment Wi-Fi checks. No reboot or partition write in this round.
 
@@ -115,8 +125,9 @@ are not sustained agent benchmarks. The chat client does not execute commands.
 Arch desktop, runtime and model now persist on userdata and start automatically
 on recovery boot, without host restoration. Normal cold-power-on routing is
 unconfirmed after the BOOT attempt. Native signed
-package installation currently hits a kernel/runtime helper hang; host-verified
-package deployment works. See [the migration record](docs/PERSISTENCE_MIGRATION_2026-09-20.md).
+package installation remains unaccepted; the close_range workaround is currently
+Pi-scoped, not a system-wide kernel repair. Host-verified package deployment
+works. See [the migration record](docs/PERSISTENCE_MIGRATION_2026-09-20.md).
 
 ## Other phones: native Linux and Omarchy feasibility
 
