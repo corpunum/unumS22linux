@@ -81,3 +81,11 @@ __pycache__/
 **/ssh_host_*_key
 **/.env
 **/.env.*
+
+# Device/account identities belong in local provisioning, not public evidence.
+**/known_hosts
+**/*known-hosts
+**/tailscaled.state
+**/tailscale/private/
+**/wpa_supplicant*.conf
+**/*auth-url*
