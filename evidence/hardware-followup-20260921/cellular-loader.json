@@ -1,0 +1,28 @@
+{
+  "closure_ambiguous": {},
+  "closure_missing": [],
+  "devices_exposed": false,
+  "elapsed_seconds": 1.109,
+  "helper_sha256": "af292c81a814dd79b1ed36a9138e0b52a3c2fc161515bd726f340cd3a8186c89",
+  "kernel_capture_exit": 0,
+  "limitations": [
+    "dlopen constructors executed; no RIL API, modem or SIM operation.",
+    "Absent generated linker configuration warned; load and lookup succeeded.",
+    "CP startup and protected NV/EFS handling remain unresolved."
+  ],
+  "manifest_sha256": "8138a7405d1a5fbc96042c039214ad0849740f2b78defdc7cc75d3ba28b3c8e9",
+  "post_exec_clone_count": 0,
+  "post_exec_connects": 1,
+  "post_exec_ioctl_count": 0,
+  "private_network_namespace": true,
+  "probe_sha256": "fe1b9d6dc1342a2df0ec9dba868971ee2827b02d0af5dd98c8a3a92f2943a2ce",
+  "read_only_proc": false,
+  "resident_4b_healthy": true,
+  "returncode": 0,
+  "ril_symbol_resolved": true,
+  "same_boot": true,
+  "staged_files": 127,
+  "started_at": "2026-09-21T20:41:11.110212+00:00",
+  "strace_capture_exit": 0,
+  "successful_connects": 0
+}

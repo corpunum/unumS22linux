@@ -1,0 +1,15 @@
+{
+  "excluded": [
+    "firmware and vendor binary bytes",
+    "raw kernel logs and traces",
+    "device identifiers",
+    "timestamped sensor frames"
+  ],
+  "files": {
+    "bluetooth-version.json": "2be2a498cd0416cdaecdd99d45a1892b0751ed9baa02b49277e4c9b1de389607",
+    "cellular-loader.json": "1d15ab7c12836a5343254a0eaa21b6aabeac83ca2c48cf52e8c3cf443aa3a70c",
+    "sensors.json": "8dc8db402b2e82c47a5d9b4fad38325eaf3a831130af7348355343c1c699d36f",
+    "wifi.json": "ee3d1b1368d20f1f51752b30c1bd0f809d93962de9b8e32993de094b40c73dda"
+  },
+  "format": "s22-hardware-followup-public-v1"
+}

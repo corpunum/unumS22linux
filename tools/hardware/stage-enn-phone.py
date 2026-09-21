@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage one reviewed ENN diagnostic root on the phone; never execute it."""
+"""Stage one reviewed vendor diagnostic root on the phone; never execute it."""
 
 from __future__ import annotations
 
@@ -20,12 +20,18 @@ def main() -> int:
     global SOURCE, DEST
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", action="store_true", help="print hashes and do not contact the phone")
-    parser.add_argument("--init-only", action="store_true", help="stage the separate initialization probe root")
+    choice = parser.add_mutually_exclusive_group()
+    choice.add_argument("--init-only", action="store_true", help="stage the separate initialization probe root")
+    choice.add_argument("--cellular-loader", action="store_true", help="stage the separate no-call RIL loader")
     args = parser.parse_args()
     if args.init_only:
         SOURCE = ROOT / "rootfs/npu-init-20260921"
         DEST = "/srv/s22/npu-init-20260921"
     probe = "bin/enn-init-probe" if args.init_only else "bin/enn-dlopen-probe"
+    if args.cellular_loader:
+        SOURCE = ROOT / "rootfs/cellular-loader-20260921"
+        DEST = "/srv/s22/cellular-loader-20260921"
+        probe = "bin/cellular-dlopen-probe"
     manifest = json.loads((SOURCE / "manifests/files.json").read_text())
     expected = {entry["path"]: entry["sha256"] for entry in manifest["files"]}
     local = {
@@ -79,7 +85,7 @@ for p in [root]+list(root.rglob('*')):
     assert not p.is_symlink(), p
     os.chown(p,0,0,follow_symlinks=False)
     if not p.is_symlink():
-        os.chmod(p,0o755 if p.is_dir() or str(p.relative_to(root)) in {'bin/enn-dlopen-probe','bin/enn-init-probe','system/bin/linker64'} else 0o644)
+        os.chmod(p,0o755 if p.is_dir() or str(p.relative_to(root)) in {'bin/enn-dlopen-probe','bin/enn-init-probe','bin/cellular-dlopen-probe','system/bin/linker64'} else 0o644)
 for p in [root]+list(root.rglob('*')):
     info=p.lstat()
     assert info.st_uid == 0 and info.st_gid == 0, p
