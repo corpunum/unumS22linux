@@ -24,6 +24,24 @@ SPEC.loader.exec_module(MOD)
 
 
 class SupervisorUnitTests(unittest.TestCase):
+    def test_web_disabled_without_userdata_marker(self):
+        with tempfile.TemporaryDirectory() as td, \
+             mock.patch.object(MOD, 'MOUNT', Path(td)), \
+             mock.patch.object(MOD, 'command') as command:
+            MOD.optional_agent_web('--start')
+            MOD.optional_agent_web('--stop')
+            command.assert_not_called()
+
+    def test_web_missing_helper_is_nonfatal(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root/'agent-web').mkdir()
+            (root/'agent-web/enabled').touch()
+            with mock.patch.object(MOD, 'MOUNT', root), \
+                 mock.patch.object(MOD, 'command') as command:
+                MOD.optional_agent_web('--start')
+                command.assert_not_called()
+
     def test_wifi_disabled_by_default_and_explicit_marker(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

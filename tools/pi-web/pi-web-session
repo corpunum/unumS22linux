@@ -1,0 +1,9 @@
+#!/bin/sh
+# Browser-only session history; never attach to the desktop's active JSONL file.
+set -eu
+exec /opt/s22-pi-web/tmux-musl/lib/ld-musl-aarch64.so.1 \
+  --library-path /opt/s22-pi-web/tmux-musl/lib \
+  /opt/s22-pi-web/tmux-musl/tmux -f /dev/null \
+  -S /home/alarm/.pi/agent/web-sessions/web-musl.tmux \
+  new-session -A -s pi -c /home/alarm/Work/s22-agent \
+  /usr/local/bin/pi --session-dir /home/alarm/.pi/agent/web-sessions --continue

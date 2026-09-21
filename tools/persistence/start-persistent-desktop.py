@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import errno
 import fcntl
+import hashlib
 import json
 import os
 import re
@@ -35,6 +36,14 @@ LOCK = Path("/run/s22-persistent-desktop.lock")
 STRIDE_ENABLED = Path("/etc/s22-linear-stride-enabled")
 WIFI_ENABLED = Path('/etc/s22-wifi-enabled')
 WIFI_DISABLED = Path('/etc/s22-wifi-disabled')
+TAILSCALE_ENABLED = Path('/etc/s22-tailscale-enabled')
+MODEL_PROFILE_SELECTOR = Path('/etc/s22-model-profile')
+QWEN2B_PROFILE = 'qwen2b'
+QWEN4B_PROFILE = 'qwen4b'
+QWEN4B_ALIAS = 's22-qwen4b'
+QWEN2B_MODEL_ID = '/mnt/model-bench/models/Qwen3.5-2B-Q4_0.gguf'
+QWEN4B_MODEL_ID = '/mnt/model-bench/models/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf'
+QWEN4B_SHA256 = '79e28ecacf84e75b6056cf4059636d435aa9eb67795780f7b7dbc7d32a962741'
 
 
 class Failure(RuntimeError):
@@ -110,7 +119,38 @@ def filesystem_uuid(path: str) -> str | None:
     return m.group(1).lower() if m else None
 
 
+def selected_model_profile(selector: Path = MODEL_PROFILE_SELECTOR) -> str:
+    """Read the explicit model selector, defaulting only when absent."""
+    try:
+        value = selector.read_text().strip()
+    except FileNotFoundError:
+        return QWEN2B_PROFILE
+    if value == QWEN2B_PROFILE:
+        return QWEN2B_PROFILE
+    if value in (QWEN4B_PROFILE, QWEN4B_ALIAS):
+        return QWEN4B_PROFILE
+    raise Failure(f"unsupported model profile {value!r}; expected qwen2b or qwen4b")
+
+
+def model_id(profile: str) -> str:
+    if profile == QWEN2B_PROFILE:
+        return QWEN2B_MODEL_ID
+    if profile == QWEN4B_PROFILE:
+        return QWEN4B_MODEL_ID
+    raise Failure(f"unsupported model profile {profile!r}")
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open('rb') as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def preflight(*, mounted_ok: bool = False) -> dict[str, object]:
+    profile = selected_model_profile()
+    selected_model_id = model_id(profile)
     if Path('/proc/1/comm').read_text().strip() != 'native-guardian':
         raise Failure('PID 1 is not native-guardian')
     props = dict(line.split('=', 1) for line in
@@ -159,20 +199,25 @@ def preflight(*, mounted_ok: bool = False) -> dict[str, object]:
         if any(not isinstance(marker.get(k), str) or
                not re.fullmatch(r"[0-9a-f]{64}", marker[k]) for k in required[2:]):
             raise Failure("deployment marker lacks complete SHA-256 fields")
-        import hashlib
-        for path, key in ((MODEL / "models/Qwen3.5-2B-Q4_0.gguf", "model_sha256"),
-                          (MODEL / "server/bin/llama-server", "server_sha256"),
-                          (ARCH / "usr/local/bin/s22-chat", "chat_sha256")):
+        checks = [(MODEL / "server/bin/llama-server", "server_sha256"),
+                  (ARCH / "usr/local/bin/s22-chat", "chat_sha256")]
+        checks.insert(0, (MODEL / "models/Qwen3.5-2B-Q4_0.gguf", "model_sha256"))
+        if profile == QWEN4B_PROFILE:
+            four_b = MODEL / Path(QWEN4B_MODEL_ID).relative_to('/mnt/model-bench')
+            if not four_b.is_file():
+                raise Failure(f"deployment artifact missing: {four_b}")
+            actual = sha256_file(four_b)
+            if actual != QWEN4B_SHA256:
+                raise Failure(f"SHA-256 mismatch for {four_b}: {actual} != {QWEN4B_SHA256}")
+        for path, key in checks:
             if not path.is_file():
                 raise Failure(f"deployment artifact missing: {path}")
-            h = hashlib.sha256()
-            with path.open("rb") as f:
-                for block in iter(lambda: f.read(1024 * 1024), b""):
-                    h.update(block)
-            if h.hexdigest() != marker[key]:
-                raise Failure(f"SHA-256 mismatch for {path}: {h.hexdigest()} != marker")
+            actual = sha256_file(path)
+            if actual != marker[key]:
+                raise Failure(f"SHA-256 mismatch for {path}: {actual} != marker")
     return {"device": DEVICE, "major": major, "minor": minor,
-            "sectors": sectors, "uuid": fs_uuid, "mounted": is_mounted(MOUNT)}
+            "sectors": sectors, "uuid": fs_uuid, "mounted": is_mounted(MOUNT),
+            "model_profile": profile, "model_id": selected_model_id}
 
 
 def mount_fs(path: Path, source: str, *, fstype: str | None = None,
@@ -263,15 +308,24 @@ def healthy(url: str) -> bool:
         return False
 
 
-def start_model(log: Path, retries: int = 3) -> subprocess.Popen[str]:
-    cmd = chroot_cmd(
-        {"HOME": "/root", "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+def model_command(profile: str) -> list[str]:
+    command = [
         "/usr/bin/nice", "-n", "20", "/mnt/model-bench/server/libc/ld-linux-aarch64.so.1",
         "--library-path", "/mnt/model-bench/server/libc:/mnt/model-bench/server/lib",
-        "/mnt/model-bench/server/bin/llama-server",
-        "-m", "/mnt/model-bench/models/Qwen3.5-2B-Q4_0.gguf",
+        "/mnt/model-bench/server/bin/llama-server", "-m", model_id(profile),
         "-t", "4", "-C", "f0", "--cpu-strict", "1", "-c", "4096", "-np", "1",
-        "-ngl", "0", "--host", "127.0.0.1", "--port", "8089", "--no-webui")
+        "-ngl", "0", "--host", "127.0.0.1", "--port", "8089", "--no-webui",
+    ]
+    if profile == QWEN4B_PROFILE:
+        command += ["-b", "64", "-ub", "32", "--cache-ram", "0"]
+    return command
+
+
+def start_model(log: Path, retries: int = 3, profile: str | None = None) -> subprocess.Popen[str]:
+    profile = selected_model_profile() if profile is None else profile
+    cmd = chroot_cmd(
+        {"HOME": "/root", "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+        *model_command(profile))
     for attempt in range(1, retries + 1):
         try:
             with socket.create_connection(("127.0.0.1", 8089), timeout=.2):
@@ -323,7 +377,7 @@ def start_desktop(log: Path) -> tuple[subprocess.Popen[str], subprocess.Popen[st
     except BaseException:
         terminate(seat)
         raise
-    env = {"HOME": "/root", "PATH": "/usr/local/bin:/usr/bin:/bin",
+    env = {"HOME": "/root", "PATH": "/usr/local/bin:/opt/omarchy-source/bin:/usr/bin:/bin",
            "OMARCHY_PATH": "/opt/omarchy-source", "XDG_RUNTIME_DIR": "/run/user/0",
            "LANG": "C.UTF-8", "TZ": "Europe/Athens", "XDG_SESSION_TYPE": "wayland",
            "LIBSEAT_BACKEND": "seatd", "SEATD_VTBOUND": "0",
@@ -379,10 +433,48 @@ def start_optional_wifi() -> subprocess.Popen | None:
         return None
 
 
+def prepare_data_mount(reuse: bool) -> list[Path]:
+    """Never own an existing data mount; reuse only after full validation."""
+    if reuse and is_mounted(MOUNT):
+        preflight(mounted_ok=True)
+        return []
+    preflight()
+    mount_fs(MOUNT, DEVICE, fstype="ext4", options="rw,noatime,nosuid,nodev,errors=remount-ro")
+    return [MOUNT]
+
+
+def start_optional_tailscale() -> None:
+    if not TAILSCALE_ENABLED.is_file():
+        return
+    try:
+        result = command('/usr/bin/python3', str(MOUNT / 'network/start-tailscale.py'), '--start')
+        say(result.stdout.strip())
+    except Exception as error:
+        say(f'optional Tailscale startup unavailable: {type(error).__name__}')
+
+
+def optional_agent_web(action: str) -> None:
+    """The web terminal is optional; Tailscale/rescue remain independent."""
+    base = MOUNT / 'agent-web'
+    if not (base / 'enabled').is_file():
+        return
+    try:
+        script = base / 'start-agent-web.py'
+        st = script.stat()
+        if script.is_symlink() or st.st_uid != 0 or st.st_mode & 0o022:
+            raise Failure('optional web helper ownership changed')
+        result = command('/usr/bin/python3', str(script), action)
+        say('optional agent web: ' + result.stdout.strip())
+    except Exception as error:
+        say(f'optional agent web {action} unavailable: {type(error).__name__}')
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="read-only identity and layout check")
     ap.add_argument("--foreground", action="store_true", help="run supervisor in foreground (default)")
+    ap.add_argument("--reuse-data-mount", action="store_true",
+                    help="reuse a validated userdata mount during a desktop-only restart")
     args = ap.parse_args()
     def stop_signal(_signum: int, _frame: object) -> None:
         raise KeyboardInterrupt
@@ -408,11 +500,12 @@ def main() -> int:
             raise AlreadyRunning('an existing compositor is active; refusing to take it over')
         if Path("/etc/s22-persistent-disabled").exists() or Path('/run/s22-persistent-disabled').exists():
             raise Failure("persistent desktop explicitly disabled")
-        preflight()
-        mount_fs(MOUNT, DEVICE, fstype="ext4", options="rw,noatime,nosuid,nodev,errors=remount-ro")
-        owned_mounts = [MOUNT]
+        owned_mounts = prepare_data_mount(args.reuse_data_mount)
         try:
-            preflight(mounted_ok=True)
+            readiness = preflight(mounted_ok=True)
+            profile = str(readiness['model_profile'])
+            # Remote access must not depend on the model or compositor starting.
+            start_optional_tailscale()
             RUNTIME_READY.unlink(missing_ok=True)
             if command('pidof', 'udevd', check=False).returncode:
                 command('/sbin/udevd', '--daemon')
@@ -458,7 +551,7 @@ def main() -> int:
             state = MOUNT / "state"; state.mkdir(exist_ok=True)
             model = seat = desktop = None
             try:
-                model = start_model(state / "model-server.log")
+                model = start_model(state / "model-server.log", profile=profile)
                 seat, desktop = start_desktop(state / "desktop.log")
                 for _ in range(150):
                     if desktop.poll() is not None:
@@ -480,10 +573,12 @@ def main() -> int:
                     raise Failure('terminal, keyboard or Omarchy shell did not start')
                 runtime = {"uuid": UUID, "device": DEVICE,
                     "arch": str(ARCH), "model": str(MODEL), "model_port": 8089,
+                    "model_profile": profile, "model_id": model_id(profile),
                     "desktop_pid": desktop.pid, "model_pid": model.pid,
                     "supervisor_pid": os.getpid(), "started_at": int(time.time())}
                 RUNTIME_READY.write_text(json.dumps(runtime, sort_keys=True) + "\n")
                 say("persistent desktop and model ready")
+                optional_agent_web('--start')
                 wifi_startup = start_optional_wifi()
                 model_restarts = 0
                 while desktop.poll() is None:
@@ -494,13 +589,14 @@ def main() -> int:
                         if model_restarts >= 2:
                             raise Failure("model server exceeded bounded runtime restarts")
                         model_restarts += 1
-                        model = start_model(state / "model-server.log")
+                        model = start_model(state / "model-server.log", profile=profile)
                         runtime['model_pid'] = model.pid
                         runtime['model_restarts'] = model_restarts
                         RUNTIME_READY.write_text(json.dumps(runtime, sort_keys=True) + '\n')
                     time.sleep(1)
                 raise Failure(f"desktop exited with status {desktop.returncode}")
             finally:
+                optional_agent_web('--stop')
                 RUNTIME_READY.unlink(missing_ok=True)
                 terminate(desktop); terminate(seat); terminate(model)
         finally:
