@@ -1,0 +1,153 @@
+{
+  "audio_fw_log_after_progress_v2": {
+    "bytes": 1048575,
+    "firmware_flush_requested": false,
+    "log_cursor_consumed": false,
+    "offset": 1,
+    "register_or_sram_dump": false,
+    "runtime_pm_before_after": "suspended",
+    "sha256": "82e37f66100c18f26c9d678833a9646523584d4fc486e1b03ccc38104416ae0d"
+  },
+  "audio_progress_first": {
+    "elapsed_seconds": 16.062,
+    "helper_sha256": "76ca8774d669a999d810b8abd950d620b2ee46b9e2712f52b5390a7705fc9511",
+    "observer_sha256": "c61bf9e9af484541a7198abe757f619910236ea5f02a412ba99119bba41f89ad",
+    "physical_playback_verified": false,
+    "reset_count_values": [
+      "0"
+    ],
+    "route_controls_restored": true,
+    "running_appl_ptr_values": [
+      8192,
+      8192,
+      8192,
+      8192,
+      8192,
+      8192,
+      8192
+    ],
+    "running_hw_ptr_values": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "running_snapshot_count": 7,
+    "running_status_registers": {
+      "0x1230": 0,
+      "0x1238": 0
+    },
+    "runtime_status_values": [
+      "active"
+    ],
+    "same_boot": true,
+    "snapshot_count": 8,
+    "started_at": "2026-09-21T22:51:15.849754+00:00",
+    "supervisor_sha256": "55794cc798aad9f1174d61ce242b89fdd6b92e56ea6a5ccd424ceea8c39e6d0c",
+    "timeout_cleanup_verified": true
+  },
+  "audio_progress_source_review": {
+    "elapsed_seconds": 149.85,
+    "ok": true,
+    "returncode": 0,
+    "tool_count": 1
+  },
+  "bluetooth": {
+    "baud-3m-first": {
+      "accepted_source_sha256": "b3a9a346facc24845655fa63c020687efc30ffd44c2a0a9ae7bf8ed149ec58a9",
+      "after_metadata_exit": 0,
+      "after_vote_check": 0,
+      "baud_3m_transport": true,
+      "baud_reply_hex": "040e040148fc01",
+      "binary_sha256": "cbe4f1110baeb8d3200c8b9fb22205643a8f654272944c7965166d851f21377b",
+      "elapsed": 2.923,
+      "firmware_transmitted": false,
+      "hci_attached": false,
+      "kernel_capture_exit": 0,
+      "protocol": "baud-change-command-complete",
+      "returncode": 0,
+      "same_boot": true,
+      "source_sha256": "cd8dc310ef46c8f1b170dc03f936bb215652959480b4df687084405a2ddbf2e6",
+      "standard_zero_status_not_claimed": true,
+      "started_at": "2026-09-21T22:47:42.487760+00:00",
+      "strace_capture_exit": 0
+    },
+    "full-patch-3m-first": {
+      "accepted_source_sha256": "b3a9a346facc24845655fa63c020687efc30ffd44c2a0a9ae7bf8ed149ec58a9",
+      "after_metadata_exit": 0,
+      "after_vote_check": 0,
+      "binary_sha256": "d0ce0e3bce2aecf4ff0898d27ca2c6857a3bec95dbd2b709d789962e1c4278fc",
+      "bytes_transmitted": 195848,
+      "download_mode": 3,
+      "elapsed": 5.943,
+      "final_ack_parameter": "0x1e",
+      "final_status": 0,
+      "hci_accepted": false,
+      "kernel_capture_exit": 0,
+      "nvm_transmitted": false,
+      "protocol": "full-patch-download",
+      "ram_transfer_proven": true,
+      "returncode": 0,
+      "same_boot": true,
+      "segments": 806,
+      "source_sha256": "1860b851051c880b3cf2c424739f173664d7afba09a8ef678f0900ab539dcd7b",
+      "started_at": "2026-09-21T22:57:34.859149+00:00",
+      "strace_capture_exit": 0
+    },
+    "postpatch-board-3m-first": {
+      "accepted_source_sha256": "b3a9a346facc24845655fa63c020687efc30ffd44c2a0a9ae7bf8ed149ec58a9",
+      "after_metadata_exit": 0,
+      "after_vote_check": 0,
+      "binary_sha256": "b638ba3c1256874b73cc2d795ef86c73bf912849ef2f8db13b83b8260c3f5e95",
+      "bytes_transmitted": 195848,
+      "download_mode": 3,
+      "elapsed": 4.299,
+      "final_ack_parameter": "0x1e",
+      "final_status": 0,
+      "hci_accepted": false,
+      "kernel_capture_exit": 0,
+      "nvm_transmitted": false,
+      "postpatch_board_payload_hex": "020000",
+      "postpatch_board_query_accepted": true,
+      "protocol": "full-patch-download",
+      "ram_transfer_proven": true,
+      "returncode": 0,
+      "same_boot": true,
+      "segments": 806,
+      "source_sha256": "a95769f6370df09c2a8517cb0873a60ee710a5fb86263ce6412d0d19a408f6af",
+      "started_at": "2026-09-21T23:16:41.046060+00:00",
+      "strace_capture_exit": 0
+    },
+    "segment-3m-first": {
+      "accepted_source_sha256": "b3a9a346facc24845655fa63c020687efc30ffd44c2a0a9ae7bf8ed149ec58a9",
+      "after_metadata_exit": 0,
+      "after_vote_check": 0,
+      "binary_sha256": "4a94c460992760d57ad2e1ccf2cd51497d4481c230f82fb28826108380c5e7b5",
+      "bytes_transmitted": 243,
+      "elapsed": 4.858,
+      "full_firmware_transmitted": false,
+      "intermediate_ack_expected": false,
+      "kernel_capture_exit": 0,
+      "nvm_transmitted": false,
+      "protocol": "patch-segment-transport",
+      "rejection_proven": false,
+      "returncode": 1,
+      "same_boot": true,
+      "segments_sent": 1,
+      "source_sha256": "27cc266c421352331af54a312a27aa8b57851262741dc09695267bd0eab4ae71",
+      "started_at": "2026-09-21T22:53:24.661129+00:00",
+      "strace_capture_exit": 0,
+      "timeout_mode_expected": true
+    }
+  },
+  "format": "main-driver-loop-continuation-public-v1",
+  "limitations": [
+    "Audio status-register non-progress is not physical playback acceptance.",
+    "Firmware log read is metadata/hash only; raw log bytes are excluded.",
+    "Bluetooth RAM transfer does not prove HCI, modem, NVM, or pairing acceptance.",
+    "No UUIDs, device identifiers, raw UART/kernel/strace logs, or vendor bytes exported."
+  ]
+}

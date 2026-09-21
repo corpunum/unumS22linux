@@ -24,6 +24,7 @@ DEST = '/srv/s22/bt-board-20260922/bt-qca6490-board-probe'
 SOURCE = ROOT / 'tools/hardware/bt-qca6490-board-probe.c'
 ACCEPTED_SOURCE = ROOT / 'tools/hardware/bt-version-transport-probe.c'
 NOTE = 'Raw version+board transport only; no baud, firmware, HCI, pairing or data acceptance.'
+EXTRA_SOURCES = []
 
 
 def accepted_runner():
@@ -82,6 +83,11 @@ def main():
     digest = hashlib.sha256(data).hexdigest()
     source_hash = hashlib.sha256(SOURCE.read_bytes()).hexdigest()
     accepted_hash = hashlib.sha256(ACCEPTED_SOURCE.read_bytes()).hexdigest()
+    included_hashes = {str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()
+                       for p in EXTRA_SOURCES}
+    workflow_hashes = {str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()
+                       for p in (Path(__file__),ROOT/'tools/hardware/run-bt-version-once.py',
+                                 ROOT/'tools/gpu-compat/run-trial.py')}
     stage = '''import hashlib,os,pathlib
 p=pathlib.Path(DEST); data=__import__('sys').stdin.buffer.read()
 assert hashlib.sha256(data).hexdigest()==DIGEST
@@ -132,6 +138,8 @@ print('binary_hash_verified')
     receipt = dict(started_at=start, returncode=result.returncode, elapsed=round(elapsed, 3),
                    source_sha256=source_hash, accepted_source_sha256=accepted_hash,
                    binary_sha256=digest, before=before, after=after,
+                   included_source_sha256=included_hashes,
+                   supervisor_source_sha256=workflow_hashes,
                    same_boot=before['boot_id'] == after['boot_id'], kernel_capture_exit=kernel.returncode,
                    after_metadata_exit=state.returncode, after_vote_check=check_after.returncode,
                    strace_capture_exit=captured.returncode, uart_output=result.stdout,

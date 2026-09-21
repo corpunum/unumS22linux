@@ -8,12 +8,138 @@ import re
 ROOT=Path(__file__).resolve().parents[2]
 RAW=ROOT/'rootfs/main-driver-loop-20260921'
 OUT=ROOT/'evidence/main-driver-loop-20260922'
+CONT_OUT=ROOT/'evidence/main-driver-loop-20260922'
 
 
 def load(name):return json.loads((RAW/name).read_text())
 
 
+def export_continuation():
+    """Export bounded continuation metadata without raw logs or identities."""
+    audio = load('audio-progress-first/receipt.json')
+    samples = audio['result']['progress_samples']
+    assert len(samples) == 8
+    running = [s for s in samples if 'state: RUNNING' in s['alsa_status']]
+    assert len(running) == 7
+    assert all(s['registers'] == {'1230': 0, '1238': 0} for s in running)
+    assert audio['same_boot'] and audio['kernel_capture_exit'] == 0
+    assert audio['trace_capture_exit'] == audio['after_audio_exit'] == 0
+    assert audio['result']['child_deadline_exceeded']
+    assert audio['before']['model'] == audio['after']['model'] == 'ok'
+    assert audio['result']['after_status'] == 'closed'
+    assert audio['result']['restored']['ABOX SPUS OUT2']['value'] == '0'
+    assert audio['result']['restored']['ABOX UAIF1 SPK']['value'] == '0'
+    assert all(s['reset_count'] == '0' for s in samples)
+    assert all(s['runtime_status']=='active' and s['cache_only']=='N' and s['service']=='1' for s in samples)
+    pointers = [[int(re.search(r'^'+name+r'\s*:\s*(\d+)$',s['alsa_status'],re.M)[1])
+                 for s in running] for name in ('hw_ptr','appl_ptr')]
+    assert pointers == [[0]*7,[8192]*7]
+    progress = {
+        'started_at': audio['started_at'],
+        'elapsed_seconds': audio['elapsed_seconds'],
+        'same_boot': audio['same_boot'],
+        'helper_sha256': audio['helper_sha256'],
+        'observer_sha256': audio['observer_sha256'],
+        'supervisor_sha256': audio['supervisor_sha256'],
+        'snapshot_count': len(samples),
+        'running_snapshot_count': len(running),
+        'running_status_registers': {'0x1230': 0, '0x1238': 0},
+        'running_hw_ptr_values': pointers[0],
+        'running_appl_ptr_values': pointers[1],
+        'runtime_status_values': sorted({s['runtime_status'] for s in samples}),
+        'reset_count_values': ['0'],
+        'timeout_cleanup_verified': True,
+        'route_controls_restored': True,
+        'physical_playback_verified': False,
+    }
+
+    fwlog = load('audio-fw-log-after-progress-v2/receipt.json')
+    assert fwlog['runtime_pm_before_after'] == 'suspended'
+    assert not fwlog['firmware_flush_requested']
+    assert not fwlog['register_or_sram_dump']
+    fwlog_public = {
+        'offset': fwlog['offset'], 'bytes': fwlog['bytes'],
+        'sha256': fwlog['sha256'],
+        'runtime_pm_before_after': fwlog['runtime_pm_before_after'],
+        'firmware_flush_requested': fwlog['firmware_flush_requested'],
+        'register_or_sram_dump': fwlog['register_or_sram_dump'],
+        'log_cursor_consumed': fwlog['log_cursor_consumed'],
+    }
+    review = load('audio-progress-source-review/review-receipt.json')
+    assert review['returncode'] == 0 and review['ok']
+    source_review = {k: review[k] for k in
+                     ('returncode', 'elapsed_seconds', 'tool_count', 'ok')}
+
+    bluetooth = {}
+    for name in ('baud-3m-first', 'segment-3m-first', 'full-patch-3m-first', 'postpatch-board-3m-first'):
+        r = json.loads((ROOT / 'rootfs/hardware-reuse-20260921/bt-trials' /
+                        name / 'receipt.json').read_text())
+        assert r['same_boot'] and r['kernel_capture_exit'] == 0
+        assert r['after_metadata_exit'] == 0 and r['after_vote_check'] == 0
+        assert r['strace_capture_exit'] == 0
+        assert r['before']['model'] == r['after']['model'] == 'ok'
+        uart=r['uart_output']
+        assert 'baud_transport_3m_identity=PASS' in uart
+        assert 'raw=04 0e 04 01 48 fc 01\n' in uart
+        item = {k: r[k] for k in ('started_at', 'returncode', 'elapsed',
+                                  'source_sha256', 'accepted_source_sha256',
+                                  'binary_sha256', 'same_boot',
+                                  'kernel_capture_exit', 'after_metadata_exit',
+                                  'after_vote_check', 'strace_capture_exit')}
+        if name == 'baud-3m-first':
+            assert r['returncode'] == 0
+            item.update({'protocol': 'baud-change-command-complete',
+                         'baud_3m_transport': True, 'hci_attached': False,
+                         'firmware_transmitted': False,
+                         'baud_reply_hex':'040e040148fc01',
+                         'standard_zero_status_not_claimed':True})
+        elif name == 'segment-3m-first':
+            assert r['returncode'] == 1
+            assert 'patch_prefix_transmitted_bytes=243' in uart
+            item.update({'protocol': 'patch-segment-transport',
+                         'bytes_transmitted':243,'segments_sent': 1, 'intermediate_ack_expected': False,
+                         'timeout_mode_expected': True, 'full_firmware_transmitted': False,
+                         'nvm_transmitted': False, 'rejection_proven': False})
+        else:
+            assert r['returncode'] == 0
+            assert 'patch_transmitted_bytes=195848 segments=806 download_mode=3 nvm_transmitted=no' in uart
+            assert 'raw=04 0e 05 01 00 fc 00 1e\n' in uart
+            item.update({'protocol': 'full-patch-download',
+                         'bytes_transmitted': 195848, 'segments': 806,
+                         'download_mode': 3, 'final_status': 0,
+                         'final_ack_parameter': '0x1e',
+                         'ram_transfer_proven': True, 'hci_accepted': False,
+                         'nvm_transmitted': False})
+            if name=='postpatch-board-3m-first':
+                assert 'postpatch_board raw=04 0e 08 01 00 fc 00 23 02 00 00\n' in uart
+                assert 'postpatch_board_response=PASS nvm_transmitted=no hci_attached=no' in uart
+                item['postpatch_board_query_accepted']=True
+                item['postpatch_board_payload_hex']='020000'
+        bluetooth[name] = item
+
+    result = {'format': 'main-driver-loop-continuation-public-v1',
+              'audio_progress_first': progress,
+              'audio_fw_log_after_progress_v2': fwlog_public,
+              'audio_progress_source_review': source_review,
+              'bluetooth': bluetooth,
+              'limitations': [
+                  'Audio status-register non-progress is not physical playback acceptance.',
+                  'Firmware log read is metadata/hash only; raw log bytes are excluded.',
+                  'Bluetooth RAM transfer does not prove HCI, modem, NVM, or pairing acceptance.',
+                  'No UUIDs, device identifiers, raw UART/kernel/strace logs, or vendor bytes exported.']}
+    CONT_OUT.mkdir(exist_ok=True)
+    (CONT_OUT / 'continuation.json').write_text(
+        json.dumps(result, indent=2, sort_keys=True) + '\n')
+    digest = __import__('hashlib').sha256(
+        (CONT_OUT / 'continuation.json').read_bytes()).hexdigest()
+    (CONT_OUT / 'continuation-manifest.json').write_text(json.dumps(
+        {'format': result['format'], 'files': {'continuation.json': digest},
+         'excluded': ['raw logs', 'UUIDs', 'device IDs', 'vendor payload bytes']},
+        indent=2, sort_keys=True) + '\n')
+
+
 def main():
+    export_continuation()
     trials={}
     for name in ['runtime-filter-first','runtime-posix-spawn-first',
                  'runtime-close-range-filter-first','runtime-close-range-subprocess-first',
