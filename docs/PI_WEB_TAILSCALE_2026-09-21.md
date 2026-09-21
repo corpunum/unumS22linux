@@ -69,6 +69,15 @@ SIGKILL; its priority was lowered. No reboot was attempted to clear it. The
 working musl tmux and Pi are separate processes; this unresolved kernel-level
 spawn symptom must not be reported as fixed by the browser workaround.
 
+Final containment check: the failed child was still spending a full core in
+kernel time despite pending SIGKILL. This kernel has neither CFS bandwidth
+nor RT group scheduling enabled, so no CPU quota was available. Restricted
+only that verified test PID to efficiency CPU0 at nice10; no global clocks,
+cgroup configuration, driver, or other process was changed. Battery telemetry
+fell from40.6C to38.5C in the subsequent sample, with the model API healthy.
+This reduces the fast-core/thermal impact; it does not terminate the task or
+remove the need for a later controlled recovery-target reboot.
+
 The Arch `/dev/ptmx -> pts/ptmx` alias originally reached a mode-000 devpts
 node. Binding the native multiplexer into the Arch dev directory then failed
 with ENOENT: this kernel could not resolve its sibling pts mount through that
