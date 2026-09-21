@@ -2607,3 +2607,53 @@ Public npu-initialize.json records failed request paths without raw traces or
 identifiers. Next gate: source-backed allocator/NPU open-close lifecycle and
 firmware audit before device exposure, then model/buffer ABI and numerical
 inference. Zero initialization status must never be counted as NPU success.
+
+### 2026-09-21 — private Pi browser access and continued hardware gates
+
+Installed official hash-verified ttyd 1.7.7 as UID1000, capabilities zero,
+NoNewPrivs, loopback8093 only. Tailscale Serve HTTP8092 provides the private
+MagicDNS route; no Funnel, public listener or exposed model API. The web
+launcher uses the existing canonical Pi and local4B configuration with its
+own saved-session directory. Browser origin checks rejected an unrelated
+website upgrade; missing proxy identity returned407.
+
+Actual Chromium/WebSocket/PTY acceptance produced two saved assistant replies
+S22_WEB_OK. First measured request took66.154s including954 uncached prompt
+tokens; warmed follow-up took4.834s. The latter finished after closing the
+browser0.5s after submission; the same Pi process remained alive and a new
+browser restored the reply. This is a real Pi terminal, not a full remote
+desktop. Raw sessions/screenshots and tailnet identities remain private.
+
+Corrected the Arch virtual PTY layout without changing global devpts mode or
+physical-device permissions. A native ptmx file bind failed ENOENT; removed
+that test bind and created the normal char5:2 multiplexer beside Arch pts.
+Signed ArchARM tmux then reproduced the earlier process-spawn compatibility
+hang before Pi exec. Stopped its server and restored direct Pi; one child
+remained stuck despite SIGKILL and was lowered to nice10. No reboot attempted.
+This unresolved residue is recorded, not claimed fixed. The separate native
+Alpine musl tmux closure worked, preserving Pi across browser disconnects.
+No Arch libraries/package DB or privileged utempter helpers were replaced.
+
+Backed up and updated only the web launcher/helper and already deployed
+desktop supervisor; enabled optional post-readiness web startup on persistent
+userdata/CACHE overlay. Verified web-only stop/start and restored history
+without changing desktop/model readiness. Tailscale remains independent.
+Cold boot of the new web hook is not tested. See PI_WEB_TAILSCALE note and
+curated evidence/pi-web-20260921/acceptance.json.
+
+At18:59:02UTC a source-reviewed NPU open/fstat/close passed in1.253s, exact
+vertex10 char82:10, no residual vertex fds, same boot/guardian and healthy4B.
+No NPU ioctl, firmware boot, model or buffer operation. Kernel registered
+its software debug state; this is not NPU inference. The follow-up audit
+established BOOTUP ctrl.value0x2=NPU and0x4=DSP, with0x6 rejected. NPU-only
+does not require the full missing DSP closure. Exact AIE and three DSP assets
+are privately staged on the host; no firmware boot was attempted.
+
+Recovered host-only Samsung cbd/rild/secril_config_svc and36 radio libraries;
+six system dependencies and referenced boot/diagnostic services remain
+unresolved. CP/SIM/data/calls were not activated. Prepared a guarded four-file
+audio staging helper; normal ASoC card is still missing and live rebind stays
+excluded. Hardened the host-only Bluetooth raw-version probe; live lstat
+confirmed btpower503:0 and ttySAC1 204:65. Its quiescent-WLAN precondition
+deliberately fails on this working Wi-Fi session, so no BT power/UART action
+was performed. Hardware issues remain open; no partition write or reboot.
