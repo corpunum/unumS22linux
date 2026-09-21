@@ -5,6 +5,7 @@ if [[ $# != 1 || -e "$1" ]]; then
     echo 'Usage: observe-native-boot.sh NEW_EVIDENCE_DIRECTORY' >&2
     exit 2
 fi
+serial=${S22_ADB_SERIAL:?Set S22_ADB_SERIAL to the locally verified phone serial}
 out=$(realpath -m "$1")
 mkdir -p "$out"
 deadline=$((SECONDS + 210))
@@ -28,8 +29,8 @@ while (( SECONDS < deadline )); do
             echo 'Linux state captured; deliberately NOT sending host readiness ACK.'
         fi
     fi
-    if (( SECONDS > 45 && ! captured_recovery )) && adb -s DEVICE_SERIAL_REDACTED get-state >/dev/null 2>&1; then
-        if adb -s DEVICE_SERIAL_REDACTED shell 'test -f /native/handoff.log && cat /native/handoff.log; id; readlink /proc/1/exe; head -12 /proc/boot_reset; cat /proc/uptime' \
+    if (( SECONDS > 45 && ! captured_recovery )) && adb -s "$serial" get-state >/dev/null 2>&1; then
+        if adb -s "$serial" shell 'test -f /native/handoff.log && cat /native/handoff.log; id; readlink /proc/1/exe; head -12 /proc/boot_reset; cat /proc/uptime' \
             > "$out/recovery-state.txt" 2>&1; then
             captured_recovery=1
             date --iso-8601=seconds | tee "$out/recovery-reachable-at.txt"

@@ -5,9 +5,9 @@ if [[ $# != 1 || -e "$1" ]]; then
     echo 'Usage: capture-phone-state.sh NEW_OUTPUT_DIRECTORY' >&2
     exit 2
 fi
+serial=${S22_ADB_SERIAL:?Set S22_ADB_SERIAL to the locally verified phone serial}
 out=$1
 mkdir -p "$out"
-serial=DEVICE_SERIAL_REDACTED
 date --iso-8601=seconds > "$out/host-time.txt"
 adb devices -l > "$out/adb-devices.txt"
 adb -s "$serial" shell 'head -n 40 /proc/boot_reset' > "$out/boot-reset.txt"

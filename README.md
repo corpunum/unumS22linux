@@ -5,6 +5,16 @@ Exynos 2200, codename `r0s`, unlocked bootloader. This is the S22, not S22+.
 
 ## Current result — 2026-09-21
 
+**Native Linux + Omarchy UI + Pi on a Samsung S22.** Pi now launches through
+Omarchy's agent integration with a local Qwen3.5-4B CPU model and an optional
+larger Qwen provider over Tailscale. Pi/Qwen are helping investigate GPU/NPU
+drivers, including an offline trace checker and supervised evidence review;
+**GPU compute and NPU inference are not fixed**. Recovery reboot BORE761
+restored Pi,4B, Wi-Fi and Tailscale without buttons. Driver contributors welcome!
+See the [Pi/agent milestone and limitations](docs/PI_AGENT_STATUS_2026-09-21.md)
+and [publication/privacy review](docs/PUBLICATION.md). This is an experimental
+community port, not official Omarchy phone support or a complete distribution.
+
 GPU update: restored resource-buffer submission and repaired inconsistent
 timeline-fence handling. Isolated native GPU transfer tests pass exact
 readback and real fence completion. Subsequent shader/descriptor readback and
@@ -14,7 +24,7 @@ needed, and Wi-Fi/desktop/model remain running. See
 [GPU repair evidence and limitations](docs/GPU_SUBMISSION_2026-09-21.md) and
 [latest shader diagnostics](docs/GPU_SHADER_DIAGNOSTICS_2026-09-21.md).
 
-**Last recovery-boot acceptance (2026-09-20 20:41 UTC):** native Linux was running in RECOVERY
+**Earlier Wi-Fi recovery-boot acceptance (2026-09-20 20:41 UTC):** native Linux was running in RECOVERY
 BORE760 with the persistent desktop and CPU model. **Wi-Fi now autostarts:**
 WPA2 association, DHCP, DNS and TLS-verified HTTPS forced through WLAN passed.
 DNS also works in both Alpine and Arch/Omarchy. USB SSH remains available.
@@ -48,11 +58,13 @@ and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 | --- | --- |
 | Native boot | Alpine 3.24.2; guardian PID1; Samsung/Lineage 5.10.260 kernel |
 | Persistent base | Alpine package/file overlay in existing CACHE; reboot-tested |
-| Persistent desktop/model | ext4 userdata; automatic recovery startup verified again at BORE759/760 |
+| Persistent desktop/model | ext4 userdata; automatic recovery startup verified with4B/Pi at BORE761 |
 | Desktop | Arch ARM, Hyprland 0.56.2, Omarchy v4.0.4; software-rendered |
 | Keyboard/input | Visible Squeekboard plus Keyboard bar button; synthetic tap reveal passed; physical finger sensing unverified |
 | Battery/display power | Native telemetry bar/panel; controlled DPMS off/on passed; no suspend/battery-life acceptance |
-| Local model | Resident Qwen3.5-2B Q4_0, 4K context, four fast CPU cores, loopback-only API |
+| Local model | Qwen3.5-4B Q4_K_M, 4K context, four fast CPU cores; CPU-only;2B retained but stopped |
+| Pi/agents | Unprivileged Pi0.86.1 through Omarchy's launcher; local4B and optional rig Qwen; supervised driver review, not autonomous repair |
+| Tailscale | Enrolled; remote SSH and Pi-to-rig use verified; recovery-reboot persistence passed |
 | CPU benchmark | 0.8B: 20.21 tok/s; 2B: 10.13 short / 5.47 at depth4096 |
 | GPU | Experimental RADV: real-fence transfer/readback passes; shader compute still fails; no model acceleration |
 | NPU | Vendor assets investigated; no working inference |
