@@ -14,8 +14,10 @@ OUT=ROOT/'builds/bt-segment-20260922'
 
 def main():
     ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('--full',action='store_true')
-    ap.add_argument('--postpatch-board',action='store_true');args=ap.parse_args()
-    if args.postpatch_board and not args.full:ap.error('--postpatch-board requires --full')
+    mode=ap.add_mutually_exclusive_group()
+    mode.add_argument('--postpatch-board',action='store_true')
+    mode.add_argument('--read-address',action='store_true');args=ap.parse_args()
+    if (args.postpatch_board or args.read_address) and not args.full:ap.error('query mode requires --full')
     data=ASSET.read_bytes();prefix=data[:243]
     assert len(data)==195848 and data[:4]==bytes.fromhex('0104fd02')
     assert hashlib.sha256(data).hexdigest()==FULL_SHA
@@ -35,6 +37,7 @@ def main():
         p.chmod(0o600)
     stem='bt-qca6490-patch-capture' if args.full else 'bt-qca6490-segment-capture'
     if args.postpatch_board:stem='bt-qca6490-postpatch-board'
+    if args.read_address:stem='bt-qca6490-read-address'
     source=ROOT/'tools/hardware'/(stem+'.c')
     binary=out/stem
     subprocess.run(['aarch64-linux-gnu-gcc','-static','-std=c11','-Wall','-Wextra','-Werror',

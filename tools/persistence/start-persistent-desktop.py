@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import errno
 import fcntl
+import grp
 import hashlib
 import json
 import os
@@ -352,6 +353,74 @@ def prepare_optional_audio_control() -> Path | None:
         return None
 
 
+def materialize_optional_audio_control(*, card_sysfs: Path = SOUND_CARD_SYSFS,
+                                       control_sysfs: Path = SOUND_CONTROL_SYSFS,
+                                       sysfs_devices: Path = SOUND_SYSFS_DEVICES,
+                                       sound_dir: Path = SOUND_DIR,
+                                       control_node: Path = SOUND_CONTROL) -> Path:
+    """Create only a missing, validated controlC0 node below a safe directory."""
+    validate_optional_audio_control(card_sysfs=card_sysfs, control_sysfs=control_sysfs,
+                                    sysfs_devices=sysfs_devices, sound_dir=sound_dir,
+                                    control_node=control_node, require_node=False)
+    directory = sound_dir.lstat()
+    if directory.st_uid != 0 or not stat.S_ISDIR(directory.st_mode) or \
+            stat.S_IMODE(directory.st_mode) not in (0o755, 0o777):
+        raise Failure(f"unsafe ALSA directory {sound_dir}")
+    try:
+        audio_gid = grp.getgrnam("audio").gr_gid
+    except KeyError:
+        audio_gid = 0
+    dirfd = os.open(sound_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        current = os.fstat(dirfd)
+        if ((current.st_dev, current.st_ino) != (directory.st_dev, directory.st_ino) or
+                current.st_uid != 0 or stat.S_IMODE(current.st_mode) not in (0o755, 0o777)):
+            raise Failure("sound directory changed")
+        if stat.S_IMODE(current.st_mode) == 0o777:
+            os.fchmod(dirfd, 0o755)
+        try:
+            existing = os.stat(control_node.name, dir_fd=dirfd, follow_symlinks=False)
+        except FileNotFoundError:
+            os.mknod(control_node.name, stat.S_IFCHR | 0o600,
+                     os.makedev(116, 114), dir_fd=dirfd)
+            os.chown(control_node.name, 0, audio_gid, dir_fd=dirfd, follow_symlinks=False)
+            os.chmod(control_node.name, 0o660 if audio_gid else 0o600, dir_fd=dirfd)
+            existing = os.stat(control_node.name, dir_fd=dirfd, follow_symlinks=False)
+        if (not stat.S_ISCHR(existing.st_mode) or existing.st_rdev != os.makedev(116, 114) or
+                existing.st_uid != 0 or stat.S_IMODE(existing.st_mode) not in (0o600, 0o640, 0o660)):
+            raise Failure(f"unsafe ALSA control node {control_node}")
+    finally:
+        os.close(dirfd)
+    return validate_optional_audio_control(card_sysfs=card_sysfs, control_sysfs=control_sysfs,
+                                           sysfs_devices=sysfs_devices, sound_dir=sound_dir,
+                                           control_node=control_node)
+
+
+def late_prepare_optional_audio_control(*, deadline: float,
+                                        card_sysfs: Path = SOUND_CARD_SYSFS,
+                                        control_sysfs: Path = SOUND_CONTROL_SYSFS,
+                                        sysfs_devices: Path = SOUND_SYSFS_DEVICES,
+                                        sound_dir: Path = SOUND_DIR,
+                                        control_node: Path = SOUND_CONTROL) -> Path | None:
+    """Make one narrow attempt when both class entries are present."""
+    if time.monotonic() >= deadline or not (card_sysfs.exists() and control_sysfs.exists()):
+        return None
+    try:
+        validate_optional_audio_control(card_sysfs=card_sysfs, control_sysfs=control_sysfs,
+                                        sysfs_devices=sysfs_devices, sound_dir=sound_dir,
+                                        control_node=control_node, require_node=False)
+        command('udevadm', 'trigger', '--action=add', '--subsystem-match=sound',
+                '--sysname-match=controlC0')
+        command('udevadm', 'settle', '--timeout=10')
+        return materialize_optional_audio_control(
+            card_sysfs=card_sysfs, control_sysfs=control_sysfs,
+            sysfs_devices=sysfs_devices, sound_dir=sound_dir,
+            control_node=control_node)
+    except (Failure, OSError, ValueError, subprocess.SubprocessError) as exc:
+        say(f"late optional ALSA control unavailable; no retry: {exc}")
+        return None
+
+
 def terminate(proc: subprocess.Popen[str] | None, timeout: float = 3.0) -> None:
     if not proc:
         return
@@ -674,10 +743,33 @@ def main() -> int:
                     "supervisor_pid": os.getpid(), "started_at": int(time.time())}
                 RUNTIME_READY.write_text(json.dumps(runtime, sort_keys=True) + "\n")
                 say("persistent desktop and model ready")
+                late_audio_deadline = time.monotonic() + 90.0 if audio_control is None else None
+                late_audio_done = audio_control is not None
                 optional_agent_web('--start')
                 wifi_startup = start_optional_wifi()
                 model_restarts = 0
                 while desktop.poll() is None:
+                    if not late_audio_done:
+                        if time.monotonic() >= late_audio_deadline:
+                            late_audio_done = True
+                        elif SOUND_CARD_SYSFS.exists() and SOUND_CONTROL_SYSFS.exists():
+                            # Card registration is now observable; make one
+                            # narrow attempt and never repeat after failure.
+                            late_control = late_prepare_optional_audio_control(
+                                deadline=late_audio_deadline)
+                            late_audio_done = True
+                            if late_control is not None:
+                                audio_target = CHROOT / "dev/snd/controlC0"
+                                try:
+                                    bind_file(late_control, audio_target)
+                                except (Failure, OSError, ValueError, subprocess.SubprocessError) as exc:
+                                    if (not is_mounted(audio_target) and audio_target.exists() and
+                                            not audio_target.is_symlink()):
+                                        audio_target.unlink()
+                                    say(f"late optional ALSA control bind unavailable; continuing without it: {exc}")
+                                else:
+                                    owned_mounts.append(audio_target)
+                                    say("late optional ALSA controlC0 bound; PCM nodes remain hidden")
                     if wifi_startup is not None and wifi_startup.poll() is not None:
                         say(f'optional Wi-Fi startup exited status={wifi_startup.returncode}; no retry')
                         wifi_startup = None

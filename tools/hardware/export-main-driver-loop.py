@@ -14,6 +14,68 @@ CONT_OUT=ROOT/'evidence/main-driver-loop-20260922'
 def load(name):return json.loads((RAW/name).read_text())
 
 
+def export_late_control_checkpoint():
+    reboot=load('audio-control-late-reboot/result.json')
+    assert reboot['new_boot'] and reboot['actual_mode']=='recovery'
+    assert reboot['continuous_uptime_seconds']>=90 and reboot['model_healthy']
+    assert not reboot['pending_kill_tasks']
+    checks=load('audio-control-late-postboot/receipt.json')['checks']
+    assert all(x['returncode']==0 for x in checks.values())
+    state=checks['state']['result']; control=checks['arch-control']['result']; wifi=checks['wifi']['result']
+    assert state['card_id']=='RainbowPrince' and control['control_count']==1736
+    assert state['startup_sha256']=='76a759049766100e57127363c3cd5141a486c061df4783560e8a3c2a918dae96'
+    assert len(state['control_mount_lines'])==1
+    nodes=state['arch_sound_nodes']
+    assert len(nodes)==1 and nodes[0]['name']=='controlC0' and nodes[0]['character']
+    assert (nodes[0]['major'],nodes[0]['minor'],nodes[0]['uid'],nodes[0]['mode'])==(116,114,0,'0o660')
+    assert 'late optional ALSA controlC0 bound; PCM nodes remain hidden' in state['startup_log']
+    assert wifi['all_checks_passed'] and len(wifi['checks'])==13
+    bore=re.search(r'^\[\s*(\d+)\].*> RECOVERY >',state['boot_reset'],re.M)
+    assert bore
+    bt=json.loads((ROOT/'rootfs/hardware-reuse-20260921/bt-trials/nvm-3m-first/receipt.json').read_text())
+    assert bt['returncode']==1 and bt['same_boot'] and bt['after_vote_check']==0
+    assert 'non_event_byte=ff' in bt['uart_output'] and 'patch_transmitted_bytes=' not in bt['uart_output']
+    qwen=json.loads((ROOT/'rootfs/main-driver-loop-usb-20260922/nvm03/receipt.json').read_text())
+    assert qwen['pi_transport']['valid_transport'] and qwen['pi_transport']['requested_output_only']
+    bt_success={}
+    for trial_name in ('baud-precomputed-first','nvm-precomputed-first'):
+        r=json.loads((ROOT/'rootfs/hardware-reuse-20260921/bt-trials'/trial_name/'receipt.json').read_text())
+        assert r['returncode']==0 and r['same_boot'] and r['after_vote_check']==0
+        assert r['before']['model']==r['after']['model']=='ok'
+        assert r['after_metadata_exit']==r['kernel_capture_exit']==r['strace_capture_exit']==0
+        assert 'precomputed_termios=yes' in r['uart_output'] and 'baud_transport_3m_identity=PASS' in r['uart_output']
+        item={k:r[k] for k in ('started_at','elapsed','binary_sha256','returncode','same_boot','after_vote_check')}
+        if trial_name=='nvm-precomputed-first':
+            events=re.findall(r'^nvm_segment=(\d+) bytes=(\d+) reply=(.*)$',r['uart_output'],re.M)
+            assert [int(e[0]) for e in events]==list(range(1,30))
+            assert [int(e[1]) for e in events]==[243]*28+[219]
+            assert all(e[2]=='04 0e 05 01 00 fc 00 1e' for e in events)
+            assert 'nvm_transmitted_bytes=7023 acknowledged_segments=29 reset_sent=no hci_attached=no power_off_next=yes' in r['uart_output']
+            item.update({'configuration_bytes':7023,'acknowledged_segments':29,
+                         'diagnostic_address_all_zero':True,'hci_reset_sent':False,'hci_attached':False,'pairing_accepted':False})
+        bt_success[trial_name]=item
+    result={'format':'main-driver-loop-late-control-v1','recovery_reboot':reboot,
+            'boot_record_number':int(bore[1]),'audio_control_startup':{
+                'startup_sha256':state['startup_sha256'],'arch_control_count':control['control_count'],
+                'arch_sound_nodes':nodes,'automatic_control_only_bind':True,
+                'speaker_or_microphone_accepted':False},
+            'wifi':wifi,'qwen_usb_review':{k:qwen[k] for k in ('provider','model','pi_transport','review_sha256','timestamp')},
+            'bluetooth_precomputed_transport':bt_success,
+            'bluetooth_configuration_trial':{'returncode':bt['returncode'],'elapsed_seconds':bt['elapsed'],
+                'binary_sha256':bt['binary_sha256'],'same_boot':bt['same_boot'],
+                'failure_phase':'baud-change response; received non-event ff before timeout',
+                'patch_or_nvm_sent':False,'bluetooth_power_vote_released':True,
+                'hci_pairing_accepted':False},
+            'limitations':['An earlier same-image boot exposed missing control-node creation; this late hook fixes that specific startup gap.',
+                'Earlier native DNS checks failed intermittently. This fresh 13/13 result is not a sustained-reliability claim.',
+                'Qwen source review is advisory, not hardware acceptance. Invalid output-path attempts are not counted.',
+                'No UUIDs, raw UART/kernel traces, vendor bytes, or identities exported.']}
+    OUT.mkdir(exist_ok=True)
+    path=OUT/'late-control.json';path.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+    (OUT/'late-control-manifest.json').write_text(json.dumps({'files':{path.name:__import__('hashlib').sha256(path.read_bytes()).hexdigest()},
+        'format':result['format']},indent=2)+'\n')
+
+
 def export_continuation():
     """Export bounded continuation metadata without raw logs or identities."""
     audio = load('audio-progress-first/receipt.json')
@@ -139,6 +201,7 @@ def export_continuation():
 
 
 def main():
+    export_late_control_checkpoint()
     export_continuation()
     trials={}
     for name in ['runtime-filter-first','runtime-posix-spawn-first',

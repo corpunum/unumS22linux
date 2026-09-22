@@ -58,9 +58,14 @@ def save(name, value):
 
 
 def main():
+    global OUT
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--execute',action='store_true')
+    parser.add_argument('--name',default='audio-reboot')
+    parser.add_argument('--capture-early-kernel',action='store_true')
     args=parser.parse_args()
+    if not re.fullmatch('[a-z0-9-]+',args.name):parser.error('use a unique lowercase receipt name')
+    OUT=OUT.parent/args.name
     if not args.execute:
         print('Plan only: one s22-reboot recovery, observe up to 240s; no automatic retry.');return
     flash=json.loads((OUT.parent/'audio-recovery-flash.json').read_text())
@@ -81,6 +86,7 @@ def main():
     except subprocess.TimeoutExpired:
         save('request-result.json',{'ssh_timeout_seconds':15,'reboot_retried':False})
     count=0
+    kernel_captured=False
     while time.monotonic()-started<240:
         try:
             current=snapshot()
@@ -88,6 +94,12 @@ def main():
             save('sample-%03d.json'%count,current)
             print(json.dumps({k:current[k] for k in ['host_elapsed_seconds','uptime_seconds','pid1','temperature','native_ready','pending_kill_tasks']}),flush=True)
             changed=current['boot_id']!=before['boot_id']
+            if changed and args.capture_early_kernel and not kernel_captured:
+                kernel=subprocess.run([str(SSH),'dmesg'],capture_output=True,text=True,timeout=12)
+                with (OUT/'early-kernel.txt').open('x') as stream:stream.write(kernel.stdout)
+                save('early-kernel-receipt.json',{'returncode':kernel.returncode,
+                    'uptime_seconds':current['uptime_seconds'],'bytes':len(kernel.stdout.encode())})
+                kernel_captured=True
             if changed and current['uptime_seconds']>=90 and current.get('model',{}).get('status')=='ok' and current['persistent_ready']:
                 assert current['pid1']=='native-guardian' and current['native_ready']
                 first_record=next(line for line in current['boot_reset'].splitlines() if re.match(r'^\[\s*\d+\]',line))
