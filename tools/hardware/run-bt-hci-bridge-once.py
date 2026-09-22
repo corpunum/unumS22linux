@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """One preinitialized kernel-H4/IBS handoff, bounded to twenty seconds."""
 import importlib.util
+import sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 spec=importlib.util.spec_from_file_location('runtime',ROOT/'tools/hardware/run-bt-runtime-reset-once.py')
@@ -14,4 +15,7 @@ board.HOST_TIMEOUT=45
 board.EXTRA_SOURCES += [ROOT/'tools/hardware/bt-h4-ibs-bridge.c',
                        ROOT/'tools/hardware/bt-qca6490-runtime-reset.c',Path(__file__)]
 board.NOTE='Real QCA6490 initialization, 20s PTY-H4/IBS bridge to existing Linux HCI; detach then poweroff. No deliberate discovery/advertising/pairing; inspect captured command opcodes and init outcome.'
-if __name__=='__main__':board.main()
+if __name__=='__main__':
+    if '--execute' in sys.argv:
+        raise SystemExit('Live HCI trial disabled after BORE766 panic: restore and validate the kernel HCI socket implementation before re-enabling this runner.')
+    board.main()
