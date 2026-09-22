@@ -2825,3 +2825,30 @@ incorrect AMP interpretation was rejected. NPUcandidate remains unaccepted.
 Hosttests:6 registerplanner,8 abortclassification,5 prepare-only plus native
 host Bluetooth framing/negative-reply/termios fixtures. Curated continuation
 receipts and sources published via isolated localcommit9d0c4a8/publicca8787b.
+
+### 2026-09-22 — Persistent controls, Bluetooth configuration, extra audio firmware
+
+BORE763 exposed a late-card/udev-node startup defect. The revised supervisor
+was verified at BORE764: automatic controlC0-only Arch bind,1736 readonly
+controls,95.10s uninterrupted recovery uptime and13/13 WLAN checks. No image
+write for that reboot. Earlier intermittent native DNS failures remain noted.
+
+Bluetooth's first configuration test stopped before sending firmware at a
+failed baud transition. A precomputed-termios variant passed a separate baud
+test, then fullRAMpatch/board/7023-byte configuration in29 acknowledged packets
+(5.131s). Diagnostic address remainszero; noHCIreset,scan,pairingorRFacceptance.
+PrivateBTpower released,WLAN/model/USB preserved. Pi/QwenUSBreview51.12s,
+oneverifiedwrite; earliertransport/output-pathfailures notcountedasacceptance.
+
+Then20 recoveredABOXextras were added to the currentaudioimage, preserving
+alloriginalCPIOrecords/fourcoreassets/kernel/DTB/DTBO/headeraddresses.
+An initialhostbuildusingthewrongV3base wasrejectedbeforestaging.
+RECOVERY-only write/readbackSHA256:
+758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b.
+RollbackSHA1c1b77a5e532e50b8274cfc68921aa9b1bfe6d4ae9a3459281be0cc033c5c3d5.
+BORE765 actualrecovery95.09s: desktop/modelrestored,20payloadhashesverified,
+18Bluetoothcodeccontrolsadded/noexistingnamesremoved,Archreadonly1754.
+Samezerostreamstillstalled:7RUNNINGhw_ptr0/status0,10sdeadline,total15.297s,
+8WRITEIsuccess/77EAGAIN; selectorsrestored,PCMclosed,ampsoff,modelhealthy.
+See docs/DRIVER_CHECKPOINT_2026-09-22.md and sanitized late-control/audio-extras
+receipts. Physicalaudio,NPUinference,cellular,HCI/pairing remainunfinished.
