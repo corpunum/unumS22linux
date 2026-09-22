@@ -25,6 +25,8 @@ SOURCE = ROOT / 'tools/hardware/bt-qca6490-board-probe.c'
 ACCEPTED_SOURCE = ROOT / 'tools/hardware/bt-version-transport-probe.c'
 NOTE = 'Raw version+board transport only; no baud, firmware, HCI, pairing or data acceptance.'
 EXTRA_SOURCES = []
+PHONE_TIMEOUT = 12
+HOST_TIMEOUT = 25
 
 
 def accepted_runner():
@@ -109,15 +111,19 @@ print('binary_hash_verified')
     if check.returncode:
         raise RuntimeError('Live C preflight refused without opening devices')
     trace = '/srv/s22/bt-board-20260922/' + args.name + '.strace'
-    command = shlex.join(['timeout', '-s', 'TERM', '-k', '5', '12', 'strace', '-f', '-qq', '-tt', '-T',
+    command = shlex.join(['timeout', '-s', 'TERM', '-k', '5', str(PHONE_TIMEOUT), 'strace', '-f', '-qq', '-tt', '-T',
                           '-s', '256', '-o', trace, '-e', 'trace=openat,close,ioctl,read,write', DEST,
                           '--execute', '--allow-shared-wlan-rail', '--live-wlan-vote', '--uart', '/dev/ttySAC1',
                           '--btpower', '/dev/btpower', '--btpower-rdev', '503:0'])
     start = datetime.now(timezone.utc).isoformat()
     began = time.monotonic()
     try:
-        result = trial.remote(command, timeout=25)
-    except subprocess.TimeoutExpired:
+        result = trial.remote(command, timeout=HOST_TIMEOUT)
+    except subprocess.TimeoutExpired as error:
+        # Preserve partial evidence even if the kernel resets before SSH exits.
+        for name,value in (('stdout.txt',error.stdout),('stderr.txt',error.stderr)):
+            if value is not None:
+                (raw/name).write_bytes(value.encode() if isinstance(value,str) else value)
         (raw / 'unknown.txt').write_text('Host timeout. No automatic retry/reset.\n')
         raise
     elapsed = time.monotonic() - began

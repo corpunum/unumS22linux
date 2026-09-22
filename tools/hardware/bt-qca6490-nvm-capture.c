@@ -5,10 +5,16 @@
 static int nvm_transfer(int fd);
 static int nvm_self_test(void);
 #define S22_BT_POSTPATCH_BOARD 1
+#ifndef S22_BT_AFTER_PATCH_BOARD
 #define S22_BT_AFTER_PATCH_BOARD nvm_transfer
+#endif
 #define S22_BT_NVM_SELF_TEST nvm_self_test
 #include "bt-qca6490-patch-capture.c"
+#ifdef S22_BT_NVM_HEADER
+#include S22_BT_NVM_HEADER
+#else
 #include "../../builds/bt-nvm-20260922/qca-nvm-private.h"
+#endif
 
 static size_t nvm_packet_at(size_t offset,uint8_t packet[249])
 {
@@ -36,7 +42,7 @@ static int nvm_transfer(int fd)
     if (n!=sizeof(patch_ack) || memcmp(frame,patch_ack,n)) return -EPROTO;
     offset+=bytes-6;count++;
   }
-  printf("nvm_transmitted_bytes=%zu acknowledged_segments=%zu reset_sent=no hci_attached=no power_off_next=yes\n",offset,count);
+  printf("nvm_transmitted_bytes=%zu acknowledged_segments=%zu reset_sent=no hci_attached=no\n",offset,count);
   return 0;
 }
 
@@ -64,5 +70,8 @@ static int nvm_self_test(void)
     if (write(s[1],bad,sizeof(bad))!=sizeof(bad) || nvm_transfer(s[0])!=-EPROTO) return 1;
   }
   close(s[0]);close(s[1]);
+#ifdef S22_BT_RUNTIME_SELF_TEST
+  if (S22_BT_RUNTIME_SELF_TEST()) return 1;
+#endif
   puts("NVM29-segment framing and rejection self-test: PASS (no hardware)");return 0;
 }
