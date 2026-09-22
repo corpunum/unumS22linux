@@ -1,0 +1,123 @@
+{
+  "audio_control_startup": {
+    "arch_control_count": 1736,
+    "arch_sound_nodes": [
+      {
+        "character": true,
+        "gid": 18,
+        "major": 116,
+        "minor": 114,
+        "mode": "0o660",
+        "name": "controlC0",
+        "uid": 0
+      }
+    ],
+    "automatic_control_only_bind": true,
+    "speaker_or_microphone_accepted": false,
+    "startup_sha256": "76a759049766100e57127363c3cd5141a486c061df4783560e8a3c2a918dae96"
+  },
+  "bluetooth_configuration_trial": {
+    "binary_sha256": "69c51eb73e95374971209aa587f7eef1c43d65de1d02a4326aa791d1c931bb94",
+    "bluetooth_power_vote_released": true,
+    "elapsed_seconds": 2.852,
+    "failure_phase": "baud-change response; received non-event ff before timeout",
+    "hci_pairing_accepted": false,
+    "patch_or_nvm_sent": false,
+    "returncode": 1,
+    "same_boot": true
+  },
+  "bluetooth_precomputed_transport": {
+    "baud-precomputed-first": {
+      "after_vote_check": 0,
+      "binary_sha256": "fddd8c17d603872abca9b7fa5a4a84acd0009fab539831b2a9071be6cc07b3d7",
+      "elapsed": 3.015,
+      "returncode": 0,
+      "same_boot": true,
+      "started_at": "2026-09-21T23:57:45.001499+00:00"
+    },
+    "nvm-precomputed-first": {
+      "acknowledged_segments": 29,
+      "after_vote_check": 0,
+      "binary_sha256": "60a3b8d998ac4e8cb8e0a2abbe61f619ce8cc0f9f5afa1351d8092aec55f158a",
+      "configuration_bytes": 7023,
+      "diagnostic_address_all_zero": true,
+      "elapsed": 5.131,
+      "hci_attached": false,
+      "hci_reset_sent": false,
+      "pairing_accepted": false,
+      "returncode": 0,
+      "same_boot": true,
+      "started_at": "2026-09-21T23:58:58.643637+00:00"
+    }
+  },
+  "boot_record_number": 764,
+  "format": "main-driver-loop-late-control-v1",
+  "limitations": [
+    "An earlier same-image boot exposed missing control-node creation; this late hook fixes that specific startup gap.",
+    "Earlier native DNS checks failed intermittently. This fresh 13/13 result is not a sustained-reliability claim.",
+    "Qwen source review is advisory, not hardware acceptance. Invalid output-path attempts are not counted.",
+    "No UUIDs, raw UART/kernel traces, vendor bytes, or identities exported."
+  ],
+  "qwen_usb_review": {
+    "model": "openai/qwen3.8-flash-next-uncensored-lean",
+    "pi_transport": {
+      "agent_end": true,
+      "elapsed_seconds": 51.12,
+      "errors": [],
+      "event_count": 1116,
+      "models": [
+        "openai/qwen3.8-flash-next-uncensored-lean"
+      ],
+      "providers": [
+        "s22-rig"
+      ],
+      "requested_output_only": true,
+      "returncode": 0,
+      "tool_count": 1,
+      "tool_names": [
+        "write"
+      ],
+      "valid_transport": true
+    },
+    "provider": "s22-rig",
+    "review_sha256": "8b2333fb76b08ef90b29e2b4c88ad7f1b56266aad56fe9c3ddf653af5288ff8d",
+    "timestamp": "2026-09-21T23:52:12.723703+00:00"
+  },
+  "recovery_reboot": {
+    "actual_mode": "recovery",
+    "continuous_uptime_seconds": 95.1,
+    "host_elapsed_seconds": 111.13,
+    "model_healthy": true,
+    "new_boot": true,
+    "pending_kill_tasks": [],
+    "reboot_requests": 1
+  },
+  "wifi": {
+    "all_checks_passed": true,
+    "checks": {
+      "arch_app_dns": true,
+      "arch_shares_resolver_inode": true,
+      "cnss_mission_ready": true,
+      "dns_forced_wlan0": true,
+      "https_forced_wlan0_tls_verified": true,
+      "lease_dns_first": true,
+      "lease_private": true,
+      "native_app_dns": true,
+      "resident_model_healthy": true,
+      "usb_carrier": true,
+      "usb_default_preserved": true,
+      "wlan_default_metric_600": true,
+      "wpa2_ccmp_completed": true
+    },
+    "cnss_state": "State: 0x420107(QMI_WLFW_CONNECTED | FW_MEM_READY | FW_READY | DRIVER_PROBED | COLD_BOOT_CAL_DONE | PCI PROBE DONE)",
+    "not_tested": [
+      "reboot_autostart",
+      "USB_disconnected",
+      "suspend_resume",
+      "roaming",
+      "sustained_throughput"
+    ],
+    "timestamp_utc": "2026-09-21T23:55:07.642310+00:00",
+    "uptime_seconds": 97.07
+  }
+}

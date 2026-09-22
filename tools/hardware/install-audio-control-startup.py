@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import shlex
 import subprocess
 
@@ -23,7 +24,7 @@ compile(incoming,'start-persistent-desktop','exec')
 target=p('/usr/local/bin/start-persistent-desktop'); info=target.lstat()
 assert target.is_file() and not target.is_symlink() and info.st_uid==0 and not info.st_mode & 0o022
 assert hashlib.sha256(target.read_bytes()).hexdigest()==BEFORE
-backup=p('/srv/s22/audio-control-startup-20260922'); assert not backup.exists()
+backup=p(BACKUP); assert not backup.exists()
 os.umask(0o077); backup.mkdir(mode=0o700)
 with (backup/'start-persistent-desktop.before').open('xb') as f:
  f.write(target.read_bytes()); f.flush(); os.fsync(f.fileno())
@@ -38,16 +39,22 @@ print(json.dumps({'before_sha256':BEFORE,'after_sha256':AFTER,'backup':str(backu
 '''
 
 def main():
-    ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('--install',action='store_true');args=ap.parse_args()
+    ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('--install',action='store_true')
+    ap.add_argument('--before-sha256',default=BEFORE)
+    ap.add_argument('--name',default='audio-control-startup-20260922');args=ap.parse_args()
+    if not re.fullmatch('[0-9a-f]{64}',args.before_sha256):ap.error('expected SHA256 required')
+    if not re.fullmatch('[a-z0-9-]+',args.name):ap.error('safe unique name required')
     data=SOURCE.read_bytes(); after=hashlib.sha256(data).hexdigest()
     if not args.install:
-        print(json.dumps({'before_sha256':BEFORE,'after_sha256':after,'bytes':len(data)}));return
-    code=REMOTE.replace('BEFORE',repr(BEFORE)).replace('AFTER',repr(after))
+        print(json.dumps({'before_sha256':args.before_sha256,'after_sha256':after,'bytes':len(data)}));return
+    receipt_path=ROOT/'rootfs/main-driver-loop-20260921'/(args.name+'-install.json')
+    assert not receipt_path.exists()
+    code=REMOTE.replace('BEFORE',repr(args.before_sha256)).replace('AFTER',repr(after)).replace('BACKUP',repr('/srv/s22/'+args.name))
     result=subprocess.run([str(ROOT/'tools/s22-ssh'),'python3 -c '+shlex.quote(code)],
                           input=data,capture_output=True,timeout=25)
     if result.returncode:raise RuntimeError(result.stderr.decode())
     receipt=json.loads(result.stdout)
-    (ROOT/'rootfs/main-driver-loop-20260921/audio-control-startup-install.json').write_text(json.dumps(receipt,indent=2)+'\n')
+    with receipt_path.open('x') as stream:stream.write(json.dumps(receipt,indent=2)+'\n')
     print(json.dumps(receipt,indent=2))
 
 if __name__=='__main__':main()

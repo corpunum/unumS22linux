@@ -48,6 +48,9 @@ static int baud_probe(const char *uart_path, const char *power_path,
                       unsigned power_major, unsigned power_minor, bool live)
 {
   struct termios saved; struct sigaction old_int, old_term;
+#ifdef S22_BT_PRECOMPUTED_BAUD
+  struct termios next_3m, observed_3m;
+#endif
   uint8_t frame[BT_MAX_EVENT_BYTES]; size_t length = 0;
   int uart = -1, power = -1, rc = -EIO;
   bool saved_valid = false, configured = false, powered = false;
@@ -70,14 +73,36 @@ static int baud_probe(const char *uart_path, const char *power_path,
   /* Private HAL jump table 2d9e9: op3 -> 5fbc8 clears CRTSCTS.
    * op4, NOT op3, invokes private ioctl 54ec. */
   if ((rc = flow_control(uart, false))) goto cleanup;
+#ifdef S22_BT_PRECOMPUTED_BAUD
+  /* Finish configuration reads before the controller switches its clock.
+   * Preserve exactly the same baud/flow protocol; omit diagnostic stdout
+   * and avoidable TCGETS calls in the write-to-host-speed interval. */
+  if (tcgetattr(uart, &next_3m) || cfsetispeed(&next_3m, B3000000) ||
+      cfsetospeed(&next_3m, B3000000)) { rc = -errno; goto cleanup; }
+#endif
   if ((rc = write_bounded(uart, baud_3m, sizeof(baud_3m), VERSION_TIMEOUT_MS))) goto cleanup;
+#ifndef S22_BT_PRECOMPUTED_BAUD
   puts("sent=baud3m raw=01 48 fc 01 0e"); fflush(stdout);
+#endif
   if (tcdrain(uart)) { rc = -errno; goto cleanup; }
   if (stop_requested) { rc = -ECANCELED; goto cleanup; }
+#ifdef S22_BT_PRECOMPUTED_BAUD
+  if (tcsetattr(uart, TCSANOW, &next_3m)) { rc = -errno; goto cleanup; }
+#else
   if ((rc = set_3m(uart))) goto cleanup;
+#endif
   { struct timespec delay = {0, 20000000};
     if (nanosleep(&delay, NULL) || stop_requested) { rc = -ECANCELED; goto cleanup; } }
+#ifdef S22_BT_PRECOMPUTED_BAUD
+  if (tcgetattr(uart, &observed_3m)) { rc = -errno; goto cleanup; }
+  if (cfgetispeed(&observed_3m) != B3000000 || cfgetospeed(&observed_3m) != B3000000) {
+    rc = -EIO; goto cleanup;
+  }
+#endif
   if ((rc = flow_control(uart, true))) goto cleanup;
+#ifdef S22_BT_PRECOMPUTED_BAUD
+  puts("sent=baud3m raw=01 48 fc 01 0e precomputed_termios=yes"); fflush(stdout);
+#endif
   if ((rc = capture_opaque_events(uart, VERSION_TIMEOUT_MS))) goto cleanup;
   if ((rc = patch_identity(uart))) goto cleanup;
   rc = 0;
