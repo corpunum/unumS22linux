@@ -13,7 +13,7 @@ import time
 
 MAP=Path('/sys/kernel/debug/regmap/18c50000.abox')
 ABOX=Path('/sys/bus/platform/devices/18c50000.abox')
-TARGETS=(0x1230,0x1238)
+TARGETS=(0x1200,0x1230,0x1238)
 
 def plans(ranges_text, access_text):
     ranges=[];previous=-1
@@ -36,7 +36,12 @@ def plans(ranges_text, access_text):
     size=width+8+3 # pinned config: val_bits32, stride4
     result=[]
     for target in TARGETS:
-        if flags.get(target)!=('y','n','y','n'):raise ValueError('target not readable/read-only/volatile/nonprecious')
+        # CTRL(2) is intentionally read with pread only, but the kernel marks
+        # it writable because normal driver code updates its enable bit, and
+        # shared_reg() makes it volatile so regmap bypasses the cache. The
+        # status pair is source-declared read-only, volatile, non-precious.
+        expected = ('y','y','y','n') if target == 0x1200 else ('y','n','y','n')
+        if flags.get(target)!=expected:raise ValueError('target access metadata mismatch')
         index=0
         for a,b in ranges:
             if a<=target<=b:
@@ -45,6 +50,12 @@ def plans(ranges_text, access_text):
         else:raise ValueError('target absent from printable map')
         result.append({'register':target,'offset':index*size,'length':size,'width':width})
     return result
+
+def decode_rdma2_ctrl(value):
+    """Decode only the source-defined RDMA2 CTRL enable bit."""
+    if not isinstance(value,int) or value < 0 or value > 0xffffffff:
+        raise ValueError('invalid 32-bit CTRL value')
+    return {'raw':value,'enable':bool(value & 0x1)}
 
 def bounded(path,limit):
     with open(path,'r') as f:data=f.read(limit+1)
@@ -72,6 +83,8 @@ def snapshot(read_status=False):
                 raise ValueError('register record mismatch; stop rather than scanning')
             result['registers'][f'{p["register"]:04x}']=int(m[2],16)
     finally:os.close(fd)
+    if '1200' in result['registers']:
+        result['rdma2_ctrl'] = decode_rdma2_ctrl(result['registers']['1200'])
     return result
 
 if __name__=='__main__':

@@ -1,0 +1,73 @@
+{
+  "accepted_controller_trial": {
+    "after_vote_check": 0,
+    "binary_sha256": "32bfa5abc9cfecf140d1871ec543f7cd5c015752199eee844982ab99242cc4ed",
+    "elapsed": 4.864,
+    "returncode": 0,
+    "same_boot": true,
+    "started_at": "2026-09-22T00:22:30.146664+00:00"
+  },
+  "audio_discriminator": {
+    "assessment": {
+      "child_interrupted": true,
+      "cleanup_verified": true,
+      "diagnostic_completed": false,
+      "outcome": "interrupted",
+      "physical_playback_verified": false,
+      "prepare_accepted": true,
+      "successful_write_ioctls": 8,
+      "write_eagain_count": 75
+    },
+    "elapsed_seconds": 15.632,
+    "enable": false,
+    "hw_ptr": 0,
+    "mixer_routes_restored": true,
+    "rdma2_ctrl": "0xb0200000",
+    "samples": 8,
+    "status": 0,
+    "trial": "audio-ctrl-serial"
+  },
+  "controller": {
+    "address_readback_matches": true,
+    "address_source": "linux-generated-not-factory",
+    "hci_version": 12,
+    "manufacturer": 29,
+    "nvm_acknowledged_segments": 29,
+    "patch_segments": 806,
+    "powered_off_after_trial": true,
+    "reset_complete": true,
+    "subversion": 26748
+  },
+  "format": "runtime-bt-and-kernel-panic-v1",
+  "limitations": [
+    "No accepted Linux HCI/pairing/RF result",
+    "Audio DMA remains disabled",
+    "NPU, SIM/data/calls, camera, GNSS and suspend remain unaccepted",
+    "Concurrent audio trial during panic yielded no result; serial test used afterward",
+    "No image or protected-partition writes in this checkpoint"
+  ],
+  "post_recovery": {
+    "control_count": 1754,
+    "model_health": true,
+    "uptime_seconds": 125.19,
+    "wifi_checks_passed": 13
+  },
+  "qwen_review": {
+    "elapsed_seconds": 68.61,
+    "executed_via_pi": true,
+    "model": "openai/qwen3.8-flash-next-uncensored-lean",
+    "recommendation_accepted": false,
+    "rejection_reason": "Reset-before-NVM contradicts relevant vendor HAL ordering"
+  },
+  "rejected_hci_trial": {
+    "assertion": "BUG_ON(!sk)",
+    "automatic_recovery": true,
+    "boot_record": 766,
+    "capture_sha256": "2b0a194e7996540bd9db0a0dd0680215e25ae813f408f128903950b58676136b",
+    "cause": "hci_sock_create body compiled out but returns success",
+    "function": "bt_sock_create+0x144/0x150",
+    "name": "hci-bridge-first",
+    "result": "kernel-panic",
+    "source": "net/bluetooth/af_bluetooth.c:71"
+  }
+}

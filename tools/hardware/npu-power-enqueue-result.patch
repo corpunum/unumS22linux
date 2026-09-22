@@ -1,0 +1,21 @@
+--- a/lineage/android_kernel_samsung_s5e9925/drivers/vision/npu/core/npu-session.c
++++ b/lineage/android_kernel_samsung_s5e9925/drivers/vision/npu/core/npu-session.c
+@@ -2951,8 +2951,17 @@ int npu_session_NW_CMD_POWER_NOTIFY(struct npu_session *session, bool on)
+ 	}
+ 
+ 	session->nw_result.result_code = NPU_NW_JUST_STARTED;
+-	npu_session_put_nw_req(session, nw_cmd);
++	ret = npu_session_put_nw_req(session, nw_cmd);
++	if (unlikely(ret <= 0)) {
++		/* Do not wait when the request was not queued. */
++		ret = -EIO;
++		mutex_unlock(session->global_lock);
++		return ret;
++	}
+ 	wait_event(session->wq, session->nw_result.result_code != NPU_NW_JUST_STARTED);
++	ret = session->nw_result.result_code;
++	if (ret == NPU_NW_JUST_STARTED)
++		ret = -EIO;
+ 
+ 	mutex_unlock(session->global_lock);
+ 
