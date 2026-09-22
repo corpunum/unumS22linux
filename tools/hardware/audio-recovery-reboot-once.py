@@ -63,14 +63,20 @@ def main():
     parser.add_argument('--execute',action='store_true')
     parser.add_argument('--name',default='audio-reboot')
     parser.add_argument('--capture-early-kernel',action='store_true')
+    parser.add_argument('--image-profile',choices=('core','extras'),default='core')
     args=parser.parse_args()
     if not re.fullmatch('[a-z0-9-]+',args.name):parser.error('use a unique lowercase receipt name')
     OUT=OUT.parent/args.name
     if not args.execute:
         print('Plan only: one s22-reboot recovery, observe up to 240s; no automatic retry.');return
-    flash=json.loads((OUT.parent/'audio-recovery-flash.json').read_text())
+    profiles={'core':('audio-recovery-flash.json','1c1b77a5e532e50b8274cfc68921aa9b1bfe6d4ae9a3459281be0cc033c5c3d5'),
+              'extras':('audio-extra-recovery-flash.json','758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b')}
+    flash_name,expected=profiles[args.image_profile]
+    flash=json.loads((OUT.parent/flash_name).read_text())
     assert flash['partition_written']=='recovery'
-    assert flash['readback_sha256']=='1c1b77a5e532e50b8274cfc68921aa9b1bfe6d4ae9a3459281be0cc033c5c3d5'
+    assert flash['readback_sha256']==expected
+    live_hash=subprocess.run([str(SSH),'sha256sum /dev/block/by-name/recovery'],capture_output=True,text=True,timeout=30)
+    assert live_hash.returncode==0 and live_hash.stdout.split()[0]==expected
     ack=subprocess.run(['systemctl','--user','is-active','s22-native-auto-ack.service'],capture_output=True,text=True)
     assert ack.returncode==0 and ack.stdout.strip()=='active'
     before=snapshot()

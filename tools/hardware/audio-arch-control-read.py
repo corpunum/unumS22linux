@@ -7,6 +7,11 @@ This opens only hw:0's control device; no PCM or mixer write is performed.
 """
 import ctypes as c
 import json
+import argparse
+
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--expected-count',type=int,choices=(1736,1754),default=1736)
+options=parser.parse_args()
 
 lib=c.CDLL('libasound.so.2')
 pointer=c.c_void_p
@@ -29,7 +34,7 @@ try:
     check(lib.snd_ctl_elem_list_malloc(c.byref(listing)))
     check(lib.snd_ctl_elem_list(control,listing))
     count=lib.snd_ctl_elem_list_get_count(listing)
-    if count!=1736:raise RuntimeError('control count differs: '+str(count))
+    if count!=options.expected_count:raise RuntimeError('control count differs: '+str(count))
     print(json.dumps({'library':'libasound.so.2','card':'hw:0','control_count':count,
                       'open_mode':'SND_CTL_READONLY','pcm_opened':False,'mixer_written':False}))
 finally:

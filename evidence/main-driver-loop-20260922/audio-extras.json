@@ -1,0 +1,209 @@
+{
+  "added_control_names": [
+    "'ABOX A2DP A2DP DYN PARAM'",
+    "'ABOX A2DP A2DP Offload On'",
+    "'ABOX A2DP A2DP PARAM'",
+    "'ABOX A2DP BT SBM PARAM'",
+    "'ABOX A2DP BT VENDOR PARAM'",
+    "'ABOX A2DP SUSPEND PARAM'",
+    "'ABOX LEA_DEC BT SBM PARAM'",
+    "'ABOX LEA_DEC BT VENDOR PARAM'",
+    "'ABOX LEA_DEC DYN PARAM'",
+    "'ABOX LEA_DEC Offload On'",
+    "'ABOX LEA_DEC PARAM'",
+    "'ABOX LEA_DEC SUSPEND PARAM'",
+    "'ABOX LEA_ENC BT SBM PARAM'",
+    "'ABOX LEA_ENC BT VENDOR PARAM'",
+    "'ABOX LEA_ENC DYN PARAM'",
+    "'ABOX LEA_ENC Offload On'",
+    "'ABOX LEA_ENC PARAM'",
+    "'ABOX LEA_ENC SUSPEND PARAM'"
+  ],
+  "arch_control_read": {
+    "card": "hw:0",
+    "control_count": 1754,
+    "library": "libasound.so.2",
+    "mixer_written": false,
+    "open_mode": "SND_CTL_READONLY",
+    "pcm_opened": false
+  },
+  "boot_record_number": 765,
+  "digital_zero_trial": {
+    "amplifiers_enabled": false,
+    "assessment": {
+      "child_interrupted": true,
+      "cleanup_verified": true,
+      "diagnostic_completed": false,
+      "outcome": "interrupted",
+      "physical_playback_verified": false,
+      "prepare_accepted": true,
+      "successful_write_ioctls": 8,
+      "write_eagain_count": 77
+    },
+    "elapsed_seconds": 15.297,
+    "hardware_pointer_in_all_running_snapshots": 0,
+    "rdma_status_registers": {
+      "0x1230": 0,
+      "0x1238": 0
+    },
+    "route_controls_restored": true,
+    "running_snapshots": 7,
+    "same_boot": true
+  },
+  "firmware": {
+    "APBargeIn_AUDIO_SLSI.bin": {
+      "bytes": 23682,
+      "exact": true,
+      "sha256": "45ce256597cd6595e6b5ae38546efa935941ab961bdc833a4abcae65a32aadbf"
+    },
+    "APDV_AUDIO_SLSI.bin": {
+      "bytes": 362040,
+      "exact": true,
+      "sha256": "16e739665c2e32a1f522808db8d9fb4f6a3abbdd4506ef9d9cc1ed7905787bd4"
+    },
+    "AP_AUDIO_SLSI.bin": {
+      "bytes": 703332,
+      "exact": true,
+      "sha256": "6a8439d046f435299a39545721dbbcec53f591d7c895519f92ede5499e347f7a"
+    },
+    "Cal360.bin": {
+      "bytes": 110810,
+      "exact": true,
+      "sha256": "79bae6b1dd72c7ae3728bcef04f0cd41e261b9ecd667bbc025e317dda9e9c5cc"
+    },
+    "SoundBoosterParam.bin": {
+      "bytes": 16240,
+      "exact": true,
+      "sha256": "28068ee2de7ea99f09e06ed42d5c3d70352ff0edd1f6d70615618fc01ff7a1d6"
+    },
+    "a2dpcom.bin": {
+      "bytes": 532704,
+      "exact": true,
+      "sha256": "618d6fc9e55a87871138066a4c254c37d93f7de7750d457ff825fd8c5b2a0972"
+    },
+    "avsyncmix.bin": {
+      "bytes": 5684,
+      "exact": true,
+      "sha256": "07c48b0a3e9344e03e4d782853c2a681a02a28fec56339529a4d4c630bfdff1f"
+    },
+    "bidirmic.bin": {
+      "bytes": 293184,
+      "exact": true,
+      "sha256": "3dfe5959983550905437ea09941371be8c429d5bfbf532b852cf974f8a0e2351"
+    },
+    "dax_param.bin": {
+      "bytes": 34736,
+      "exact": true,
+      "sha256": "51f08d5882a948c3a49f3f55de19fea012b4546b7f20d91b44e70381690daac5"
+    },
+    "dolby.bin": {
+      "bytes": 2178276,
+      "exact": true,
+      "sha256": "e3459f95ae0d2caa0561d7d58f429178f84ecb61d532287a85253f3ebf46bf5a"
+    },
+    "leaudio_dec.bin": {
+      "bytes": 109904,
+      "exact": true,
+      "sha256": "8fdc30a5e85571651d5b1ddd259aff13cc3b3ba5a41d455df1a482c12ba35afb"
+    },
+    "leaudio_enc.bin": {
+      "bytes": 146576,
+      "exact": true,
+      "sha256": "831e2259ea3f0d7cd14baa21d47fd4b17b024a8e99991cf002a07f60fbcbd3c6"
+    },
+    "listenbackeffect.bin": {
+      "bytes": 82592,
+      "exact": true,
+      "sha256": "9c04a48e1d3bac3eb0f27056cb88e68f8609662b547810ea8ccd36fb896ec554"
+    },
+    "rxse.bin": {
+      "bytes": 366304,
+      "exact": true,
+      "sha256": "63d52dc9a34a40faff005a891bc4d1107e10063a5b891222c18fe51ee7583b12"
+    },
+    "sb_ll.bin": {
+      "bytes": 57080,
+      "exact": true,
+      "sha256": "2e6643bbcccf29259b61c6e8b494514059518b5c322a689c2a8da63e71bf6417"
+    },
+    "sb_music.bin": {
+      "bytes": 119912,
+      "exact": true,
+      "sha256": "e8f889bb6b5be4b8a61eef1c9cd6819306de980f185548058e56daec050bde54"
+    },
+    "sb_others.bin": {
+      "bytes": 171504,
+      "exact": true,
+      "sha256": "fd52350e1a6a5adf76425bc6c47c36f9b2368d81564832cf43ce2614a0b06438"
+    },
+    "txse1.bin": {
+      "bytes": 4354944,
+      "exact": true,
+      "sha256": "2bb571da5331199faa371d6d4dfb6b94addbafc16e9b0d85527617bceab99593"
+    },
+    "txse2.bin": {
+      "bytes": 108792,
+      "exact": true,
+      "sha256": "6c1bda2f0233a86dd048975ce6bbecdec192a1d99bbcdd0c2f2811c5b80d6e74"
+    },
+    "volumemonitor.bin": {
+      "bytes": 15576,
+      "exact": true,
+      "sha256": "8d7915462cf71ac0a336797ab99ff52de0e6b1e2e2a7d3a166c848dc2792c084"
+    }
+  },
+  "format": "audio-extra-firmware-public-v1",
+  "limitations": [
+    "Twenty recovered firmware assets and18 newBluetooth codec controls do not fix the observed RDMA2 stall.",
+    "Physical speaker/microphone, BluetoothHCI/pairing, NPUinference andcellular remainunaccepted.",
+    "First hash probe usedthewrongroot; first controlprobe assumed1736; neither counted as acceptance.",
+    "NativeDNSfailed onanearliercheckinthisboot; later13/13doesnotprovesustainedreliability."
+  ],
+  "recovery_boot": {
+    "actual_mode": "recovery",
+    "continuous_uptime_seconds": 95.09,
+    "host_elapsed_seconds": 111.32,
+    "model_healthy": true,
+    "new_boot": true,
+    "pending_kill_tasks": [],
+    "reboot_requests": 1
+  },
+  "recovery_flash": {
+    "before_sha256": "1c1b77a5e532e50b8274cfc68921aa9b1bfe6d4ae9a3459281be0cc033c5c3d5",
+    "bytes": 100663296,
+    "mode": "flash",
+    "partition_written": "recovery",
+    "readback_sha256": "758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b",
+    "reboot_performed": false
+  },
+  "removed_control_names": [],
+  "rollback_image_sha256": "1c1b77a5e532e50b8274cfc68921aa9b1bfe6d4ae9a3459281be0cc033c5c3d5",
+  "wifi": {
+    "all_checks_passed": true,
+    "checks": {
+      "arch_app_dns": true,
+      "arch_shares_resolver_inode": true,
+      "cnss_mission_ready": true,
+      "dns_forced_wlan0": true,
+      "https_forced_wlan0_tls_verified": true,
+      "lease_dns_first": true,
+      "lease_private": true,
+      "native_app_dns": true,
+      "resident_model_healthy": true,
+      "usb_carrier": true,
+      "usb_default_preserved": true,
+      "wlan_default_metric_600": true,
+      "wpa2_ccmp_completed": true
+    },
+    "cnss_state": "State: 0x420107(QMI_WLFW_CONNECTED | FW_MEM_READY | FW_READY | DRIVER_PROBED | COLD_BOOT_CAL_DONE | PCI PROBE DONE)",
+    "not_tested": [
+      "reboot_autostart",
+      "USB_disconnected",
+      "suspend_resume",
+      "roaming",
+      "sustained_throughput"
+    ],
+    "timestamp_utc": "2026-09-22T00:10:49.573770+00:00",
+    "uptime_seconds": 213.98
+  }
+}
