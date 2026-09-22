@@ -14,6 +14,44 @@ CONT_OUT=ROOT/'evidence/main-driver-loop-20260922'
 def load(name):return json.loads((RAW/name).read_text())
 
 
+def export_audio_extras_checkpoint():
+    flash=load('audio-extra-recovery-flash.json');reboot=load('audio-extras-reboot/result.json')
+    assert flash['partition_written']=='recovery' and flash['readback_sha256']=='758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b'
+    assert reboot['new_boot'] and reboot['actual_mode']=='recovery' and reboot['continuous_uptime_seconds']>=90
+    checks=load('audio-extras-postboot-v3/receipt.json')['checks']
+    assert all(x['returncode']==0 for x in checks.values())
+    state=checks['state']['result'];control=checks['arch-control']['result'];wifi=checks['wifi']['result']
+    assert control['control_count']==1754 and len(state['arch_sound_nodes'])==1 and state['arch_sound_nodes'][0]['name']=='controlC0'
+    firmware=load('audio-extras-firmware-postboot-v3.json')['result']
+    assert len(firmware['files'])==20 and all(x['exact'] for x in firmware['files'].values())
+    old_controls=load('audio-control-metadata-v4.json')['tools']['amixer']['stdout'].splitlines()
+    names=lambda lines:{x.split(',name=',1)[1] for x in lines if ',name=' in x}
+    old_names=names(old_controls);new_names=names(firmware['controls'])
+    assert len(new_names-old_names)==18 and not old_names-new_names
+    progress=load('audio-extras-progress/receipt.json')
+    assert progress['assessment']['cleanup_verified'] and progress['same_boot']
+    assert progress['assessment']['child_interrupted'] and not progress['assessment']['diagnostic_completed']
+    running=[s for s in progress['result']['progress_samples'] if 'state: RUNNING' in s.get('alsa_status','')]
+    assert len(running)==7 and all(s['registers']=={'1230':0,'1238':0} for s in running)
+    assert all(re.search(r'^hw_ptr\s*:\s*0$',s['alsa_status'],re.M) for s in running)
+    bore=re.search(r'^\[\s*(\d+)\].*> RECOVERY >',state['boot_reset'],re.M);assert bore
+    result={'format':'audio-extra-firmware-public-v1','recovery_flash':flash,'recovery_boot':reboot,
+            'boot_record_number':int(bore[1]),'firmware':firmware['files'],
+            'arch_control_read':control,'added_control_names':sorted(new_names-old_names),'removed_control_names':[],
+            'wifi':wifi,'digital_zero_trial':{
+                'elapsed_seconds':progress['elapsed_seconds'],'assessment':progress['assessment'],
+                'same_boot':progress['same_boot'],'running_snapshots':len(running),
+                'hardware_pointer_in_all_running_snapshots':0,'rdma_status_registers':{'0x1230':0,'0x1238':0},
+                'route_controls_restored':True,'amplifiers_enabled':False},
+            'rollback_image_sha256':flash['before_sha256'],
+            'limitations':['Twenty recovered firmware assets and18 newBluetooth codec controls do not fix the observed RDMA2 stall.',
+                'Physical speaker/microphone, BluetoothHCI/pairing, NPUinference andcellular remainunaccepted.',
+                'First hash probe usedthewrongroot; first controlprobe assumed1736; neither counted as acceptance.',
+                'NativeDNSfailed onanearliercheckinthisboot; later13/13doesnotprovesustainedreliability.']}
+    OUT.mkdir(exist_ok=True);path=OUT/'audio-extras.json';path.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+    (OUT/'audio-extras-manifest.json').write_text(json.dumps({'files':{path.name:__import__('hashlib').sha256(path.read_bytes()).hexdigest()},'format':result['format']},indent=2)+'\n')
+
+
 def export_late_control_checkpoint():
     reboot=load('audio-control-late-reboot/result.json')
     assert reboot['new_boot'] and reboot['actual_mode']=='recovery'
@@ -201,6 +239,7 @@ def export_continuation():
 
 
 def main():
+    export_audio_extras_checkpoint()
     export_late_control_checkpoint()
     export_continuation()
     trials={}

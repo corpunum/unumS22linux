@@ -32,14 +32,15 @@ print(json.dumps(result))
 '''
 
 def main():
-    ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('name');args=ap.parse_args()
+    ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('name')
+    ap.add_argument('--expected-controls',type=int,choices=(1736,1754),default=1736);args=ap.parse_args()
     if not re.fullmatch('[a-z0-9-]+',args.name):ap.error('unique safe name required')
     out=ROOT/'rootfs/main-driver-loop-20260921'/args.name
     out.mkdir(mode=0o700,exist_ok=False)
     summary={'utc':datetime.now(timezone.utc).isoformat(),'checks':{}}
     for name,command,source in [
         ('state','python3 -',STATE.encode()),
-        ('arch-control','chroot /mnt/omarchy-trial /usr/local/libexec/s22-close-range-compat -- /usr/bin/python3 -',
+        ('arch-control','chroot /mnt/omarchy-trial /usr/local/libexec/s22-close-range-compat -- /usr/bin/python3 - --expected-count '+str(args.expected_controls),
          (ROOT/'tools/hardware/audio-arch-control-read.py').read_bytes()),
         ('wifi','python3 -',(ROOT/'tools/hardware/wifi-acceptance.py').read_bytes())]:
         start=time.monotonic()

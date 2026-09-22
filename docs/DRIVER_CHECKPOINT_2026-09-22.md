@@ -82,3 +82,33 @@ Host checks passed: 11 supervisor, 8 model-profile, 13 optional-audio and
 7 USB-review tests; 5 NVM parser and 3 configuration-builder checks; C baud,
 806-packet patch and 29-packet configuration framing/rejection self-tests.
 These checks do not substitute for the unresolved end-to-end hardware tests.
+
+## Later update: twenty extra audio firmware files deployed
+
+The corrected additions-only candidate was written to RECOVERY with full
+readback verification, then booted through the same software recovery path.
+BORE765 remained up for 95.09 uninterrupted seconds; desktop and4B returned.
+Current recovery SHA256 is
+`758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b`.
+The previous working audio image was saved as rollback, SHA256
+`1c1b77a5e532e50b8274cfc68921aa9b1bfe6d4ae9a3459281be0cc033c5c3d5`.
+
+All20 additional payloads matched their hashes through PID1's firmware root.
+Kernel missing-extra messages dropped from22 names to the two unrecovered
+optional files. ALSA gained18 Bluetooth codec controls (A2DP, LEA encoder and
+decoder); no existing control names disappeared. Arch read-only enumeration
+now returns1,754 controls through the automatic control-only bind. The fresh
+WLAN check passed13/13, following another intermittent native DNS failure.
+
+The same controlled digital-zero experiment still stalled: seven RUNNING
+snapshots had hardware pointer0 and RDMA2 status/status-add0. After its10s
+deadline, the child exited, both temporary selectors returned to0, the PCM
+closed, amplifiers remainedoff and the model stayed healthy. Total15.297s;
+8 successful WRITEI ioctls and77 EAGAIN. These firmware additions therefore
+add real codec controls but **do not fix the measured playback stall**.
+
+[Audio-extra receipt](../evidence/main-driver-loop-20260922/audio-extras.json)
+records this newer image and test. The first file-hash probe used the wrong
+root; two intermediate control probes failed from a stale count expectation
+and then a variable-name bug. Those failures were retained, corrected and
+are not counted as successful verification. No other partition was written.
