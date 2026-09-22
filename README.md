@@ -5,6 +5,15 @@ Exynos 2200, codename `r0s`, unlocked bootloader. This is the S22, not S22+.
 
 ## Current result — 2026-09-22
 
+**Latest: audio control access now survives reboot, and Bluetooth configuration
+transfer is acknowledged.** BORE764 restored the desktop/4B model and exposed
+only the ALSA control node to Arch automatically (1,736 controls); Wi-Fi passed
+13/13 checks. Bluetooth accepted the full RAM patch plus all 29 configuration
+packets, then was powered down. A usable Bluetooth address, HCI/pairing,
+speaker/microphone, NPU inference and cellular remain unfinished.
+See the [latest measured checkpoint](docs/DRIVER_CHECKPOINT_2026-09-22.md),
+including prior failed tests and the remaining limitations.
+
 **Audio card startup and Pi subprocess repair are now verified.** An audio-only
 RECOVERY update registered Rainbow-Prince with23 playback/53 capture PCMs;
 native ALSA enumerates1736 controls after the narrow control-node fix.
@@ -109,9 +118,9 @@ and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 | GPU | Samsung OpenCL/Vulkan compute passes; llama.cpp Vulkan Qwen0.8B all-layer offload and CPU-matching text verified. Resident4B remains CPU; RADV/desktop acceleration and sustained stability remain unaccepted |
 | NPU | Real ENN loads; vertex10 open/close passed. BOOTUP audit found unbounded waits and unsafe error cleanup; no speculative patch or firmware-boot acceptance |
 | Sensors | Accelerometer/gyro and now magnetometer/light frames sampled twice each. Compass accuracy is zero and light response untested; calibration, auto-rotation and autostart remain unaccepted |
-| Audio DSP | Card and 1736 controls work; digital route prepares but actual RDMA does not advance. Speaker/mic remain unfinished; optional control-node startup hook awaits reboot validation |
+| Audio DSP | Card and1736 controls work; control-only Arch exposure reboot-tested at BORE764. Digital route prepares but actual RDMA does not advance; speaker/microphone unfinished |
 | Modem | Dependencies recovered; real Samsung RIL library loads in isolated phone runtime without a RIL call. CPIF remains INIT; SIM/data/calls not working |
-| Bluetooth | Full QCA6490 RAM patch acknowledged; post-patch board query works, WLAN preserved. NVM board configuration, HCI and pairing remain unfinished |
+| Bluetooth | Full195848-byte RAM patch and7023-byte configuration (29ACKs) accepted at3M; WLAN preserved. Diagnostic address is zero; no HCI/reset/pairing/RF acceptance |
 | Connectivity | USB rescue retained; Wi-Fi association, DHCP, DNS and HTTPS passed after two automatic recovery-boot startups |
 | Other everyday hardware | Usable audio, cellular, camera, GPS and suspend remain unaccepted |
 
