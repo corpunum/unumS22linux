@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 CHECKER = ROOT / "tools/hardware/npu-boot-preflight.py"
 AIE = ROOT / "rootfs/npu-firmware-closure-20260921/vendor/firmware/AIE.bin"
 RULES = ROOT / "rootfs/npu-firmware-closure-20260921/vendor/firmware/dsp_reloc_rules.bin"
+SPEC = importlib.util.spec_from_file_location("npu_boot_preflight", CHECKER)
+assert SPEC is not None and SPEC.loader is not None
+PREFLIGHT = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(PREFLIGHT)
 
 CONFIG = """CONFIG_NPU_USE_BOOT_IOCTL=y
 CONFIG_NPU_USE_HW_DEVICE=y
@@ -36,8 +42,8 @@ def run(config_text: str, root: Path) -> tuple[int, dict]:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
     proc = subprocess.run(
-        ["python3", str(CHECKER), "--source", str(source), "--config", str(cfg),
-         "--aie", str(AIE), "--dsp-rules", str(RULES)],
+        [sys.executable, str(CHECKER), "--source", str(source), "--config", str(cfg),
+         "--aie", str(root / "missing-AIE.bin"), "--dsp-rules", str(root / "missing-dsp-rules.bin")],
         capture_output=True, text=True, check=False,
     )
     return proc.returncode, json.loads(proc.stdout)
@@ -47,19 +53,41 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="npu-preflight-") as name:
         root = Path(name)
         status, result = run(CONFIG, root)
-        assert status == 0
-        assert result["preflight_pass"] is True
+        assert status == 2
+        assert result["artifact_preflight_pass"] is False
         assert result["config_matches"] is True
-        assert result["artifact_closure_pass"] is True
         assert result["live_probe_validated"] is False
+        assert result["bootup_ready"] is False
+        assert result["bootup_authorized"] is False
+        assert result["exit_code"] == status
         assert result["checks"]["known_lifecycle_gaps"]["normal_boot_unwind_missing"] is True
 
         bad = CONFIG.replace("CONFIG_NPU_MAILBOX_VERSION=9", "CONFIG_NPU_MAILBOX_VERSION=8")
         status, result = run(bad, root)
-        assert status != 0
-        assert result["preflight_pass"] is False
+        assert status == 2
+        assert result["artifact_preflight_pass"] is False
+        assert result["bootup_ready"] is False
+        assert result["bootup_authorized"] is False
         assert result["config_matches"] is False
-        assert result["artifact_closure_pass"] is True
+
+    # Even a fully passing synthetic artifact/config/source audit cannot
+    # mark BOOTUP ready while kernel lifecycle and device/authorization gates
+    # remain unproven.
+    readiness = PREFLIGHT.evaluate_readiness(
+        config_matches=True,
+        required_artifacts_match=True,
+        source_route_pass=True,
+        lifecycle_gaps={
+            "normal_boot_unwind_missing": False,
+            "power_notify_has_unbounded_wait": False,
+        },
+    )
+    assert readiness["artifact_preflight_pass"] is True
+    assert readiness["bootup_ready"] is False
+    assert readiness["bootup_authorized"] is False
+    assert readiness["exit_code"] == 2
+    assert "callback_close_race_regressions_passed" in readiness["readiness_blockers"]
+    assert "live_probe_validated" in readiness["readiness_blockers"]
     print("npu boot preflight synthetic pass/mismatch cases passed")
 
 

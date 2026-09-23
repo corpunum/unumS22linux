@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Host-only NPU BOOTUP preflight; never opens a device or stages firmware.
+"""Host-only NPU artifact/source audit; never authorizes BOOTUP.
 
-This checks the pinned source/config and private host artifacts needed before a
-separate device decision. It never authorizes or performs a device probe.
+This checks the source/config and host artifacts. A successful artifact audit
+is not BOOTUP readiness or authorization. Lifecycle regressions, firmware
+boot/shutdown, live validation, rescue readiness and owner authorization are
+separate required gates. This script has no option to assert those gates.
 """
 from __future__ import annotations
 
@@ -54,6 +56,44 @@ def function_body(text: str, marker: str) -> str:
             if depth == 0:
                 return text[start : pos + 1]
     return ""
+
+
+def evaluate_readiness(
+    *,
+    config_matches: bool,
+    required_artifacts_match: bool,
+    source_route_pass: bool,
+    lifecycle_gaps: dict[str, bool],
+) -> dict[str, object]:
+    """Keep host artifact checks separate from permission to touch the NPU.
+
+    The final lifecycle/runtime/authorization gates are deliberately false:
+    this checker cannot prove them from files, and no CLI argument may
+    override them. In particular, a passing artifact audit still exits 2.
+    """
+    artifact_pass = bool(config_matches and required_artifacts_match and source_route_pass)
+    gates = {
+        "power_notify_wait_resolved": not lifecycle_gaps.get("power_notify_has_unbounded_wait", True),
+        "normal_boot_error_unwind_resolved": not lifecycle_gaps.get("normal_boot_unwind_missing", True),
+        "callback_close_race_regressions_passed": False,
+        "firmware_boot_and_shutdown_device_tested": False,
+        "live_probe_validated": False,
+        "independent_recovery_path_verified": False,
+        "owner_authorized_for_bootup": False,
+    }
+    bootup_ready = artifact_pass and all(gates.values())
+    # Readiness is still not permission. This host-only tool never grants it.
+    bootup_authorized = False
+    blockers = [name for name, passed in gates.items() if not passed]
+    exit_code = 0 if bootup_ready and bootup_authorized else 2
+    return {
+        "artifact_preflight_pass": artifact_pass,
+        "bootup_ready": bootup_ready,
+        "bootup_authorized": bootup_authorized,
+        "readiness_gates": gates,
+        "readiness_blockers": blockers,
+        "exit_code": exit_code,
+    }
 
 
 def main() -> int:
@@ -130,14 +170,23 @@ def main() -> int:
         "normal_boot_unwind_missing": checks["source"]["normal_boot_unwind_missing"],
         "power_notify_has_unbounded_wait": checks["source"]["power_notify_has_unbounded_wait"],
     }
-    result["live_probe_validated"] = False
-    result["reason"] = "host preflight only; lifecycle gaps remain and no device probe was performed"
     result["config_matches"] = checks["config"]["matches"]
     result["artifact_closure_pass"] = checks["artifact_closure"]["required_matches"]
     result["source_route_pass"] = all(checks["source_route"].values())
-    result["preflight_pass"] = bool(result["config_matches"] and result["artifact_closure_pass"] and result["source_route_pass"])
+    readiness = evaluate_readiness(
+        config_matches=bool(result["config_matches"]),
+        required_artifacts_match=bool(result["artifact_closure_pass"]),
+        source_route_pass=bool(result["source_route_pass"]),
+        lifecycle_gaps=checks["known_lifecycle_gaps"],
+    )
+    result.update(readiness)
+    result["live_probe_validated"] = readiness["readiness_gates"]["live_probe_validated"]
+    result["reason"] = (
+        "host artifact/source audit only; no lifecycle, firmware runtime, live probe, "
+        "independent recovery, or BOOTUP authorization is established"
+    )
     print(json.dumps(result, indent=2, sort_keys=True))
-    return 0 if result["preflight_pass"] else 2
+    return int(result["exit_code"])
 
 
 if __name__ == "__main__":

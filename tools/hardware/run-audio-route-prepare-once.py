@@ -10,6 +10,7 @@ from datetime import datetime,timezone
 import hashlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -86,6 +87,46 @@ finally:
 def load(name,path):
     spec=importlib.util.spec_from_file_location(name,path);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);return m
 
+def assess_dma_progress(samples):
+    """Accept only advancing ALSA hardware pointers from timed RUNNING samples.
+
+    Pointer movement proves DMA progress for this bounded stream, not audible
+    output. Missing/malformed pointers, time reversal, or pointer regression
+    fail closed. Physical playback is never inferred here.
+    """
+    if not isinstance(samples, list) or len(samples) > 256:
+        return {'verified':False,'running_samples':0,'reason':'invalid sample collection'}
+    points=[]
+    for sample in samples:
+        if not isinstance(sample, dict):
+            continue
+        status=sample.get('alsa_status')
+        if not isinstance(status,str) or 'state: RUNNING' not in status:
+            continue
+        matches=re.findall(r'^hw_ptr\s*:\s*(\d+)$',status,re.M)
+        timestamp=sample.get('monotonic')
+        if len(matches)!=1 or isinstance(timestamp,bool) or not isinstance(timestamp,(int,float)):
+            return {'verified':False,'running_samples':len(points),'reason':'invalid RUNNING sample'}
+        try:
+            timestamp=float(timestamp)
+        except (OverflowError,ValueError):
+            return {'verified':False,'running_samples':len(points),'reason':'invalid RUNNING sample'}
+        if not math.isfinite(timestamp):
+            return {'verified':False,'running_samples':len(points),'reason':'invalid RUNNING sample'}
+        point=(timestamp,int(matches[0]))
+        if points and (point[0] <= points[-1][0] or point[1] < points[-1][1]):
+            return {'verified':False,'running_samples':len(points),'reason':'non-monotonic observation'}
+        points.append(point)
+    advance=points[-1][1]-points[0][1] if len(points)>=2 else 0
+    return {
+        'verified':len(points)>=2 and advance>0,
+        'running_samples':len(points),
+        'first_hw_ptr':points[0][1] if points else None,
+        'last_hw_ptr':points[-1][1] if points else None,
+        'hw_ptr_advance':advance,
+        'reason':'hw_ptr advanced while RUNNING' if advance>0 else 'no observed hw_ptr advance',
+    }
+
 def classify(receipt, trace):
     """Separate cleanup, child completion and hardware evidence.
 
@@ -109,10 +150,12 @@ def classify(receipt, trace):
     prepare_only=receipt.get('diagnostic_kind','prepare-only')=='prepare-only'
     evidence_ok=prepared and (writes==0 if prepare_only else writes>0)
     accepted=bool(cleanup and capture_ok and receipt.get('same_boot') is True and child_ok and evidence_ok)
+    dma=assess_dma_progress(result.get('progress_samples',[]))
     return {'diagnostic_completed':accepted,'cleanup_verified':cleanup,
             'child_interrupted':interrupted,'prepare_accepted':prepared,
             'successful_write_ioctls':writes,
             'write_eagain_count':len(re.findall(r'SNDRV_PCM_IOCTL_WRITEI_FRAMES[^\n]+= -1 EAGAIN',trace)),
+            'dma_progress_verified':dma['verified'],'dma_progress':dma,
             'physical_playback_verified':False,
             'outcome':'interrupted' if interrupted else ('completed' if accepted else 'failed-or-unproven')}
 
