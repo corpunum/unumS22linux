@@ -39,10 +39,9 @@ performed by any worker.
 | Bluetooth patch host validation | Coordinator worktree + existing read-only kernel worktrees | Source/apply host-validated only | H4/IBS bridge suite (3), HCI contract test and `git apply --check` passed; full build is historical evidence, no live HCI claim |
 | Recovery candidate AVB structure/hash verification | Coordinator worktree, read-only | Both local recovery candidates pass footer/hash verification; Samsung authentication and bootability not established | `avbtool.py verify_image` passed for the live audio-extra baseline and unflashed HCI candidate. Both report algorithm `NONE`; this does not prove Samsung signature acceptance or boot success. |
 
-The coordinator commit is local only. No push was made because the required
-independent Luna review/runtime verification is unavailable. The original
-dirty `/home/corpunum/s22-linux` checkout was not merged, reset, stashed, or
-edited by the coordinator changes.
+The coordinator commit was local only at the time of this historical entry.
+The original dirty checkout was not merged, reset, stashed, or edited by the
+coordinator changes.
 
 ## Live phone reconciliation — read-only, 2026-09-23 18:14 UTC
 
@@ -77,3 +76,95 @@ edited by the coordinator changes.
   device exposes the lowercase link `/dev/block/by-name/recovery`; resolving
   that verified link identified `/dev/sda16` for the successful hash. This
   is a path-case correction, not a device change.
+
+## Execution correction follow-up — 2026-09-23
+
+This section supersedes the earlier statements above that no worker had edited
+code, that Luna selection was unmet, that Tailscale reachability was unknown,
+and that publication must wait for review. The earlier entries remain the
+historical 18:14 UTC checkpoint; the execution correction at
+`origin/master:docs/S22_LUNA_EXECUTION_CORRECTION_2026-09-23.md` governs the
+current procedure. The original two local commits remain intact and reachable
+on `s22/luna-driver-completion-20260923`; no reset, stash, discard, or edit to
+the dirty original checkout was performed.
+
+### Model and worker receipts
+
+Installed client: `codex-cli 0.156.1`. Effective persistent Codex config selects
+`gpt-6-luna`; this client/model catalog exposes `max` reasoning. The primary
+session does not expose runtime model/session metadata here, so coordinator
+evidence is `explicitly_configured`, not `runtime_reported`. Each worker below
+was launched through the native collaboration interface with explicit
+`gpt-6-luna` and `max`; the tool returned task handles but no opaque session
+IDs or runtime identity attestation. There is no known worker override/fallback.
+
+| Actual task handle | Worktree / branch | Assignment and current result |
+|---|---|---|
+| `/root/recovery_deploy_impl` | `/tmp/s22-luna-wave1-deploy-20260923`, `codex/s22-wave1-deploy-20260923` | Implementing deployment/build hardening, embedded checks, AVB verify and negative tests. Checkpoint reports changes to the two assigned deploy/build paths plus `deploy-audio-recovery.py`, and a new host test. 22 focused tests passed before the latest `-O` additions; final all-mode run/review/commit pending. No device actions. |
+| `/root/bluetooth_impl` | `/tmp/s22-luna-wave1-bt-20260923`, `codex/s22-wave1-bt-20260923` | Completed host-only bridge/test improvements; commit `7bade3f376bb0e810baca799e4dc5ec8f17b2443`. Changed H4 bridge cleanup reporting and expanded bridge/HCI negative tests. H4 suite: 12 passed. Candidate HCI patch applied in a temporary directory to the clean pinned kernel source, lifecycle contract plus three mutation negatives passed. No kernel build/runtime HCI. Independent review is pending next available slot. |
+| `/root/audio_diag_impl` | `/tmp/s22-luna-wave1-audio-20260923`, `codex/s22-wave1-audio-20260923` | Implementing synchronized, bounded audio DMA snapshot and runner/cleanup classification. Current snapshot rewrite py-compiles; runner, tests, and commit pending. No live audio. |
+| `/root/recovery_hardening` | `/tmp/s22-luna-wave1-npu-20260923`, `codex/s22-wave1-npu-20260923`; exact pinned kernel worktree `/tmp/s22-kernel-npu-lifecycle-20260923` at `4e5c5ad7d950e4de0688b5663965f2075654b2ad` | Reassigned from recovery scouting to NPU implementation. Found missing-source fail-open in `power_notify_wait_resolved`, unbounded POWER_NOTIFY wait, ignored enqueue/result errors, and incomplete boot failure unwind. Implementing in the bounded kernel/preflight/test ownership. No BOOTUP, build, or device actions. |
+
+The branches/worktrees are isolated from one another. The original checkout
+remains dirty and divergent (`master` at `fb60a2c1...`, 44 ahead of
+`origin/master`, no merge base); it was not used as the publication baseline.
+The two preserved commits are `5928e980ea32355c43ca5240eb41c8aa862533f3`
+(NPU gate/audio classifier and tests) and `295b8696b20ef2c342df1ea6031ac41d9bc52fe8`
+(this task board). They are intentionally retained, not recreated. The
+review branch merges fetched `origin/master` correction commit
+`20605dbe623e0909cf219c3cae9ef7bb597b15a6` without rewriting those commits.
+
+### Host receipts at this checkpoint
+
+- `git show --check` on both preserved commits and Bluetooth commit: passed.
+- `python3 tools/hardware/test-npu-boot-preflight.py`: passed synthetic
+  pass/mismatch cases. `sh tools/hardware/test-npu-boot-probe.sh`: passed
+  three ABI assertions and refusal checks.
+- `python3 tools/hardware/test-audio-route-assessment.py`: 12 passed;
+  `python3 tools/hardware/test-audio-progress-snapshot.py`: 8 passed.
+- Bluetooth H4/IBS PTY/unit suite from the worker branch: 12 passed.
+- `python3 tools/hardware/test-bt-hci-socket-restore.py --base-source
+  "$PINNED_KERNEL/net/bluetooth/hci_sock.c" --patch
+  tools/hardware/bt-hci-socket-restore.patch`: passed source application,
+  lifecycle checks, and three mutation negatives using the exact clean kernel
+  pin. Scope is source validation only.
+- The optimized-mode NPU CLI still exits nonzero, but its diagnostic currently
+  reports `power_notify_wait_resolved=true` when the pinned source is missing.
+  This is a confirmed subgate false-green, not a passing readiness receipt;
+  the NPU worker has the fix and missing-source regression assigned. BOOTUP
+  remains unauthorized and disabled.
+- AVB `verify_image` on the two existing recovery artifacts passed footer/hash
+  checks; both use algorithm `NONE`. This does not establish Samsung
+  authentication or bootability. No image was built or flashed here.
+- Bluetooth HCI validator invoked once with a stale temp source path failed
+  due to that path being absent; rerunning with `--base-source` against the
+  exact pinned source above passed. No test artifact or source was modified by
+  that initial path error.
+
+### Refreshed live state — read-only
+
+USB rescue SSH succeeded through the existing strict-host-key helper at
+`2026-09-23 19:19 UTC`; live kernel is `5.10.260-g4e5c5ad7d950`, PID 1 is
+`native-guardian`, and PID 1/SSH mount namespaces match.
+Uptime was `69018.93` seconds. The resident assistant health endpoint returned
+HTTP 200. A host-originated Tailscale ping reached the phone peer over USB in
+5 ms; private peer identifiers and addresses are omitted. This proves current
+peer reachability, not independent rescue if the kernel fails.
+
+PID 1 mounts CACHE at `/cache` and the native overlay at `/newroot`, with
+`/cache/s22-linux/upper` as upperdir. Overlay `/` had 34,844,672 bytes
+available (94% used), 29,780 free inodes (22% used). The upperdir used
+521,476 KiB; `/usr` accounted for 502,788 KiB, including `/usr/lib` at
+411,952 KiB and `/usr/lib/python3.14` at 59,408 KiB. No disposable cache was
+identified or removed. Arch `/srv/s22` is on persistent userdata with
+102,382,280,704 bytes available and 1,652,508 free inodes. Do not install
+packages or stage files into the native overlay without a destination-specific
+space check; no phone files were written.
+
+No device state changed; no hardware test, kernel build, deploy or reboot was
+performed. The current phone remains on the known-running kernel/userspace.
+The next experiment remains gated on completing and independently reviewing
+the relevant host patch, validating exact candidate/artifact provenance, and
+preserving USB rescue plus the existing rollback. In particular, do not retry
+raw HCI on this kernel or submit NPU BOOTUP while ownership/unwind checks are
+incomplete.
