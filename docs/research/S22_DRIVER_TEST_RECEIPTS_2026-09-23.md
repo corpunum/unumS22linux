@@ -18,6 +18,8 @@ or reboot was performed for this receipt.
   negative tests.
 - `2d6d9a40c3d97064ef4a5ccc5ceb90071970b715`, integrated as
   `2b55003` — synchronized audio snapshots and cleanup classification.
+- `d2852765b2b58bba434ba8ae1b28c078615ff13f`, integrated as
+  `4397d61` — fail-closed NPU readiness when lifecycle source is absent.
 
 The first two commits were kept intact and remain ancestors of the review
 branch. The Bluetooth worker commit was based on the review branch's exact
@@ -30,6 +32,7 @@ its patch content.
 |---|---|---|
 | `git show --check` for the two preserved commits and Bluetooth worker commit | Pass | Patch whitespace/integrity only |
 | `python3 tools/hardware/test-npu-boot-preflight.py` | Pass | Synthetic pass/mismatch cases; no firmware or device use |
+| `python3 -O tools/hardware/test-npu-boot-preflight.py` after missing-source fix | Pass | Optimization-mode synthetic cases; missing/unreadable lifecycle source cannot resolve a gate |
 | `sh tools/hardware/test-npu-boot-probe.sh` | Pass, 3 assertions plus refusal checks | Host ABI and safety refusal only |
 | `python3 tools/hardware/test-audio-route-assessment.py` | Pass, 12 tests | Classifier logic only |
 | `python3 tools/hardware/test-audio-progress-snapshot.py` | Pass, 8 tests | Snapshot planning/classification only; no stream capture |
@@ -37,7 +40,7 @@ its patch content.
 | `python3 tools/hardware/test-bt-hci-socket-restore.py --base-source "$PINNED_KERNEL/net/bluetooth/hci_sock.c" --patch tools/hardware/bt-hci-socket-restore.patch` | Pass | Applied candidate in a temporary tree, validated source contracts, and rejected three mutated candidates; not a kernel build/runtime test |
 | `python3 tools/hardware/test-recovery-deployment-hardening.py` | Pass, 28 tests in normal, `python3 -O`, and `PYTHONOPTIMIZE=1` modes | Host mocks plus synthetic AVB footer/corruption test; no operational deploy path |
 | Audio snapshot / route / cleanup / bind-node / PCM-prepare / sync-node suites | Pass, respectively 13 / 18 / 4 / 4 / 5 / 3 tests | Host-only diagnostics and fake child/PCM cleanup; no live audio |
-| `python3 -O tools/hardware/npu-boot-preflight.py --repo "$REPO"` | Exit 2, fail-closed overall | Correctly does not authorize BOOTUP, but currently misreports the individual `power_notify_wait_resolved` subgate as true when the required pinned lifecycle source is missing. This regression is assigned to the NPU worker and must be fixed before the receipt is promoted. |
+| `python3 -O tools/hardware/npu-boot-preflight.py --repo "$REPO"` after fix | Exit 2; `bootup_ready=false`, `bootup_authorized=false`, and missing-source lifecycle gates false | Fail-closed source/artifact audit only; NPU request ownership/unwind and runtime remain unproven |
 | `avbtool.py verify_image` against the existing audio-extra and HCI candidate recovery artifacts | Pass, footer/hash checks | Both artifacts use AVB algorithm `NONE`; this is not Samsung authentication or proof of bootability. No image is included here. |
 
 An earlier HCI test invocation used a stale temporary source path and failed
@@ -59,6 +62,22 @@ writable-parent path-replacement race. The deployment author has a follow-up
 to add fixes and negative tests. The deployment entrypoints were not invoked;
 only isolated mocked tests and read-only AVB verification were run. The code
 is WIP, unmerged and undeployed.
+
+The Bluetooth independent Luna review also completed. It passed H4 12/12 and
+the exact-pinned-source HCI validator, found no defect in the changed C
+cleanup-reporting path, and requested two P2 test-hardening changes: isolate
+test binaries under a per-run temporary directory and prove capability denial
+control flow with a negative mutation. A P3 naming clarification was also
+requested. The author follow-up is active. This does not verify the HCI kernel
+patch by compilation or runtime; device deployment remains blocked.
+
+The earlier NPU missing-source subgate false-green is fixed in commit
+`d2852765b2b58bba434ba8ae1b28c078615ff13f` (integrated as `4397d61`). Normal
+and optimized preflight tests pass; an optimized CLI probe on the public
+checkout still exits 2 and now reports missing-source lifecycle readiness
+gates false. This does not repair actual kernel callback ownership or boot
+error unwind; that implementation remains in progress, and BOOTUP stays
+disabled.
 
 ## Live read-only snapshot
 
