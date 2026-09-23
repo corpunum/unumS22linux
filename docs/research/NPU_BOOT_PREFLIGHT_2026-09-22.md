@@ -1,9 +1,11 @@
-# NPU normal BOOTUP preflight — 2026-09-22
+# NPU artifact/source audit and BOOTUP gate — 2026-09-22 (gate corrected 2026-09-23)
 
-Host-only result from `tools/hardware/npu-boot-preflight.py`. The checker does
-not open `/dev/vertex*`, invoke an ioctl, stage firmware, reboot, or use a
-phone. It exits nonzero until the source-level BOOTUP unwind is independently
-fixed.
+`tools/hardware/npu-boot-preflight.py` is a host-only source/config/artifact
+audit. It never opens `/dev/vertex*`, invokes an ioctl, stages firmware,
+reboots, or uses a phone. Its artifact result is separate from BOOTUP
+readiness and authorization. The checker exits 2 unless all independent
+lifecycle/runtime/rescue/authorization gates pass; no CLI input can set those
+gates. Matching files alone can never authorize BOOTUP.
 
 ## Verified prerequisites
 
@@ -71,13 +73,21 @@ Run:
 python3 tools/hardware/npu-boot-preflight.py
 ```
 
-Expected current outcome is a passing host preflight with matching required
-artifact/config/source-route checks, `live_probe_validated: false`, and a
-non-empty `known_lifecycle_gaps` section; it also reports
-`device_access: false` and `staging: false`. A future device probe requires,
-at minimum, a source-validated BOOTUP error unwind and callback lifetime
-repair, confirmation of the recovery image's imgloader firmware search root,
-and an externally supervised shutdown plan that does not rely on a userspace
-alarm to cancel queued work. No probe C program is supplied or executed here;
-there is no safe “hold fd then reboot” protocol until those kernel ownership
-conditions are met.
+Expected outcome on a private checkout may include
+`artifact_preflight_pass: true`; a public checkout without the excluded
+firmware/kernel inputs will report it false. In either case,
+`bootup_ready: false`, `bootup_authorized: false`, and process exit code 2 are
+required while lifecycle/runtime/rescue/owner gates remain unproven. The JSON
+`readiness_gates` and `readiness_blockers` fields identify those independent
+conditions; an artifact pass is not a device go/no-go. A public checkout does
+not contain the private AIE/DSP firmware or pinned kernel source. The owner’s
+separate local working copy may supply those inputs for private verification;
+do not copy them into public Git to make CI green.
+
+A future device probe requires, at minimum, an independently reviewed
+request/session ownership repair, late-callback/close-race and error-unwind
+regressions, confirmation of the recovery image's imgloader firmware search
+root, tested firmware boot/shutdown, an independent recovery path, a live
+validation receipt, and explicit owner authorization for the exact operation.
+No probe C program is supplied or executed here; there is no safe “hold fd then
+reboot” protocol until those kernel ownership conditions are met.

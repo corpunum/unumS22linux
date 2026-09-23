@@ -41,5 +41,37 @@ class Assessment(unittest.TestCase):
         self.assertFalse(route.classify(BASE,'')['diagnostic_completed'])
         r=copy.deepcopy(BASE);r['same_boot']=False
         self.assertFalse(route.classify(r,TRACE)['diagnostic_completed'])
+    def test_completed_diagnostic_without_samples_does_not_claim_dma(self):
+        a=route.classify(BASE,TRACE)
+        self.assertTrue(a['diagnostic_completed'])
+        self.assertFalse(a['dma_progress_verified'])
+        self.assertFalse(a['physical_playback_verified'])
+    def test_hw_pointer_advance_verifies_dma_not_sound(self):
+        r=copy.deepcopy(BASE)
+        r['result']['progress_samples']=[
+            {'monotonic':1.0,'alsa_status':'state: RUNNING\nhw_ptr: 100\nappl_ptr: 200\n'},
+            {'monotonic':2.0,'alsa_status':'state: RUNNING\nhw_ptr: 356\nappl_ptr: 456\n'},
+        ]
+        a=route.classify(r,TRACE)
+        self.assertTrue(a['dma_progress_verified'])
+        self.assertEqual(a['dma_progress']['hw_ptr_advance'],256)
+        self.assertFalse(a['physical_playback_verified'])
+    def test_constant_pointer_does_not_verify_dma(self):
+        samples=[
+            {'monotonic':1.0,'alsa_status':'state: RUNNING\nhw_ptr: 100\n'},
+            {'monotonic':2.0,'alsa_status':'state: RUNNING\nhw_ptr: 100\n'},
+        ]
+        self.assertFalse(route.assess_dma_progress(samples)['verified'])
+    def test_regression_or_bad_running_sample_fails_closed(self):
+        regress=[
+            {'monotonic':1.0,'alsa_status':'state: RUNNING\nhw_ptr: 200\n'},
+            {'monotonic':2.0,'alsa_status':'state: RUNNING\nhw_ptr: 100\n'},
+        ]
+        malformed=[
+            {'monotonic':1.0,'alsa_status':'state: RUNNING\nhw_ptr: ???\n'},
+            {'monotonic':2.0,'alsa_status':'state: RUNNING\nhw_ptr: 300\n'},
+        ]
+        self.assertFalse(route.assess_dma_progress(regress)['verified'])
+        self.assertFalse(route.assess_dma_progress(malformed)['verified'])
 
 if __name__=='__main__':unittest.main()

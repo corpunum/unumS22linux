@@ -1,9 +1,40 @@
 # S22 native Linux status
 
-Updated 2026-09-20. Older states and experiments remain in `EXPERIMENTS.md`
-and Git history; the old claim that nothing custom was flashed is obsolete.
+Updated 2026-09-23 from a read-only live check. The detailed driver ledger is
+[`docs/DRIVER_STATUS_2026-09-23.md`](docs/DRIVER_STATUS_2026-09-23.md); the
+chronological experiment record remains in `EXPERIMENTS.md`.
 
-## Current accepted state — 20:41 UTC
+## Current accepted state — BORE 767
+
+- Live device tree identifies Samsung R0S / S5E9925 (SM-S901B/DS, Exynos
+  2200). Native kernel `5.10.260-g4e5c5ad7d950`, guardian PID 1, RECOVERY
+  mode. The live RECOVERY partition is exactly 100,663,296 bytes and hashes
+  to the accepted audio-extras baseline
+  `758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b`.
+- Hyprland and the internal 1080×2340 DSI panel are running; 60/120 Hz modes
+  are exposed. Touch and 11 evdev nodes enumerate, but physical finger input
+  has not been accepted.
+- WLAN-bound HTTPS returned 200. `tailscaled` is active, but the current
+  `tailscale0` operstate is unknown and this check did not prove peer reachability.
+- The local model API returned HTTP 200. The resident Qwen3.5-4B remains
+  CPU-only; Samsung GPU compute has separate bounded test evidence, not
+  accelerated Hyprland or resident-4B acceptance.
+- The live kernel has 325 loaded modules despite lacking a conventional
+  `/lib/modules` directory. Their boot-time source/loader closure is not yet
+  fully mapped.
+- Audio controls and route preparation work; measured RDMA2/hardware pointer
+  progress remained zero. No speaker/microphone acceptance. Bluetooth
+  firmware/configuration transport was acknowledged, but the HCI kernel
+  candidate is unflashed and `/sys/class/bluetooth` is empty. NPU inference,
+  SIM/data/calls, cameras, suspend and physical touch remain unaccepted.
+- CACHE-backed `/` has about 34 MiB free; do not add packages or bulk files
+  there. The persistent userdata filesystem has about 99.98 GiB free.
+
+No reboot or partition write occurred during this refresh. The current
+readiness and remaining gates are tracked in the driver ledger, not inferred
+from this summary.
+
+## Historical checkpoint — 2026-09-20 (superseded)
 
 Native RECOVERY **BORE760** is running, USB SSH is reachable, and the resident
 CPU model reports `ok`. Two intentional recovery-target software reboots
