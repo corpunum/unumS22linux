@@ -149,6 +149,11 @@ def main() -> int:
     lifecycle_source_available = all((session_available, vertex_available, proto_available))
     normal_boot = function_body(vertex, "int npu_hwdev_normal_bootup(")
     power_notify = function_body(session, "int npu_session_NW_CMD_POWER_NOTIFY(")
+    power_wait = function_body(session, "static int npu_session_wait_power_request(")
+    bounded_power_wait = (
+        "npu_session_wait_power_request(session, NPU_NW_CMD_POWER_CTL)" in power_notify
+        and "wait_for_completion_timeout" in power_wait
+    )
 
     checks["source"] = {
         "normal_fw_name_AIE": (
@@ -156,7 +161,9 @@ def main() -> int:
             and '#define NPU_FW_NAME\t\t(FW_BASE_NAME ".bin")' in binary
         ),
         "normal_boot_has_power_notify": "npu_session_NW_CMD_POWER_NOTIFY(session, true)" in normal_boot,
-        "power_notify_has_unbounded_wait": "wait_event(session->wq" in power_notify,
+        "power_notify_has_unbounded_wait": (
+            "wait_event(session->wq" in power_notify or not bounded_power_wait
+        ),
         "normal_boot_unwind_missing": "npu_hwdev_shutdown(device, ctrl->value)" not in normal_boot,
         "system_calls_signature_loader": "npu_firmware_file_read_signature" in system,
         "lifecycle_sources_available": lifecycle_source_available,
@@ -181,6 +188,7 @@ def main() -> int:
         "normal_fw_name_AIE": checks["source"]["normal_fw_name_AIE"],
         "normal_boot_has_power_notify": checks["source"]["normal_boot_has_power_notify"],
         "system_calls_signature_loader": checks["source"]["system_calls_signature_loader"],
+        "lifecycle_sources_available": lifecycle_source_available,
     }
     checks["known_lifecycle_gaps"] = {
         "normal_boot_unwind_missing": checks["source"]["normal_boot_unwind_missing"],
