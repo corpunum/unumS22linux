@@ -131,8 +131,10 @@ def main(argv=None, *, base_module=None):
     receipt_path=ROOT/'rootfs/main-driver-loop-20260921'/('audio-extra-recovery-'+mode+'.json')
     base.ensure_new_receipt(receipt_path)
     ssh=ROOT/'tools/s22-ssh'
-    if ssh.is_symlink() or not ssh.is_file() or not os.access(ssh,os.X_OK):
-        raise SystemExit(f'approved SSH wrapper is missing, symlinked, or not executable: {ssh}')
+    try:
+        base.validate_approved_ssh_wrapper(ssh)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
     # Render the candidate/rollback hashes and staging paths from this
     # deployment's explicit manifest; no broad edits to a baked remote script.
     code=base.render_remote(

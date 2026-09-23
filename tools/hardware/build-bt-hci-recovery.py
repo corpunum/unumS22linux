@@ -8,11 +8,14 @@ current audio-extras recovery image before writing the candidate and manifest.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -20,6 +23,9 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 BASE_IMAGE = ROOT / "builds/audio-extra-v2-20260922/recovery.img"
 DEFAULT_AVBTOOL = ROOT / "tools/avb/avbtool.py"
+# Trusted AOSP avbtool 1.4.0 bytes in the project owner's existing local tool
+# store. `--avbtool` may relocate these exact bytes, but cannot select a shim.
+TRUSTED_AVBTOOL_SHA256 = "5698656733ef5077d62ee30395b5ad34295a0f170fb1ba570026c760ead83782"
 BASE_SHA256 = "758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b"
 PARTITION_SIZE = 100663296
 FINGERPRINT = "samsung/lineage_r0s/r0s:16/BP4A.251205.006/4a67c928b4:userdebug/release-keys"
@@ -44,22 +50,87 @@ def run(*args: str) -> None:
     subprocess.run(list(args), check=True)
 
 
-def verify_image(avbtool: Path, image: Path) -> str:
-    """Require cryptographic/footer verification before accepting a candidate."""
+def open_trusted_avbtool(avbtool: Path) -> int:
+    """Snapshot and seal the verifier bytes, returning an immutable memfd."""
     avbtool = Path(avbtool)
-    image = Path(image)
-    if not avbtool.is_file() or avbtool.is_symlink():
-        raise RuntimeError(f"pinned avbtool is missing or is not a regular file: {avbtool}")
-    if not image.is_file() or image.is_symlink():
-        raise RuntimeError(f"candidate image is missing or is not a regular file: {image}")
     try:
-        result = subprocess.run(
-            [sys.executable, str(avbtool), "verify_image", "--image", str(image)],
-            check=True, capture_output=True, text=True,
+        before = avbtool.lstat()
+        if not stat.S_ISREG(before.st_mode):
+            raise RuntimeError(f"trusted avbtool must be a non-symlink regular file: {avbtool}")
+        source_fd = os.open(avbtool, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as error:
+        raise RuntimeError(f"trusted avbtool cannot be opened safely: {avbtool}: {error}") from error
+    snapshot_fd = None
+    try:
+        opened = os.fstat(source_fd)
+        if (not stat.S_ISREG(opened.st_mode)
+                or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)):
+            raise RuntimeError("avbtool path changed during trusted-identity check")
+        seal_names = ("F_ADD_SEALS", "F_GET_SEALS", "F_SEAL_SEAL", "F_SEAL_SHRINK",
+                      "F_SEAL_GROW", "F_SEAL_WRITE")
+        if (not hasattr(os, "memfd_create") or not hasattr(os, "MFD_ALLOW_SEALING")
+                or any(not hasattr(fcntl, name) for name in seal_names)):
+            raise RuntimeError("this host cannot create a sealed verifier snapshot")
+        snapshot_fd = os.memfd_create(
+            "s22-trusted-avbtool",
+            getattr(os, "MFD_CLOEXEC", 0) | getattr(os, "MFD_ALLOW_SEALING", 0),
         )
+        digest = hashlib.sha256()
+        while True:
+            block = os.read(source_fd, 1024 * 1024)
+            if not block:
+                break
+            digest.update(block)
+            offset = 0
+            while offset < len(block):
+                count = os.write(snapshot_fd, block[offset:])
+                if count <= 0:
+                    raise RuntimeError("could not complete trusted avbtool snapshot")
+                offset += count
+        actual = digest.hexdigest()
+        if actual != TRUSTED_AVBTOOL_SHA256:
+            raise RuntimeError(
+                f"avbtool identity mismatch: expected trusted SHA-256 {TRUSTED_AVBTOOL_SHA256}, got {actual}"
+            )
+        seals = (fcntl.F_SEAL_SEAL | fcntl.F_SEAL_SHRINK
+                 | fcntl.F_SEAL_GROW | fcntl.F_SEAL_WRITE)
+        fcntl.fcntl(snapshot_fd, fcntl.F_ADD_SEALS, seals)
+        if fcntl.fcntl(snapshot_fd, fcntl.F_GET_SEALS) & seals != seals:
+            raise RuntimeError("trusted avbtool snapshot could not be made immutable")
+        os.lseek(snapshot_fd, 0, os.SEEK_SET)
+        os.close(source_fd)
+        return snapshot_fd
+    except Exception:
+        os.close(source_fd)
+        if snapshot_fd is not None:
+            os.close(snapshot_fd)
+        raise
+
+
+def run_trusted_avbtool(avbtool: Path, *arguments: str, runner=None) -> subprocess.CompletedProcess:
+    """Run only the pinned verifier bytes; runner injection is a test seam."""
+    fd = open_trusted_avbtool(avbtool)
+    try:
+        command = [sys.executable, f"/proc/self/fd/{fd}", *(str(arg) for arg in arguments)]
+        execute = subprocess.run if runner is None else runner
+        return execute(command, check=True, capture_output=True, text=True, pass_fds=(fd,))
     except subprocess.CalledProcessError as error:
-        detail = (error.stderr or error.stdout or "verifier returned nonzero").strip()
-        raise RuntimeError(f"AVB verify_image failed for {image}: {detail}") from error
+        detail = (error.stderr or error.stdout or "avbtool returned nonzero").strip()
+        raise RuntimeError(f"trusted avbtool {arguments[0] if arguments else 'command'} failed: {detail}") from error
+    finally:
+        os.close(fd)
+
+
+def verify_image(avbtool: Path, image: Path, *, runner=None) -> str:
+    """Require the pinned AVB verifier to validate the candidate footer/hash."""
+    image = Path(image)
+    try:
+        metadata = image.lstat()
+    except OSError as error:
+        raise RuntimeError(f"candidate image is missing or unreadable: {image}: {error}") from error
+    if not stat.S_ISREG(metadata.st_mode):
+        raise RuntimeError(f"candidate image must be a non-symlink regular file: {image}")
+    result = run_trusted_avbtool(avbtool, "verify_image", "--image", image, runner=runner)
     return result.stdout.strip()
 
 
@@ -129,8 +200,8 @@ def main() -> int:
             "--os_version", "16.0.0", "--os_patch_level", "2026-09",
             "--board", "", "--cmdline", " bootconfig",
         )
-        run(
-            sys.executable, str(args.avbtool), "add_hash_footer",
+        run_trusted_avbtool(
+            args.avbtool, "add_hash_footer",
             "--image", str(candidate), "--partition_size", str(PARTITION_SIZE),
             "--partition_name", "recovery", "--algorithm", "NONE",
             "--rollback_index", "0", "--salt", SALT,
@@ -158,9 +229,8 @@ def main() -> int:
             if sha(base_dir / name) != sha(candidate_dir / name):
                 raise SystemExit(f"candidate changed the base {name} payload")
 
-        avb_report = subprocess.run(
-            [sys.executable, str(args.avbtool), "info_image", "--image", str(candidate)],
-            check=True, capture_output=True, text=True,
+        avb_report = run_trusted_avbtool(
+            args.avbtool, "info_image", "--image", candidate,
         ).stdout
         out.mkdir()
         image_path = out / "recovery.img"
@@ -180,6 +250,7 @@ def main() -> int:
             },
             "avb_verify_image": avb_verification,
             "avb_info_image": avb_report,
+            "avb_verifier_sha256": TRUSTED_AVBTOOL_SHA256,
             "avb_note": "algorithm NONE verifies the AVB footer/hash only; it does not establish Samsung authentication or bootability",
         }
         (out / "manifest.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")

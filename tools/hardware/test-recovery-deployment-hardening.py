@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import fcntl
 import importlib.util
 import json
 import os
@@ -201,6 +202,7 @@ class ExtraDeploymentEntrypointTests(unittest.TestCase):
             NEW_SHA=BASE.NEW_SHA,
             render_remote=BASE.render_remote,
             ensure_new_receipt=BASE.ensure_new_receipt,
+            validate_approved_ssh_wrapper=BASE.validate_approved_ssh_wrapper,
             validate_remote_receipt=BASE.validate_remote_receipt,
         )
         self.hashes = {
@@ -236,7 +238,8 @@ class ExtraDeploymentEntrypointTests(unittest.TestCase):
         command = args[0][1]
         self.assertIn(self.hashes["BEFORE"], command)
         self.assertIn(self.hashes["AFTER"], command)
-        self.assertIn("/srv/s22/audio-extra-v2-20260922", command)
+        self.assertIn("audio-extra-v2-20260922", command)
+        self.assertIn("dir_fd=parent_fd", command)
         self.assertEqual(kwargs["input"], self.candidate)
         receipt = self.root / "rootfs/main-driver-loop-20260921/audio-extra-recovery-stage.json"
         self.assertTrue(receipt.is_file())
@@ -256,6 +259,18 @@ class ExtraDeploymentEntrypointTests(unittest.TestCase):
         receipt.write_text("old")
         with self.assertRaisesRegex(ValueError, "existing deployment receipt"):
             self.call_main(["--flash"], transport)
+        transport.assert_not_called()
+
+    def test_extra_deployer_rejects_symlinked_ssh_wrapper_before_transport(self):
+        ssh = self.root / "tools/s22-ssh"
+        ssh.unlink()
+        target = self.root / "tools/real-ssh"
+        target.write_text("#!/bin/sh\nexit 0\n")
+        target.chmod(0o755)
+        ssh.symlink_to(target)
+        transport = mock.Mock()
+        with self.assertRaisesRegex(SystemExit, "non-symlink executable regular file"):
+            self.call_main(["--stage"], transport)
         transport.assert_not_called()
 
     def test_invalid_remote_receipt_is_not_recorded_as_success(self):
@@ -322,7 +337,8 @@ print("UNSAFE_ACCEPT");sys.exit(0)
         )
         self.assertIn("base_sha='" + "a" * 64 + "'", rendered)
         self.assertIn("new_sha='" + "b" * 64 + "'", rendered)
-        self.assertIn("/srv/s22/test-candidate", rendered)
+        self.assertIn("directory_name='test-candidate'", rendered)
+        self.assertIn("dir_fd=parent_fd", rendered)
         self.assertNotIn("__S22_", rendered)
         with self.assertRaisesRegex(ValueError, "SHA-256"):
             BASE.render_remote(base_sha="bad", new_sha="b" * 64,
@@ -332,9 +348,82 @@ print("UNSAFE_ACCEPT");sys.exit(0)
                                staging_directory="/srv/s22/../outside", rollback_filename="rollback.img")
 
     def _guards(self):
-        namespace = {"hashlib": hashlib}
+        namespace = {"hashlib": hashlib, "os": os, "stat": __import__("stat")}
         exec(BASE.REMOTE_GUARDS, namespace)
         return namespace
+
+    def test_staging_parent_must_be_root_owned_and_not_group_or_other_writable(self):
+        validate = self._guards()["validate_directory_metadata"]
+        valid = SimpleNamespace(st_mode=0o40755, st_uid=0)
+        validate(valid, "staging parent", 0, private=False)
+        with self.assertRaisesRegex(RuntimeError, "expected uid"):
+            validate(SimpleNamespace(st_mode=0o40755, st_uid=1000), "staging parent", 0)
+        with self.assertRaisesRegex(RuntimeError, "writable by group/other"):
+            validate(SimpleNamespace(st_mode=0o40777, st_uid=0), "staging parent", 0)
+        with self.assertRaisesRegex(RuntimeError, "real directory"):
+            validate(SimpleNamespace(st_mode=0o120777, st_uid=0), "staging parent", 0)
+
+    def test_staging_directory_open_is_anchored_and_detects_path_replacement(self):
+        guards = self._guards()
+        with tempfile.TemporaryDirectory(prefix="s22-staging-dirfd-") as temporary:
+            parent = Path(temporary)
+            parent_link = parent.parent / (parent.name + "-parent-link")
+            parent_link.symlink_to(parent, target_is_directory=True)
+            with self.assertRaisesRegex(RuntimeError, "not a real directory"):
+                guards["open_parent_directory"](
+                    parent_link, "test parent", expected_uid=os.geteuid())
+            parent_link.unlink()
+            parent_fd = guards["open_parent_directory"](
+                parent, "test parent", expected_uid=os.geteuid())
+            try:
+                child_fd = guards["open_child_directory"](
+                    parent_fd, "private-stage", "test staging", create=True,
+                    expected_uid=os.geteuid())
+                try:
+                    guards["verify_child_directory"](
+                        parent_fd, "private-stage", child_fd, "test staging",
+                        expected_uid=os.geteuid())
+                    moved = parent / "moved-stage"
+                    (parent / "private-stage").rename(moved)
+                    (parent / "private-stage").mkdir(mode=0o700)
+                    with self.assertRaisesRegex(RuntimeError, "path was replaced"):
+                        guards["verify_child_directory"](
+                            parent_fd, "private-stage", child_fd, "test staging",
+                            expected_uid=os.geteuid())
+                finally:
+                    os.close(child_fd)
+            finally:
+                os.close(parent_fd)
+
+    def test_staging_helpers_use_no_follow_and_verify_private_file_bytes(self):
+        guards = self._guards()
+        with tempfile.TemporaryDirectory(prefix="s22-staging-files-") as temporary:
+            parent = Path(temporary)
+            parent_fd = guards["open_parent_directory"](
+                parent, "test parent", expected_uid=os.geteuid())
+            try:
+                child_fd = guards["open_child_directory"](
+                    parent_fd, "private-stage", "test staging", create=True,
+                    expected_uid=os.geteuid())
+                try:
+                    content = b"rollback fixture"
+                    digest = hashlib.sha256(content).hexdigest()
+                    guards["write_staged_file"](
+                        child_fd, "rollback.img", content, "rollback",
+                        expected_uid=os.geteuid())
+                    self.assertEqual(guards["read_staged_file"](
+                        child_fd, "rollback.img", "rollback", digest, len(content),
+                        expected_uid=os.geteuid()), content)
+                    link = parent / "private-stage" / "rollback-link.img"
+                    link.symlink_to(parent / "private-stage" / "rollback.img")
+                    with self.assertRaises(OSError):
+                        guards["read_staged_file"](
+                            child_fd, "rollback-link.img", "rollback", digest, len(content),
+                            expected_uid=os.geteuid())
+                finally:
+                    os.close(child_fd)
+            finally:
+                os.close(parent_fd)
 
     def test_wrong_device_capacity_and_mounted_partition_are_refused(self):
         validate = self._guards()["validate_recovery_target"]
@@ -402,6 +491,18 @@ print("UNSAFE_ACCEPT");sys.exit(0)
             with self.assertRaisesRegex(ValueError, "existing deployment receipt"):
                 BASE.ensure_new_receipt(target)
 
+    def test_primary_deployer_rejects_symlinked_ssh_wrapper(self):
+        with tempfile.TemporaryDirectory(prefix="s22-ssh-wrapper-") as directory:
+            root = Path(directory)
+            approved = root / "s22-ssh"
+            approved.write_text("#!/bin/sh\nexit 0\n")
+            approved.chmod(0o755)
+            self.assertEqual(BASE.validate_approved_ssh_wrapper(approved), approved)
+            link = root / "approved-link"
+            link.symlink_to(approved)
+            with self.assertRaisesRegex(ValueError, "non-symlink executable"):
+                BASE.validate_approved_ssh_wrapper(link)
+
 
 class AvbVerificationTests(unittest.TestCase):
     def setUp(self):
@@ -415,13 +516,38 @@ class AvbVerificationTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_failed_avb_verifier_is_fatal(self):
+        if not self.avbtool.is_file():
+            self.skipTest(f"trusted avbtool unavailable: {self.avbtool}")
         self.image.write_bytes(b"synthetic candidate")
-        self.avbtool = self.root / "avbtool.py"
-        self.avbtool.write_text("# mocked executable path\n")
-        failure = subprocess.CalledProcessError(1, ["avbtool"], stderr="footer mismatch")
-        with mock.patch.object(BUILDER.subprocess, "run", side_effect=failure):
-            with self.assertRaisesRegex(RuntimeError, "AVB verify_image failed.*footer mismatch"):
-                BUILDER.verify_image(self.avbtool, self.image)
+        failure = subprocess.CalledProcessError(1, ["pinned-avbtool"], stderr="footer mismatch")
+        runner = mock.Mock(side_effect=failure)
+        with self.assertRaisesRegex(RuntimeError, "trusted avbtool verify_image failed.*footer mismatch"):
+            BUILDER.verify_image(self.avbtool, self.image, runner=runner)
+        command = runner.call_args.args[0]
+        self.assertRegex(command[1], r"/proc/self/fd/\d+$")
+        self.assertEqual(runner.call_args.kwargs["pass_fds"], (int(command[1].rsplit("/", 1)[1]),))
+
+    def test_untrusted_avbtool_shim_is_rejected_before_injected_runner(self):
+        self.image.write_bytes(b"synthetic candidate")
+        shim = self.root / "avbtool.py"
+        shim.write_text("print('verified')\n")
+        runner = mock.Mock()
+        with self.assertRaisesRegex(RuntimeError, "avbtool identity mismatch"):
+            BUILDER.verify_image(shim, self.image, runner=runner)
+        runner.assert_not_called()
+
+    def test_trusted_verifier_snapshot_is_sealed_against_mutation(self):
+        if not self.avbtool.is_file():
+            self.skipTest(f"trusted avbtool unavailable: {self.avbtool}")
+        fd = BUILDER.open_trusted_avbtool(self.avbtool)
+        try:
+            required = (fcntl.F_SEAL_SEAL | fcntl.F_SEAL_SHRINK
+                        | fcntl.F_SEAL_GROW | fcntl.F_SEAL_WRITE)
+            self.assertEqual(fcntl.fcntl(fd, fcntl.F_GET_SEALS) & required, required)
+            with self.assertRaises(OSError):
+                os.write(fd, b"tamper")
+        finally:
+            os.close(fd)
 
     def test_candidate_builder_requires_verify_before_publication(self):
         source = (ROOT / "tools/hardware/build-bt-hci-recovery.py").read_text()
@@ -435,18 +561,17 @@ class AvbVerificationTests(unittest.TestCase):
         if not self.avbtool.is_file():
             self.skipTest(f"avbtool.py unavailable: {self.avbtool}")
         self.image.write_bytes(bytes((index % 251 for index in range(512 * 1024))))
-        subprocess.run(
-            [sys.executable, str(self.avbtool), "add_hash_footer", "--image", str(self.image),
-             "--partition_size", str(2 * 1024 * 1024), "--partition_name", "recovery",
-             "--algorithm", "NONE", "--rollback_index", "0", "--salt", "11" * 32],
-            check=True, capture_output=True, text=True,
+        BUILDER.run_trusted_avbtool(
+            self.avbtool, "add_hash_footer", "--image", self.image,
+            "--partition_size", str(2 * 1024 * 1024), "--partition_name", "recovery",
+            "--algorithm", "NONE", "--rollback_index", "0", "--salt", "11" * 32,
         )
         verified = BUILDER.verify_image(self.avbtool, self.image)
         self.assertTrue(verified)
         damaged = bytearray(self.image.read_bytes())
         damaged[123] ^= 1
         self.image.write_bytes(damaged)
-        with self.assertRaisesRegex(RuntimeError, "AVB verify_image failed"):
+        with self.assertRaisesRegex(RuntimeError, "trusted avbtool verify_image failed"):
             BUILDER.verify_image(self.avbtool, self.image)
 
 

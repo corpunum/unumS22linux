@@ -65,6 +65,94 @@ def validate_free_space(available_bytes, available_inodes, image_size):
          'insufficient free staging bytes for candidate, rollback, and filesystem overhead')
  require(available_inodes>=3,'insufficient free staging inodes for directory, candidate, and rollback')
 
+def validate_directory_metadata(info, label, expected_uid, private=False):
+ require(stat.S_ISDIR(info.st_mode),label+' is not a real directory')
+ require(info.st_uid==expected_uid,label+' is not owned by the expected uid')
+ mask=0o077 if private else 0o022
+ require((info.st_mode&mask)==0,
+         label+(' is accessible by group/other users' if private else ' is writable by group/other users'))
+
+def require_same_directory(opened, current, label):
+ require((opened.st_dev,opened.st_ino)==(current.st_dev,current.st_ino),
+         label+' path was replaced during validation')
+
+def open_parent_directory(path, label, expected_uid=0):
+ try:
+  before=os.lstat(path)
+ except OSError as error:
+  raise RuntimeError(label+' is unavailable: '+str(error)) from error
+ validate_directory_metadata(before,label,expected_uid,private=False)
+ flags=os.O_RDONLY|os.O_CLOEXEC|os.O_DIRECTORY|os.O_NOFOLLOW
+ try:
+  fd=os.open(path,flags)
+ except OSError as error:
+  raise RuntimeError(label+' could not be opened without following symlinks: '+str(error)) from error
+ try:
+  opened=os.fstat(fd)
+  validate_directory_metadata(opened,label,expected_uid,private=False)
+  require_same_directory(opened,before,label)
+  return fd
+ except Exception:
+  os.close(fd)
+  raise
+
+def verify_child_directory(parent_fd, name, child_fd, label, expected_uid=0):
+ try:
+  current=os.stat(name,dir_fd=parent_fd,follow_symlinks=False)
+ except OSError as error:
+  raise RuntimeError(label+' path is unavailable under its approved parent: '+str(error)) from error
+ opened=os.fstat(child_fd)
+ validate_directory_metadata(opened,label,expected_uid,private=True)
+ validate_directory_metadata(current,label,expected_uid,private=True)
+ require_same_directory(opened,current,label)
+
+def open_child_directory(parent_fd, name, label, create=False, expected_uid=0):
+ if create:
+  os.mkdir(name,mode=0o700,dir_fd=parent_fd)
+ try:
+  current=os.stat(name,dir_fd=parent_fd,follow_symlinks=False)
+ except OSError as error:
+  raise RuntimeError(label+' is unavailable under its approved parent: '+str(error)) from error
+ validate_directory_metadata(current,label,expected_uid,private=True)
+ flags=os.O_RDONLY|os.O_CLOEXEC|os.O_DIRECTORY|os.O_NOFOLLOW
+ try:
+  fd=os.open(name,flags,dir_fd=parent_fd)
+ except OSError as error:
+  raise RuntimeError(label+' could not be opened safely under its approved parent: '+str(error)) from error
+ try:
+  verify_child_directory(parent_fd,name,fd,label,expected_uid)
+  return fd
+ except Exception:
+  os.close(fd)
+  raise
+
+def read_staged_file(directory_fd, name, label, expected_sha, expected_size, expected_uid=0):
+ fd=os.open(name,os.O_RDONLY|os.O_CLOEXEC|os.O_NOFOLLOW,dir_fd=directory_fd)
+ try:
+  metadata=os.fstat(fd)
+  require(stat.S_ISREG(metadata.st_mode) and metadata.st_uid==expected_uid,
+          label+' is not an expected-owner regular file')
+  require((metadata.st_mode&0o077)==0,label+' permissions expose staged data')
+  validate_size(metadata.st_size,expected_size,label)
+  data=read_all(fd,expected_size,os.read,label)
+ finally:
+  os.close(fd)
+ validate_digest(data,expected_sha,label)
+ return data
+
+def write_staged_file(directory_fd, name, content, label, expected_uid=0):
+ fd=os.open(name,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_CLOEXEC|os.O_NOFOLLOW,
+            0o600,dir_fd=directory_fd)
+ try:
+  metadata=os.fstat(fd)
+  require(stat.S_ISREG(metadata.st_mode) and metadata.st_uid==expected_uid,
+          label+' was not created as an expected-owner regular file')
+  require((metadata.st_mode&0o077)==0,label+' permissions expose staged data')
+  write_all_fd(fd,content,lambda descriptor,chunk,offset:os.write(descriptor,chunk),
+               os.fsync,label)
+ finally:
+  os.close(fd)
+
 def validate_recovery_target(pid1, kernel, temperature, resolved_node,
                              has_partition_tag, sectors, is_block, rdev,
                              mounted, expected_rdev, expected_sectors):
@@ -114,9 +202,7 @@ validate_recovery_target(
  stat.S_ISBLK(info.st_mode),info.st_rdev,mounted,expected_rdev,196608)
 require(not node.is_symlink(), '/dev/sda16 unexpectedly became a symlink')
 parent=p('/srv/s22')
-parent_info=parent.lstat()
-require(stat.S_ISDIR(parent_info.st_mode) and parent_info.st_uid==0 and not parent.is_symlink(),
-        'staging parent is not a root-owned real directory')
+parent_fd=open_parent_directory(parent,'staging parent')
 
 def check_fd(fd):
  opened=os.fstat(fd)
@@ -135,64 +221,42 @@ def read_recovery():
 
 old=read_recovery()
 validate_digest(old,base_sha,'recovery baseline; no write')
-directory=p('__S22_STAGING_DIRECTORY__')
-require(directory.parent==parent,'staging directory escaped the approved parent')
-candidate=directory/'recovery.img'
-backup=directory/'__S22_ROLLBACK_FILENAME__'
+directory_name='__S22_STAGING_DIRECTORY_NAME__'
+candidate_name='recovery.img'
+backup_name='__S22_ROLLBACK_FILENAME__'
 os.umask(0o077)
-
-def read_root_file(path,label,want_sha):
- require(not path.is_symlink() and path.is_file(),label+' is missing or is a symlink')
- fd=os.open(path,os.O_RDONLY|os.O_CLOEXEC|os.O_NOFOLLOW)
- try:
-  metadata=os.fstat(fd)
-  require(stat.S_ISREG(metadata.st_mode) and metadata.st_uid==0,
-          label+' is not a root-owned regular file')
-  validate_size(metadata.st_size,size,label)
-  data=read_all(fd,size,os.read,label)
- finally:
-  os.close(fd)
- validate_digest(data,want_sha,label)
- return data
-
-def write_all(path,content):
- fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_CLOEXEC|os.O_NOFOLLOW,0o600)
- try:
-  write_all_fd(fd,content,lambda descriptor,chunk,offset:os.write(descriptor,chunk),
-               os.fsync,'staging write')
- finally:
-  os.close(fd)
 
 if mode=='stage':
  data=sys.stdin.buffer.read(size+1)
  validate_size(len(data),size,'staged candidate')
  validate_digest(data,new_sha,'staged candidate')
- space=os.statvfs(parent)
+ space=os.fstatvfs(parent_fd)
  validate_free_space(space.f_bavail*space.f_frsize,space.f_favail,size)
  try:
-  directory.mkdir(mode=0o700,exist_ok=False)
-  metadata=directory.lstat()
-  require(stat.S_ISDIR(metadata.st_mode) and metadata.st_uid==0 and not directory.is_symlink(),
-          'staging directory is not a new root-owned directory')
-  write_all(backup,old)
-  write_all(candidate,data)
-  dfd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY|os.O_CLOEXEC|os.O_NOFOLLOW)
-  try: os.fsync(dfd)
-  finally: os.close(dfd)
-  staged_backup=read_root_file(backup,'rollback copy',base_sha)
-  staged_candidate=read_root_file(candidate,'staged candidate',new_sha)
+  dfd=open_child_directory(parent_fd,directory_name,'staging directory',create=True)
+  try:
+   write_staged_file(dfd,backup_name,old,'rollback copy')
+   write_staged_file(dfd,candidate_name,data,'staged candidate')
+   os.fsync(dfd)
+   verify_child_directory(parent_fd,directory_name,dfd,'staging directory')
+   staged_backup=read_staged_file(dfd,backup_name,'rollback copy',base_sha,size)
+   staged_candidate=read_staged_file(dfd,candidate_name,'staged candidate',new_sha,size)
+   verify_child_directory(parent_fd,directory_name,dfd,'staging directory')
+  finally:
+   os.close(dfd)
   require(len(staged_backup)==size and len(staged_candidate)==size,
           'staged file size mismatch; no flash permitted')
  except Exception as error:
   raise RuntimeError('staging did not complete; inspect the partial staging directory and do not flash: '+str(error)) from error
  print(json.dumps({'mode':mode,'partition_written':False,'backup_sha256':base_sha,'candidate_sha256':new_sha}))
 elif mode=='flash':
- metadata=directory.lstat()
- require(stat.S_ISDIR(metadata.st_mode) and metadata.st_uid==0 and
-         not directory.is_symlink() and (metadata.st_mode&0o077)==0,
-         'staging directory is not a private root-owned directory')
- data=read_root_file(candidate,'staged candidate',new_sha)
- rollback=read_root_file(backup,'rollback copy',base_sha)
+ dfd=open_child_directory(parent_fd,directory_name,'staging directory')
+ try:
+  data=read_staged_file(dfd,candidate_name,'staged candidate',new_sha,size)
+  rollback=read_staged_file(dfd,backup_name,'rollback copy',base_sha,size)
+  verify_child_directory(parent_fd,directory_name,dfd,'staging directory')
+ finally:
+  os.close(dfd)
  validate_size(len(data),size,'staged candidate')
  validate_size(len(rollback),size,'rollback copy')
  fd=os.open(node,os.O_RDWR|os.O_CLOEXEC|os.O_NOFOLLOW)
@@ -225,7 +289,7 @@ def render_remote(*, base_sha, new_sha, staging_directory, rollback_filename):
     values = {
         "__S22_BASE_SHA__": base_sha,
         "__S22_NEW_SHA__": new_sha,
-        "__S22_STAGING_DIRECTORY__": str(staging),
+        "__S22_STAGING_DIRECTORY_NAME__": staging.name,
         "__S22_ROLLBACK_FILENAME__": rollback_filename,
     }
     rendered = REMOTE_TEMPLATE
@@ -290,6 +354,28 @@ def ensure_new_receipt(path):
     return path
 
 
+def validate_approved_ssh_wrapper(path):
+    """Reject wrappers that are symlinked or replaced during preflight."""
+    path=Path(path)
+    try:
+        before=path.lstat()
+    except OSError as error:
+        raise ValueError(f'approved SSH wrapper is unavailable: {path}: {error}') from error
+    if not stat.S_ISREG(before.st_mode) or not (before.st_mode&0o111) or not os.access(path,os.X_OK):
+        raise ValueError(f'approved SSH wrapper must be a non-symlink executable regular file: {path}')
+    try:
+        fd=os.open(path,os.O_RDONLY|getattr(os,'O_CLOEXEC',0)|getattr(os,'O_NOFOLLOW',0))
+    except OSError as error:
+        raise ValueError(f'approved SSH wrapper could not be opened safely: {path}: {error}') from error
+    try:
+        opened=os.fstat(fd)
+        if not stat.S_ISREG(opened.st_mode) or (opened.st_dev,opened.st_ino)!=(before.st_dev,before.st_ino):
+            raise ValueError(f'approved SSH wrapper changed during validation: {path}')
+    finally:
+        os.close(fd)
+    return path
+
+
 def validate_remote_receipt(receipt, *, mode, before_sha, candidate_sha, size):
     if not isinstance(receipt,dict) or receipt.get('mode')!=mode:
         raise ValueError('remote deployment receipt has an invalid mode or shape')
@@ -331,8 +417,10 @@ def main(argv=None):
     except ValueError as error:
         raise SystemExit(str(error)) from error
     ssh=ROOT/'tools/s22-ssh'
-    if not ssh.is_file() or not os.access(ssh,os.X_OK):
-        raise SystemExit(f'approved SSH wrapper is missing or not executable: {ssh}')
+    try:
+        validate_approved_ssh_wrapper(ssh)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
     command='python3 -c '+shlex.quote(REMOTE)+' '+mode
     try:
         result=subprocess.run([str(ssh),command],input=image if args.stage else b'',
