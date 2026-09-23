@@ -1,0 +1,888 @@
+diff --git a/drivers/vision/npu/core/npu-protodrv.c b/drivers/vision/npu/core/npu-protodrv.c
+index e254eadcf..f53f85f17 100755
+--- a/drivers/vision/npu/core/npu-protodrv.c
++++ b/drivers/vision/npu/core/npu-protodrv.c
+@@ -25,6 +25,29 @@
+ #include "npu-queue.h"
+ #include "npu-if-protodrv-mbox2.h"
+ 
++#ifdef CONFIG_NPU_USE_BOOT_IOCTL
++extern int npu_session_power_wait_assign_req_id(u64 cookie, npu_req_id_t req_id);
++extern int npu_session_power_wait_is_active(u64 cookie, npu_req_id_t req_id);
++extern int npu_session_save_power_result(struct npu_session *session, struct nw_result result);
++
++static u64 nw_power_wait_cookie(const struct npu_nw *nw)
++{
++	return ((u64)nw->param1 << 32) | nw->param0;
++}
++
++static int nw_power_wait_assign_req_id(struct npu_nw *nw)
++{
++	return npu_session_power_wait_assign_req_id(nw_power_wait_cookie(nw),
++			nw->npu_req_id);
++}
++
++static int nw_power_wait_is_active(const struct npu_nw *nw)
++{
++	return npu_session_power_wait_is_active(nw_power_wait_cookie(nw),
++			nw->npu_req_id);
++}
++#endif
++
+ 
+ #define NPU_PROTO_DRV_SIZE	1024
+ #define NPU_PROTO_DRV_NAME	"npu-proto_driver"
+@@ -1201,10 +1224,24 @@ void t32_trace_ncp_load(void)
+ 
+ static int nw_mgmt_op_get_request(struct proto_req_nw *target)
+ {
+-	if (unlikely(npu_ncp_mgmt_get(&target->nw) == 0)) {
++	int ret = npu_ncp_mgmt_get(&target->nw);
++
++	if (unlikely(ret <= 0)) {
+ 		return 0;	/* Empty */
+ 	} else {
+ 		target->nw.npu_req_id = get_next_npu_req_id();
++#ifdef CONFIG_NPU_USE_BOOT_IOCTL
++		/* Power wait cookies are never session references.  Assign the
++		 * protocol identity before transmission so stale/cancelled queued
++		 * commands can be dropped without dereferencing the cookie.
++		 */
++		if (target->nw.cmd == NPU_NW_CMD_POWER_CTL &&
++		    target->nw.notify_func == npu_session_save_power_result) {
++			ret = nw_power_wait_assign_req_id(&target->nw);
++			if (unlikely(ret))
++				return ret;
++		}
++#endif
+ #ifdef T32_GROUP_TRACE_SUPPORT
+ 		if (target->nw.cmd == NPU_NW_CMD_LOAD) {
+ 			/* Trap NCP load command for trace */
+@@ -1367,7 +1404,19 @@ static int npu_protodrv_handler_nw_free(void)
+ 	/* Take a entry from FREE list, before access the queue */
+ 	while ((entry = proto_nw_lsm.lsm_get_entry(FREE)) != NULL) {
+ 		/* Is request available ? */
+-		if (likely(nw_mgmt_op_get_request(entry) != 0)) {
++		ret = nw_mgmt_op_get_request(entry);
++		if (unlikely(ret <= 0)) {
++			/* A negative result is a dequeued POWER_CTL whose waiter
++			 * timed out/closed before admission.  Drop it, do not send it.
++			 */
++			proto_nw_lsm.lsm_put_entry(FREE, entry);
++			if (ret < 0) {
++				err_cnt++;
++				continue;
++			}
++			goto break_entry_iter;
++		}
++		{
+ 			/* Save the request and put it to REQUESTED state */
+ 			entry->ts.init = now;
+ 
+@@ -1463,10 +1512,6 @@ static int npu_protodrv_handler_nw_free(void)
+ 			goto finally;
+ finally:
+ 			;
+-		} else {
+-			/* No more request available. rollbacks the entry to FREE */
+-			proto_nw_lsm.lsm_put_entry(FREE, entry);
+-			goto break_entry_iter;
+ 		}
+ 	}
+ break_entry_iter:
+@@ -1674,7 +1719,23 @@ static int  npu_protodrv_handler_nw_requested(void)
+ #if (CONFIG_NPU_MAILBOX_VERSION >= 8)
+ 		case NPU_NW_CMD_POWER_CTL:
+ 			/* Publish if no session is active */
+-			if (likely(__mbox_nw_ops_put(entry) > 0)) {
++			if (entry->nw.notify_func == npu_session_save_power_result &&
++			    !nw_power_wait_is_active(&entry->nw)) {
++				/* The bounded owner has timed out after request identity was
++				 * assigned.  Drop it before a later queue retry can send stale
++				 * power state to firmware.
++				 */
++				proto_nw_lsm.lsm_move_entry(FREE, entry);
++				break;
++			}
++			if (unlikely(npu_device_is_emergency_err(npu_proto_drv.npu_device))) {
++				/* Do not strand a waiter after a timeout/reset has put the
++				 * driver into fail-closed emergency mode.
++				 */
++				entry->nw.result_code = NPU_CRITICAL_DRIVER(NPU_ERR_IN_EMERGENCY);
++				proto_nw_lsm.lsm_move_entry(COMPLETED, entry);
++				compl_handle_cnt++;
++			} else if (likely(__mbox_nw_ops_put(entry) > 0)) {
+ 				/* Success */
+ 				proto_nw_lsm.lsm_move_entry(PROCESSING, entry);
+ 				proc_handle_cnt++;
+diff --git a/drivers/vision/npu/core/npu-session.c b/drivers/vision/npu/core/npu-session.c
+index 22889124b..2f205c327 100755
+--- a/drivers/vision/npu/core/npu-session.c
++++ b/drivers/vision/npu/core/npu-session.c
+@@ -14,6 +14,12 @@
+ #include <linux/delay.h>
+ #include <linux/slab.h>
+ #include <linux/wait.h>
++#include <linux/completion.h>
++#include <linux/spinlock.h>
++#include <linux/list.h>
++#include <linux/atomic.h>
++#include <linux/jiffies.h>
++#include <linux/errno.h>
+ #include <linux/sched.h>
+ //#include "lib/vpul-ds.h"
+ #include "npu-log.h"
+@@ -43,6 +49,195 @@ struct npu_frame kpi_frame[KPI_FRAME_MAX_BUFFER];
+ #define KPI_FRAME_PRIORITY	200
+ const struct npu_session_ops npu_session_ops;
+ 
++#ifdef CONFIG_NPU_USE_BOOT_IOCTL
++#define NPU_POWER_WAIT_TIMEOUT_MS	12000
++
++/* POWER_CTL is not linked to a protodrv session reference.  Its callback
++ * therefore carries a monotonically unique cookie instead of a session
++ * pointer.  The cookie is looked up under this lock before any waiter state
++ * is touched; late and duplicate callbacks become no-ops.
++ */
++struct npu_power_waiter {
++	struct list_head	list;
++	u64			cookie;
++	npu_req_id_t		req_id;
++	struct completion	completion;
++	struct nw_result	result;
++	bool			done;
++};
++
++static LIST_HEAD(npu_power_waiters);
++static DEFINE_SPINLOCK(npu_power_waiters_lock);
++static atomic64_t npu_power_wait_cookie = ATOMIC64_INIT(0);
++
++static struct npu_power_waiter *npu_power_waiter_find(u64 cookie)
++{
++	struct npu_power_waiter *waiter;
++
++	list_for_each_entry(waiter, &npu_power_waiters, list) {
++		if (waiter->cookie == cookie)
++			return waiter;
++	}
++	return NULL;
++}
++
++int npu_session_save_power_result(struct npu_session *session, struct nw_result result)
++{
++	struct npu_power_waiter *waiter;
++	unsigned long flags;
++	u64 cookie = ((u64)result.nw.param1 << 32) | result.nw.param0;
++
++	/* The session argument is deliberately not dereferenced: the waiter is
++	 * identified by the opaque cookie copied through POWER_CTL's unused params.
++	 */
++	(void)session;
++
++	spin_lock_irqsave(&npu_power_waiters_lock, flags);
++	waiter = npu_power_waiter_find(cookie);
++	if (waiter && waiter->req_id &&
++	    waiter->req_id == result.nw.npu_req_id && !waiter->done) {
++		waiter->result = result;
++		waiter->done = true;
++		complete(&waiter->completion);
++	}
++	spin_unlock_irqrestore(&npu_power_waiters_lock, flags);
++	return 0;
++}
++
++int npu_session_power_wait_assign_req_id(u64 cookie, npu_req_id_t req_id)
++{
++	struct npu_power_waiter *waiter;
++	unsigned long flags;
++	int ret = -ECANCELED;
++
++	if (!cookie || !req_id)
++		return -EINVAL;
++	spin_lock_irqsave(&npu_power_waiters_lock, flags);
++	waiter = npu_power_waiter_find(cookie);
++	if (waiter && !waiter->done && !waiter->req_id) {
++		waiter->req_id = req_id;
++		ret = 0;
++	} else if (waiter && waiter->req_id) {
++		ret = -EALREADY;
++	}
++	spin_unlock_irqrestore(&npu_power_waiters_lock, flags);
++	return ret;
++}
++
++int npu_session_power_wait_is_active(u64 cookie, npu_req_id_t req_id)
++{
++	struct npu_power_waiter *waiter;
++	unsigned long flags;
++	int active = 0;
++
++	spin_lock_irqsave(&npu_power_waiters_lock, flags);
++	waiter = npu_power_waiter_find(cookie);
++	if (waiter && waiter->req_id == req_id && !waiter->done)
++		active = 1;
++	spin_unlock_irqrestore(&npu_power_waiters_lock, flags);
++	return active;
++}
++
++static int npu_power_result_to_errno(npu_errno_t result)
++{
++	if (result == NPU_ERR_NO_ERROR)
++		return 0;
++
++	switch (NPU_ERR_CODE(result)) {
++	case NPU_ERR_NPU_TIMEOUT:
++	case NPU_ERR_QUEUE_TIMEOUT:
++	case NPU_ERR_SCHED_TIMEOUT:
++	case NPU_ERR_NPU_HW_TIMEOUT_RECOVERED:
++	case NPU_ERR_NPU_HW_TIMEOUT_NOTRECOVERABLE:
++		return -ETIMEDOUT;
++	case NPU_ERR_NO_MEMORY:
++		return -ENOMEM;
++	case NPU_ERR_INVALID_UID:
++		return -ENOENT;
++	case NPU_ERR_INVALID_STATE:
++	case NPU_ERR_SIZE_NOT_MATCH:
++		return -EINVAL;
++	default:
++		return -EIO;
++	}
++}
++
++/* Caller holds session->global_lock.  npu_session_close takes the same lock
++ * before setting CLOSE, so teardown cannot free the session while this stack
++ * waiter is registered or while it is copying its result.
++ */
++static int npu_session_wait_power_request(struct npu_session *session, nw_cmd_e nw_cmd)
++{
++	struct npu_power_waiter waiter;
++	struct npu_nw req = { };
++	unsigned long flags;
++	unsigned long waited;
++	unsigned long timeout;
++	int queued, ret;
++
++	memset(&waiter, 0, sizeof(waiter));
++	INIT_LIST_HEAD(&waiter.list);
++	init_completion(&waiter.completion);
++	for (;;) {
++		waiter.cookie = atomic64_inc_return(&npu_power_wait_cookie);
++		spin_lock_irqsave(&npu_power_waiters_lock, flags);
++		if (waiter.cookie && !npu_power_waiter_find(waiter.cookie))
++			break;
++		spin_unlock_irqrestore(&npu_power_waiters_lock, flags);
++	}
++
++	req.uid = session->uid;
++	req.bound_id = session->sched_param.bound_id;
++	req.npu_req_id = 0;
++	req.result_code = 0;
++	/* POWER_CTL is not session-ref linked and has no session-lifetime need.
++	 * Keep the pointer NULL so delayed protocol work cannot dereference a
++	 * session after its bounded waiter times out and close frees it.  A NULL
++	 * session selects the general message-ID pool; POWER_CTL's wire mapping
++	 * ignores these unused parameters.
++	 */
++	req.session = NULL;
++	req.param0 = (u32)waiter.cookie;
++	req.param1 = (u32)(waiter.cookie >> 32);
++	req.cmd = nw_cmd;
++	req.ncp_addr = session->ncp_info.ncp_addr;
++	req.magic_tail = NPU_NW_MAGIC_TAIL;
++	req.notify_func = npu_session_save_power_result;
++	session->nw_result.result_code = NPU_NW_JUST_STARTED;
++
++	list_add_tail(&waiter.list, &npu_power_waiters);
++	spin_unlock_irqrestore(&npu_power_waiters_lock, flags);
++
++	queued = npu_ncp_mgmt_put(&req);
++	if (unlikely(queued <= 0)) {
++		spin_lock_irqsave(&npu_power_waiters_lock, flags);
++		if (!list_empty(&waiter.list))
++			list_del_init(&waiter.list);
++		spin_unlock_irqrestore(&npu_power_waiters_lock, flags);
++		ret = queued < 0 ? queued : -EAGAIN;
++		session->nw_result.result_code = NPU_ERR_DRIVER(NPU_ERR_INVALID_STATE);
++		session->nw_result.nw.npu_req_id = 0;
++		return ret;
++	}
++
++	timeout = msecs_to_jiffies(NPU_POWER_WAIT_TIMEOUT_MS);
++	waited = wait_for_completion_timeout(&waiter.completion, timeout);
++	spin_lock_irqsave(&npu_power_waiters_lock, flags);
++	if (waiter.done) {
++		session->nw_result = waiter.result;
++		ret = npu_power_result_to_errno(waiter.result.result_code);
++	} else {
++		ret = waited ? -EIO : -ETIMEDOUT;
++		session->nw_result.result_code = NPU_ERR_DRIVER(NPU_ERR_NPU_TIMEOUT);
++		session->nw_result.nw.npu_req_id = 0;
++	}
++	if (!list_empty(&waiter.list))
++		list_del_init(&waiter.list);
++	spin_unlock_irqrestore(&npu_power_waiters_lock, flags);
++	return ret;
++}
++#endif
++
+ /*****************************************************************************
+  *****                         wrapper function                          *****
+  *****************************************************************************/
+@@ -621,11 +816,18 @@ int npu_session_close(struct npu_session *session)
+ 	struct npu_sessionmgr *sessionmgr;
+ #endif
+ 
+-	BUG_ON(!session);
+-
+-	npu_scheduler_unregister_session(session);
++	if (!session || !session->global_lock)
++		return -EINVAL;
+ 
++	/* Serialize close against POWER_CTL wait registration/result copying.
++	 * The bounded waiter holds this same lock until it is removed from the
++	 * cookie registry, so no callback can retain or dereference this session.
++	 */
++	mutex_lock(session->global_lock);
+ 	session->ss_state |= BIT(NPU_SESSION_STATE_CLOSE);
++	mutex_unlock(session->global_lock);
++
++	npu_scheduler_unregister_session(session);
+ 	vctx = &(session->vctx);
+ 	vertex = vctx->vertex;
+ 	device = container_of(vertex, struct npu_device, vertex);
+@@ -2909,26 +3111,37 @@ int npu_session_format(struct npu_queue *queue, struct vs4l_format_list *flist)
+ #ifdef CONFIG_NPU_USE_BOOT_IOCTL
+ int npu_session_NW_CMD_POWER_NOTIFY(struct npu_session *session, bool on)
+ {
+-	int ret = 0;
++	int ret = 0, pwr_ret;
++	bool pwr_changed = false;
+ 	struct npu_sessionmgr *sessionmgr;
+ 	struct npu_vertex_ctx *vctx;
+ 	struct npu_vertex *vertex;
+ 	struct npu_device *device;
+ 	int session_cnt = 0;
+-	nw_cmd_e nw_cmd = NPU_NW_CMD_POWER_CTL;
+ 
+-	if (!session) {
++	if (!session || !session->global_lock || !session->cookie) {
+ 		npu_err("invalid session\n");
+-		ret = -EINVAL;
+-		return ret;
++		return -EINVAL;
+ 	}
+ 
+ 	mutex_lock(session->global_lock);
++	if (session->ss_state & BIT(NPU_SESSION_STATE_CLOSE)) {
++		ret = -ESHUTDOWN;
++		goto out_unlock;
++	}
+ 
+ 	sessionmgr = session->cookie;
+ 	vctx = &(session->vctx);
+ 	vertex = vctx->vertex;
++	if (!vertex) {
++		ret = -EINVAL;
++		goto out_unlock;
++	}
+ 	device = container_of(vertex, struct npu_device, vertex);
++	if (npu_device_is_emergency_err(device)) {
++		ret = -EIO;
++		goto out_unlock;
++	}
+ 
+ 	if (session->hids & NPU_HWDEV_ID_NPU)
+ 		session_cnt = atomic_read(&sessionmgr->npu_hw_cnt);
+@@ -2936,26 +3149,31 @@ int npu_session_NW_CMD_POWER_NOTIFY(struct npu_session *session, bool on)
+ 		session_cnt = atomic_read(&sessionmgr->dsp_hw_cnt);
+ 
+ 	if (on) {
+-		if (session_cnt > 1)  {
+-			mutex_unlock(session->global_lock);
+-			return ret;
+-		}
+-		dsp_dhcp_update_pwr_status(device, session->hids, true);
+-	}
+-	else  {
+-		if (session_cnt > 0) {
+-			mutex_unlock(session->global_lock);
+-			return ret;
++		if (session_cnt > 1)
++			goto out_unlock;
++		pwr_ret = dsp_dhcp_update_pwr_status(device, session->hids, true);
++	} else {
++		if (session_cnt > 0)
++			goto out_unlock;
++		pwr_ret = dsp_dhcp_update_pwr_status(device, session->hids, false);
++	}
++	if (pwr_ret < 0) {
++		ret = pwr_ret;
++		goto out_unlock;
++	}
++	pwr_changed = (pwr_ret == 0);
++	ret = npu_session_wait_power_request(session, NPU_NW_CMD_POWER_CTL);
++	if (ret && pwr_changed) {
++		pwr_ret = dsp_dhcp_update_pwr_status(device, session->hids, !on);
++		if (pwr_ret < 0) {
++			npu_err("failed to restore DHCP power status (%d)\n", pwr_ret);
++			npu_device_set_emergency_err(device);
+ 		}
+-		dsp_dhcp_update_pwr_status(device, session->hids, false);
+ 	}
+-
+-	session->nw_result.result_code = NPU_NW_JUST_STARTED;
+-	npu_session_put_nw_req(session, nw_cmd);
+-	wait_event(session->wq, session->nw_result.result_code != NPU_NW_JUST_STARTED);
+-
++	if (ret == -ETIMEDOUT)
++		npu_device_set_emergency_err(device);
++out_unlock:
+ 	mutex_unlock(session->global_lock);
+-
+ 	return ret;
+ }
+ 
+@@ -2964,11 +3182,13 @@ int npu_session_restore_cnt(struct npu_session *session)
+ 	int ret = 0;
+ 	struct npu_sessionmgr *sessionmgr;
+ 
++	if (!session || !session->global_lock || !session->cookie)
++		return -EINVAL;
+ 	mutex_lock(session->global_lock);
+ 
+ 	sessionmgr = session->cookie;
+ 	atomic_xchg(&sessionmgr->npu_hw_cnt, sessionmgr->npu_hw_cnt_saved);
+-	atomic_xchg(&sessionmgr->npu_hw_cnt, sessionmgr->npu_hw_cnt_saved);
++	atomic_xchg(&sessionmgr->dsp_hw_cnt, sessionmgr->dsp_hw_cnt_saved);
+ 
+ 	mutex_unlock(session->global_lock);
+ 
+@@ -2977,29 +3197,46 @@ int npu_session_restore_cnt(struct npu_session *session)
+ 
+ int npu_session_NW_CMD_RESUME(struct npu_session *session)
+ {
+-	int ret = 0;
++	int ret = 0, pwr_ret;
++	bool pwr_changed;
+ 	struct npu_vertex_ctx *vctx;
+ 	struct npu_vertex *vertex;
+ 	struct npu_device *device;
+-	nw_cmd_e nw_cmd = NPU_NW_CMD_POWER_CTL;
+ 
+-	if (!session) {
++	if (!session || !session->global_lock || !session->cookie || !session->vctx.vertex) {
+ 		npu_err("invalid session\n");
+-		ret = -EINVAL;
+-		return ret;
++		return -EINVAL;
+ 	}
+ 
+ 	mutex_lock(session->global_lock);
++	if (session->ss_state & BIT(NPU_SESSION_STATE_CLOSE)) {
++		ret = -ESHUTDOWN;
++		goto resume_unlock;
++	}
+ 
+ 	vctx = &(session->vctx);
+ 	vertex = vctx->vertex;
+ 	device = container_of(vertex, struct npu_device, vertex);
++	if (npu_device_is_emergency_err(device)) {
++		ret = -EIO;
++		goto resume_unlock;
++	}
+ 
+-	dsp_dhcp_update_pwr_status(device, session->hids, true);
+-	session->nw_result.result_code = NPU_NW_JUST_STARTED;
+-	npu_session_put_nw_req(session, nw_cmd);
+-	wait_event(session->wq, session->nw_result.result_code != NPU_NW_JUST_STARTED);
+-
++	pwr_ret = dsp_dhcp_update_pwr_status(device, session->hids, true);
++	if (pwr_ret < 0) {
++		ret = pwr_ret;
++		goto resume_unlock;
++	}
++	pwr_changed = (pwr_ret == 0);
++	ret = npu_session_wait_power_request(session, NPU_NW_CMD_POWER_CTL);
++	if (ret && pwr_changed) {
++		pwr_ret = dsp_dhcp_update_pwr_status(device, session->hids, false);
++		if (pwr_ret < 0)
++			npu_device_set_emergency_err(device);
++	}
++	if (ret == -ETIMEDOUT)
++		npu_device_set_emergency_err(device);
++resume_unlock:
+ 	mutex_unlock(session->global_lock);
+ 	return ret;
+ }
+@@ -3007,6 +3244,8 @@ int npu_session_NW_CMD_RESUME(struct npu_session *session)
+ int npu_session_NW_CMD_SUSPEND(struct npu_session *session)
+ {
+ 	int ret = 0;
++	int pwr_ret;
++	bool pwr_changed = false;
+ #if (CONFIG_NPU_MAILBOX_VERSION == 9)
+ 	int cnt = 0;
+ #endif
+@@ -3014,37 +3253,50 @@ int npu_session_NW_CMD_SUSPEND(struct npu_session *session)
+ 	struct npu_vertex_ctx *vctx;
+ 	struct npu_vertex *vertex;
+ 	struct npu_device *device;
+-	nw_cmd_e nw_cmd = NPU_NW_CMD_POWER_CTL;
+ 
+-	if (!session) {
++	if (!session || !session->global_lock || !session->cookie ||
++	    !session->vctx.vertex) {
+ 		npu_err("invalid session\n");
+-		ret = -EINVAL;
+-		return ret;
++		return -EINVAL;
+ 	}
+ 
+ 	mutex_lock(session->global_lock);
++	if (session->ss_state & BIT(NPU_SESSION_STATE_CLOSE)) {
++		ret = -ESHUTDOWN;
++		goto suspend_unlock;
++	}
+ 
+ 	sessionmgr = session->cookie;
+ 	vctx = &(session->vctx);
+ 	vertex = vctx->vertex;
+ 	device = container_of(vertex, struct npu_device, vertex);
++	if (npu_device_is_emergency_err(device)) {
++		ret = -EIO;
++		goto suspend_unlock;
++	}
+ 
+ 	sessionmgr->npu_hw_cnt_saved = 0;
+ 	sessionmgr->npu_hw_cnt_saved = atomic_xchg(&sessionmgr->npu_hw_cnt, sessionmgr->npu_hw_cnt_saved);
+ 	sessionmgr->dsp_hw_cnt_saved = 0;
+ 	sessionmgr->dsp_hw_cnt_saved = atomic_xchg(&sessionmgr->dsp_hw_cnt, sessionmgr->dsp_hw_cnt_saved);
+ 
+-	dsp_dhcp_update_pwr_status(device, session->hids, false);
+-	session->nw_result.result_code = NPU_NW_JUST_STARTED;
+-	npu_session_put_nw_req(session, nw_cmd);
+-	wait_event(session->wq, session->nw_result.result_code != NPU_NW_JUST_STARTED);
++	pwr_ret = dsp_dhcp_update_pwr_status(device, session->hids, false);
++	if (pwr_ret < 0) {
++		ret = pwr_ret;
++		goto restore_counts;
++	}
++	pwr_changed = (pwr_ret == 0);
++	ret = npu_session_wait_power_request(session, NPU_NW_CMD_POWER_CTL);
++	if (ret)
++		goto restore_counts;
+ 
+ 	/* Waiting for FW to update the flag */
+ #if (CONFIG_NPU_MAILBOX_VERSION == 9)
+ #define BOOT_TYPE_WARM_BOOT (0xb0080c0d)
+ 	ret = -EFAULT;
+ 	do {
+-		if (device->system.mbox_hdr->boottype == BOOT_TYPE_WARM_BOOT) {
++		if (device->system.mbox_hdr &&
++		    device->system.mbox_hdr->boottype == BOOT_TYPE_WARM_BOOT) {
+ 			ret = 0;
+ 			break;
+ 		}
+@@ -3057,9 +3309,24 @@ int npu_session_NW_CMD_SUSPEND(struct npu_session *session)
+ 		sessionmgr->dsp_hw_cnt_saved = 0;
+ 		sessionmgr->dsp_hw_cnt_saved = atomic_xchg(&sessionmgr->dsp_hw_cnt, sessionmgr->dsp_hw_cnt_saved);
+ 	}
++	if (ret)
++		npu_device_set_emergency_err(device);
++	goto suspend_unlock;
+ 
++restore_counts:
++	/* The firmware did not accept the transition.  Restore the host-visible
++	 * counts and power bit before releasing the serialization mutex.
++	 */
++	sessionmgr->npu_hw_cnt_saved =
++		atomic_xchg(&sessionmgr->npu_hw_cnt, sessionmgr->npu_hw_cnt_saved);
++	sessionmgr->dsp_hw_cnt_saved =
++		atomic_xchg(&sessionmgr->dsp_hw_cnt, sessionmgr->dsp_hw_cnt_saved);
++	if (pwr_changed && dsp_dhcp_update_pwr_status(device, session->hids, true) < 0)
++		npu_device_set_emergency_err(device);
++	if (ret == -ETIMEDOUT)
++		npu_device_set_emergency_err(device);
++suspend_unlock:
+ 	mutex_unlock(session->global_lock);
+-
+ 	return ret;
+ }
+ #endif
+diff --git a/drivers/vision/npu/core/npu-vertex.c b/drivers/vision/npu/core/npu-vertex.c
+index 06ed7226c..d280be584 100755
+--- a/drivers/vision/npu/core/npu-vertex.c
++++ b/drivers/vision/npu/core/npu-vertex.c
+@@ -311,6 +311,7 @@ static int npu_vertex_close(struct file *file)
+ #ifdef CONFIG_NPU_USE_BOOT_IOCTL
+ 	struct npu_device *device = container_of(vertex, struct npu_device, vertex);
+ 	u32 save_state = vctx->state;
++	int power_error = 0;
+ #endif
+ 
+ 	if (mutex_lock_interruptible(lock)) {
+@@ -354,12 +355,20 @@ static int npu_vertex_close(struct file *file)
+ #ifdef CONFIG_NPU_USE_BOOT_IOCTL
+ 	if (vctx->state & BIT(NPU_VERTEX_POWER)) {
+ 		npu_sessionmgr_unregHW(session);
+-		ret = npu_session_NW_CMD_POWER_NOTIFY(session, false);
+-		if (ret) {
+-			npu_ierr("fail(%d) in npu_session_NW_CMD_POWER_NOTIFY\n", vctx, ret);
+-			goto p_err;
++		vctx->state &= ~BIT(NPU_VERTEX_POWER);
++		power_error = npu_session_NW_CMD_POWER_NOTIFY(session, false);
++		if (power_error) {
++			npu_ierr("POWER_NOTIFY failed (%d)\n", vctx, power_error);
++			npu_device_set_emergency_err(device);
+ 		}
+ 	}
++#endif
++#ifdef CONFIG_NPU_USE_BOOT_IOCTL
++	if (session->sec_mem_buf) {
++		npu_memory_free(session->memory, session->sec_mem_buf);
++		kfree(session->sec_mem_buf);
++		session->sec_mem_buf = NULL;
++	}
+ #endif
+ 	ret = npu_session_close(session);
+ 	if (ret) {
+@@ -376,11 +385,6 @@ static int npu_vertex_close(struct file *file)
+ 		}
+ 	}
+ 	if (vertex->normal_count == 1 || vertex->secure_count == 1) {
+-		if (session->sec_mem_buf) {
+-			npu_memory_free(session->memory, session->sec_mem_buf);
+-			kfree(session->sec_mem_buf);
+-			session->sec_mem_buf = NULL;
+-		}
+ 		if (!check_emergency(device)) {
+ 			ret = npu_hwdev_shutdown(device, hids);
+ 			if (ret) {
+@@ -406,6 +410,10 @@ static int npu_vertex_close(struct file *file)
+ 	}
+ 	device->is_secure = 0;
+ p_err:
++#ifdef CONFIG_NPU_USE_BOOT_IOCTL
++	if (!ret && power_error)
++		ret = power_error;
++#endif
+ 	npu_info("id(%d)\n", id);
+ 	mutex_unlock(lock);
+ 	return ret;
+@@ -413,10 +421,11 @@ static int npu_vertex_close(struct file *file)
+ #ifdef CONFIG_NPU_USE_BOOT_IOCTL
+ 	if (vctx->state & BIT(NPU_VERTEX_POWER)) {
+ 		npu_sessionmgr_unregHW(session);
+-		ret = npu_session_NW_CMD_POWER_NOTIFY(session, false);
+-		if (ret) {
+-			npu_ierr("fail(%d) in npu_session_NW_CMD_POWER_NOTIFY\n", vctx, ret);
+-			goto p_err;
++		vctx->state &= ~BIT(NPU_VERTEX_POWER);
++		power_error = npu_session_NW_CMD_POWER_NOTIFY(session, false);
++		if (power_error) {
++			npu_ierr("POWER_NOTIFY failed (%d)\n", vctx, power_error);
++			npu_device_set_emergency_err(device);
+ 		}
+ 	}
+ #endif
+@@ -451,6 +460,8 @@ static int npu_vertex_close(struct file *file)
+ 	}
+ p_err:
+ #ifdef CONFIG_NPU_USE_BOOT_IOCTL
++	if (!ret && power_error)
++		ret = power_error;
+ 	npu_info("id(%d), boot_ref(%d), open_ref(%d)\n", id,
+ 		atomic_read(&vertex->boot_cnt.refcount), atomic_read(&vertex->open_cnt.refcount));
+ #else
+@@ -1134,9 +1145,23 @@ int npu_hwdev_secure_bootdown(struct npu_device *device, struct npu_vertex_ctx *
+ 
+ int npu_hwdev_normal_bootup(struct npu_device *device, struct npu_vertex_ctx *vctx, struct vs4l_ctrl *ctrl)
+ {
+-	int ret = 0;
+-	struct npu_vertex *vertex = vctx->vertex;
+-	struct npu_session *session = container_of(vctx, struct npu_session, vctx);
++	int ret = 0, unwind_ret;
++	struct npu_vertex *vertex;
++	struct npu_session *session;
++	struct npu_hw_device *hdev = NULL;
++	bool lock_held = false;
++	bool hwdev_booted = false;
++	bool core_ref_held = false;
++	bool session_hw_registered = false;
++	bool power_notify_attempted = false;
++	bool hwacg_attempted = false;
++
++	if (!device || !vctx || !ctrl || !vctx->vertex)
++		return -EINVAL;
++	vertex = vctx->vertex;
++	session = container_of(vctx, struct npu_session, vctx);
++	if (!device->system.mbox_hdr)
++		return -ENODEV;
+ 
+ 	/* check npu_device emergency error */
+ 	ret = check_emergency_vctx(vctx);
+@@ -1147,20 +1172,24 @@ int npu_hwdev_normal_bootup(struct npu_device *device, struct npu_vertex_ctx *vc
+ 		npu_ierr("fail in mutex_lock_interruptible\n", vctx);
+ 		return -ERESTARTSYS;
+ 	}
++	lock_held = true;
+ 
+ 	if (vertex->secure_count) {
+ 		int retry = 1000;
+ 		bool done = false;
+ 
+ 		mutex_unlock(&vertex->lock);
++		lock_held = false;
+ 		while (retry) {
+ 			mutex_lock(&vertex->lock);
++			lock_held = true;
+ 			if (!vertex->secure_count) {
+ 				done = true;
+ 				break;
+ 			}
+ 
+ 			mutex_unlock(&vertex->lock);
++			lock_held = false;
+ 			retry--;
+ 			mdelay(5);
+ 		}
+@@ -1169,15 +1198,14 @@ int npu_hwdev_normal_bootup(struct npu_device *device, struct npu_vertex_ctx *vc
+ 			ret = -ETIMEDOUT;
+ 			npu_err("normal operation(%u) was not finished\n",
+ 					vertex->secure_count);
+-			goto p_err_check;
++			goto p_err;
+ 		}
+ 	}
+ 
+ 	if (vertex->normal_count) {
+ 		vertex->normal_count++;
+ 		npu_info("secure normal count is increased(%u)\n", vertex->secure_count);
+-		mutex_unlock(&vertex->lock);
+-		return 0;
++		goto out_unlock;
+ 	}
+ 
+ 	device->system.saved_warm_boot_flag = device->system.mbox_hdr->warm_boot_enable;
+@@ -1188,44 +1216,103 @@ int npu_hwdev_normal_bootup(struct npu_device *device, struct npu_vertex_ctx *vc
+ 		npu_ierr("fail(%d) in npu_vertex_bootup : hids %x\n", vctx, ret, ctrl->value);
+ 		goto p_err;
+ 	}
++	hwdev_booted = true;
+ 
++	/* __vref_get increments before invoking the first-reference callback, so
++	 * unwind its reference even when the callback reports failure.
++	 */
++	core_ref_held = true;
+ 	ret = __vref_get(&vertex->boot_cnt);
+ 	if (ret) {
+ 		npu_err("fail(%d) in vref_get", ret);
+-		__vref_put(&vertex->boot_cnt);
+ 		goto p_err;
+ 	}
+ 
+-	npu_sessionmgr_regHW(session);
+-	if (device->system.mbox_hdr->warm_boot_enable)
+-	{
+-		npu_session_restore_cnt(session);
+-		npu_session_NW_CMD_RESUME(session);
++	ret = npu_sessionmgr_regHW(session);
++	if (ret)
++		goto p_err;
++	session_hw_registered = true;
++	if (device->system.mbox_hdr->warm_boot_enable) {
++		ret = npu_session_restore_cnt(session);
++		if (ret)
++			goto p_err;
++		ret = npu_session_NW_CMD_RESUME(session);
++		if (ret)
++			goto p_err;
+ 		npu_session_restart();
+ 	} else {
++		power_notify_attempted = true;
+ 		ret = npu_session_NW_CMD_POWER_NOTIFY(session, true);
+ 		if (ret) {
+ 			npu_ierr("fail(%d) in npu_session_NW_CMD_POWER_NOTIFY\n", vctx, ret);
+ 			goto p_err;
+ 		}
+ 
+-		{
+-			struct npu_hw_device *hdev =
+-				npu_get_hdev_by_id(session->hids);
+-			if (atomic_read(&hdev->boot_cnt.refcount) == 1) {
+-				ret = npu_stm_enable(&device->system, session->hids);
+-				if (ret)
+-					npu_err("fail(%d) in npu_stm_enable(%u)\n", ret, session->hids);
+-				/* enable HWACG */
+-				npu_hwdev_hwacg(&hdev->device->system, hdev->id, true);
++		hdev = npu_get_hdev_by_id(session->hids);
++		if (!hdev) {
++			ret = -ENODEV;
++			goto p_err;
++		}
++		if (atomic_read(&hdev->boot_cnt.refcount) == 1) {
++			ret = npu_stm_enable(&device->system, session->hids);
++			if (ret) {
++				npu_err("fail(%d) in npu_stm_enable(%u)\n", ret, session->hids);
++				/* STM may have partially changed shared state. */
++				npu_device_set_emergency_err(device);
++				goto p_err;
+ 			}
++			/* Track the attempt too: HWACG can partially enable before error. */
++			hwacg_attempted = true;
++			ret = npu_hwdev_hwacg(&device->system, hdev->id, true);
++			if (ret)
++				goto p_err;
+ 		}
+ 	}
+ 	vertex->normal_count = 1;
+-	mutex_unlock(&vertex->lock);
+-	return 0;
+-p_err_check:
++	goto out_unlock;
+ p_err:
++	/* Reverse the successful partial acquisition.  npu_hwdev_shutdown() also
++	 * releases the successful STM enable performed by this device's init hook.
++	 */
++	if (hwacg_attempted && hdev) {
++		unwind_ret = npu_hwdev_hwacg(&device->system, hdev->id, false);
++		if (unwind_ret) {
++			npu_err("failed to disable HWACG during unwind (%d)\n", unwind_ret);
++			npu_device_set_emergency_err(device);
++		}
++	}
++	if (session_hw_registered) {
++		unwind_ret = npu_sessionmgr_unregHW(session);
++		if (unwind_ret) {
++			npu_err("failed to unregister session HW during unwind (%d)\n", unwind_ret);
++			npu_device_set_emergency_err(device);
++		}
++	}
++	if (power_notify_attempted) {
++		unwind_ret = npu_session_NW_CMD_POWER_NOTIFY(session, false);
++		if (unwind_ret) {
++			npu_err("failed to compensate POWER_CTL during unwind (%d)\n", unwind_ret);
++			npu_device_set_emergency_err(device);
++		}
++	}
++	if (core_ref_held) {
++		unwind_ret = __vref_put(&vertex->boot_cnt);
++		if (unwind_ret) {
++			npu_err("failed to release vertex boot reference (%d)\n", unwind_ret);
++			npu_device_set_emergency_err(device);
++		}
++	}
++	if (hwdev_booted) {
++		unwind_ret = npu_hwdev_shutdown(device, ctrl->value);
++		if (unwind_ret) {
++			npu_err("hardware shutdown unwind failed (%d)\n", unwind_ret);
++			npu_device_set_emergency_err(device);
++		}
++	}
++	device->is_secure = 0;
++out_unlock:
++	if (lock_held)
++		mutex_unlock(&vertex->lock);
+ 	return ret;
+ }
+ int npu_hwdev_normal_bootdown(struct npu_device *device, struct npu_vertex_ctx *vctx, struct vs4l_ctrl *ctrl)
