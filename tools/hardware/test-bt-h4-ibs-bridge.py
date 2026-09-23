@@ -236,10 +236,17 @@ class BridgeTests(unittest.TestCase):
             os.write(virtual, COMMAND * 9)
             self.assertEqual(read_exact(physical_master, 1), b"\xfd")
             self.assertIsNotNone(proc.wait(timeout=2))
-            self.assertNotEqual(proc.returncode, 0)
             assert_quiet(self, physical_master, timeout=0.02)
         finally:
-            stop_bridge(proc, virtual, physical_master, physical_slave)
+            return_code, stdout, _ = stop_bridge(
+                proc, virtual, physical_master, physical_slave
+            )
+        self.assertNotEqual(return_code, 0)
+        self.assertEqual(
+            stdout.count("bridge_hci_command="), 8,
+            "expected eight accepted commands before the ninth overflowed the queue",
+        )
+        self.assertIn("bridge_detach_result=0", stdout)
 
     def test_invalid_packet_type_fails_closed(self):
         proc, virtual, physical_master, physical_slave = start_bridge(self)
