@@ -7,8 +7,8 @@ It does not inject input, change display power, suspend, reboot, or alter USB.
 from __future__ import annotations
 
 import argparse
-import glob
 import json
+import math
 import os
 from pathlib import Path
 import select
@@ -25,18 +25,19 @@ def read(path: Path) -> str | None:
         return None
 
 
-def inputs() -> list[dict[str, object]]:
+def inputs(sys_root: Path = Path("/sys"),
+           dev_root: Path = Path("/dev")) -> list[dict[str, object]]:
     result = []
-    for sysdev in sorted(glob.glob("/sys/class/input/event*")):
-        name = read(Path(sysdev) / "device/name")
-        event = "/dev/input/" + Path(sysdev).name
-        result.append({"event": event, "name": name, "present": Path(event).exists()})
+    for sysdev in sorted((sys_root / "class/input").glob("event*")):
+        name = read(sysdev / "device/name")
+        event = dev_root / "input" / sysdev.name
+        result.append({"event": str(event), "name": name, "present": event.exists()})
     return result
 
 
-def power() -> dict[str, dict[str, str]]:
+def power(sys_root: Path = Path("/sys")) -> dict[str, dict[str, str]]:
     result: dict[str, dict[str, str]] = {}
-    for base in sorted(Path("/sys/class/power_supply").glob("*")):
+    for base in sorted((sys_root / "class/power_supply").glob("*")):
         if not base.is_dir():
             continue
         values = {}
@@ -49,9 +50,9 @@ def power() -> dict[str, dict[str, str]]:
     return result
 
 
-def thermal() -> dict[str, dict[str, str]]:
+def thermal(sys_root: Path = Path("/sys")) -> dict[str, dict[str, str]]:
     result = {}
-    for base in sorted(Path("/sys/class/thermal").glob("thermal_zone*")):
+    for base in sorted((sys_root / "class/thermal").glob("thermal_zone*")):
         typ = read(base / "type")
         temp = read(base / "temp")
         if typ is not None or temp is not None:
@@ -59,18 +60,22 @@ def thermal() -> dict[str, dict[str, str]]:
     return result
 
 
-def cameras() -> list[dict[str, str | bool]]:
+def cameras(sys_root: Path = Path("/sys"),
+            dev_root: Path = Path("/dev")) -> list[dict[str, str | bool]]:
     result = []
-    for dev in sorted(glob.glob("/dev/video*")):
-        name = read(Path("/sys/class/video4linux") / Path(dev).name / "name")
-        result.append({"device": dev, "name": name or "", "present": True})
+    for dev in sorted(dev_root.glob("video*")):
+        name = read(sys_root / "class/video4linux" / dev.name / "name")
+        result.append({"device": str(dev), "name": name or "", "present": True})
     return result
 
 
-def observe(seconds: float) -> list[dict[str, int | str]]:
+def observe(seconds: float, sys_root: Path = Path("/sys"),
+            dev_root: Path = Path("/dev")) -> list[dict[str, int | str]]:
+    if not math.isfinite(seconds) or seconds < 0 or seconds > 300:
+        raise ValueError("seconds must be between 0 and 300")
     handles = []
     try:
-        for item in inputs():
+        for item in inputs(sys_root, dev_root):
             if not item["present"]:
                 continue
             try:
@@ -80,8 +85,11 @@ def observe(seconds: float) -> list[dict[str, int | str]]:
             handles.append((fd, str(item["event"]), str(item["name"])))
         end = time.monotonic() + seconds
         events = []
-        while time.monotonic() < end:
-            ready, _, _ = select.select([x[0] for x in handles], [], [], .25)
+        while True:
+            remaining = end - time.monotonic()
+            if remaining <= 0:
+                break
+            ready, _, _ = select.select([x[0] for x in handles], [], [], min(.25, remaining))
             for fd, path, name in handles:
                 if fd not in ready:
                     continue
@@ -101,18 +109,23 @@ def observe(seconds: float) -> list[dict[str, int | str]]:
             os.close(fd)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None, *, sys_root: Path = Path("/sys"),
+         dev_root: Path = Path("/dev")) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--events", type=float, metavar="SECONDS", help="observe physical input events")
     ap.add_argument("--camera", action="store_true", help="include read-only V4L2 node inventory")
-    args = ap.parse_args()
-    result: dict[str, object] = {"inputs": inputs(), "power": power(), "thermal": thermal()}
+    args = ap.parse_args(argv)
+    result: dict[str, object] = {
+        "inputs": inputs(sys_root, dev_root),
+        "power": power(sys_root),
+        "thermal": thermal(sys_root),
+    }
     if args.camera:
-        result["cameras"] = cameras()
+        result["cameras"] = cameras(sys_root, dev_root)
     if args.events is not None:
-        if args.events < 0 or args.events > 300:
+        if not math.isfinite(args.events) or args.events < 0 or args.events > 300:
             ap.error("--events must be between 0 and 300 seconds")
-        result["events"] = observe(args.events)
+        result["events"] = observe(args.events, sys_root, dev_root)
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
