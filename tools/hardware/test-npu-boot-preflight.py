@@ -30,17 +30,32 @@ SOURCE = {
     "drivers/vision/npu/core/npu-session.c": 'int npu_session_NW_CMD_POWER_NOTIFY(struct npu_session *session, bool on) { wait_event(session->wq, 1); return 0; }\n',
     "drivers/vision/npu/core/npu-vertex.c": 'int npu_hwdev_normal_bootup(struct npu_device *device, struct npu_vertex_ctx *vctx, struct vs4l_ctrl *ctrl) { npu_session_NW_CMD_POWER_NOTIFY(session, true); return 0; }\n',
     "drivers/vision/npu/core/npu-system.c": 'npu_firmware_file_read_signature(&system->binary, 0, 0, 0);\n',
+    "drivers/vision/npu/core/npu-protodrv.c": 'static int nw_mgmt_op_get_request(void) { return 1; }\n',
 }
 
 
-def run(config_text: str, root: Path) -> tuple[int, dict]:
+def check(condition: bool, message: str) -> None:
+    if not condition:
+        raise RuntimeError(message)
+
+
+def run(config_text: str, root: Path, *, missing: str | None = None,
+        unreadable: str | None = None) -> tuple[int, dict]:
     cfg = root / "config"
     cfg.write_text(config_text)
     source = root / "source"
     for rel, text in SOURCE.items():
         path = source / rel
         path.parent.mkdir(parents=True, exist_ok=True)
+        if path.is_dir():
+            path.rmdir()
         path.write_text(text)
+    if missing is not None:
+        (source / missing).unlink()
+    if unreadable is not None:
+        unreadable_path = source / unreadable
+        unreadable_path.unlink()
+        unreadable_path.mkdir()
     proc = subprocess.run(
         [sys.executable, str(CHECKER), "--source", str(source), "--config", str(cfg),
          "--aie", str(root / "missing-AIE.bin"), "--dsp-rules", str(root / "missing-dsp-rules.bin")],
@@ -53,22 +68,40 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="npu-preflight-") as name:
         root = Path(name)
         status, result = run(CONFIG, root)
-        assert status == 2
-        assert result["artifact_preflight_pass"] is False
-        assert result["config_matches"] is True
-        assert result["live_probe_validated"] is False
-        assert result["bootup_ready"] is False
-        assert result["bootup_authorized"] is False
-        assert result["exit_code"] == status
-        assert result["checks"]["known_lifecycle_gaps"]["normal_boot_unwind_missing"] is True
+        check(status == 2, "synthetic preflight must remain fail-closed")
+        check(result["artifact_preflight_pass"] is False, "missing artifacts must fail")
+        check(result["config_matches"] is True, "synthetic config should match")
+        check(result["live_probe_validated"] is False, "host preflight cannot validate live probe")
+        check(result["bootup_ready"] is False, "host preflight cannot establish readiness")
+        check(result["bootup_authorized"] is False, "host preflight cannot authorize BOOTUP")
+        check(result["exit_code"] == status, "JSON and process exit status must match")
+        check(result["checks"]["known_lifecycle_gaps"]["normal_boot_unwind_missing"] is True,
+              "synthetic source must expose missing unwind")
 
         bad = CONFIG.replace("CONFIG_NPU_MAILBOX_VERSION=9", "CONFIG_NPU_MAILBOX_VERSION=8")
         status, result = run(bad, root)
-        assert status == 2
-        assert result["artifact_preflight_pass"] is False
-        assert result["bootup_ready"] is False
-        assert result["bootup_authorized"] is False
-        assert result["config_matches"] is False
+        check(status == 2, "config mismatch must fail closed")
+        check(result["artifact_preflight_pass"] is False, "config mismatch must fail artifacts")
+        check(result["bootup_ready"] is False, "config mismatch must fail readiness")
+        check(result["bootup_authorized"] is False, "config mismatch must not authorize")
+        check(result["config_matches"] is False, "config mismatch must be reported")
+
+        # Each required lifecycle source missing or unreadable is unknown, not
+        # proof that a source-pattern gap is absent. All lifecycle gates stay
+        # false and this tool never authorizes BOOTUP.
+        for unavailable, mode in (("drivers/vision/npu/core/npu-session.c", "missing"),
+                                  ("drivers/vision/npu/core/npu-vertex.c", "unreadable"),
+                                  ("drivers/vision/npu/core/npu-protodrv.c", "missing")):
+            kwargs = {mode: unavailable}
+            status, result = run(CONFIG, root, **kwargs)
+            check(status == 2, f"{mode} lifecycle source must fail closed")
+            gates = result["readiness_gates"]
+            check(gates["power_notify_wait_resolved"] is False,
+                  f"{mode} lifecycle source must not resolve POWER wait")
+            check(gates["normal_boot_error_unwind_resolved"] is False,
+                  f"{mode} lifecycle source must not resolve boot unwind")
+            check(not any(gates.values()), f"{mode} lifecycle source must leave all lifecycle gates false")
+            check(result["bootup_authorized"] is False, f"{mode} lifecycle source must not authorize BOOTUP")
 
     # Even a fully passing synthetic artifact/config/source audit cannot
     # mark BOOTUP ready while kernel lifecycle and device/authorization gates
@@ -82,12 +115,13 @@ def main() -> None:
             "power_notify_has_unbounded_wait": False,
         },
     )
-    assert readiness["artifact_preflight_pass"] is True
-    assert readiness["bootup_ready"] is False
-    assert readiness["bootup_authorized"] is False
-    assert readiness["exit_code"] == 2
-    assert "callback_close_race_regressions_passed" in readiness["readiness_blockers"]
-    assert "live_probe_validated" in readiness["readiness_blockers"]
+    check(readiness["artifact_preflight_pass"] is True, "synthetic artifacts should pass")
+    check(readiness["bootup_ready"] is False, "unproven gates must block readiness")
+    check(readiness["bootup_authorized"] is False, "host checker must never authorize")
+    check(readiness["exit_code"] == 2, "unproven gates must return status 2")
+    check("callback_close_race_regressions_passed" in readiness["readiness_blockers"],
+          "callback race gate must remain a blocker")
+    check("live_probe_validated" in readiness["readiness_blockers"], "live gate must remain a blocker")
     print("npu boot preflight synthetic pass/mismatch cases passed")
 
 
