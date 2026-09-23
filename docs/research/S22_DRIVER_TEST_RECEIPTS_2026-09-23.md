@@ -20,6 +20,9 @@ or reboot was performed for this receipt.
 - `03eba0700f65e0ef1576a50a1ab43dd2b325d5bd`, integrated as
   `9dc83b3` — RECOVERY deployment/build hardening and optimization-mode
   negative tests.
+- `0187e3c6e07a01b368bb558a95ddec96dfaceded`, integrated as
+  `9dfec4b` — reviewed deployment fixes for verifier identity, wrapper
+  symlinks, and remote staging path races.
 - `2d6d9a40c3d97064ef4a5ccc5ceb90071970b715`, integrated as
   `2b55003` — synchronized audio snapshots and cleanup classification.
 - `d2852765b2b58bba434ba8ae1b28c078615ff13f`, integrated as
@@ -42,7 +45,7 @@ its patch content.
 | `python3 tools/hardware/test-audio-progress-snapshot.py` | Pass, 8 tests | Snapshot planning/classification only; no stream capture |
 | `python3 tools/hardware/test-bt-h4-ibs-bridge.py` after Bluetooth test-hardening follow-up | Pass, 12 tests | Host PTY/unit tests; binaries are isolated in a per-run temporary directory; no UART/controller/HCI runtime |
 | `python3 tools/hardware/test-bt-hci-socket-restore.py --base-source "$PINNED_KERNEL/net/bluetooth/hci_sock.c" --patch tools/hardware/bt-hci-socket-restore.patch` after follow-up | Pass | Applied candidate in a temporary tree, validated source contracts and capability-denial branches, and rejected mutated candidates; not a kernel build/runtime test |
-| `python3 tools/hardware/test-recovery-deployment-hardening.py` | Pass, 28 tests in normal, `python3 -O`, and `PYTHONOPTIMIZE=1` modes | Host mocks plus synthetic AVB footer/corruption test; no operational deploy path |
+| `python3 tools/hardware/test-recovery-deployment-hardening.py` after hardening follow-up | Pass, 35 tests in normal, `python3 -O`, and `PYTHONOPTIMIZE=1` modes | Host mocks, optimization-mode negative cases, and synthetic AVB footer/corruption test; no operational deploy path |
 | Audio snapshot / route / cleanup / bind-node / PCM-prepare / sync-node suites | Pass, respectively 13 / 18 / 4 / 4 / 5 / 3 tests | Host-only diagnostics and fake child/PCM cleanup; no live audio |
 | `python3 -O tools/hardware/npu-boot-preflight.py --repo "$REPO"` after fix | Exit 2; `bootup_ready=false`, `bootup_authorized=false`, and missing-source lifecycle gates false | Fail-closed source/artifact audit only; NPU request ownership/unwind and runtime remain unproven |
 | `avbtool.py verify_image` against the existing audio-extra and HCI candidate recovery artifacts | Pass, footer/hash checks | Both artifacts use AVB algorithm `NONE`; this is not Samsung authentication or proof of bootability. No image is included here. |
@@ -57,15 +60,18 @@ the public worktree does not contain `calliope_sram.bin`. This missing
 firmware fixture was not copied into the branch; the error is an environment
 coverage gap, not evidence of an audio-stage runtime failure.
 
-Independent Luna review completed against exact commit
-`03eba0700f65e0ef1576a50a1ab43dd2b325d5bd`. It found three issues before
-deployment hardening can be considered complete: the AVB builder accepts an
-arbitrary verifier executable, the primary deployer accepts a symlinked SSH
-wrapper, and remote staging does not anchor filesystem operations against a
-writable-parent path-replacement race. The deployment author has a follow-up
-to add fixes and negative tests. The deployment entrypoints were not invoked;
-only isolated mocked tests and read-only AVB verification were run. The code
-is WIP, unmerged and undeployed.
+Independent Luna review of initial commit
+`03eba0700f65e0ef1576a50a1ab43dd2b325d5bd` found three issues: arbitrary AVB
+verifier substitution, a symlinked SSH wrapper, and remote staging parent-path
+replacement. Fixes landed in `0187e3c6e07a01b368bb558a95ddec96dfaceded`
+(integrated as `9dfec4b`): verifier SHA-256 is pinned and run from a sealed
+snapshot, both deployers reject symlinked wrappers, and remote staging uses
+validated directory fds with ownership/mode/replacement checks. The
+coordinator reran 35 tests in normal, `-O`, and `PYTHONOPTIMIZE=1` modes;
+py_compile, help, and diff checks passed. The second independent review is
+active. The pinned AVB tool bytes are currently available only from the local
+ignored tool file; a fresh clone must supply that exact trusted tool. The
+deployment entrypoints were not invoked; no live staging or flash occurred.
 
 The Bluetooth independent Luna review also completed. It passed H4 12/12 and
 the exact-pinned-source HCI validator, found no defect in the changed C
