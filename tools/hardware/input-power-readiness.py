@@ -93,7 +93,7 @@ def observe(seconds: float, sys_root: Path = Path("/sys"),
             for fd, path, name in handles:
                 if fd not in ready:
                     continue
-                while True:
+                while time.monotonic() < end:
                     try:
                         data = os.read(fd, EVENT.size)
                     except BlockingIOError:
