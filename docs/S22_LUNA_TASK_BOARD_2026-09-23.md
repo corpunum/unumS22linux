@@ -402,3 +402,32 @@ No physical touch/button event was observed, and no camera node was opened or
 streamed. One optional `max77705-fuelgauge/online` read returned EINVAL. These
 results establish enumeration/telemetry only, not physical input, camera
 capture, or complete power-driver acceptance.
+
+## NPU publication-race follow-up — 2026-09-23 20:45 UTC
+
+- Worker `/root/recovery_hardening` committed kernel change
+  `4c20670269e800454a5daacb9a01856ad1a792ae` on exact prior candidate
+  `f264b971c6917598347fc14823e7d41d1e4a54e0`, based on pinned kernel
+  `4e5c5ad7d950e4de0688b5663965f2075654b2ad`. The sanitized patch plus
+  deterministic host regressions are commit
+  `1908c624bc4a2066476488d9b196216b2a242820`, integrated here as `0548764`.
+  A waiter publish lease is reserved, authorized under the waiter lock, then
+  finished after the synchronous mailbox post; cancellation before authorize
+  revokes send, and cancellation after authorization drains the post before
+  the stack waiter is removed. Late callbacks after cancellation are ignored.
+- Coordinator reran lifecycle/model-source suites normal and `python3 -O`,
+  NPU preflight suites normal and `python3 -O`, Python syntax checks, exact
+  patch reverse-apply, and pinned kernel diff-check; all passed. No C compile,
+  full kernel build, BOOTUP, or device action. Independent reviewer
+  `/root/npu_lifecycle_independent_review` is inspecting exact repo/kernel
+  snapshots now. Review must resolve the new drain behavior: waiting for an
+  already-authorized synchronous publish may exceed the 12-second caller wait
+  if the mailbox routine stalls. The optional
+  `CONFIG_NPU_USE_BOOT_IOCTL` variant is uncompiled.
+- `checkpatch.pl --no-tree --strict` reported no source-style errors beyond a
+  missing `Signed-off-by` attestation, plus missing commit-description and
+  three `extern`-in-C warnings. No sign-off was invented or added. This is an
+  internal WIP patch, not an upstream submission.
+- Explicit `gpt-6-luna` / `max` was requested for the worker, but this runtime
+  did not expose model/session attestation. It was an implementation task, not
+  research-only. The high-risk patch remains unmerged and undeployed.
