@@ -489,7 +489,10 @@ not establish independent rescue or cable-free persistence.
   base `4e5c5ad7d950e4de0688b5663965f2075654b2ad` and the preserved hardening
   config, including a safe `CONFIG_NPU_USE_BOOT_IOCTL=n` variant if possible.
   It owns isolated output dirs; no full link/build or device operation is
-  assigned. Provenance is established; object compilation is now underway.
+  assigned. Provenance is established. Setup caught a Kconfig normalization
+  trap: a prepare invocation without `LLVM_IAS=1` would have disabled ThinLTO.
+  No target translation unit was compiled with that altered config; untouched
+  config copies are being restored and prepare rerun with `LLVM_IAS=1`.
 - The latest live evidence remains the 20:48 UTC WLAN acceptance: 13/13
   checks passed over the existing USB SSH session, including TLS-verified
   HTTPS bound to `wlan0` and healthy resident model. Phone kernel/PID1 remain
