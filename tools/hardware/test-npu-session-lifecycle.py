@@ -58,15 +58,21 @@ class WaitRegistry:
             self.waiters[cookie] = {
                 "req_id": None,
                 "done": False,
+                "cancelled": False,
+                "publishing": False,
+                "publish_committed": False,
                 "result": None,
                 "event": threading.Event(),
+                "publish_done": threading.Event(),
+                "cancel_seen": threading.Event(),
             }
             return cookie
 
     def assign(self, cookie: int, req_id: int) -> bool:
         with self.lock:
             waiter = self.waiters.get(cookie)
-            if waiter is None or waiter["done"] or waiter["req_id"] is not None:
+            if (waiter is None or waiter["done"] or waiter["cancelled"] or
+                    waiter["req_id"] is not None):
                 return False
             waiter["req_id"] = req_id
             return True
@@ -74,17 +80,66 @@ class WaitRegistry:
     def active(self, cookie: int, req_id: int) -> bool:
         with self.lock:
             waiter = self.waiters.get(cookie)
-            return bool(waiter and waiter["req_id"] == req_id and not waiter["done"])
+            return bool(waiter and waiter["req_id"] == req_id and not waiter["done"]
+                        and not waiter["cancelled"])
 
     def complete(self, cookie: int, req_id: int, result: int) -> bool:
         with self.lock:
             waiter = self.waiters.get(cookie)
-            if (waiter is None or waiter["req_id"] != req_id or waiter["done"]):
+            if (waiter is None or waiter["req_id"] != req_id or waiter["done"] or
+                    waiter["cancelled"]):
                 return False
             waiter["result"] = result
             waiter["done"] = True
             waiter["event"].set()
             return True
+
+    def begin_publish(self, cookie: int, req_id: int) -> bool:
+        with self.lock:
+            waiter = self.waiters.get(cookie)
+            if (waiter is None or waiter["req_id"] != req_id or waiter["done"] or
+                    waiter["cancelled"] or waiter["publishing"]):
+                return False
+            waiter["publish_done"].clear()
+            waiter["publishing"] = True
+            waiter["publish_committed"] = False
+            return True
+
+    def authorize_publish(self, cookie: int, req_id: int) -> bool:
+        with self.lock:
+            waiter = self.waiters.get(cookie)
+            if (waiter is None or waiter["req_id"] != req_id or waiter["done"] or
+                    waiter["cancelled"] or not waiter["publishing"] or
+                    waiter["publish_committed"]):
+                return False
+            waiter["publish_committed"] = True
+            return True
+
+    def finish_publish(self, cookie: int, req_id: int) -> None:
+        with self.lock:
+            waiter = self.waiters.get(cookie)
+            if waiter is not None and waiter["req_id"] == req_id and waiter["publishing"]:
+                waiter["publishing"] = False
+                waiter["publish_committed"] = False
+                waiter["publish_done"].set()
+
+    def cancel_and_drain(self, cookie: int) -> tuple[str, int | None]:
+        while True:
+            with self.lock:
+                waiter = self.waiters.get(cookie)
+                if waiter is None:
+                    return "cancelled", None
+                waiter["cancelled"] = True
+                waiter["cancel_seen"].set()
+                if not waiter["publishing"]:
+                    if waiter["done"]:
+                        state, result = "completed", waiter["result"]
+                    else:
+                        state, result = "timeout", None
+                    del self.waiters[cookie]
+                    return state, result
+                publish_done = waiter["publish_done"]
+            publish_done.wait()
 
     def wait_and_remove(self, cookie: int, timeout: float) -> tuple[str, int | None]:
         with self.lock:
@@ -93,16 +148,7 @@ class WaitRegistry:
                 return "cancelled", None
             event = waiter["event"]
         event.wait(timeout)
-        with self.lock:
-            waiter = self.waiters.get(cookie)
-            if waiter is None:
-                return "cancelled", None
-            if waiter["done"]:
-                result = waiter["result"]
-                del self.waiters[cookie]
-                return "completed", result
-            del self.waiters[cookie]
-            return "timeout", None
+        return self.cancel_and_drain(cookie)
 
     def enqueue_failed(self, cookie: int) -> None:
         with self.lock:
@@ -149,7 +195,11 @@ def test_source_contract() -> None:
     for marker in (
         "wait_for_completion_timeout",
         "npu_session_power_wait_assign_req_id",
-        "npu_session_power_wait_is_active",
+        "npu_session_power_wait_begin_publish",
+        "npu_session_power_wait_authorize_publish",
+        "npu_session_power_wait_finish_publish",
+        "npu_power_wait_cancel_and_drain",
+        "waiter->publish_committed",
         "req.session = NULL",
         "req.param0 = (u32)waiter.cookie",
         "req.param1 = (u32)(waiter.cookie >> 32)",
@@ -195,9 +245,30 @@ def test_source_contract() -> None:
         check("mutex_lock(session->global_lock)" in close_body and
               "BIT(NPU_SESSION_STATE_CLOSE)" in close_body,
               "session close does not use the waiter drain barrier")
-        check("nw_power_wait_is_active(&entry->nw)" in requested_body and
+        check("nw_power_wait_begin_publish(&entry->nw)" in requested_body and
+              "nw_power_wait_authorize_publish(&entry->nw)" in requested_body and
               "proto_nw_lsm.lsm_move_entry(FREE, entry)" in requested_body,
               "stale queued POWER_CTL can be retried after timeout")
+        power_start = requested_body.find("case NPU_NW_CMD_POWER_CTL:")
+        power_end = requested_body.find("#else", power_start)
+        power_body = requested_body[power_start:power_end] if power_start >= 0 and power_end > power_start else ""
+        begin_pos = power_body.find("nw_power_wait_begin_publish(&entry->nw)")
+        authorize_pos = power_body.find("nw_power_wait_authorize_publish(&entry->nw)")
+        send_pos = power_body.find("__mbox_nw_ops_put(entry)")
+        finish_pos = power_body.rfind("nw_power_wait_finish(publish_cookie, publish_req_id)")
+        check(begin_pos >= 0 and begin_pos < authorize_pos < send_pos < finish_pos,
+              "POWER_CTL publication is not leased, authorized, and drained")
+        cancel_body = function_body(session, "static void npu_power_wait_cancel_and_drain(")
+        check("waiter->cancelled = true" in cancel_body and
+              "waiter->publishing" in cancel_body and
+              "wait_for_completion(&waiter->publish_done)" in cancel_body,
+              "timeout cancellation does not revoke or drain the publication lease")
+        check("!waiter->cancelled" in callback_body,
+              "late completion must not revive a waiter once timeout cancellation starts")
+        check("npu_power_wait_cancel_and_drain(&waiter)" in wait_body and
+              wait_body.find("wait_for_completion_timeout") <
+              wait_body.find("npu_power_wait_cancel_and_drain(&waiter)"),
+              "timeout must cancel and drain before stack waiter removal")
         check("req.session = NULL" in wait_body and
               "req.param0 = (u32)waiter.cookie" in wait_body and
               "req.param1 = (u32)(waiter.cookie >> 32)" in wait_body,
@@ -289,6 +360,98 @@ def test_timeout_callback_race() -> None:
               "completion racing timeout must have one terminal owner")
 
 
+def test_timeout_publication_handshake() -> None:
+    # Pause after the worker's first validation/lease, cancel the waiter, then
+    # let it make the final publication decision.  It must be revoked.
+    registry = WaitRegistry()
+    cookie = registry.register()
+    check(registry.assign(cookie, 88), "publication waiter identity should be assigned")
+    with registry.lock:
+        cancel_seen = registry.waiters[cookie]["cancel_seen"]
+    validated = threading.Event()
+    allow_authorize = threading.Event()
+    timeout_returned = threading.Event()
+    publish_decisions: list[bool] = []
+    timeout_results: list[tuple[str, int | None]] = []
+
+    def validate_then_attempt_publish() -> None:
+        publish_decisions.append(registry.begin_publish(cookie, 88))
+        validated.set()
+        allow_authorize.wait(1.0)
+        publish_decisions.append(registry.authorize_publish(cookie, 88))
+        registry.finish_publish(cookie, 88)
+
+    def timeout_waiter() -> None:
+        timeout_results.append(registry.cancel_and_drain(cookie))
+        timeout_returned.set()
+
+    publisher = threading.Thread(target=validate_then_attempt_publish)
+    canceller = threading.Thread(target=timeout_waiter)
+    publisher.start()
+    check(validated.wait(1.0), "publisher did not reserve its waiter lease")
+    canceller.start()
+    check(cancel_seen.wait(1.0), "timeout did not cancel the waiter")
+    check(not registry.complete(cookie, 88, 0),
+          "late completion during timeout drain must not revive the waiter")
+    check(not timeout_returned.wait(0.02), "timeout returned before in-flight lease drained")
+    allow_authorize.set()
+    publisher.join(1.0)
+    canceller.join(1.0)
+    check(not publisher.is_alive() and not canceller.is_alive(),
+          "validation/cancellation race workers did not drain")
+    check(publish_decisions == [True, False],
+          "a publish attempted after cancellation must be denied")
+    check(timeout_results == [("timeout", None)] and timeout_returned.is_set(),
+          "cancelled publication waiter must terminate as timeout")
+    check(not registry.waiters, "revoked publication lease must not leak its waiter")
+
+    # If authorization linearizes first, timeout cannot return until the
+    # synchronous mailbox-post model has completed.
+    registry = WaitRegistry()
+    cookie = registry.register()
+    check(registry.assign(cookie, 89), "committed publisher identity should be assigned")
+    with registry.lock:
+        cancel_seen = registry.waiters[cookie]["cancel_seen"]
+    committed = threading.Event()
+    allow_post_return = threading.Event()
+    timeout_returned = threading.Event()
+    post_result: list[str] = []
+    authorization_result: list[bool] = []
+    timeout_results = []
+
+    def committed_publish() -> None:
+        authorization_result.append(registry.begin_publish(cookie, 89))
+        authorization_result.append(registry.authorize_publish(cookie, 89))
+        committed.set()
+        allow_post_return.wait(1.0)
+        post_result.append("sent")
+        registry.finish_publish(cookie, 89)
+
+    def timeout_committed_waiter() -> None:
+        timeout_results.append(registry.cancel_and_drain(cookie))
+        timeout_returned.set()
+
+    publisher = threading.Thread(target=committed_publish)
+    canceller = threading.Thread(target=timeout_committed_waiter)
+    publisher.start()
+    check(committed.wait(1.0), "publisher did not commit before timeout")
+    canceller.start()
+    check(cancel_seen.wait(1.0), "timeout did not cancel the committed waiter")
+    check(not timeout_returned.wait(0.02), "timeout returned during committed mailbox post")
+    check(not post_result, "mailbox post model should still be in flight")
+    allow_post_return.set()
+    publisher.join(1.0)
+    canceller.join(1.0)
+    check(not publisher.is_alive() and not canceller.is_alive(),
+          "committed publication workers did not drain")
+    check(authorization_result == [True, True],
+          "committed publisher lease should begin and authorize")
+    check(post_result == ["sent"] and timeout_returned.is_set(),
+          "timeout must return only after committed publication finishes")
+    check(timeout_results == [("timeout", None)] and not registry.waiters,
+          "committed timeout must still remove its waiter")
+
+
 def test_close_barrier() -> None:
     registry = WaitRegistry()
     session = SessionModel(registry)
@@ -358,6 +521,7 @@ def main() -> None:
     test_source_contract()
     test_queue_and_callback_edges()
     test_timeout_callback_race()
+    test_timeout_publication_handshake()
     test_close_barrier()
     test_reverse_boot_unwind()
     print("NPU lifecycle source contracts and host race/unwind model passed")

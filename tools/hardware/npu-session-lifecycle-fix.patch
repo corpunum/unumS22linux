@@ -1,14 +1,16 @@
 diff --git a/drivers/vision/npu/core/npu-protodrv.c b/drivers/vision/npu/core/npu-protodrv.c
-index e254eadcf..f53f85f17 100755
+index e254eadcf..d03787af0 100755
 --- a/drivers/vision/npu/core/npu-protodrv.c
 +++ b/drivers/vision/npu/core/npu-protodrv.c
-@@ -25,6 +25,29 @@
+@@ -25,6 +25,42 @@
  #include "npu-queue.h"
  #include "npu-if-protodrv-mbox2.h"
  
 +#ifdef CONFIG_NPU_USE_BOOT_IOCTL
 +extern int npu_session_power_wait_assign_req_id(u64 cookie, npu_req_id_t req_id);
-+extern int npu_session_power_wait_is_active(u64 cookie, npu_req_id_t req_id);
++extern int npu_session_power_wait_begin_publish(u64 cookie, npu_req_id_t req_id);
++extern int npu_session_power_wait_authorize_publish(u64 cookie, npu_req_id_t req_id);
++extern void npu_session_power_wait_finish_publish(u64 cookie, npu_req_id_t req_id);
 +extern int npu_session_save_power_result(struct npu_session *session, struct nw_result result);
 +
 +static u64 nw_power_wait_cookie(const struct npu_nw *nw)
@@ -22,17 +24,28 @@ index e254eadcf..f53f85f17 100755
 +			nw->npu_req_id);
 +}
 +
-+static int nw_power_wait_is_active(const struct npu_nw *nw)
++static int nw_power_wait_begin_publish(const struct npu_nw *nw)
 +{
-+	return npu_session_power_wait_is_active(nw_power_wait_cookie(nw),
++	return npu_session_power_wait_begin_publish(nw_power_wait_cookie(nw),
 +			nw->npu_req_id);
++}
++
++static int nw_power_wait_authorize_publish(const struct npu_nw *nw)
++{
++	return npu_session_power_wait_authorize_publish(nw_power_wait_cookie(nw),
++			nw->npu_req_id);
++}
++
++static void nw_power_wait_finish(u64 cookie, npu_req_id_t req_id)
++{
++	npu_session_power_wait_finish_publish(cookie, req_id);
 +}
 +#endif
 +
  
  #define NPU_PROTO_DRV_SIZE	1024
  #define NPU_PROTO_DRV_NAME	"npu-proto_driver"
-@@ -1201,10 +1224,24 @@ void t32_trace_ncp_load(void)
+@@ -1201,10 +1237,24 @@ void t32_trace_ncp_load(void)
  
  static int nw_mgmt_op_get_request(struct proto_req_nw *target)
  {
@@ -58,7 +71,7 @@ index e254eadcf..f53f85f17 100755
  #ifdef T32_GROUP_TRACE_SUPPORT
  		if (target->nw.cmd == NPU_NW_CMD_LOAD) {
  			/* Trap NCP load command for trace */
-@@ -1367,7 +1404,19 @@ static int npu_protodrv_handler_nw_free(void)
+@@ -1367,7 +1417,19 @@ static int npu_protodrv_handler_nw_free(void)
  	/* Take a entry from FREE list, before access the queue */
  	while ((entry = proto_nw_lsm.lsm_get_entry(FREE)) != NULL) {
  		/* Is request available ? */
@@ -79,7 +92,7 @@ index e254eadcf..f53f85f17 100755
  			/* Save the request and put it to REQUESTED state */
  			entry->ts.init = now;
  
-@@ -1463,10 +1512,6 @@ static int npu_protodrv_handler_nw_free(void)
+@@ -1463,10 +1525,6 @@ static int npu_protodrv_handler_nw_free(void)
  			goto finally;
  finally:
  			;
@@ -90,33 +103,61 @@ index e254eadcf..f53f85f17 100755
  		}
  	}
  break_entry_iter:
-@@ -1674,7 +1719,23 @@ static int  npu_protodrv_handler_nw_requested(void)
+@@ -1673,11 +1731,47 @@ static int  npu_protodrv_handler_nw_requested(void)
+ 			break;
  #if (CONFIG_NPU_MAILBOX_VERSION >= 8)
  		case NPU_NW_CMD_POWER_CTL:
- 			/* Publish if no session is active */
+-			/* Publish if no session is active */
 -			if (likely(__mbox_nw_ops_put(entry) > 0)) {
-+			if (entry->nw.notify_func == npu_session_save_power_result &&
-+			    !nw_power_wait_is_active(&entry->nw)) {
-+				/* The bounded owner has timed out after request identity was
-+				 * assigned.  Drop it before a later queue retry can send stale
-+				 * power state to firmware.
+-				/* Success */
+-				proto_nw_lsm.lsm_move_entry(PROCESSING, entry);
+-				proc_handle_cnt++;
++			{
++				bool publish_waiter =
++					entry->nw.notify_func == npu_session_save_power_result;
++				u64 publish_cookie = 0;
++				npu_req_id_t publish_req_id = 0;
++
++				if (publish_waiter) {
++					publish_cookie = nw_power_wait_cookie(&entry->nw);
++					publish_req_id = entry->nw.npu_req_id;
++				}
++
++				/* Reserve publication under the waiter lock.  Timeout can
++				 * revoke this lease before authorization, or must drain the
++				 * synchronous mailbox post after authorization.
 +				 */
-+				proto_nw_lsm.lsm_move_entry(FREE, entry);
-+				break;
-+			}
-+			if (unlikely(npu_device_is_emergency_err(npu_proto_drv.npu_device))) {
-+				/* Do not strand a waiter after a timeout/reset has put the
-+				 * driver into fail-closed emergency mode.
-+				 */
-+				entry->nw.result_code = NPU_CRITICAL_DRIVER(NPU_ERR_IN_EMERGENCY);
-+				proto_nw_lsm.lsm_move_entry(COMPLETED, entry);
-+				compl_handle_cnt++;
-+			} else if (likely(__mbox_nw_ops_put(entry) > 0)) {
- 				/* Success */
- 				proto_nw_lsm.lsm_move_entry(PROCESSING, entry);
- 				proc_handle_cnt++;
++				if (publish_waiter &&
++				    !nw_power_wait_begin_publish(&entry->nw)) {
++					proto_nw_lsm.lsm_move_entry(FREE, entry);
++					break;
++				}
++				if (publish_waiter &&
++				    !nw_power_wait_authorize_publish(&entry->nw)) {
++					proto_nw_lsm.lsm_move_entry(FREE, entry);
++					nw_power_wait_finish(publish_cookie, publish_req_id);
++					break;
++				}
++				if (npu_device_is_emergency_err(npu_proto_drv.npu_device)) {
++					/* Do not strand a waiter after a timeout/reset that put the
++					 * driver into fail-closed emergency mode.
++					 */
++					entry->nw.result_code =
++						NPU_CRITICAL_DRIVER(NPU_ERR_IN_EMERGENCY);
++					proto_nw_lsm.lsm_move_entry(COMPLETED, entry);
++					compl_handle_cnt++;
++				} else if (likely(__mbox_nw_ops_put(entry) > 0)) {
++					/* Success */
++					proto_nw_lsm.lsm_move_entry(PROCESSING, entry);
++					proc_handle_cnt++;
++				}
++				if (publish_waiter)
++					nw_power_wait_finish(publish_cookie, publish_req_id);
+ 			}
+ #else
+ 		case NPU_NW_CMD_POWER_DOWN:
 diff --git a/drivers/vision/npu/core/npu-session.c b/drivers/vision/npu/core/npu-session.c
-index 22889124b..2f205c327 100755
+index 22889124b..875402fdb 100755
 --- a/drivers/vision/npu/core/npu-session.c
 +++ b/drivers/vision/npu/core/npu-session.c
 @@ -14,6 +14,12 @@
@@ -132,7 +173,7 @@ index 22889124b..2f205c327 100755
  #include <linux/sched.h>
  //#include "lib/vpul-ds.h"
  #include "npu-log.h"
-@@ -43,6 +49,195 @@ struct npu_frame kpi_frame[KPI_FRAME_MAX_BUFFER];
+@@ -43,6 +49,264 @@ struct npu_frame kpi_frame[KPI_FRAME_MAX_BUFFER];
  #define KPI_FRAME_PRIORITY	200
  const struct npu_session_ops npu_session_ops;
  
@@ -149,8 +190,12 @@ index 22889124b..2f205c327 100755
 +	u64			cookie;
 +	npu_req_id_t		req_id;
 +	struct completion	completion;
++	struct completion	publish_done;
 +	struct nw_result	result;
 +	bool			done;
++	bool			cancelled;
++	bool			publishing;
++	bool			publish_committed;
 +};
 +
 +static LIST_HEAD(npu_power_waiters);
@@ -182,7 +227,8 @@ index 22889124b..2f205c327 100755
 +	spin_lock_irqsave(&npu_power_waiters_lock, flags);
 +	waiter = npu_power_waiter_find(cookie);
 +	if (waiter && waiter->req_id &&
-+	    waiter->req_id == result.nw.npu_req_id && !waiter->done) {
++	    waiter->req_id == result.nw.npu_req_id && !waiter->done &&
++	    !waiter->cancelled) {
 +		waiter->result = result;
 +		waiter->done = true;
 +		complete(&waiter->completion);
@@ -201,7 +247,7 @@ index 22889124b..2f205c327 100755
 +		return -EINVAL;
 +	spin_lock_irqsave(&npu_power_waiters_lock, flags);
 +	waiter = npu_power_waiter_find(cookie);
-+	if (waiter && !waiter->done && !waiter->req_id) {
++	if (waiter && !waiter->done && !waiter->cancelled && !waiter->req_id) {
 +		waiter->req_id = req_id;
 +		ret = 0;
 +	} else if (waiter && waiter->req_id) {
@@ -211,18 +257,76 @@ index 22889124b..2f205c327 100755
 +	return ret;
 +}
 +
-+int npu_session_power_wait_is_active(u64 cookie, npu_req_id_t req_id)
++int npu_session_power_wait_begin_publish(u64 cookie, npu_req_id_t req_id)
 +{
 +	struct npu_power_waiter *waiter;
 +	unsigned long flags;
-+	int active = 0;
++	int started = 0;
 +
 +	spin_lock_irqsave(&npu_power_waiters_lock, flags);
 +	waiter = npu_power_waiter_find(cookie);
-+	if (waiter && waiter->req_id == req_id && !waiter->done)
-+		active = 1;
++	if (waiter && waiter->req_id == req_id && !waiter->done &&
++	    !waiter->cancelled && !waiter->publishing) {
++		reinit_completion(&waiter->publish_done);
++		waiter->publishing = true;
++		waiter->publish_committed = false;
++		started = 1;
++	}
 +	spin_unlock_irqrestore(&npu_power_waiters_lock, flags);
-+	return active;
++	return started;
++}
++
++int npu_session_power_wait_authorize_publish(u64 cookie, npu_req_id_t req_id)
++{
++	struct npu_power_waiter *waiter;
++	unsigned long flags;
++	int authorized = 0;
++
++	spin_lock_irqsave(&npu_power_waiters_lock, flags);
++	waiter = npu_power_waiter_find(cookie);
++	if (waiter && waiter->req_id == req_id && !waiter->done &&
++	    !waiter->cancelled && waiter->publishing &&
++	    !waiter->publish_committed) {
++		waiter->publish_committed = true;
++		authorized = 1;
++	}
++	spin_unlock_irqrestore(&npu_power_waiters_lock, flags);
++	return authorized;
++}
++
++void npu_session_power_wait_finish_publish(u64 cookie, npu_req_id_t req_id)
++{
++	struct npu_power_waiter *waiter;
++	unsigned long flags;
++
++	spin_lock_irqsave(&npu_power_waiters_lock, flags);
++	waiter = npu_power_waiter_find(cookie);
++	if (waiter && waiter->req_id == req_id && waiter->publishing) {
++		waiter->publishing = false;
++		waiter->publish_committed = false;
++		complete_all(&waiter->publish_done);
++	}
++	spin_unlock_irqrestore(&npu_power_waiters_lock, flags);
++}
++
++static void npu_power_wait_cancel_and_drain(struct npu_power_waiter *waiter)
++{
++	unsigned long flags;
++
++	for (;;) {
++		spin_lock_irqsave(&npu_power_waiters_lock, flags);
++		waiter->cancelled = true;
++		if (!waiter->publishing) {
++			spin_unlock_irqrestore(&npu_power_waiters_lock, flags);
++			return;
++		}
++		spin_unlock_irqrestore(&npu_power_waiters_lock, flags);
++
++		/* The publisher owns a lease on this stack waiter until it reports
++		 * that the synchronous mailbox post has returned.
++		 */
++		wait_for_completion(&waiter->publish_done);
++	}
 +}
 +
 +static int npu_power_result_to_errno(npu_errno_t result)
@@ -265,6 +369,7 @@ index 22889124b..2f205c327 100755
 +	memset(&waiter, 0, sizeof(waiter));
 +	INIT_LIST_HEAD(&waiter.list);
 +	init_completion(&waiter.completion);
++	init_completion(&waiter.publish_done);
 +	for (;;) {
 +		waiter.cookie = atomic64_inc_return(&npu_power_wait_cookie);
 +		spin_lock_irqsave(&npu_power_waiters_lock, flags);
@@ -298,6 +403,7 @@ index 22889124b..2f205c327 100755
 +	queued = npu_ncp_mgmt_put(&req);
 +	if (unlikely(queued <= 0)) {
 +		spin_lock_irqsave(&npu_power_waiters_lock, flags);
++		waiter.cancelled = true;
 +		if (!list_empty(&waiter.list))
 +			list_del_init(&waiter.list);
 +		spin_unlock_irqrestore(&npu_power_waiters_lock, flags);
@@ -309,6 +415,10 @@ index 22889124b..2f205c327 100755
 +
 +	timeout = msecs_to_jiffies(NPU_POWER_WAIT_TIMEOUT_MS);
 +	waited = wait_for_completion_timeout(&waiter.completion, timeout);
++	/* Revoke any not-yet-committed publish and drain a committed synchronous
++	 * mailbox post before the stack waiter can go out of scope.
++	 */
++	npu_power_wait_cancel_and_drain(&waiter);
 +	spin_lock_irqsave(&npu_power_waiters_lock, flags);
 +	if (waiter.done) {
 +		session->nw_result = waiter.result;
@@ -328,7 +438,7 @@ index 22889124b..2f205c327 100755
  /*****************************************************************************
   *****                         wrapper function                          *****
   *****************************************************************************/
-@@ -621,11 +816,18 @@ int npu_session_close(struct npu_session *session)
+@@ -621,11 +885,18 @@ int npu_session_close(struct npu_session *session)
  	struct npu_sessionmgr *sessionmgr;
  #endif
  
@@ -350,7 +460,7 @@ index 22889124b..2f205c327 100755
  	vctx = &(session->vctx);
  	vertex = vctx->vertex;
  	device = container_of(vertex, struct npu_device, vertex);
-@@ -2909,26 +3111,37 @@ int npu_session_format(struct npu_queue *queue, struct vs4l_format_list *flist)
+@@ -2909,26 +3180,37 @@ int npu_session_format(struct npu_queue *queue, struct vs4l_format_list *flist)
  #ifdef CONFIG_NPU_USE_BOOT_IOCTL
  int npu_session_NW_CMD_POWER_NOTIFY(struct npu_session *session, bool on)
  {
@@ -393,7 +503,7 @@ index 22889124b..2f205c327 100755
  
  	if (session->hids & NPU_HWDEV_ID_NPU)
  		session_cnt = atomic_read(&sessionmgr->npu_hw_cnt);
-@@ -2936,26 +3149,31 @@ int npu_session_NW_CMD_POWER_NOTIFY(struct npu_session *session, bool on)
+@@ -2936,26 +3218,31 @@ int npu_session_NW_CMD_POWER_NOTIFY(struct npu_session *session, bool on)
  		session_cnt = atomic_read(&sessionmgr->dsp_hw_cnt);
  
  	if (on) {
@@ -442,7 +552,7 @@ index 22889124b..2f205c327 100755
  	return ret;
  }
  
-@@ -2964,11 +3182,13 @@ int npu_session_restore_cnt(struct npu_session *session)
+@@ -2964,11 +3251,13 @@ int npu_session_restore_cnt(struct npu_session *session)
  	int ret = 0;
  	struct npu_sessionmgr *sessionmgr;
  
@@ -457,7 +567,7 @@ index 22889124b..2f205c327 100755
  
  	mutex_unlock(session->global_lock);
  
-@@ -2977,29 +3197,46 @@ int npu_session_restore_cnt(struct npu_session *session)
+@@ -2977,29 +3266,46 @@ int npu_session_restore_cnt(struct npu_session *session)
  
  int npu_session_NW_CMD_RESUME(struct npu_session *session)
  {
@@ -514,7 +624,7 @@ index 22889124b..2f205c327 100755
  	mutex_unlock(session->global_lock);
  	return ret;
  }
-@@ -3007,6 +3244,8 @@ int npu_session_NW_CMD_RESUME(struct npu_session *session)
+@@ -3007,6 +3313,8 @@ int npu_session_NW_CMD_RESUME(struct npu_session *session)
  int npu_session_NW_CMD_SUSPEND(struct npu_session *session)
  {
  	int ret = 0;
@@ -523,7 +633,7 @@ index 22889124b..2f205c327 100755
  #if (CONFIG_NPU_MAILBOX_VERSION == 9)
  	int cnt = 0;
  #endif
-@@ -3014,37 +3253,50 @@ int npu_session_NW_CMD_SUSPEND(struct npu_session *session)
+@@ -3014,37 +3322,50 @@ int npu_session_NW_CMD_SUSPEND(struct npu_session *session)
  	struct npu_vertex_ctx *vctx;
  	struct npu_vertex *vertex;
  	struct npu_device *device;
@@ -583,7 +693,7 @@ index 22889124b..2f205c327 100755
  			ret = 0;
  			break;
  		}
-@@ -3057,9 +3309,24 @@ int npu_session_NW_CMD_SUSPEND(struct npu_session *session)
+@@ -3057,9 +3378,24 @@ int npu_session_NW_CMD_SUSPEND(struct npu_session *session)
  		sessionmgr->dsp_hw_cnt_saved = 0;
  		sessionmgr->dsp_hw_cnt_saved = atomic_xchg(&sessionmgr->dsp_hw_cnt, sessionmgr->dsp_hw_cnt_saved);
  	}
