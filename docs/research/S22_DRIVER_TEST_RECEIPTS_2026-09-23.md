@@ -570,3 +570,23 @@ rollback/readback and the exact authorization must be ready. Root-overlay
 staging additionally requires resolving the upper-layer accounting and
 measuring destination-specific free space. NPU BOOTUP remains denied until
 the runtime lifecycle gates pass; the host build does not relax them.
+
+### Final pre-publication audit
+
+The fetched public baseline is `20605dbe623e0909cf219c3cae9ef7bb597b15a6`.
+The selected review branch has 43 commits beyond it across 29 changed tracked
+paths. No reachable blob exceeds 20 MiB; no firmware package, image, model
+weight, credential, host key, or private trace was found in newly reachable
+paths. The large unrelated local commits
+`1ccf3395303d62e2c31aff8bb88d46155e68dcb6` and
+`a52151f24eb2c3ae4fdd750020cdaeb9c9468c1f` are not ancestors. The preserved
+commits `5928e980ea32355c43ca5240eb41c8aa862533f3` and
+`295b8696b20ef2c342df1ea6031ac41d9bc52fe8` are ancestors as intended.
+
+Whole-branch `git diff --check` reports 416 whitespace diagnostics confined
+to `tools/hardware/npu-session-lifecycle-fix.patch`; that exported patch keeps
+the exact formatting from the downstream kernel source. The remaining branch
+diff check is clean. The patch reverse-applies and byte-compares exactly to
+the kernel diff from source `4e5c5ad7d950e4de0688b5663965f2075654b2ad` to
+candidate `40b5c72cedfb87facca7391c3efb3871497f5393`. This publication audit
+does not promote or deploy the candidate.
