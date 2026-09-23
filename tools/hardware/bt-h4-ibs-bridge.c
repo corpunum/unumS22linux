@@ -46,6 +46,7 @@ struct bridge {
     uint8_t pending[MAX_PENDING][MAX_FRAME]; size_t pending_n[MAX_PENDING];
     size_t pending_head, pending_count;
     int tx_awake, rx_awake, waiting_ack, retries;
+    int queue_overflow;
     int hci_index;
     unsigned commands, events, ibs_ack_rx, ibs_wake_rx;
     uint64_t wake_at;
@@ -103,7 +104,11 @@ static int flush_pending(struct bridge *x) {
     return 0;
 }
 static int queue_pty_frame(struct bridge *x, const uint8_t *b, size_t n) {
-    if (x->pending_count == MAX_PENDING || n > MAX_FRAME) return -1;
+    if (x->pending_count == MAX_PENDING) {
+        x->queue_overflow = 1;
+        return -1;
+    }
+    if (n > MAX_FRAME) return -1;
     size_t i = (x->pending_head + x->pending_count) % MAX_PENDING;
     memcpy(x->pending[i], b, n); x->pending_n[i] = n; x->pending_count++;
     if (b[0] == 1) {
@@ -160,6 +165,10 @@ static int speed_value(unsigned long n, speed_t *out) {
 static int cleanup_pty(struct bridge *x) {
     int line = 0;
     return ioctl(x->pty_slave, TIOCSETD, &line);
+}
+static void report_queue_overflow(const struct bridge *x) {
+    if (x->queue_overflow)
+        printf("bridge_queue_overflow=1 queued=%zu\n", x->pending_count);
 }
 static int attach_h4(struct bridge *x) {
     int line = N_HCI, index = -1;
@@ -234,14 +243,15 @@ int s22_bridge_run(int uart, int duration_ms) {
     cfmakeraw(&t); t.c_cflag |= CLOCAL | CREAD; if (tcsetattr(x.pty_slave, TCSANOW, &t) < 0) goto out;
     if (attach_h4(&x) < 0) { perror("H4 attach");goto out; }
     rc = run_bridge(&x, duration_ms);
+    report_queue_overflow(&x);
     if (report_hci(&x) && !rc)rc=-1;
     printf("bridge_result=%d commands=%u events=%u ibs_wake_rx=%u ibs_ack_rx=%u queued=%zu\n",
            rc,x.commands,x.events,x.ibs_wake_rx,x.ibs_ack_rx,x.pending_count);fflush(stdout);
 out:
     if(x.pty_slave>=0) {
-        int detached=cleanup_pty(&x);
-        printf("bridge_detach_result=%d\n",detached);fflush(stdout);
-        if(detached && !rc)rc=-1;
+        int pty_cleanup_result=cleanup_pty(&x);
+        printf("pty_cleanup_ioctl_result=%d\n",pty_cleanup_result);fflush(stdout);
+        if(pty_cleanup_result && !rc)rc=-1;
         close(x.pty_slave);
     }
     if(x.pty_master>=0)close(x.pty_master);
@@ -279,10 +289,11 @@ int main(int argc, char **argv) {
     signal(SIGINT, stop_signal); signal(SIGTERM, stop_signal);
     fprintf(stdout, "%s\n", x.slave_name); fflush(stdout);
     int rc = run_bridge(&x, 0);
-    int detached = cleanup_pty(&x);
-    printf("bridge_detach_result=%d\n", detached);
+    report_queue_overflow(&x);
+    int pty_cleanup_result = cleanup_pty(&x);
+    printf("pty_cleanup_ioctl_result=%d\n", pty_cleanup_result);
     fflush(stdout);
-    if (detached < 0 && rc == 0) rc = -1;
+    if (pty_cleanup_result < 0 && rc == 0) rc = -1;
     close(x.pty_master); close(x.pty_slave); close(x.uart);
     return rc == 0 ? 0 : 1;
 }

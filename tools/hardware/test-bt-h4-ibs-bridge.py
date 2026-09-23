@@ -233,7 +233,8 @@ class BridgeTests(unittest.TestCase):
         try:
             # First command waits for IBS ACK; no UART credit is returned, so
             # the ninth queued command must be rejected at MAX_PENDING=8.
-            os.write(virtual, COMMAND * 9)
+            burst = COMMAND * 9
+            self.assertEqual(os.write(virtual, burst), len(burst))
             self.assertEqual(read_exact(physical_master, 1), b"\xfd")
             self.assertIsNotNone(proc.wait(timeout=2))
             assert_quiet(self, physical_master, timeout=0.02)
@@ -246,7 +247,8 @@ class BridgeTests(unittest.TestCase):
             stdout.count("bridge_hci_command="), 8,
             "expected eight accepted commands before the ninth overflowed the queue",
         )
-        self.assertIn("bridge_detach_result=0", stdout)
+        self.assertIn("bridge_queue_overflow=1 queued=8", stdout)
+        self.assertIn("pty_cleanup_ioctl_result=0", stdout)
 
     def test_invalid_packet_type_fails_closed(self):
         proc, virtual, physical_master, physical_slave = start_bridge(self)
@@ -284,7 +286,7 @@ class BridgeTests(unittest.TestCase):
             self.assertEqual(read_exact(physical_master, 3, timeout=1.0), b"\xfd" * 3)
             self.assertNotEqual(proc.wait(timeout=2), 0)
             rest, _ = proc.communicate(timeout=2)
-            self.assertIn("bridge_detach_result=0", rest)
+            self.assertIn("pty_cleanup_ioctl_result=0", rest)
         finally:
             # communicate() above already reaped the child; helper is idempotent.
             if proc.poll() is None:
@@ -311,7 +313,7 @@ class BridgeTests(unittest.TestCase):
             proc.send_signal(signal.SIGTERM)
             rest, _ = proc.communicate(timeout=2)
             self.assertNotEqual(proc.returncode, 0)  # orderly signal cancellation
-            self.assertIn("bridge_detach_result=0", rest)
+            self.assertIn("pty_cleanup_ioctl_result=0", rest)
             os.close(virtual); os.close(physical_master); os.close(physical_slave)
 
     def test_parser_fragmentation_and_malformed_lengths(self):
