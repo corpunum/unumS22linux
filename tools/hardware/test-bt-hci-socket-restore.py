@@ -8,6 +8,7 @@ temporary tree before checking the resulting source.
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 import tempfile
@@ -28,6 +29,40 @@ def body(text: str, marker: str) -> str:
             if depth == 0:
                 return text[start : pos + 1]
     raise AssertionError(f"unterminated body: {marker}")
+
+
+def capability_denials(function: str, capability: str, minimum: int) -> None:
+    condition = f"if (!capable({capability}))"
+    start = 0
+    branches = []
+    while (pos := function.find(condition, start)) >= 0:
+        tail = function[pos + len(condition):].lstrip()
+        if tail.startswith("{"):
+            depth = 0
+            end = None
+            for index, char in enumerate(tail):
+                if char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+                    if depth == 0:
+                        end = index
+                        break
+            assert end is not None, f"unterminated {capability} gate branch"
+            branch = tail[1:end]
+        else:
+            branch = tail.splitlines()[0].strip()
+        branches.append(branch)
+        start = pos + len(condition)
+
+    assert len(branches) >= minimum, (
+        f"expected at least {minimum} {capability} denial gates, found {len(branches)}"
+    )
+    for branch in branches:
+        normalized = re.sub(r"/\*.*?\*/|//[^\n]*", "", branch, flags=re.S).strip()
+        assert normalized in ("return -EPERM;", "err = -EPERM;\n\t\t\tgoto done;"), (
+            f"{capability} gate does not deny on failure: {branch!r}"
+        )
 
 
 def validate_contract(text: str) -> None:
@@ -63,9 +98,9 @@ def validate_contract(text: str) -> None:
         assert expected in release, expected
 
     ioctl = body(text, "static int hci_sock_ioctl(")
-    assert "if (!capable(CAP_NET_ADMIN))" in ioctl
+    capability_denials(ioctl, "CAP_NET_ADMIN", minimum=5)
     bound_ioctl = body(text, "static int hci_sock_bound_ioctl(")
-    assert bound_ioctl.count("capable(CAP_NET_ADMIN)") >= 3
+    capability_denials(bound_ioctl, "CAP_NET_ADMIN", minimum=3)
 
     bind = body(text, "static int hci_sock_bind(")
     for expected in (
@@ -76,6 +111,8 @@ def validate_contract(text: str) -> None:
         "if (!capable(CAP_NET_RAW))",
     ):
         assert expected in bind, expected
+    capability_denials(bind, "CAP_NET_ADMIN", minimum=1)
+    capability_denials(bind, "CAP_NET_RAW", minimum=1)
 
     ops = body(text, "static const struct proto_ops hci_sock_ops")
     for name in (
@@ -91,38 +128,46 @@ def validate_contract(text: str) -> None:
 
 
 def negative_contract_checks(text: str) -> None:
+    def require_rejected(mutant: str, reason: str) -> None:
+        try:
+            validate_contract(mutant)
+        except AssertionError:
+            return
+        raise AssertionError(reason)
+
     release = body(text, "static int hci_sock_release(")
     broken_release = text.replace(
         release, release.replace("hci_sock_free_cookie(sk);", "/* removed cleanup */", 1), 1
     )
-    try:
-        validate_contract(broken_release)
-    except AssertionError:
-        pass
-    else:
-        raise AssertionError("contract accepted missing release/cookie cleanup")
+    require_rejected(broken_release,
+                     "contract accepted missing release/cookie cleanup")
 
     ioctl = body(text, "static int hci_sock_ioctl(")
     broken_ioctl = text.replace(
         ioctl, ioctl.replace("!capable(CAP_NET_ADMIN)", "!capable(CAP_NET_RAW)"), 1
     )
-    try:
-        validate_contract(broken_ioctl)
-    except AssertionError:
-        pass
-    else:
-        raise AssertionError("contract accepted weakened ioctl privilege check")
+    require_rejected(broken_ioctl,
+                     "contract accepted weakened ioctl privilege check")
 
     create = body(text, "static int hci_sock_create(")
     broken_create = text.replace(
         create, create.replace("sock->type != SOCK_RAW", "sock->type == SOCK_RAW", 1), 1
     )
-    try:
-        validate_contract(broken_create)
-    except AssertionError:
-        pass
-    else:
-        raise AssertionError("contract accepted incorrect socket-type gate")
+    require_rejected(broken_create,
+                     "contract accepted incorrect socket-type gate")
+
+    ioctl = body(text, "static int hci_sock_ioctl(")
+    allowed_ioctl = text.replace(
+        ioctl, ioctl.replace("return -EPERM;", "return 0;"), 1
+    )
+    require_rejected(allowed_ioctl,
+                     "contract accepted capability-gate allow return")
+
+    no_op_ioctl = text.replace(
+        ioctl, ioctl.replace("return -EPERM;", ""), 1
+    )
+    require_rejected(no_op_ioctl,
+                     "contract accepted capability-gate no-op")
 
 
 def patched_candidate(base: Path, patch: Path) -> str:
