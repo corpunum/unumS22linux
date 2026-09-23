@@ -569,7 +569,10 @@ space at the exact destination.
 
 The coordinator integrated only those three reviewed implementation commits
 onto this unmerged branch as `e1af7f2`, `daeb0b5`, and `38f5f12`. The workflow
-has not yet run on GitHub. The coordinator reran policy tests **7/7 normally
+was run on GitHub after the first publication: workflow run
+`35926456431` for branch SHA
+`29bdfa5a13edf7bdd8e871d28af432711cb6d6ad` completed successfully. The
+coordinator reran policy tests **7/7 normally
 and 7/7 with `-O`**, then the complete suite: **7 normal runs, 5 optimized
 runs, 2 documented optimized-mode skips, 0 failures**. `py_compile` for the
 runner, policy test and all seven allowlisted scripts passed; `git diff

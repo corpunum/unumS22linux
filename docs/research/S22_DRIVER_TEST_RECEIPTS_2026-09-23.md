@@ -502,7 +502,9 @@ The coordinator integrated those commits as `e1af7f2`, `daeb0b5`, and
 | `python3 -m py_compile` on runner, policy test and seven allowlisted scripts | Pass | Syntax only |
 | `git diff --check 7b683219..HEAD` | Pass | Patch whitespace only |
 
-The workflow has not run on GitHub. It grants `contents: read`, disables
+The first push-triggered GitHub Actions run, `35926456431`, completed with
+conclusion `success` for branch SHA
+`29bdfa5a13edf7bdd8e871d28af432711cb6d6ad`. It grants `contents: read`, disables
 checkout credential persistence and uses no secrets or device step. The test
 suite clears inherited device overrides/credentials and makes no IP/HTTP
 requests. Workflow runner egress itself is not blocked. A separate rerun of
