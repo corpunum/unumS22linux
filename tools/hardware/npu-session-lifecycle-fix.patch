@@ -1,5 +1,5 @@
 diff --git a/drivers/vision/npu/core/npu-protodrv.c b/drivers/vision/npu/core/npu-protodrv.c
-index e254eadcf..d03787af0 100755
+index e254eadcf..a3a5e0299 100755
 --- a/drivers/vision/npu/core/npu-protodrv.c
 +++ b/drivers/vision/npu/core/npu-protodrv.c
 @@ -25,6 +25,42 @@
@@ -45,6 +45,15 @@ index e254eadcf..d03787af0 100755
  
  #define NPU_PROTO_DRV_SIZE	1024
  #define NPU_PROTO_DRV_NAME	"npu-proto_driver"
+@@ -777,7 +813,7 @@ int is_last_session_ref(struct proto_req_nw *req_nw)
+ /* Returns 0 if no session ref is exist.
+  * Otherwise, return 1
+  */
+-#ifndef CONFIG_NPU_USE_BOOT_IOCTL
++#if CONFIG_NPU_MAILBOX_VERSION < 8
+ static int is_session_ref_exist(void)
+ {
+ 	struct session_ref *sess_ref = &(npu_proto_drv.session_ref);
 @@ -1201,10 +1237,24 @@ void t32_trace_ncp_load(void)
  
  static int nw_mgmt_op_get_request(struct proto_req_nw *target)
@@ -103,7 +112,7 @@ index e254eadcf..d03787af0 100755
  		}
  	}
  break_entry_iter:
-@@ -1673,11 +1731,47 @@ static int  npu_protodrv_handler_nw_requested(void)
+@@ -1673,11 +1731,51 @@ static int  npu_protodrv_handler_nw_requested(void)
  			break;
  #if (CONFIG_NPU_MAILBOX_VERSION >= 8)
  		case NPU_NW_CMD_POWER_CTL:
@@ -113,6 +122,7 @@ index e254eadcf..d03787af0 100755
 -				proto_nw_lsm.lsm_move_entry(PROCESSING, entry);
 -				proc_handle_cnt++;
 +			{
++#ifdef CONFIG_NPU_USE_BOOT_IOCTL
 +				bool publish_waiter =
 +					entry->nw.notify_func == npu_session_save_power_result;
 +				u64 publish_cookie = 0;
@@ -138,6 +148,7 @@ index e254eadcf..d03787af0 100755
 +					nw_power_wait_finish(publish_cookie, publish_req_id);
 +					break;
 +				}
++#endif
 +				if (npu_device_is_emergency_err(npu_proto_drv.npu_device)) {
 +					/* Do not strand a waiter after a timeout/reset that put the
 +					 * driver into fail-closed emergency mode.
@@ -151,8 +162,10 @@ index e254eadcf..d03787af0 100755
 +					proto_nw_lsm.lsm_move_entry(PROCESSING, entry);
 +					proc_handle_cnt++;
 +				}
++#ifdef CONFIG_NPU_USE_BOOT_IOCTL
 +				if (publish_waiter)
 +					nw_power_wait_finish(publish_cookie, publish_req_id);
++#endif
  			}
  #else
  		case NPU_NW_CMD_POWER_DOWN:
@@ -720,10 +733,17 @@ index 22889124b..875402fdb 100755
  }
  #endif
 diff --git a/drivers/vision/npu/core/npu-vertex.c b/drivers/vision/npu/core/npu-vertex.c
-index 06ed7226c..d280be584 100755
+index 06ed7226c..51c9273b4 100755
 --- a/drivers/vision/npu/core/npu-vertex.c
 +++ b/drivers/vision/npu/core/npu-vertex.c
-@@ -311,6 +311,7 @@ static int npu_vertex_close(struct file *file)
+@@ -305,12 +305,13 @@ static int npu_vertex_close(struct file *file)
+ 	struct mutex *lock = &vertex->lock;
+ 	int id = vctx->id;
+ 	enum npu_vertex_state done_state;
+-#ifdef CONFIG_NPU_USE_HW_DEVICE
++#ifdef CONFIG_NPU_USE_BOOT_IOCTL
+ 	int hids = session->hids;
+ #endif
  #ifdef CONFIG_NPU_USE_BOOT_IOCTL
  	struct npu_device *device = container_of(vertex, struct npu_device, vertex);
  	u32 save_state = vctx->state;
