@@ -78,3 +78,9 @@ trial captures were not copied or published.
    before any firmware BOOTUP experiment.
 4. Treat SIM/calls, camera, physical touch, audio output, and suspend as
    separate acceptance tests; kernel enumeration alone is not success.
+
+The local `samloader` CLI exposes `reboot-download` and flash, but no explicit
+software `reboot-recovery` action. Its `--no-reboot` flag only suppresses the
+post-flash reboot; it does not select a recovery boot target. Since the phone
+is unattended, the candidate remains staged until a reliable post-flash return
+to RECOVERY is available.
