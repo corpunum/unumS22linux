@@ -30,6 +30,14 @@ Camera mode is inventory-only: it lists `/dev/video*` and names from
 `/sys/class/video4linux`; it intentionally does not open a camera, stream,
 capture, or access microphone data.
 
+## Host-only collector tests
+
+Run `python3 tools/hardware/test-input-power-readiness.py` for focused tests
+against temporary synthetic sysfs and device roots. The tests cover input,
+power, thermal, and camera inventory plus bounded event observation, and fail
+if event handling opens a write-capable descriptor, writes an event, or grabs
+one. They do not access a phone or establish physical-device acceptance.
+
 ## Deployed acceptance evidence (2026-09-20)
 
 The native Lua binding uses the pinned direct dispatcher
