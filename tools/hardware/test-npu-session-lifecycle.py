@@ -258,6 +258,14 @@ def test_source_contract() -> None:
         finish_pos = power_body.rfind("nw_power_wait_finish(publish_cookie, publish_req_id)")
         check(begin_pos >= 0 and begin_pos < authorize_pos < send_pos < finish_pos,
               "POWER_CTL publication is not leased, authorized, and drained")
+        waiter_guard_start = power_body.find("#ifdef CONFIG_NPU_USE_BOOT_IOCTL")
+        waiter_guard_end = power_body.find("#endif", waiter_guard_start)
+        finish_guard_start = power_body.rfind("#ifdef CONFIG_NPU_USE_BOOT_IOCTL")
+        finish_guard_end = power_body.find("#endif", finish_guard_start)
+        check(waiter_guard_start >= 0 and waiter_guard_end > authorize_pos and
+              waiter_guard_end < power_body.find("npu_device_is_emergency_err") and
+              finish_guard_start > send_pos and finish_guard_end > finish_pos,
+              "BOOT_IOCTL-only waiter ownership must be guarded from generic POWER_CTL")
         cancel_body = function_body(session, "static void npu_power_wait_cancel_and_drain(")
         check("waiter->cancelled = true" in cancel_body and
               "waiter->publishing" in cancel_body and
