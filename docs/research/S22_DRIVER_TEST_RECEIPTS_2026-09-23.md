@@ -383,3 +383,43 @@ health. The script did not emit SSID, MAC, address, gateway, or DNS IP. It
 reports reboot/autostart, USB-disconnected rescue, suspend/resume, roaming and
 sustained throughput as not tested. This confirms WLAN works now; it does not
 prove Tailscale/remote rescue independent of USB or survival of a kernel fault.
+
+## Execution-correction and final NPU review receipt — 2026-09-23 21:00 UTC
+
+Fetched origin without integrating over active work. Read the complete
+`origin/master:docs/S22_LUNA_EXECUTION_CORRECTION_2026-09-23.md` and original
+mission. Original local commits `5928e980ea32355c43ca5240eb41c8aa862533f3`
+and `295b8696b20ef2c342df1ea6031ac41d9bc52fe8` remain unchanged, reachable
+on `codex/s22-luna-coordinator-20260923`, and included as ancestors of the
+review branch. No reset, stash, discard, or original-checkout edit occurred.
+
+Final independent NPU re-review approved the race fix at kernel commit
+`4c20670269e800454a5daacb9a01856ad1a792ae` and repository patch/test commit
+`1908c624bc4a2066476488d9b196216b2a242820`. Tests passed normally and under
+`python3 -O`; exact patch reverse-application and base-diff checks passed.
+The 12-second response wait is not a strict API wall-clock bound because a
+publisher already authorized under the lease must drain its synchronous
+mailbox post. The exact changed C files remain uncompiled at this receipt.
+
+Current-turn reruns: recovery-deployment suite 38/38 in normal, `-O`, and
+`PYTHONOPTIMIZE=1` modes with the trusted local AVB tool;
+NPU lifecycle source/model suite passed in normal and `-O`. The NPU preflight
+CLI exited 2 with `bootup_ready=false` and `bootup_authorized=false`; the
+public review snapshot lacks the exact config, AIE firmware artifacts, and
+private/pinned lifecycle source closure. This is the intended fail-closed
+result, not a reason to stage firmware or attempt BOOTUP.
+
+One follow-up object compilation is in progress in the existing isolated NPU
+worker context. It is limited to candidate translation units and does not
+authorize deployment, a full image build, BOOTUP, or any phone operation.
+Model evidence remains explicit selection only: local Codex CLI config is
+Luna/xhigh, the catalog supports Luna/max, worker calls were explicitly
+Luna/max, and this execution interface exposes no runtime/session attestation.
+
+At the latest read-only phone checkpoint, WLAN passed all 13 acceptance
+checks while USB SSH and the resident assistant were healthy. The native
+overlay had 34,844,672 bytes free and 29,780 free inodes, while persistent
+`/srv/s22` had 102,382,280,704 bytes free. The overlay upper/merged `/usr`
+size discrepancy remains unresolved and no independent recovery path was
+proven. No hardware change, install, cleanup, deployment, reboot, or driver
+acceptance occurred.
