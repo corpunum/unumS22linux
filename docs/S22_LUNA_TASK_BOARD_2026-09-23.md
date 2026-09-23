@@ -442,3 +442,66 @@ emits no SSID, MAC, address, gateway, or DNS IP. It explicitly leaves
 reboot/autostart, USB-disconnected rescue, suspend/resume, roaming, and
 sustained-throughput untested. This verifies current WLAN service, but does
 not establish independent rescue or cable-free persistence.
+
+## Execution correction and NPU review — 2026-09-23 21:00 UTC
+
+- Fetched `origin` without pulling or changing the original checkout. Fetched
+  master contains correction commit
+  `20605dbe623e0909cf219c3cae9ef7bb597b15a6`; its complete text and the
+  complete driver mission were read directly from `origin/master`. This
+  checkpoint applies its model-evidence, worker-write, WIP-publication, and
+  immediate-order rules without relaxing any device gate.
+- Original checkout remains `master` at `fb60a2c`, ahead 44 / behind 57, with
+  the user's existing modifications and untracked files untouched. The two
+  local commits remain intact on durable branch
+  `codex/s22-luna-coordinator-20260923` and are ancestors of this review
+  branch. `git cherry -v origin/master codex/s22-luna-coordinator-20260923`
+  marks both as local-only; the exact diffs are the NPU readiness/audio DMA
+  work in `5928e980` (7 files, 277 insertions, 53 deletions) and the task
+  board in `295b869` (one 79-line file). No blind merge or cherry-pick was
+  performed.
+- Installed `codex-cli 0.156.1` reports effective local config
+  `model=gpt-6-luna`, `model_reasoning_effort=xhigh`; its bundled model catalog
+  confirms `gpt-6-luna` supports `max`. The current interactive execution
+  exposes no in-turn model/effort switch or session metadata, so coordinator
+  evidence remains `explicitly_configured`, not `runtime_reported`; the
+  coordinator is not represented as Max. Native worker requests explicitly
+  select Luna/Max and have no known override/fallback, but runtime identity is
+  not exposed by this interface. Task handles, not invented session IDs, are
+  recorded in this board.
+- Independent Luna reviewer `/root/npu_lifecycle_independent_review`
+  approved the exact NPU candidate (`4c206702`) and repo patch (`1908c62`).
+  The review confirmed the timeout/publication race fix and no lock inversion.
+  Qualification: the 12-second firmware-response wait is followed by a
+  synchronous publish-lease drain; this can exceed 12 seconds if the mailbox
+  post stalls. Describe it as a bounded response wait plus publish drain, not
+  a hard 12-second end-to-end cap. Checkpatch's missing author sign-off was
+  not fabricated. No kernel build or device/BOOTUP test was part of this
+  review.
+- Coordinator reran deployment hardening tests with the trusted local AVB
+  tool: 38/38 passed in normal Python, `python3 -O`, and
+  `PYTHONOPTIMIZE=1`. NPU lifecycle source/model tests passed in normal and
+  `-O` modes. The real preflight CLI on this public review tree exits 2;
+  config/AIE artifacts and lifecycle-source inputs are absent, and
+  `bootup_ready=false`, `bootup_authorized=false`. No device access occurred.
+- Existing NPU implementation worker `/root/recovery_hardening` has a bounded
+  follow-up to compile only the changed translation units against kernel
+  base `4e5c5ad7d950e4de0688b5663965f2075654b2ad` and the preserved hardening
+  config, including a safe `CONFIG_NPU_USE_BOOT_IOCTL=n` variant if possible.
+  It owns isolated output dirs; no full link/build or device operation is
+  assigned. Provenance is established; object compilation is now underway.
+- The latest live evidence remains the 20:48 UTC WLAN acceptance: 13/13
+  checks passed over the existing USB SSH session, including TLS-verified
+  HTTPS bound to `wlan0` and healthy resident model. Phone kernel/PID1 remain
+  the last read-only reported `5.10.260-g4e5c5ad7d950` / `native-guardian`.
+  Overlay headroom was 34,844,672 bytes with 29,780 free inodes; persistent
+  `/srv/s22` has ample capacity. Upper `/usr` (502,788 KiB) versus merged
+  `/usr` (4,148 KiB) remains unexplained. USB SSH is not independent rescue;
+  no cleanup, install, firmware activation, deployment, or reboot occurred.
+
+The next device experiment remains blocked until an exact candidate kernel
+build and matching config/AIE preflight are established, independent rescue
+works without relying on the candidate kernel, and the existing rollback and
+owner authorization gates pass. Root-overlay installation/cleanup additionally
+requires resolving the upper-versus-merged `/usr` accounting and checking
+space at the exact destination.
