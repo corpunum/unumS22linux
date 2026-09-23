@@ -125,3 +125,39 @@ installation or phone file staging was attempted.
   required.
 - NPU lifecycle ownership/unwind, independent review, image authentication,
   and the relevant recovery/rollback gates remain open.
+
+## Continuation update — 2026-09-23
+
+The later coordinator checkpoint supersedes the older pending-review and
+storage statements above:
+
+- Bluetooth follow-up `2af4d23f66d9bc857f3de45bc3f550dd1a886491`, integrated
+  as `4163b89`, closes the final independent test-quality findings. It checks
+  all 36 input bytes were written, requires the exact eight-slot overflow
+  receipt and uses `pty_cleanup_ioctl_result` without claiming N_HCI detach.
+  Independent Luna review approved the delta; coordinator reran H4 12/12 and
+  pinned-source HCI validation. No kernel build or runtime test occurred.
+- Deployment commit `0187e3c6e07a01b368bb558a95ddec96dfaceded` passes its 35
+  host cases in standard and optimized modes, and its original AVB/dirfd
+  review findings are closed. Independent review still blocks promotion on
+  wrapper identity pinning through execution and missing parent-directory
+  fsync after staging mkdir. The implementation worker is addressing both;
+  no deployment command ran.
+- NPU kernel ownership/unwind implementation is still in progress. During
+  review of the draft, the worker caught that storing an opaque waiter cookie
+  in `nw.session` would be dereferenced as a real session pointer by
+  `msgid_issue_save_ref()` under `CONFIG_DSP_USE_VS4L`. The worker is changing
+  the draft to preserve the session pointer and carry the cookie in unused
+  POWER_CTL parameters. This was caught before commit; no BOOTUP or device
+  action occurred.
+- Current read-only USB SSH still reaches the running `5.10.260-g4e5c5ad7d950`
+  kernel and resident assistant (health HTTP 200). `/` has 34,844,672 bytes
+  free (94% used), 29,780 free inodes; `/srv/s22` has 102,382,280,704 bytes
+  and 1,652,508 inodes free. Overlay metadata points at `/cache/s22-linux/upper`,
+  but `/cache` is outside the visible PID 1/SSH root view; visible-root `du`
+  accounts for only about 4.7 MiB and does not identify the backing usage.
+  No cleanup/install was attempted. USB SSH and a peer ping over that same
+  transport are not independent rescue from a failed kernel.
+- No new hardware functionality was verified. The next device experiment
+  remains blocked on independently usable rescue plus a candidate-specific
+  rollback gate; source and host tests continue independently.
