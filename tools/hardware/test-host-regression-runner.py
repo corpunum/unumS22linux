@@ -72,7 +72,18 @@ class RunnerPolicyTests(unittest.TestCase):
             external.write_text("pass\n", encoding="utf-8")
             link = root / "tools/hardware/test-link.py"
             link.symlink_to(external)
-            with self.assertRaises(FileNotFoundError):
+            with self.assertRaisesRegex(ValueError, "symlinked path component"):
+                runner._resolve_test_paths(
+                    root, (runner.HostTest("tools/hardware/test-link.py"),))
+
+        with tempfile.TemporaryDirectory(prefix="s22-runner-internal-link-") as temp:
+            root = Path(temp)
+            alternate = root / "alternate"
+            alternate.mkdir()
+            (alternate / "test-link.py").write_text("pass\n", encoding="utf-8")
+            (root / "tools").mkdir()
+            (root / "tools/hardware").symlink_to(alternate, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "symlinked path component"):
                 runner._resolve_test_paths(
                     root, (runner.HostTest("tools/hardware/test-link.py"),))
 
@@ -83,7 +94,7 @@ class RunnerPolicyTests(unittest.TestCase):
             (external / "test-escape.py").write_text("pass\n", encoding="utf-8")
             (root / "tools").mkdir()
             (root / "tools/hardware").symlink_to(external, target_is_directory=True)
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "symlinked path component"):
                 runner._resolve_test_paths(
                     root, (runner.HostTest("tools/hardware/test-escape.py"),))
 

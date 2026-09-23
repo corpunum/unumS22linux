@@ -73,9 +73,13 @@ def _resolve_test_paths(root: Path, tests: Sequence[HostTest]) -> tuple[Path, ..
                 not test.optimization_safe and not test.normal_only_reason):
             raise ValueError(f"invalid or duplicate allowlist entry: {test.path}")
         seen.add(test.path)
-        candidate = resolved_root / relative
-        if candidate.is_symlink() or not candidate.is_file():
-            raise FileNotFoundError(f"allowlisted test is missing or symlinked: {test.path}")
+        candidate = resolved_root
+        for component in relative.parts:
+            candidate = candidate / component
+            if candidate.is_symlink():
+                raise ValueError(f"symlinked path component in allowlist: {test.path}")
+        if not candidate.is_file():
+            raise FileNotFoundError(f"allowlisted test is missing: {test.path}")
         resolved = candidate.resolve(strict=True)
         if not resolved.is_relative_to(resolved_root):
             raise ValueError(f"allowlisted test escapes repository: {test.path}")
