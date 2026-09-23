@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -194,7 +195,7 @@ class ExtraDeploymentEntrypointTests(unittest.TestCase):
         (self.root / "rootfs/main-driver-loop-20260921").mkdir(parents=True)
         ssh = self.root / "tools/s22-ssh"
         ssh.parent.mkdir(parents=True)
-        ssh.write_text("#!/usr/bin/env bash\nexit 99\n")
+        ssh.write_bytes((ROOT / "tools/s22-ssh").read_bytes())
         ssh.chmod(0o755)
         self.base = SimpleNamespace(
             SIZE=2048,
@@ -282,13 +283,7 @@ class ExtraDeploymentEntrypointTests(unittest.TestCase):
         evidence.mkdir(parents=True)
         (evidence / "native-v2-known-hosts").write_text("fixture host key\n")
         wrapper = tools / "s22-ssh"
-        wrapper.write_text(
-            "#!/usr/bin/env bash\n"
-            "set -euo pipefail\n"
-            "project_dir=$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")/..\" && pwd)\n"
-            "known_hosts=\"$project_dir/evidence/native-linux-20260919/native-v2-known-hosts\"\n"
-            "[[ -s \"$known_hosts\" ]] || exit 77\n"
-            "exec ssh \"$@\"\n")
+        wrapper.write_bytes((ROOT / "tools/s22-ssh").read_bytes())
         wrapper.chmod(0o755)
         fd = BASE.validate_approved_ssh_wrapper(wrapper)
         evil = tools / "replacement-ssh"
@@ -313,6 +308,29 @@ class ExtraDeploymentEntrypointTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("PINNED_WRAPPER_REACHED", result.stdout)
         self.assertNotIn("REPLACEMENT_EXECUTED", result.stdout)
+
+    def test_inherited_fake_ssh_is_not_selected(self):
+        fake_bin = self.root / "hostile-bin"
+        fake_bin.mkdir()
+        marker = self.root / "fake-ssh-ran"
+        fake_ssh = fake_bin / "ssh"
+        fake_ssh.write_text(
+            "#!/usr/bin/env bash\nprintf 'FAKE_SSH_RAN' > " + shlex.quote(str(marker)) + "\n")
+        fake_ssh.chmod(0o755)
+        fd = BASE.validate_approved_ssh_wrapper(ROOT / "tools/s22-ssh")
+        try:
+            with mock.patch.dict(os.environ, {"PATH": str(fake_bin) + ":/usr/bin:/bin"}):
+                _argv, environment = BASE.build_approved_ssh_invocation(
+                    fd, ROOT / "tools/s22-ssh", "ssh -V", project_root=ROOT)
+            self.assertEqual(environment["PATH"], "/usr/bin")
+            result = subprocess.run(
+                ["/bin/bash", "-c", "ssh -V"], capture_output=True, text=True,
+                timeout=5, env=environment, check=False)
+        finally:
+            os.close(fd)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("OpenSSH", result.stdout + result.stderr)
+        self.assertFalse(marker.exists(), "inherited PATH fake ssh was executed")
 
     def test_invalid_remote_receipt_is_not_recorded_as_success(self):
         transport = mock.Mock(return_value=SimpleNamespace(
@@ -568,11 +586,11 @@ print("UNSAFE_ACCEPT");sys.exit(0)
             with self.assertRaisesRegex(ValueError, "existing deployment receipt"):
                 BASE.ensure_new_receipt(target)
 
-    def test_primary_deployer_rejects_symlinked_ssh_wrapper(self):
+    def test_wrapper_hash_pin_rejects_regular_shim_and_symlinks(self):
         with tempfile.TemporaryDirectory(prefix="s22-ssh-wrapper-") as directory:
             root = Path(directory)
             approved = root / "s22-ssh"
-            approved.write_text("#!/usr/bin/env bash\nexit 0\n")
+            approved.write_bytes((ROOT / "tools/s22-ssh").read_bytes())
             approved.chmod(0o755)
             fd = BASE.validate_approved_ssh_wrapper(approved)
             try:
@@ -581,6 +599,10 @@ print("UNSAFE_ACCEPT");sys.exit(0)
                 self.assertEqual(fcntl.fcntl(fd, fcntl.F_GET_SEALS) & required, required)
             finally:
                 os.close(fd)
+            approved.write_text("#!/usr/bin/env bash\nexit 0\n")
+            approved.chmod(0o755)
+            with self.assertRaisesRegex(ValueError, "content SHA-256 mismatch"):
+                BASE.validate_approved_ssh_wrapper(approved)
             link = root / "approved-link"
             link.symlink_to(approved)
             with self.assertRaisesRegex(ValueError, "non-symlink executable"):

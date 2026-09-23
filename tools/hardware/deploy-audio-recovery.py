@@ -17,6 +17,10 @@ import stat
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
+# Exact reviewed tools/s22-ssh contents; updates require renewed source review.
+APPROVED_SSH_WRAPPER_SHA256 = '7e9d31035762de50ccc6c5614d8348532fd912bf59c41c9d410a4c7bfe49dd1d'
+# This root-owned directory is verified before it is the only SSH PATH entry.
+TRUSTED_SSH_BIN_DIR = Path('/usr/bin')
 SIZE = 100663296
 BASE_SHA = '1a827b43d29141efb47f530902dd4e4ee2b6d780515893c9ecd676ad27efd7d1'
 NEW_SHA = '1c1b77a5e532e50b8274cfc68921aa9b1bfe6d4ae9a3459281be0cc033c5c3d5'
@@ -419,6 +423,10 @@ def validate_approved_ssh_wrapper(path):
         state=lambda info:(info.st_dev,info.st_ino,info.st_mode,info.st_size,info.st_mtime_ns,info.st_ctime_ns)
         if state(opened)!=state(after):
             raise ValueError(f'approved SSH wrapper contents changed during snapshot: {path}')
+        if digest.hexdigest()!=APPROVED_SSH_WRAPPER_SHA256:
+            raise ValueError(
+                'approved SSH wrapper content SHA-256 mismatch: expected '
+                +APPROVED_SSH_WRAPPER_SHA256+', got '+digest.hexdigest())
         current=path.lstat()
         if (not stat.S_ISREG(current.st_mode)
                 or (current.st_dev,current.st_ino)!=(opened.st_dev,opened.st_ino)):
@@ -466,10 +474,28 @@ def build_approved_ssh_invocation(wrapper_fd, path, remote_command, project_root
     environment=os.environ.copy()
     environment.pop('BASH_ENV',None)
     environment.pop('ENV',None)
+    environment['PATH']=verified_ssh_path()
     environment['S22_APPROVED_SSH_FD']=str(wrapper_fd)
     environment['S22_APPROVED_SSH_FD_PATH']=fd_path
     environment['S22_APPROVED_PROJECT_ROOT']=str(Path(project_root))
     return argv,environment
+
+
+def verified_ssh_path():
+    """Use only the root-owned, non-writable system directory for ssh lookup."""
+    directory=TRUSTED_SSH_BIN_DIR
+    try:
+        directory_info=directory.lstat()
+        ssh_info=(directory/'ssh').lstat()
+    except OSError as error:
+        raise ValueError(f'trusted system SSH path is unavailable: {error}') from error
+    if (not stat.S_ISDIR(directory_info.st_mode) or directory_info.st_uid!=0
+            or (directory_info.st_mode&0o022)!=0):
+        raise ValueError(f'trusted SSH directory is not root-owned and protected: {directory}')
+    if (not stat.S_ISREG(ssh_info.st_mode) or ssh_info.st_uid!=0
+            or not (ssh_info.st_mode&0o111) or (ssh_info.st_mode&0o022)!=0):
+        raise ValueError(f'trusted SSH executable is not a protected root-owned file: {directory}/ssh')
+    return str(directory)
 
 
 def run_approved_ssh_wrapper(path, remote_command, *, input_data, timeout=100, project_root=ROOT):
