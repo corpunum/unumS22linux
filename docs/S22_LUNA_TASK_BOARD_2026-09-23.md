@@ -90,13 +90,15 @@ the dirty original checkout was performed.
 
 ### Model and worker receipts
 
-Installed client: `codex-cli 0.156.1`. Effective persistent Codex config selects
-`gpt-6-luna`; this client/model catalog exposes `max` reasoning. The primary
-session does not expose runtime model/session metadata here, so coordinator
-evidence is `explicitly_configured`, not `runtime_reported`. Each worker below
-was launched through the native collaboration interface with explicit
-`gpt-6-luna` and `max`; the tool returned task handles but no opaque session
-IDs or runtime identity attestation. There is no known worker override/fallback.
+Installed client: `codex-cli 0.156.1`. Persistent Codex config selects
+`gpt-6-luna` with primary reasoning effort `xhigh`; the installed model catalog
+lists `max` as supported, but this running session does not expose a native
+in-turn model/effort switch or runtime/session metadata. Coordinator evidence
+is therefore `explicitly_configured`, not `runtime_reported`, and the primary
+effort is not claimed to be `max`. Each worker below was launched through the
+native collaboration interface with explicit `gpt-6-luna` and `max`; the tool
+returned task handles but no opaque session IDs or runtime identity
+attestation. No override/fallback is known for those explicit worker calls.
 
 | Actual task handle | Worktree / branch | Assignment and current result |
 |---|---|---|
@@ -190,3 +192,57 @@ the relevant host patch, validating exact candidate/artifact provenance, and
 preserving USB rescue plus the existing rollback. In particular, do not retry
 raw HCI on this kernel or submit NPU BOOTUP while ownership/unwind checks are
 incomplete.
+
+## Continuation checkpoint — 2026-09-23 19:59 UTC
+
+The fetched execution correction at `origin/master` is applied. Its model
+evidence policy and WIP-publication rule supersede only the corresponding
+orchestration/publication wording above; hardware authorization, recovery,
+privacy and architecture boundaries remain unchanged.
+
+- Bluetooth test follow-up commit `2af4d23f66d9bc857f3de45bc3f550dd1a886491`
+  is integrated as `4163b89`. It asserts the full 36-byte burst write,
+  reports `bridge_queue_overflow=1 queued=8` only when the ninth frame meets a
+  full queue, and calls cleanup `pty_cleanup_ioctl_result` (the N_TTY ioctl,
+  not proof of production N_HCI detach). Independent Luna review
+  `/root/bt_final_review`, explicitly selected as `gpt-6-luna` / `max`,
+  approved this delta. Model metadata is not exposed by the collaboration
+  runtime; evidence level remains explicit selection, not runtime attestation.
+- Coordinator reran the H4 suite (12/12), exact-pinned HCI source validator,
+  `py_compile`, and `git diff --check`; all passed. These remain host/source
+  checks, not a kernel build or live Bluetooth test.
+- Deployment independent review of `0187e3c6e07a01b368bb558a95ddec96dfaceded`
+  confirms the AVB verifier snapshot and dirfd staging fixes, and the 35-case
+  normal/optimized suites pass. Two issues remain open: pin the SSH wrapper
+  identity through execution with a replacement-race test, and fsync the
+  staging parent after child-directory creation. Both fixes are assigned to
+  the existing deployment author worker; no deploy mode has run.
+- NPU lifecycle ownership/unwind edits remain in the existing exact-pinned
+  kernel worktree. No BOOTUP, build, or live test has occurred; the next
+  useful deliverable is the actual patch plus executable regressions, followed
+  by independent review.
+
+### Refreshed phone and storage evidence — read-only
+
+At `2026-09-23T19:59:58Z`, strict-host-key USB SSH succeeded. Kernel remains
+`5.10.260-g4e5c5ad7d950`, PID 1 remains `native-guardian`, uptime was 71,420 s,
+and PID 1 and the SSH probe have the same mount namespace. The resident
+assistant health endpoint returned HTTP 200. No reboot or phone mutation was
+performed.
+
+The actual `/` overlay reports 610,861,056 bytes total, 563,433,472 used and
+34,844,672 available (94%); 8,620/38,400 inodes are used. Persistent `/srv/s22`
+userdata reports 112,233,304,064 bytes total, 9,834,246,144 used and
+102,382,280,704 available; 1,652,508 inodes remain free. Mount metadata names
+`/cache/s22-linux/upper` as the overlay upperdir, but `/cache` is not visible
+inside this PID 1/SSH root view. Visible-root `du` totals only about 4.7 MiB,
+so it does not explain the overlay's used blocks. The underlying upper-layer
+consumers therefore remain unidentified; no cleanup or package installation
+was attempted.
+
+The strict USB SSH path is currently usable, but it depends on this running
+kernel and is not an independent rescue route if that kernel fails. A
+Tailscale ping observed over the same USB path does not change that. No new
+recovery experiment is queued until a genuinely independent rescue method and
+candidate-specific rollback are verified; this is the exact outstanding
+device gate, not a host-work blocker.
