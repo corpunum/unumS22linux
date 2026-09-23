@@ -19,73 +19,134 @@ import subprocess
 import time
 
 ROOT=Path(__file__).resolve().parents[2]
-WRAPPER=r'''import json,pathlib,re,subprocess,sys,time
+WRAPPER=r'''import json,pathlib,re,signal,subprocess,sys,time
 request=json.loads(sys.stdin.read());helper=request['helper'];samples=[]
-observer=None
+observer=None;signal_seen=None;routes=('ABOX SPUS OUT2','ABOX UAIF1 SPK')
 if request.get('observer'):
  namespace={'__name__':'progress_observer'};exec(request['observer'],namespace)
  observer=namespace['snapshot']
+def on_signal(signum,frame):
+ global signal_seen
+ signal_seen=signum
+for signum in (signal.SIGINT,signal.SIGTERM):signal.signal(signum,on_signal)
 def sample():
  if observer:
-  try:samples.append(observer(True))
-  except (OSError,ValueError) as error:samples.append({'error':str(error)})
-routes=('ABOX SPUS OUT2','ABOX UAIF1 SPK')
+  try:samples.append(observer(True,sequence=len(samples),trial_id=request.get('trial_id')))
+  except Exception as error:
+   now=time.monotonic_ns()
+   samples.append({'error_type':type(error).__name__,'monotonic':now/1e9,
+                   'sample_monotonic_ns':now,'sequence':len(samples),
+                   'trial_id':request.get('trial_id')})
 def get(name):
  r=subprocess.run(['amixer','-c','0','cget','name='+name],capture_output=True,text=True,timeout=5)
- assert r.returncode==0,r.stderr
- values=re.findall(r'^  : values=(.*)$',r.stdout,re.M); assert len(values)==1
+ values=re.findall(r'^  : values=(.*)$',r.stdout,re.M)
+ if r.returncode!=0 or len(values)!=1:raise RuntimeError('control_read_failed')
  return values[0],r.stdout
-def muted():
- for name in ('Left AMP Enable Switch','Right AMP Enable Switch'):
-  assert get(name)[0]=='off'
-assert pathlib.Path('/proc/1/comm').read_text().strip()=='native-guardian'
-assert pathlib.Path('/proc/asound/card0/pcm2p/sub0/status').read_text().strip()=='closed'
-muted()
-before={n:get(n) for n in routes}
-for value,raw in before.values():
- assert value=='0' and "Item #0 'RESERVED'" in raw and "Item #1 'SIFS0'" in raw
-changed=[]; events=[]; child=None; child_dead=True; deadline_exceeded=False; result={}
+def amps_muted():
+ return all(get(name)[0]=='off' for name in ('Left AMP Enable Switch','Right AMP Enable Switch'))
+def status_text():
+ return pathlib.Path('/proc/asound/card0/pcm2p/sub0/status').read_text().strip()
+changed=[];events=[];child=None;child_dead=True;deadline_exceeded=False
+result={'progress_samples':samples,'events':events,'before':{},'restored':{},
+        'child_deadline_exceeded':False,'wrapper_interrupted':False,
+        'child_started':False,'preconditions_verified':False,
+        'cleanup_attempted':False,'cleanup_errors':[]}
 try:
+ assert pathlib.Path('/proc/1/comm').read_text().strip()=='native-guardian','wrong_native_session'
+ assert status_text()=='closed','pcm_not_initially_closed'
+ assert amps_muted(),'amplifier_enable_not_off'
+ before={n:get(n) for n in routes};result['before']=before
+ for value,raw in before.values():
+  assert value=='0' and "Item #0 'RESERVED'" in raw and "Item #1 'SIFS0'" in raw,'route_precondition_failed'
+ result['preconditions_verified']=True
  for name in routes:
+  if signal_seen is not None:raise InterruptedError('wrapper_interrupted_before_stream')
   changed.append(name)
   r=subprocess.run(['amixer','-q','-c','0','cset','name='+name,'1'],capture_output=True,text=True,timeout=5)
   events.append({'control':name,'value':1,'returncode':r.returncode})
-  assert r.returncode==0,r.stderr
-  assert get(name)[0]=='1'; muted()
+  if r.returncode!=0:raise RuntimeError('route_write_failed')
+  if get(name)[0]!='1' or not amps_muted():raise RuntimeError('route_postcondition_failed')
+ if signal_seen is not None:raise InterruptedError('wrapper_interrupted_before_stream')
  child=subprocess.Popen(['python3','-c',helper],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
- child_dead=False
- end=time.monotonic()+10
+ result['child_started']=True
+ child_dead=False;end=time.monotonic()+10;out='';err=''
  while True:
+  if signal_seen is not None:
+   result['wrapper_interrupted']=True
+   child.terminate()
+   try:out,err=child.communicate(timeout=3)
+   except subprocess.TimeoutExpired:
+    child.kill()
+    try:out,err=child.communicate(timeout=3)
+    except subprocess.TimeoutExpired:break
+   break
   try:
    out,err=child.communicate(timeout=max(0.01,min(1 if observer else 10,end-time.monotonic())))
    break
   except subprocess.TimeoutExpired:
    if time.monotonic()<end:
     sample();continue
-   deadline_exceeded=True;child.terminate()
+   deadline_exceeded=True;result['child_deadline_exceeded']=True;child.terminate()
    try:out,err=child.communicate(timeout=3)
    except subprocess.TimeoutExpired:
-    child.kill();out,err=child.communicate(timeout=3)
+    child.kill()
+    try:out,err=child.communicate(timeout=3)
+    except subprocess.TimeoutExpired:break
    break
- child_dead=True
- result={'child_returncode':child.returncode,'child_stdout':out,'child_stderr':err,
-         'child_deadline_exceeded':deadline_exceeded,'progress_samples':samples}
+ child_dead=child.poll() is not None
+ result.update({'child_returncode':child.returncode if child_dead else None,
+                'child_stdout':out,'child_stderr':err,
+                'child_deadline_exceeded':deadline_exceeded,
+                'child_interrupted':bool(result['wrapper_interrupted'] or deadline_exceeded),
+                'progress_samples':samples})
+except BaseException as error:
+ result['wrapper_error_type']=type(error).__name__
+ result['wrapper_error_code']=str(error)[:80] if isinstance(error,(AssertionError,RuntimeError,InterruptedError)) else type(error).__name__
+ result['wrapper_interrupted']=bool(signal_seen is not None or isinstance(error,InterruptedError))
 finally:
- result.update({'events':events,'child_exited':child_dead,'before':before,'restored':{}})
+ result['child_exited']=child_dead
+ result['cleanup_attempted']=child_dead
  if child_dead:
-  for name in reversed(changed):
-   r=subprocess.run(['amixer','-q','-c','0','cset','name='+name,before[name][0]],capture_output=True,text=True,timeout=5)
-   result['restored'][name]={'returncode':r.returncode,'value':get(name)[0]}
-  muted()
- result['after_status']=pathlib.Path('/proc/asound/card0/pcm2p/sub0/status').read_text().strip()
- print(json.dumps(result),flush=True)
- if not child_dead:raise RuntimeError('child not reaped: no route cleanup while kernel state is unknown')
- assert all(v['returncode']==0 and v['value']==before[n][0] for n,v in result['restored'].items())
- assert result['after_status']=='closed'
+  try:result['pcm_status_before_restore']=status_text()
+  except Exception as error:result['cleanup_errors'].append('pcm_status_before_restore:'+type(error).__name__)
+  result['route_restore_safe']=result.get('pcm_status_before_restore')=='closed'
+  if not result['route_restore_safe'] and changed:
+   result['cleanup_errors'].append('pcm_not_closed_routes_not_restored')
+  for name in reversed(changed) if result['route_restore_safe'] else ():
+   try:
+    prior=before[name][0]
+    r=subprocess.run(['amixer','-q','-c','0','cset','name='+name,prior],capture_output=True,text=True,timeout=5)
+    try:observed=get(name)[0]
+    except Exception as error:
+     observed=None;result['cleanup_errors'].append('route_verify:'+type(error).__name__)
+    result['restored'][name]={'returncode':r.returncode,'value':observed,
+                              'expected_value':prior,'verified':r.returncode==0 and observed==prior}
+    if r.returncode!=0:result['cleanup_errors'].append('route_write:'+name)
+   except Exception as error:
+    result['restored'][name]={'returncode':None,'value':None,'expected_value':before.get(name,('',))[0],
+                              'verified':False,'error_type':type(error).__name__}
+    result['cleanup_errors'].append('route_restore:'+name+':'+type(error).__name__)
+  try:result['amps_still_off']=amps_muted()
+  except Exception as error:
+   result['amps_still_off']=False;result['cleanup_errors'].append('amp_mute_verify:'+type(error).__name__)
+  try:result['after_status']=status_text()
+  except Exception as error:
+   result['after_status']=None;result['cleanup_errors'].append('pcm_status_after_restore:'+type(error).__name__)
+ else:
+  result['cleanup_errors'].append('child_not_reaped_routes_not_restored')
+ result['cleanup_verified']=bool(child_dead and result.get('after_status')=='closed'
+  and result.get('preconditions_verified') is True
+  and result.get('amps_still_off') is True
+  and all(result['restored'].get(n,{}).get('verified') is True for n in changed)
+  and not result['cleanup_errors'])
+ print(json.dumps(result,sort_keys=True),flush=True)
+if not child_dead:raise RuntimeError('child not reaped: selectors intentionally left unchanged')
 '''
 
 def load(name,path):
     spec=importlib.util.spec_from_file_location(name,path);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);return m
+
+audio_snapshot=load('audio_progress_snapshot',ROOT/'tools/hardware/audio-progress-snapshot.py')
 
 def assess_dma_progress(samples):
     """Accept only advancing ALSA hardware pointers from timed RUNNING samples.
@@ -134,13 +195,37 @@ def classify(receipt, trace):
     deadline flag, so the signal and abort message must also be checked.
     Never rewrite those original receipts to manufacture a timeout flag.
     """
-    result=receipt.get('result') or {}
+    receipt=receipt if isinstance(receipt,dict) else {}
+    raw_result=receipt.get('result')
+    result=raw_result if isinstance(raw_result,dict) else {}
+    trace=trace if isinstance(trace,str) else ''
+    progress_samples=result.get('progress_samples',[])
+    if not isinstance(progress_samples,list):progress_samples=[]
     routes=('ABOX SPUS OUT2','ABOX UAIF1 SPK')
     restored=result.get('restored',{})
+    if not isinstance(restored,dict):restored={}
+    cleanup_errors=result.get('cleanup_errors',[])
+    cleanup_errors_valid=isinstance(cleanup_errors,list)
+    cleanup_errors_empty=cleanup_errors_valid and not cleanup_errors
+    child_stderr=result.get('child_stderr','')
+    if not isinstance(child_stderr,str):child_stderr=''
+    restored_ok=all(isinstance(restored.get(n),dict)
+                    and restored[n].get('returncode')==0
+                    and restored[n].get('value')=='0'
+                    and restored[n].get('expected_value','0')=='0'
+                    and restored[n].get('verified',True) is True for n in routes)
+    # Old pre-classifier receipts can still be assessed, while new receipts
+    # must explicitly attest that amp-enable controls stayed off and cleanup
+    # finished without hidden errors.
     cleanup=(result.get('child_exited') is True and result.get('after_status')=='closed'
-             and all(restored.get(n)=={'returncode':0,'value':'0'} for n in routes))
+             and restored_ok and result.get('amps_still_off',True) is True
+             and cleanup_errors_empty
+             and result.get('preconditions_verified',True) is True
+             and result.get('cleanup_verified',True) is True)
     interrupted=(result.get('child_deadline_exceeded') is True
-                 or 'Aborted by signal' in result.get('child_stderr','')
+                 or result.get('wrapper_interrupted') is True
+                 or result.get('child_interrupted') is True
+                 or 'Aborted by signal' in child_stderr
                  or bool(re.search(r'--- SIG(?:TERM|KILL)\b',trace)))
     capture_ok=all(receipt.get(n)==0 for n in
                    ('wrapper_returncode','after_audio_exit','trace_capture_exit','kernel_capture_exit'))
@@ -150,12 +235,31 @@ def classify(receipt, trace):
     prepare_only=receipt.get('diagnostic_kind','prepare-only')=='prepare-only'
     evidence_ok=prepared and (writes==0 if prepare_only else writes>0)
     accepted=bool(cleanup and capture_ok and receipt.get('same_boot') is True and child_ok and evidence_ok)
-    dma=assess_dma_progress(result.get('progress_samples',[]))
+    dma=assess_dma_progress(progress_samples)
+    period=audio_snapshot.period_progress(progress_samples)
+    timed=[]
+    for sample in progress_samples:
+        if not isinstance(sample,dict):continue
+        start=sample.get('snapshot_start_monotonic_ns')
+        end=sample.get('snapshot_end_monotonic_ns')
+        if isinstance(start,int) and not isinstance(start,bool) and isinstance(end,int) and not isinstance(end,bool) and end>=start:
+            timed.append((start,end))
+    correlation={'timed_sample_count':len(timed),'sample_count':len(progress_samples),
+                 'window_start_monotonic_ns':min((p[0] for p in timed),default=None),
+                 'window_end_monotonic_ns':max((p[1] for p in timed),default=None),
+                 'maximum_snapshot_duration_ns':max((e-s for s,e in timed),default=None),
+                 'same_sample_source_intervals':True}
+    if len(timed)>=2:
+        starts=sorted(s for s,_ in timed)
+        correlation['sample_start_spacing_ns']=[b-a for a,b in zip(starts,starts[1:])]
     return {'diagnostic_completed':accepted,'cleanup_verified':cleanup,
+            'cleanup_error_count':len(cleanup_errors) if cleanup_errors_valid else 1,
             'child_interrupted':interrupted,'prepare_accepted':prepared,
             'successful_write_ioctls':writes,
             'write_eagain_count':len(re.findall(r'SNDRV_PCM_IOCTL_WRITEI_FRAMES[^\n]+= -1 EAGAIN',trace)),
             'dma_progress_verified':dma['verified'],'dma_progress':dma,
+            'period_progress_verified':period['verified'],'period_progress':period,
+            'capture_correlation':correlation,
             'physical_playback_verified':False,
             'outcome':'interrupted' if interrupted else ('completed' if accepted else 'failed-or-unproven')}
 
@@ -183,7 +287,8 @@ def main():
     helper_name='audio-zero-one-second.py' if args.zero_second else 'audio-pcm-prepare-only.py'
     helper=(ROOT/'tools/hardware'/helper_name).read_bytes()
     observer=(ROOT/'tools/hardware/audio-progress-snapshot.py').read_bytes() if args.sample_progress else b''
-    payload=json.dumps({'helper':helper.decode(),'observer':observer.decode()}).encode()
+    payload=json.dumps({'helper':helper.decode(),'observer':observer.decode(),
+                        'trial_id':args.name}).encode()
     start=datetime.now(timezone.utc).isoformat();t=time.monotonic()
     try:r=subprocess.run([str(ROOT/'tools/s22-ssh'),command],input=payload,capture_output=True,timeout=45)
     except subprocess.TimeoutExpired:
