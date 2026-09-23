@@ -13,6 +13,8 @@ or reboot was performed for this receipt.
 - `7bade3f376bb0e810baca799e4dc5ec8f17b2443`, integrated as
   `c7c2080` — Bluetooth bridge cleanup reporting and expanded executable
   host regressions.
+- `d3f50668ecf19c117a503f6cafaca19cc72df4e0`, integrated as
+  `82542fe` — Bluetooth test temp isolation and capability-denial mutations.
 - `03eba0700f65e0ef1576a50a1ab43dd2b325d5bd`, integrated as
   `9dc83b3` — RECOVERY deployment/build hardening and optimization-mode
   negative tests.
@@ -36,8 +38,8 @@ its patch content.
 | `sh tools/hardware/test-npu-boot-probe.sh` | Pass, 3 assertions plus refusal checks | Host ABI and safety refusal only |
 | `python3 tools/hardware/test-audio-route-assessment.py` | Pass, 12 tests | Classifier logic only |
 | `python3 tools/hardware/test-audio-progress-snapshot.py` | Pass, 8 tests | Snapshot planning/classification only; no stream capture |
-| `python3 tools/hardware/test-bt-h4-ibs-bridge.py` after Bluetooth commit | Pass, 12 tests | Host PTY/unit tests; no UART/controller/HCI runtime |
-| `python3 tools/hardware/test-bt-hci-socket-restore.py --base-source "$PINNED_KERNEL/net/bluetooth/hci_sock.c" --patch tools/hardware/bt-hci-socket-restore.patch` | Pass | Applied candidate in a temporary tree, validated source contracts, and rejected three mutated candidates; not a kernel build/runtime test |
+| `python3 tools/hardware/test-bt-h4-ibs-bridge.py` after Bluetooth test-hardening follow-up | Pass, 12 tests | Host PTY/unit tests; binaries are isolated in a per-run temporary directory; no UART/controller/HCI runtime |
+| `python3 tools/hardware/test-bt-hci-socket-restore.py --base-source "$PINNED_KERNEL/net/bluetooth/hci_sock.c" --patch tools/hardware/bt-hci-socket-restore.patch` after follow-up | Pass | Applied candidate in a temporary tree, validated source contracts and capability-denial branches, and rejected mutated candidates; not a kernel build/runtime test |
 | `python3 tools/hardware/test-recovery-deployment-hardening.py` | Pass, 28 tests in normal, `python3 -O`, and `PYTHONOPTIMIZE=1` modes | Host mocks plus synthetic AVB footer/corruption test; no operational deploy path |
 | Audio snapshot / route / cleanup / bind-node / PCM-prepare / sync-node suites | Pass, respectively 13 / 18 / 4 / 4 / 5 / 3 tests | Host-only diagnostics and fake child/PCM cleanup; no live audio |
 | `python3 -O tools/hardware/npu-boot-preflight.py --repo "$REPO"` after fix | Exit 2; `bootup_ready=false`, `bootup_authorized=false`, and missing-source lifecycle gates false | Fail-closed source/artifact audit only; NPU request ownership/unwind and runtime remain unproven |
@@ -68,8 +70,10 @@ the exact-pinned-source HCI validator, found no defect in the changed C
 cleanup-reporting path, and requested two P2 test-hardening changes: isolate
 test binaries under a per-run temporary directory and prove capability denial
 control flow with a negative mutation. A P3 naming clarification was also
-requested. The author follow-up is active. This does not verify the HCI kernel
-patch by compilation or runtime; device deployment remains blocked.
+requested. The author follow-up is committed as
+`d3f50668ecf19c117a503f6cafaca19cc72df4e0` and coordinator host reruns pass;
+an independent review of that follow-up is active. This does not verify the
+HCI kernel patch by compilation or runtime; device deployment remains blocked.
 
 The earlier NPU missing-source subgate false-green is fixed in commit
 `d2852765b2b58bba434ba8ae1b28c078615ff13f` (integrated as `4397d61`). Normal
