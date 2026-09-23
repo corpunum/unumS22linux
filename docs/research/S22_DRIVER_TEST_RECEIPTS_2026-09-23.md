@@ -126,6 +126,85 @@ installation or phone file staging was attempted.
 - NPU lifecycle ownership/unwind, independent review, image authentication,
   and the relevant recovery/rollback gates remain open.
 
+## Follow-up implementation/review receipt — 2026-09-23 20:27 UTC
+
+### Close-range test hardening
+
+Author commit `59deecd67f502b7c3a81c2bcbea22da9639179` was reviewed at its
+exact commit and integrated on this unmerged WIP branch as `314085f`. The
+change is limited to `tools/hardware/test_clone3_compat.py`. It compiles a
+temporary wrapper around `syscall(__NR_close_range)`, explicitly skips only
+when headers or the running host kernel lack the syscall, and replaces child
+`assert` statements with explicit errors so optimized Python still checks
+child output.
+
+Independent review by `/root/userspace_close_range_review` found no remaining
+issue in scope. Coordinator rerun on the integrated branch:
+
+| Command | Result |
+|---|---|
+| `python3 tools/hardware/test_clone3_compat.py -v` | 14/14 pass |
+| `python3 -O tools/hardware/test_clone3_compat.py -v` | 14/14 pass |
+| `PYTHONOPTIMIZE=1 python3 tools/hardware/test_clone3_compat.py -v` | 14/14 pass |
+| `python3 -m py_compile tools/hardware/test_clone3_compat.py` | Pass |
+| `git diff --check HEAD^ HEAD` | Pass |
+
+Review evidence is host-only. The reviewer did not claim runtime/session Luna
+metadata, so its model evidence is not independently attested by that report.
+No phone or system state was changed.
+
+### NPU lifecycle independent review
+
+Independent review covered repository/test commit
+`07cc061226b400090e46ec4669d709803cd2255f` and kernel commit
+`f264b971c6917598347fc14823e7d41d1e4a54e0` based on pinned kernel
+`4e5c5ad7d950e4de0688b5663965f2075654b2ad`. The exported patch matches the
+kernel candidate and reverse-applies; source/model tests pass normally and
+under `python3 -O`; preflight correctly exits 2 without required config/AIE
+inputs and leaves BOOTUP unauthorized. No kernel compile or device test ran.
+
+Review found a P2 race: the protocol worker can check an active POWER_CTL
+waiter, be descheduled, then publish after the timeout path removes the waiter
+and reports failure. Passing a NULL session prevents a session UAF but does
+not prevent that stale power transition. The candidate is not device-ready.
+The fix is assigned to `/root/recovery_hardening` with an adversarial
+cancel-versus-publish regression, followed by another independent review.
+Mailbox `msgid` reuse remains outside the existing Python model coverage.
+
+### Current read-only phone and storage receipt
+
+Strict-host-key USB SSH at approximately 2026-09-23 20:27 UTC reported kernel
+`5.10.260-g4e5c5ad7d950`, PID 1 `native-guardian`, uptime 73,089.83 s, and
+assistant health `{"status":"ok"}`. PID 1 and the SSH command report the same
+mount namespace ID, but their mountinfo roots differ (`/newroot` and `/`),
+which is why the upperdir was inspected through `/proc/1/root`.
+
+The SSH root is an overlay with upperdir `/cache/s22-linux/upper`; `/` has
+34,844,672 bytes available (94% used) and 29,780 free inodes. Persistent
+`/srv/s22` has 102,382,280,704 bytes and 1,652,508 inodes free. The measured
+upperdir totals 521,476 KiB, including `/usr` at 502,788 KiB and `/usr/lib` at
+411,952 KiB. Large entries include LLVM (171,856 KiB), Python 3.14 (59,408
+KiB), Mesa Gallium (36,312 KiB), and RADV Vulkan (16,948 KiB). These are
+library/runtime-sized upper-layer objects, but their active-versus-shadowed
+status is not established. Direct merged `/usr` measured only 4,148 KiB; that
+discrepancy is unresolved. No cleanup, package install, staging, reboot, or
+other phone mutation was performed.
+
+USB SSH is current access but depends on the running kernel. Independent
+recovery/rescue connectivity is not established. No newly verified hardware
+functionality resulted from this read-only probe.
+
+### Current worker queue
+
+- `/root/input_power_test_impl` was launched on
+  `/tmp/s22-luna-wave2-input-power-20260923` for host-only executable tests of
+  read-only input/power/thermal/camera inventory and bounded event observation.
+  The requested selection was `gpt-6-luna` / `max`; runtime/session metadata is
+  unavailable. It has no device authorization.
+- `/root/recovery_hardening` is implementing the reviewed NPU
+  timeout/publication handshake in its existing exact-pinned kernel worktree.
+  No BOOTUP, build, or live experiment is authorized by that assignment.
+
 ## Continuation update — 2026-09-23
 
 The later coordinator checkpoint supersedes the older pending-review and

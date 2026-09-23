@@ -318,3 +318,69 @@ probe. No phone state changed during this follow-on work.
   All changes are WIP on the unmerged review branch; none has been merged or
   deployed. Current phone state is unchanged from the read-only probe; no
   coordinator device operation occurred.
+
+## Continued implementation and review — 2026-09-23 20:27 UTC
+
+- The userspace close-range author follow-up `59deecd67f502b7c3a81c2bccebea22da9639179`
+  was inspected and integrated as `314085f`. It replaces libc-symbol probing
+  with a temporary `__NR_close_range` syscall wrapper, establishes a suite-wide
+  ENOSYS gate, and makes subprocess output checks survive optimized Python.
+  Independent reviewer `/root/userspace_close_range_review` found no remaining
+  issue in the requested scope. Coordinator reran 14/14 in normal,
+  `python3 -O`, and `PYTHONOPTIMIZE=1`, plus `py_compile` and `git diff --check`.
+  This remains host behavior, not proof of the S22 kernel syscall.
+- Independent reviewer `/root/npu_lifecycle_independent_review` inspected the
+  exact repo snapshot `07cc061226b400090e46ec4669d709803cd2255f` and kernel
+  candidate `f264b971c6917598347fc14823e7d41d1e4a54e0`. The patch matches the
+  pinned base-to-candidate diff and reverse-applies, but review found a P2
+  timeout/publication race: protocol work can validate an active POWER_CTL
+  waiter, pause, then publish after timeout has removed the waiter and reported
+  failure. The candidate is not ready for build/deploy/BOOTUP. A follow-up is
+  assigned to `/root/recovery_hardening` in its existing isolated kernel
+  worktree, with an adversarial cancel-vs-publish test; BOOTUP stays gated.
+  Reviewer noted mailbox `msgid` reuse is not exercised by the Python model.
+- A new host implementation worker `/root/input_power_test_impl` was launched
+  on branch `codex/s22-wave2-input-power-20260923`, worktree
+  `/tmp/s22-luna-wave2-input-power-20260923`, to add synthetic-root tests for
+  read-only input/power/thermal/camera inventory and event observation. The
+  request explicitly selected `gpt-6-luna` / `max`; collaboration does not
+  expose independent runtime/session attestation, so this records selection,
+  not attestation. No phone access is assigned.
+
+### Refreshed live state and storage — read-only, 2026-09-23 20:27 UTC
+
+- Strict-host-key USB SSH succeeded. Running kernel is
+  `5.10.260-g4e5c5ad7d950`, PID 1 is `/system/bin/native-guardian`, uptime was
+  73,089.83 s, and the assistant health endpoint returned `{"status":"ok"}`.
+  PID 1 and SSH report the same mount namespace ID; their mountinfo paths are
+  rooted differently (`/newroot` for PID 1 and `/` for SSH), so both views were
+  inspected rather than inferred from the namespace ID alone.
+- SSH `/` is the live overlay with `lowerdir=/native-lower`,
+  `upperdir=/cache/s22-linux/upper`, `workdir=/cache/s22-linux/work`. The
+  overlay has 34,844,672 bytes available (94% used) and 29,780 free inodes.
+  Persistent `/srv/s22` has 102,382,280,704 bytes and 1,652,508 inodes free.
+- The upperdir was measured through `/proc/1/root/cache/s22-linux/upper`:
+  521,476 KiB total; `/usr` is 502,788 KiB, of which `/usr/lib` is 411,952
+  KiB. Largest inspected entries include `libLLVM.so.22.1` (171,856 KiB),
+  `python3.14` (59,408 KiB), `libgallium-26.1.6.so` (36,312 KiB), and
+  `libvulkan_radeon.so` (16,948 KiB). These are library/runtime-sized upper
+  objects, but their active-vs-shadowed status is unproven. No files were
+  deleted and no packages were installed. The direct merged `/usr` view is
+  only 4,148 KiB, so upperdir/merged-view accounting still needs explanation
+  before any cleanup.
+- Current USB SSH is usable but runs over the kernel being tested. No
+  independent recovery path was verified; Tailscale must not be counted as
+  independent rescue while routed over this same USB/kernel path. No device
+  write, build, deployment, reboot, or driver trial occurred.
+
+### Next device gate
+
+The next NPU live experiment remains prohibited until the timeout/publication
+race is corrected and independently reviewed, the patch builds against the
+exact pinned kernel, `npu-boot-preflight.py` passes with the required firmware
+and configuration evidence, and the original independent-rescue, rollback,
+and authorization gates are satisfied. BOOTUP remains false/unauthorized in
+the absence of those gates. Before any installation or cleanup, explain the
+4,148 KiB merged `/usr` versus 502,788 KiB upper `/usr` discrepancy and confirm
+destination-specific free space; current 34.8 MB overlay headroom is not
+installation clearance.
