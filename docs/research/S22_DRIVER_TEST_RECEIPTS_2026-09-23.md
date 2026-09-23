@@ -339,3 +339,36 @@ storage statements above:
   not visible from that root view; no cleanup/install was attempted. USB SSH
   remains a current access path, not rescue for a failed kernel. No coordinator
   device operation occurred after that probe.
+
+## NPU publication-race follow-up receipt — 2026-09-23 20:45 UTC
+
+Kernel candidate commit `4c20670269e800454a5daacb9a01856ad1a792ae` is based on
+the prior lifecycle candidate `f264b971c6917598347fc14823e7d41d1e4a54e0`
+and pinned base `4e5c5ad7d950e4de0688b5663965f2075654b2ad`. The repository
+patch/test commit `1908c624bc4a2066476488d9b196216b2a242820` integrates as
+`0548764`. A lease plus final authorization prevents an uncommitted publisher
+from sending after cancellation; once authorization wins, the waiter drains
+the synchronous mailbox post before its stack storage is removed. Late
+callbacks are ignored after cancellation.
+
+Coordinator checks on the integrated branch passed:
+
+| Check | Result |
+|---|---|
+| Lifecycle source/model suite, normal and `python3 -O` | Pass both |
+| NPU preflight tests, normal and `python3 -O` | Pass both |
+| Python syntax checks | Pass |
+| Exact exported patch reverse-apply against candidate | Pass |
+| Pinned kernel base-to-candidate `git diff --check` | Pass |
+
+Independent review by `/root/npu_lifecycle_independent_review` is active on
+separate exact repo/kernel worktrees. It must resolve whether synchronous
+mailbox publication is sufficiently bounded to make draining safe; the
+caller wait may exceed its nominal 12 seconds if the post stalls. The
+`CONFIG_NPU_USE_BOOT_IOCTL` variant has not been compiled. `checkpatch.pl
+--no-tree --strict` reports a missing `Signed-off-by` attestation, missing
+commit description, and three `extern`-in-C warnings. No DCO signoff was
+invented. This remains internal WIP, not an upstream submission.
+
+All evidence is source plus host model/test. No kernel C compilation, full
+kernel build, BOOTUP, device deployment, or live NPU functionality was tested.
