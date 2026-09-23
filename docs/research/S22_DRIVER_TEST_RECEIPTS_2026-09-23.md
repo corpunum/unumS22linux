@@ -142,9 +142,9 @@ storage statements above:
   sealed memfd snapshot and closes the staging-parent durability gap with
   parent fsync after mkdir. The new race, ordering and fsync-failure cases
   passed. Coordinator and independent review each ran 37/37 tests in normal,
-  `-O`, and `PYTHONOPTIMIZE=1` modes with
-  `S22_AVBTOOL=/home/corpunum/s22-linux/tools/avb/avbtool.py`; no cases
-  skipped. Without that local tool, three AVB-specific tests skip. Independent
+  `-O`, and `PYTHONOPTIMIZE=1` modes with `S22_AVBTOOL` set to the trusted
+  local avbtool; no cases skipped. Without that local tool, three
+  AVB-specific tests skip. Independent
   review found one remaining P2: the snapshot is not pinned to the canonical
   `tools/s22-ssh` digest, so a regular executable Bash replacement present
   before validation is accepted. The reviewer also found inherited PATH can
