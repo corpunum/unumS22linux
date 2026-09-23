@@ -278,6 +278,12 @@ int main(int argc, char **argv) {
     struct termios pt; if (tcgetattr(x.pty_slave, &pt) == 0) { cfmakeraw(&pt); pt.c_cflag |= CLOCAL | CREAD; (void)tcsetattr(x.pty_slave, TCSANOW, &pt); }
     signal(SIGINT, stop_signal); signal(SIGTERM, stop_signal);
     fprintf(stdout, "%s\n", x.slave_name); fflush(stdout);
-    int rc = run_bridge(&x, 0); cleanup_pty(&x); close(x.pty_master); close(x.pty_slave); close(x.uart); return rc == 0 ? 0 : 1;
+    int rc = run_bridge(&x, 0);
+    int detached = cleanup_pty(&x);
+    printf("bridge_detach_result=%d\n", detached);
+    fflush(stdout);
+    if (detached < 0 && rc == 0) rc = -1;
+    close(x.pty_master); close(x.pty_slave); close(x.uart);
+    return rc == 0 ? 0 : 1;
 }
 #endif
