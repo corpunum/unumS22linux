@@ -101,16 +101,16 @@ IDs or runtime identity attestation. There is no known worker override/fallback.
 | Actual task handle | Worktree / branch | Assignment and current result |
 |---|---|---|
 | `/root/recovery_deploy_impl` | `/tmp/s22-luna-wave1-deploy-20260923`, `codex/s22-wave1-deploy-20260923` | First deployment/build-hardening commit `03eba0700f65e0ef1576a50a1ab43dd2b325d5bd`, integrated as `9dc83b3`; 28 tests pass in normal, `-O`, and `PYTHONOPTIMIZE=1` modes. Independent review found AVB verifier substitution, primary SSH-wrapper symlink, and remote writable-parent race gaps. Luna author follow-up is implementing fixes/tests in the same isolated worktree. No device actions. |
-| `/root/bluetooth_impl` | `/tmp/s22-luna-wave1-bt-20260923`, `codex/s22-wave1-bt-20260923` | Completed host-only bridge/test improvements; commit `7bade3f376bb0e810baca799e4dc5ec8f17b2443`. Changed H4 bridge cleanup reporting and expanded bridge/HCI negative tests. H4 suite: 12 passed. Candidate HCI patch applied in a temporary directory to the clean pinned kernel source, lifecycle contract plus three mutation negatives passed. No kernel build/runtime HCI. Independent review is pending next available slot. |
+| `/root/bluetooth_impl` | `/tmp/s22-luna-wave1-bt-20260923`, `codex/s22-wave1-bt-20260923` | Initial host-only bridge/test commit `7bade3f376bb0e810baca799e4dc5ec8f17b2443` is integrated as `c7c2080`; H4 suite 12 passed and HCI candidate source/mutation checks passed. Independent review found no C cleanup defect, but requested P2 per-run temp isolation and stronger capability-denial mutation coverage plus a P3 test-name correction. Luna author follow-up is implementing these in the same isolated worktree. No kernel build/runtime HCI. |
 | `/root/audio_diag_impl` | `/tmp/s22-luna-wave1-audio-20260923`, `codex/s22-wave1-audio-20260923` | Completed synchronized snapshot and cleanup classification; worker commit `2d6d9a40c3d97064ef4a5ccc5ceb90071970b715`, integrated as `2b55003`. Coordinator reran snapshot 13, route 18, wrapper cleanup 4, bind-node 4, PCM prepare 5, and sync-nodes 3 tests; all passed. Firmware-stage suite had 3 passes and 1 error because public worktree lacks `calliope_sram.bin`. No live audio. |
-| `/root/recovery_hardening` | `/tmp/s22-luna-wave1-npu-20260923`, `codex/s22-wave1-npu-20260923`; exact pinned kernel worktree `/tmp/s22-kernel-npu-lifecycle-20260923` at `4e5c5ad7d950e4de0688b5663965f2075654b2ad` | Reassigned from recovery scouting to NPU implementation. Found missing-source fail-open in `power_notify_wait_resolved`, unbounded POWER_NOTIFY wait, ignored enqueue/result errors, and incomplete boot failure unwind. Implementing in the bounded kernel/preflight/test ownership. No BOOTUP, build, or device actions. |
+| `/root/recovery_hardening` | `/tmp/s22-luna-wave1-npu-20260923`, `codex/s22-wave1-npu-20260923`; exact pinned kernel worktree `/tmp/s22-kernel-npu-lifecycle-20260923` at `4e5c5ad7d950e4de0688b5663965f2075654b2ad` | First delivered missing-source fail-closed readiness fix as `d2852765b2b58bba434ba8ae1b28c078615ff13f`, integrated as `4397d61`; normal and `-O` tests pass, and optimized CLI now reports the missing lifecycle gates false with overall exit 2. Continuing actual POWER_NOTIFY wait/request ownership and reverse-unwind implementation in the pinned kernel tree. No BOOTUP, full build, or device actions. |
 
 ### Independent review lane
 
 | Actual task handle | Worktree / exact patch | Status |
 |---|---|---|
 | `/root/deployment_independent_review` | `/tmp/s22-luna-review-deploy-worker-20260923`, commit `03eba0700f65e0ef1576a50a1ab43dd2b325d5bd` | Explicit Luna Max, independent read-only review complete. Found three findings listed above; recommended fixing AVB verifier substitution and parent-path race before considering deployment hardening complete. Reviewer reran the 28-test suite and diff check. No operational deployment/device commands. |
-| `/root/bluetooth_independent_review` | `/tmp/s22-luna-review-bt-worker-20260923`, commit `7bade3f376bb0e810baca799e4dc5ec8f17b2443` | Explicit Luna Max, read-only review in progress. Inspecting the bridge changes, existing HCI lifecycle candidate, and host negative tests. Host-only tests are permitted; no build or device access. |
+| `/root/bluetooth_independent_review` | `/tmp/s22-luna-review-bt-worker-20260923`, commit `7bade3f376bb0e810baca799e4dc5ec8f17b2443` | Explicit Luna Max, independent read-only review complete. H4 12/12 and HCI source validator passed against the clean pinned source. No C cleanup defect found; flagged test temp-path race, incomplete capability-denial mutations, and naming precision. HCI restoration patch remains unbuilt; no device/runtime proof. |
 
 The branches/worktrees are isolated from one another. The original checkout
 remains dirty and divergent (`master` at `fb60a2c1...`, 44 ahead of
@@ -135,11 +135,13 @@ review branch merges fetched `origin/master` correction commit
   tools/hardware/bt-hci-socket-restore.patch`: passed source application,
   lifecycle checks, and three mutation negatives using the exact clean kernel
   pin. Scope is source validation only.
-- The optimized-mode NPU CLI still exits nonzero, but its diagnostic currently
-  reports `power_notify_wait_resolved=true` when the pinned source is missing.
-  This is a confirmed subgate false-green, not a passing readiness receipt;
-  the NPU worker has the fix and missing-source regression assigned. BOOTUP
-  remains unauthorized and disabled.
+- The initial optimized-mode NPU CLI exposed a subgate false-green when
+  lifecycle source was missing. The NPU worker fixed it in
+  `d2852765b2b58bba434ba8ae1b28c078615ff13f`; coordinator reran normal and
+  optimized synthetic tests and confirmed the public-worktree CLI reports
+  `power_notify_wait_resolved=false`, `bootup_ready=false`,
+  `bootup_authorized=false`, exit 2. BOOTUP remains unauthorized and disabled;
+  kernel request ownership/unwind is still under implementation.
 - AVB `verify_image` on the two existing recovery artifacts passed footer/hash
   checks; both use algorithm `NONE`. This does not establish Samsung
   authentication or bootability. No image was built or flashed here.
