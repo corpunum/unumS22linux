@@ -131,10 +131,6 @@ def main(argv=None, *, base_module=None):
     receipt_path=ROOT/'rootfs/main-driver-loop-20260921'/('audio-extra-recovery-'+mode+'.json')
     base.ensure_new_receipt(receipt_path)
     ssh=ROOT/'tools/s22-ssh'
-    try:
-        base.validate_approved_ssh_wrapper(ssh)
-    except ValueError as error:
-        raise SystemExit(str(error)) from error
     # Render the candidate/rollback hashes and staging paths from this
     # deployment's explicit manifest; no broad edits to a baked remote script.
     code=base.render_remote(
@@ -142,8 +138,11 @@ def main(argv=None, *, base_module=None):
         rollback_filename='audio-early-rollback.img',
     )
     try:
-        result=subprocess.run([str(ssh),'python3 -c '+shlex.quote(code)+' '+mode],
-                              input=image if args.stage else b'',capture_output=True,timeout=100)
+        result=base.run_approved_ssh_wrapper(
+            ssh,'python3 -c '+shlex.quote(code)+' '+mode,
+            input_data=image if args.stage else b'',timeout=100,project_root=ROOT)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
     except (OSError,subprocess.TimeoutExpired) as error:
         raise RuntimeError(mode+' transport failed or timed out; remote outcome may be unknown; inspect before retry: '+str(error)) from error
     if result.returncode:

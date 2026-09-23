@@ -194,7 +194,7 @@ class ExtraDeploymentEntrypointTests(unittest.TestCase):
         (self.root / "rootfs/main-driver-loop-20260921").mkdir(parents=True)
         ssh = self.root / "tools/s22-ssh"
         ssh.parent.mkdir(parents=True)
-        ssh.write_text("#!/bin/sh\nexit 99\n")
+        ssh.write_text("#!/usr/bin/env bash\nexit 99\n")
         ssh.chmod(0o755)
         self.base = SimpleNamespace(
             SIZE=2048,
@@ -203,6 +203,7 @@ class ExtraDeploymentEntrypointTests(unittest.TestCase):
             render_remote=BASE.render_remote,
             ensure_new_receipt=BASE.ensure_new_receipt,
             validate_approved_ssh_wrapper=BASE.validate_approved_ssh_wrapper,
+            run_approved_ssh_wrapper=BASE.run_approved_ssh_wrapper,
             validate_remote_receipt=BASE.validate_remote_receipt,
         )
         self.hashes = {
@@ -234,8 +235,9 @@ class ExtraDeploymentEntrypointTests(unittest.TestCase):
         self.call_main(["--stage"], transport)
         transport.assert_called_once()
         args, kwargs = transport.call_args
-        self.assertIn(str(self.root / "tools/s22-ssh"), args[0])
-        command = args[0][1]
+        self.assertEqual(args[0][0:2], ["/bin/bash", "-c"])
+        self.assertEqual(kwargs["pass_fds"], (int(kwargs["env"]["S22_APPROVED_SSH_FD"]),))
+        command = args[0][-1]
         self.assertIn(self.hashes["BEFORE"], command)
         self.assertIn(self.hashes["AFTER"], command)
         self.assertIn("audio-extra-v2-20260922", command)
@@ -273,6 +275,45 @@ class ExtraDeploymentEntrypointTests(unittest.TestCase):
             self.call_main(["--stage"], transport)
         transport.assert_not_called()
 
+    def test_ssh_wrapper_replacement_after_open_cannot_substitute_executed_bytes(self):
+        tools = self.root / "tools"
+        evidence = self.root / "evidence/native-linux-20260919"
+        tools.mkdir(parents=True, exist_ok=True)
+        evidence.mkdir(parents=True)
+        (evidence / "native-v2-known-hosts").write_text("fixture host key\n")
+        wrapper = tools / "s22-ssh"
+        wrapper.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "project_dir=$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")/..\" && pwd)\n"
+            "known_hosts=\"$project_dir/evidence/native-linux-20260919/native-v2-known-hosts\"\n"
+            "[[ -s \"$known_hosts\" ]] || exit 77\n"
+            "exec ssh \"$@\"\n")
+        wrapper.chmod(0o755)
+        fd = BASE.validate_approved_ssh_wrapper(wrapper)
+        evil = tools / "replacement-ssh"
+        evil.write_text("#!/usr/bin/env bash\nprintf 'REPLACEMENT_EXECUTED\\n'\nexit 88\n")
+        evil.chmod(0o755)
+        wrapper.unlink()
+        wrapper.symlink_to(evil)
+        fake_bin = self.root / "fake-bin"
+        fake_bin.mkdir()
+        fake_ssh = fake_bin / "ssh"
+        fake_ssh.write_text("#!/usr/bin/env bash\nprintf 'PINNED_WRAPPER_REACHED\\n'\n")
+        fake_ssh.chmod(0o755)
+        argv, environment = BASE.build_approved_ssh_invocation(
+            fd, wrapper, "python3 -c pass", project_root=self.root)
+        environment["PATH"] = str(fake_bin) + os.pathsep + environment["PATH"]
+        try:
+            result = subprocess.run(
+                argv, capture_output=True, text=True, timeout=5,
+                pass_fds=(fd,), env=environment, check=False)
+        finally:
+            os.close(fd)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("PINNED_WRAPPER_REACHED", result.stdout)
+        self.assertNotIn("REPLACEMENT_EXECUTED", result.stdout)
+
     def test_invalid_remote_receipt_is_not_recorded_as_success(self):
         transport = mock.Mock(return_value=SimpleNamespace(
             returncode=0,
@@ -291,7 +332,8 @@ class EmbeddedTargetGateTests(unittest.TestCase):
 path=sys.argv[1]
 spec=importlib.util.spec_from_file_location("target",path)
 mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
-ns={};exec(mod.REMOTE_GUARDS,ns)
+import os,stat
+ns={"os":os,"stat":stat};exec(mod.REMOTE_GUARDS,ns)
 try:
  ns["validate_recovery_target"]("native-guardian","5.10.260-g4e5c5ad7d950",278,
   "/dev/sda17",True,196608,True,2590,False,2590,196608)
@@ -425,6 +467,41 @@ print("UNSAFE_ACCEPT");sys.exit(0)
             finally:
                 os.close(parent_fd)
 
+    def test_parent_directory_fsync_follows_stage_mkdir_and_precedes_receipt(self):
+        guards = self._guards()
+        with tempfile.TemporaryDirectory(prefix="s22-stage-parent-fsync-") as temporary:
+            parent = Path(temporary)
+            parent_fd = guards["open_parent_directory"](
+                parent, "test parent", expected_uid=os.geteuid())
+            events = []
+            def observe_parent_fsync(fd):
+                self.assertEqual(fd, parent_fd)
+                self.assertTrue((parent / "private-stage").is_dir())
+                events.append("parent-fsync")
+            try:
+                child_fd = guards["create_durable_staging_directory"](
+                    parent_fd, "private-stage", "test staging",
+                    expected_uid=os.geteuid(), flush=observe_parent_fsync)
+                os.close(child_fd)
+                self.assertEqual(events, ["parent-fsync"])
+                with self.assertRaisesRegex(RuntimeError, "fsync failed"):
+                    guards["create_durable_staging_directory"](
+                        parent_fd, "failed-stage", "test staging",
+                        expected_uid=os.geteuid(),
+                        flush=lambda _fd: (_ for _ in ()).throw(OSError("injected fsync failure")))
+            finally:
+                os.close(parent_fd)
+
+        stage_start = BASE.REMOTE.index("if mode=='stage':")
+        stage_end = BASE.REMOTE.index("elif mode=='flash':", stage_start)
+        stage = BASE.REMOTE[stage_start:stage_end]
+        create = stage.index("create_durable_staging_directory(parent_fd")
+        receipt = stage.index("print(json.dumps({'mode':mode,'partition_written':False")
+        helper_create = BASE.REMOTE_GUARDS.index("fd=open_child_directory(parent_fd,name,label,create=True")
+        helper_sync = BASE.REMOTE_GUARDS.index("sync_directory(parent_fd,label+' parent',flush)")
+        self.assertLess(create, receipt)
+        self.assertLess(helper_create, helper_sync)
+
     def test_wrong_device_capacity_and_mounted_partition_are_refused(self):
         validate = self._guards()["validate_recovery_target"]
         good = ("native-guardian", "5.10.260-g4e5c5ad7d950", 278,
@@ -495,9 +572,15 @@ print("UNSAFE_ACCEPT");sys.exit(0)
         with tempfile.TemporaryDirectory(prefix="s22-ssh-wrapper-") as directory:
             root = Path(directory)
             approved = root / "s22-ssh"
-            approved.write_text("#!/bin/sh\nexit 0\n")
+            approved.write_text("#!/usr/bin/env bash\nexit 0\n")
             approved.chmod(0o755)
-            self.assertEqual(BASE.validate_approved_ssh_wrapper(approved), approved)
+            fd = BASE.validate_approved_ssh_wrapper(approved)
+            try:
+                required = (fcntl.F_SEAL_SEAL | fcntl.F_SEAL_SHRINK
+                            | fcntl.F_SEAL_GROW | fcntl.F_SEAL_WRITE)
+                self.assertEqual(fcntl.fcntl(fd, fcntl.F_GET_SEALS) & required, required)
+            finally:
+                os.close(fd)
             link = root / "approved-link"
             link.symlink_to(approved)
             with self.assertRaisesRegex(ValueError, "non-symlink executable"):

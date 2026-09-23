@@ -6,6 +6,7 @@ operation on exact recovery/sda16 (259:0), after old/new full-image hash checks.
 No BOOT, MISC, EFS, identity, PIT, bootloader or TrustZone access.
 """
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -126,6 +127,21 @@ def open_child_directory(parent_fd, name, label, create=False, expected_uid=0):
   os.close(fd)
   raise
 
+def sync_directory(fd, label, flush=os.fsync):
+ try:
+  flush(fd)
+ except OSError as error:
+  raise RuntimeError(label+' fsync failed; staging durability is not established: '+str(error)) from error
+
+def create_durable_staging_directory(parent_fd, name, label, expected_uid=0, flush=os.fsync):
+ fd=open_child_directory(parent_fd,name,label,create=True,expected_uid=expected_uid)
+ try:
+  sync_directory(parent_fd,label+' parent',flush)
+  return fd
+ except Exception:
+  os.close(fd)
+  raise
+
 def read_staged_file(directory_fd, name, label, expected_sha, expected_size, expected_uid=0):
  fd=os.open(name,os.O_RDONLY|os.O_CLOEXEC|os.O_NOFOLLOW,dir_fd=directory_fd)
  try:
@@ -233,11 +249,11 @@ if mode=='stage':
  space=os.fstatvfs(parent_fd)
  validate_free_space(space.f_bavail*space.f_frsize,space.f_favail,size)
  try:
-  dfd=open_child_directory(parent_fd,directory_name,'staging directory',create=True)
+  dfd=create_durable_staging_directory(parent_fd,directory_name,'staging directory')
   try:
    write_staged_file(dfd,backup_name,old,'rollback copy')
    write_staged_file(dfd,candidate_name,data,'staged candidate')
-   os.fsync(dfd)
+   sync_directory(dfd,'staging directory')
    verify_child_directory(parent_fd,directory_name,dfd,'staging directory')
    staged_backup=read_staged_file(dfd,backup_name,'rollback copy',base_sha,size)
    staged_candidate=read_staged_file(dfd,candidate_name,'staged candidate',new_sha,size)
@@ -355,25 +371,115 @@ def ensure_new_receipt(path):
 
 
 def validate_approved_ssh_wrapper(path):
-    """Reject wrappers that are symlinked or replaced during preflight."""
+    """Return an immutable snapshot of the approved Bash wrapper's opened inode."""
     path=Path(path)
     try:
         before=path.lstat()
     except OSError as error:
         raise ValueError(f'approved SSH wrapper is unavailable: {path}: {error}') from error
-    if not stat.S_ISREG(before.st_mode) or not (before.st_mode&0o111) or not os.access(path,os.X_OK):
+    if not stat.S_ISREG(before.st_mode) or not (before.st_mode&0o111):
         raise ValueError(f'approved SSH wrapper must be a non-symlink executable regular file: {path}')
     try:
-        fd=os.open(path,os.O_RDONLY|getattr(os,'O_CLOEXEC',0)|getattr(os,'O_NOFOLLOW',0))
+        source_fd=os.open(path,os.O_RDONLY|getattr(os,'O_CLOEXEC',0)|getattr(os,'O_NOFOLLOW',0))
     except OSError as error:
         raise ValueError(f'approved SSH wrapper could not be opened safely: {path}: {error}') from error
+    snapshot_fd=None
     try:
-        opened=os.fstat(fd)
-        if not stat.S_ISREG(opened.st_mode) or (opened.st_dev,opened.st_ino)!=(before.st_dev,before.st_ino):
+        opened=os.fstat(source_fd)
+        if (not stat.S_ISREG(opened.st_mode) or not (opened.st_mode&0o111)
+                or (opened.st_dev,opened.st_ino)!=(before.st_dev,before.st_ino)):
             raise ValueError(f'approved SSH wrapper changed during validation: {path}')
+        if opened.st_size>1024*1024:
+            raise ValueError(f'approved SSH wrapper is unexpectedly large: {path}')
+        os.lseek(source_fd,0,os.SEEK_SET)
+        first_line=os.read(source_fd,256).split(b'\n',1)[0]
+        if first_line!=b'#!/usr/bin/env bash':
+            raise ValueError(f'approved SSH wrapper is not the expected Bash script: {path}')
+        os.lseek(source_fd,0,os.SEEK_SET)
+        seal_names=('F_ADD_SEALS','F_GET_SEALS','F_SEAL_SEAL','F_SEAL_SHRINK','F_SEAL_GROW','F_SEAL_WRITE')
+        if (not hasattr(os,'memfd_create') or not hasattr(os,'MFD_ALLOW_SEALING')
+                or any(not hasattr(fcntl,name) for name in seal_names)):
+            raise ValueError('host cannot pin the approved SSH wrapper in a sealed snapshot')
+        snapshot_fd=os.memfd_create(
+            's22-approved-ssh-wrapper',
+            getattr(os,'MFD_CLOEXEC',0)|getattr(os,'MFD_ALLOW_SEALING',0))
+        digest=hashlib.sha256()
+        while True:
+            block=os.read(source_fd,65536)
+            if not block:
+                break
+            digest.update(block)
+            offset=0
+            while offset<len(block):
+                count=os.write(snapshot_fd,block[offset:])
+                if count<=0:
+                    raise ValueError('could not complete the approved SSH wrapper snapshot')
+                offset+=count
+        after=os.fstat(source_fd)
+        state=lambda info:(info.st_dev,info.st_ino,info.st_mode,info.st_size,info.st_mtime_ns,info.st_ctime_ns)
+        if state(opened)!=state(after):
+            raise ValueError(f'approved SSH wrapper contents changed during snapshot: {path}')
+        current=path.lstat()
+        if (not stat.S_ISREG(current.st_mode)
+                or (current.st_dev,current.st_ino)!=(opened.st_dev,opened.st_ino)):
+            raise ValueError(f'approved SSH wrapper pathname changed during snapshot: {path}')
+        seals=(fcntl.F_SEAL_SEAL|fcntl.F_SEAL_SHRINK|fcntl.F_SEAL_GROW|fcntl.F_SEAL_WRITE)
+        fcntl.fcntl(snapshot_fd,fcntl.F_ADD_SEALS,seals)
+        if fcntl.fcntl(snapshot_fd,fcntl.F_GET_SEALS)&seals!=seals:
+            raise ValueError('approved SSH wrapper snapshot could not be made immutable')
+        os.lseek(snapshot_fd,0,os.SEEK_SET)
+        snapshot_digest=hashlib.sha256()
+        while True:
+            block=os.read(snapshot_fd,65536)
+            if not block:
+                break
+            snapshot_digest.update(block)
+        if snapshot_digest.digest()!=digest.digest():
+            raise ValueError('approved SSH wrapper snapshot content did not match the opened object')
+        os.lseek(snapshot_fd,0,os.SEEK_SET)
+        os.close(source_fd)
+        return snapshot_fd
+    except Exception as error:
+        os.close(source_fd)
+        if snapshot_fd is not None:
+            os.close(snapshot_fd)
+        if isinstance(error,ValueError):
+            raise
+        raise ValueError(f'approved SSH wrapper could not be pinned safely: {path}: {error}') from error
+
+
+def build_approved_ssh_invocation(wrapper_fd, path, remote_command, project_root=ROOT):
+    """Build a Bash source invocation that executes only the pinned wrapper fd."""
+    fd_path=f'/proc/self/fd/{wrapper_fd}'
+    launcher=(
+        'dirname() {\n'
+        ' if [[ $# -eq 2 && "$1" == "--" && ( "$2" == "/proc/self/fd/${S22_APPROVED_SSH_FD}" '
+        '|| "$2" == "/dev/fd/${S22_APPROVED_SSH_FD}" ) ]]; then\n'
+        '  printf "%s\\n" "${S22_APPROVED_PROJECT_ROOT}/tools"\n'
+        ' else\n'
+        '  command dirname "$@"\n'
+        ' fi\n'
+        '}\n'
+        'source "$S22_APPROVED_SSH_FD_PATH" "$@"\n'
+    )
+    argv=['/bin/bash','-c',launcher,str(path),remote_command]
+    environment=os.environ.copy()
+    environment.pop('BASH_ENV',None)
+    environment.pop('ENV',None)
+    environment['S22_APPROVED_SSH_FD']=str(wrapper_fd)
+    environment['S22_APPROVED_SSH_FD_PATH']=fd_path
+    environment['S22_APPROVED_PROJECT_ROOT']=str(Path(project_root))
+    return argv,environment
+
+
+def run_approved_ssh_wrapper(path, remote_command, *, input_data, timeout=100, project_root=ROOT):
+    wrapper_fd=validate_approved_ssh_wrapper(path)
+    try:
+        argv,environment=build_approved_ssh_invocation(wrapper_fd,path,remote_command,project_root)
+        return subprocess.run(argv,input=input_data,capture_output=True,timeout=timeout,
+                              pass_fds=(wrapper_fd,),env=environment)
     finally:
-        os.close(fd)
-    return path
+        os.close(wrapper_fd)
 
 
 def validate_remote_receipt(receipt, *, mode, before_sha, candidate_sha, size):
@@ -417,14 +523,12 @@ def main(argv=None):
     except ValueError as error:
         raise SystemExit(str(error)) from error
     ssh=ROOT/'tools/s22-ssh'
-    try:
-        validate_approved_ssh_wrapper(ssh)
-    except ValueError as error:
-        raise SystemExit(str(error)) from error
     command='python3 -c '+shlex.quote(REMOTE)+' '+mode
     try:
-        result=subprocess.run([str(ssh),command],input=image if args.stage else b'',
-                              capture_output=True,timeout=100)
+        result=run_approved_ssh_wrapper(ssh,command,input_data=image if args.stage else b'',
+                                       timeout=100,project_root=ROOT)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
     except (OSError,subprocess.TimeoutExpired) as error:
         raise RuntimeError(mode+' transport failed or timed out; remote outcome may be unknown; inspect before retry: '+str(error)) from error
     if result.returncode:
