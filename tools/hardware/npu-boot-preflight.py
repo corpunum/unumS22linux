@@ -58,12 +58,21 @@ def function_body(text: str, marker: str) -> str:
     return ""
 
 
+def read_source(path: Path) -> tuple[str, bool]:
+    """Read source without mistaking absent or unreadable input for evidence."""
+    try:
+        return path.read_text(), True
+    except (OSError, UnicodeError):
+        return "", False
+
+
 def evaluate_readiness(
     *,
     config_matches: bool,
     required_artifacts_match: bool,
     source_route_pass: bool,
     lifecycle_gaps: dict[str, bool],
+    lifecycle_source_available: bool = False,
 ) -> dict[str, object]:
     """Keep host artifact checks separate from permission to touch the NPU.
 
@@ -72,9 +81,10 @@ def evaluate_readiness(
     override them. In particular, a passing artifact audit still exits 2.
     """
     artifact_pass = bool(config_matches and required_artifacts_match and source_route_pass)
+    lifecycle_source_available = bool(lifecycle_source_available)
     gates = {
-        "power_notify_wait_resolved": not lifecycle_gaps.get("power_notify_has_unbounded_wait", True),
-        "normal_boot_error_unwind_resolved": not lifecycle_gaps.get("normal_boot_unwind_missing", True),
+        "power_notify_wait_resolved": lifecycle_source_available and not lifecycle_gaps.get("power_notify_has_unbounded_wait", True),
+        "normal_boot_error_unwind_resolved": lifecycle_source_available and not lifecycle_gaps.get("normal_boot_unwind_missing", True),
         "callback_close_race_regressions_passed": False,
         "firmware_boot_and_shutdown_device_tested": False,
         "live_probe_validated": False,
@@ -131,11 +141,14 @@ def main() -> int:
     session_c = source / "drivers/vision/npu/core/npu-session.c"
     vertex_c = source / "drivers/vision/npu/core/npu-vertex.c"
     system_c = source / "drivers/vision/npu/core/npu-system.c"
-    binary = binary_h.read_text() if binary_h.is_file() else ""
-    session = session_c.read_text() if session_c.is_file() else ""
-    vertex = vertex_c.read_text() if vertex_c.is_file() else ""
-    system = system_c.read_text() if system_c.is_file() else ""
+    binary, binary_available = read_source(binary_h)
+    session, session_available = read_source(session_c)
+    vertex, vertex_available = read_source(vertex_c)
+    system, system_available = read_source(system_c)
+    proto, proto_available = read_source(source / "drivers/vision/npu/core/npu-protodrv.c")
+    lifecycle_source_available = all((session_available, vertex_available, proto_available))
     normal_boot = function_body(vertex, "int npu_hwdev_normal_bootup(")
+    power_notify = function_body(session, "int npu_session_NW_CMD_POWER_NOTIFY(")
 
     checks["source"] = {
         "normal_fw_name_AIE": (
@@ -143,9 +156,12 @@ def main() -> int:
             and '#define NPU_FW_NAME\t\t(FW_BASE_NAME ".bin")' in binary
         ),
         "normal_boot_has_power_notify": "npu_session_NW_CMD_POWER_NOTIFY(session, true)" in normal_boot,
-        "power_notify_has_unbounded_wait": "wait_event(session->wq" in session,
+        "power_notify_has_unbounded_wait": "wait_event(session->wq" in power_notify,
         "normal_boot_unwind_missing": "npu_hwdev_shutdown(device, ctrl->value)" not in normal_boot,
         "system_calls_signature_loader": "npu_firmware_file_read_signature" in system,
+        "lifecycle_sources_available": lifecycle_source_available,
+        "binary_source_available": binary_available,
+        "system_source_available": system_available,
     }
 
     checks["artifacts"] = {}
@@ -178,6 +194,7 @@ def main() -> int:
         required_artifacts_match=bool(result["artifact_closure_pass"]),
         source_route_pass=bool(result["source_route_pass"]),
         lifecycle_gaps=checks["known_lifecycle_gaps"],
+        lifecycle_source_available=lifecycle_source_available,
     )
     result.update(readiness)
     result["live_probe_validated"] = readiness["readiness_gates"]["live_probe_validated"]
