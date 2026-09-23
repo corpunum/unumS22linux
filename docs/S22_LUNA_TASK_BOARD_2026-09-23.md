@@ -646,3 +646,22 @@ any root-overlay installation or staging. For NPU BOOTUP specifically,
 keep the preflight authorization false until the reviewed lifecycle candidate
 has its required runtime firmware/shutdown and live-probe evidence; no timeout
 or successful host build substitutes for those gates.
+
+### Publication audit
+
+The final pre-push fetch confirmed `origin/master=20605dbe623e0909cf219c3cae9ef7bb597b15a6`.
+This review branch contains 43 commits beyond that baseline across 29 changed
+tracked paths. No reachable blob exceeds 20 MiB, and the new-path audit found
+no firmware packages, recovery images, model weights, credentials, host keys,
+or private trace files. The unrelated large local commits
+`1ccf3395303d62e2c31aff8bb88d46155e68dcb6` and
+`a52151f24eb2c3ae4fdd750020cdaeb9c9468c1f` are not ancestors. The two
+preserved implementation commits remain ancestors as recorded above.
+
+The full-branch `git diff --check` reports 416 whitespace diagnostics only
+inside `tools/hardware/npu-session-lifecycle-fix.patch`, which preserves the
+exact formatting of the pinned downstream kernel diff. Excluding that patch
+artifact, the branch diff check is clean. The patch reverse-applies to the
+candidate kernel and is byte-equivalent to the complete diff from running
+kernel source `4e5c5ad7d950e4de0688b5663965f2075654b2ad` to candidate commit
+`40b5c72cedfb87facca7391c3efb3871497f5393`.
