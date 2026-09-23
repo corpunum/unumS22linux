@@ -50,10 +50,15 @@ the public worktree does not contain `calliope_sram.bin`. This missing
 firmware fixture was not copied into the branch; the error is an environment
 coverage gap, not evidence of an audio-stage runtime failure.
 
-The deployment worker's independent review is in progress against exact
-commit `03eba0700f65e0ef1576a50a1ab43dd2b325d5bd`. Its deployment entrypoints
-were not invoked; only isolated mocked tests and read-only AVB verification
-were run. The new deployment code is WIP and has not been merged or deployed.
+Independent Luna review completed against exact commit
+`03eba0700f65e0ef1576a50a1ab43dd2b325d5bd`. It found three issues before
+deployment hardening can be considered complete: the AVB builder accepts an
+arbitrary verifier executable, the primary deployer accepts a symlinked SSH
+wrapper, and remote staging does not anchor filesystem operations against a
+writable-parent path-replacement race. The deployment author has a follow-up
+to add fixes and negative tests. The deployment entrypoints were not invoked;
+only isolated mocked tests and read-only AVB verification were run. The code
+is WIP, unmerged and undeployed.
 
 ## Live read-only snapshot
 
