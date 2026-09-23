@@ -72,8 +72,11 @@ test binaries under a per-run temporary directory and prove capability denial
 control flow with a negative mutation. A P3 naming clarification was also
 requested. The author follow-up is committed as
 `d3f50668ecf19c117a503f6cafaca19cc72df4e0` and coordinator host reruns pass;
-an independent review of that follow-up is active. This does not verify the
-HCI kernel patch by compilation or runtime; device deployment remains blocked.
+independent re-review confirmed those fixes. It found one remaining P3: the
+integrated queue-overflow test does not assert that the ninth command caused
+termination rather than an unrelated early bridge failure. The author is
+adding queue-count/detach-result assertions. This does not verify the HCI
+kernel patch by compilation or runtime; device deployment remains blocked.
 
 The earlier NPU missing-source subgate false-green is fixed in commit
 `d2852765b2b58bba434ba8ae1b28c078615ff13f` (integrated as `4397d61`). Normal
