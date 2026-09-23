@@ -339,13 +339,17 @@ probe. No phone state changed during this follow-on work.
   assigned to `/root/recovery_hardening` in its existing isolated kernel
   worktree, with an adversarial cancel-vs-publish test; BOOTUP stays gated.
   Reviewer noted mailbox `msgid` reuse is not exercised by the Python model.
-- A new host implementation worker `/root/input_power_test_impl` was launched
-  on branch `codex/s22-wave2-input-power-20260923`, worktree
-  `/tmp/s22-luna-wave2-input-power-20260923`, to add synthetic-root tests for
-  read-only input/power/thermal/camera inventory and event observation. The
-  request explicitly selected `gpt-6-luna` / `max`; collaboration does not
-  expose independent runtime/session attestation, so this records selection,
-  not attestation. No phone access is assigned.
+- Host implementation worker `/root/input_power_test_impl` used branch
+  `codex/s22-wave2-input-power-20260923`, worktree
+  `/tmp/s22-luna-wave2-input-power-20260923`. Commits `e2163e9` and
+  `77a78c9` add injected sysfs/device roots and five read-only collector tests.
+  The first independent review found an event-drain deadline overrun; the
+  follow-up added a per-read deadline check and deterministic continuously
+  ready test. Independent reviewer `/root/input_power_independent_review`
+  approved commit `77a78c9`; the test fails against the prior implementation
+  as intended. Coordinator reran 5/5 in normal, `-O`, and `PYTHONOPTIMIZE=1`.
+  The requests explicitly selected `gpt-6-luna` / `max`; collaboration exposes
+  no independent runtime/session attestation. No phone access was assigned.
 
 ### Refreshed live state and storage — read-only, 2026-09-23 20:27 UTC
 
@@ -384,3 +388,17 @@ the absence of those gates. Before any installation or cleanup, explain the
 4,148 KiB merged `/usr` versus 502,788 KiB upper `/usr` discrepancy and confirm
 destination-specific free space; current 34.8 MB overlay headroom is not
 installation clearance.
+
+## Input, power, and camera inventory — 2026-09-23 20:36 UTC
+
+The documented command `python3 /usr/local/bin/input-power-readiness.py
+--camera` was attempted over strict-host-key USB SSH and failed because that
+script is not installed at the documented path. No copy/staging was attempted.
+A direct read-only sysfs/dev-node fallback found input event7 `sec_touchscreen`,
+event0 `gpio_keys`, and event1 `sec-pmic-key`; battery telemetry reported
+100%, Full, Good at 27.6 C; sampled CPU zones were 31 C, G3D 32 C, and NPU
+31 C. Multiple Exynos ISP, MFC, JPEG, and scaler V4L2 nodes were enumerated.
+No physical touch/button event was observed, and no camera node was opened or
+streamed. One optional `max77705-fuelgauge/online` read returned EINVAL. These
+results establish enumeration/telemetry only, not physical input, camera
+capture, or complete power-driver acceptance.
