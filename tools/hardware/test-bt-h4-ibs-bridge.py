@@ -6,12 +6,11 @@ import select
 import signal
 import subprocess
 import termios
+import tempfile
 import time
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-BINARY = "/tmp/bt-h4-ibs-bridge-test"
-UNIT_BINARY = "/tmp/bt-h4-ibs-bridge-unit-test"
 COMMAND = bytes.fromhex("01 03 0c 00")
 EVENT = bytes.fromhex("04 0e 04 01 03 0c 00")
 
@@ -42,7 +41,7 @@ def start_bridge(test):
     physical_master, physical_slave = pty.openpty()
     raw(physical_master)
     raw(physical_slave)
-    proc = subprocess.Popen([BINARY, "--uart", os.ttyname(physical_slave)],
+    proc = subprocess.Popen([test.BINARY, "--uart", os.ttyname(physical_slave)],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             text=True)
     try:
@@ -197,12 +196,19 @@ int main(int argc, char **argv) {
 class BridgeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls._build_tmp = tempfile.TemporaryDirectory(prefix="s22-bt-bridge-tests-")
+        cls.BINARY = os.path.join(cls._build_tmp.name, "bt-h4-ibs-bridge")
+        cls.UNIT_BINARY = os.path.join(cls._build_tmp.name, "bt-h4-ibs-bridge-unit")
         source = os.path.join(ROOT, "tools/hardware/bt-h4-ibs-bridge.c")
         subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-O2",
-                        source, "-o", BINARY, "-lutil"], check=True)
+                        source, "-o", cls.BINARY, "-lutil"], check=True)
         subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-O2",
-                        "-pthread", "-I", ROOT, "-x", "c", "-", "-o", UNIT_BINARY,
+                        "-pthread", "-I", ROOT, "-x", "c", "-", "-o", cls.UNIT_BINARY,
                         "-lutil", "-pthread"], input=UNIT_SOURCE, text=True, check=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._build_tmp.cleanup()
 
     def test_fragmented_h4_command_and_event(self):
         proc, virtual, physical_master, physical_slave = start_bridge(self)
@@ -291,7 +297,8 @@ class BridgeTests(unittest.TestCase):
         finally:
             stop_bridge(proc, virtual, physical_master, physical_slave)
 
-    def test_repeated_shutdown_reports_cleanup(self):
+    def test_three_independent_sigterm_runs_report_cleanup(self):
+        """Each of three fresh bridge processes receives one SIGTERM."""
         for _ in range(3):
             proc, virtual, physical_master, physical_slave = start_bridge(self)
             proc.send_signal(signal.SIGTERM)
@@ -301,16 +308,16 @@ class BridgeTests(unittest.TestCase):
             os.close(virtual); os.close(physical_master); os.close(physical_slave)
 
     def test_parser_fragmentation_and_malformed_lengths(self):
-        subprocess.run([UNIT_BINARY, "parser"], check=True)
+        subprocess.run([self.UNIT_BINARY, "parser"], check=True)
 
     def test_queue_bound_unit(self):
-        subprocess.run([UNIT_BINARY, "queue"], check=True, stdout=subprocess.DEVNULL)
+        subprocess.run([self.UNIT_BINARY, "queue"], check=True, stdout=subprocess.DEVNULL)
 
     def test_ibs_wake_ack_sleep_unit(self):
-        subprocess.run([UNIT_BINARY, "ibs"], check=True)
+        subprocess.run([self.UNIT_BINARY, "ibs"], check=True)
 
     def test_nonblocking_short_write_recovery(self):
-        subprocess.run([UNIT_BINARY, "short-write"], check=True)
+        subprocess.run([self.UNIT_BINARY, "short-write"], check=True)
 
 
 if __name__ == "__main__":
