@@ -557,3 +557,92 @@ space at the exact destination.
   resulted. The public-tree NPU preflight still fails closed because exact
   config/AIE inputs are intentionally not published; independent rescue and
   BOOTUP authorization remain false.
+
+## Execution correction continuation — 2026-09-23 21:55 UTC
+
+### Hardware-free CI implementation and independent review
+
+| Actual task handle | Requested model / evidence | Worktree and deliverable | Review / outcome |
+|---|---|---|---|
+| `/root/host_ci_runner_impl` | Explicit `gpt-6-luna` / `max` accepted by the native worker interface; no worker runtime/session attestation is exposed | `/tmp/s22-host-ci-runner-20260924`, branch `codex/host-ci-runner-20260924`; commits `5d029ffcf7a6a946e34666b0123052335b64ccd4`, `583e553a78a223e48857a9ea5ade2e24e9137616`, `0b13812f8fa4a8e4374f4ea75ead20dc8dc16213` | Implemented a fixed seven-script host regression runner, its exact-path allowlist, path/symlink validation, policy tests, README scope and `.github/workflows/host-regressions.yml`. |
+| `/root/host_ci_runner_independent_review` | Explicit `gpt-6-luna` / `max` accepted; runtime identity not exposed | Fresh detached reviews at `/tmp/s22-host-ci-runner-followup-review-20260924` (`583e553`) and `/tmp/s22-host-ci-hardening-review-20260924` (`0b13812`) | Initial review found an internal symlinked-ancestor gap; worker fixed it. Final review approved the exact `0b13812` delta for bounded WIP publication. Remaining limitation: GitHub Actions egress is not blocked, although this suite makes no network requests. |
+
+The coordinator integrated only those three reviewed implementation commits
+onto this unmerged branch as `e1af7f2`, `daeb0b5`, and `38f5f12`. The workflow
+has not yet run on GitHub. The coordinator reran policy tests **7/7 normally
+and 7/7 with `-O`**, then the complete suite: **7 normal runs, 5 optimized
+runs, 2 documented optimized-mode skips, 0 failures**. `py_compile` for the
+runner, policy test and all seven allowlisted scripts passed; `git diff
+--check` passed. The Bluetooth coverage is PTY-backed synthetic HCI plus a
+local `AF_BLUETOOTH` query; it is not physical controller or phone evidence.
+The workflow uses no secrets and read-only repository permission; tests do
+not connect to a phone, access private firmware/model inputs, or make network
+requests.
+
+### Full linked NPU-candidate kernel build (host only)
+
+The isolated kernel worktree `/tmp/s22-kernel-npu-lifecycle-20260923` was
+clean at source commit `40b5c72cedfb87facca7391c3efb3871497f5393`, parent
+`4c20670269e800454a5daacb9a01856ad1a792ae`, based on running-kernel source
+`4e5c5ad7d950e4de0688b5663965f2075654b2ad`. A fresh output directory used
+the preserved `CONFIG_NPU_USE_BOOT_IOCTL=y` config, SHA-256
+`a147841a53f5b10c366a759d0e83525996a0ec5d8227a103b020cf2111400f9e`;
+`olddefconfig` made no change. The full linked command was `make -C <pinned
+kernel> O=<fresh-output> ARCH=arm64 LLVM=1 LLVM_IAS=1
+CROSS_COMPILE=aarch64-linux-gnu- -j2 Image modules`, with the pinned Android
+Clang 21.0 r563880c toolchain. It exited 0, linked `vmlinux`, the ARM64 Image
+and 329 modules, and produced release `5.10.260-g40b5c72cedfb`. Relevant
+SHA-256 values: `vmlinux`
+`dce21b81d73d8f8e4467c6be50b4a0e9473827f8ec3f985cfae5279a0a1a4045`,
+`arch/arm64/boot/Image`
+`ae089169bfabf8459162ca1df78704f27d04d303e71b08520547e4cf13b8fe52`,
+`drivers/vision/npu.ko`
+`0fbe47b939971be05bb0e3696122d192d12400c21bb75eabe0280230b54343f0`.
+No image packaging, module staging, deployment, or phone operation followed.
+
+The exact-source/config/local-artifact NPU preflight exited 2 by design:
+artifact and source-route checks passed, while `bootup_ready=false`,
+`bootup_authorized=false`, device access and staging were false. Remaining
+gates include runtime firmware boot/shutdown, live probe, independent rescue,
+and explicit owner authorization. This full build is **built**, not device
+tested; it is not permission to submit BOOTUP.
+
+### Read-only phone, storage, and ongoing-job checkpoint
+
+The latest bounded USB SSH snapshot still reports kernel
+`5.10.260-g4e5c5ad7d950`, PID 1 `native-guardian`, 325 loaded modules and a
+healthy resident-assistant endpoint (HTTP 200). USB SSH is dependent on the
+running kernel and is not an independent rescue route. Wi-Fi's last recorded
+acceptance remains 13/13 checks; no new Wi-Fi or driver acceptance was run in
+this checkpoint. Current boot mode is deliberately **not asserted**: the
+filtered cmdline token is `bootmode=2`, while recent `/proc/boot_reset` tail
+markers are ambiguous and were not reconciled into a current BORE mode.
+
+The root overlay reports 610,861,056 bytes total, 563,433,472 used and
+34,844,672 available (94%); 8,620/38,400 inodes are used. Mount metadata names
+`/cache/s22-linux/upper`, but `/cache` and that upper path are not visible in
+the PID 1/SSH namespace. Visible-root `du` accounts for only about 4.7 MiB,
+so backing-layer usage remains unidentified. Persistent `/srv/s22` has
+102,382,280,704 bytes and 1,652,508 inodes free. No cleanup, package install,
+or image staging was attempted. No kernel build, flashing tool, deployment,
+or test runner remained active after the host checks completed; unrelated
+existing processes were left untouched.
+
+The owner checkout remains dirty and untouched at `fb60a2c1...`, 44 commits
+ahead and 57 behind fetched `origin/master`. The two preserved commits
+`5928e980ea32355c43ca5240eb41c8aa862533f3` (NPU gate/audio classifier) and
+`295b8696b20ef2c342df1ea6031ac41d9bc52fe8` (task board) remain unchanged and
+reachable on durable branch `codex/s22-luna-coordinator-20260923`; both are
+also ancestors of this review branch. Patch-equivalence reconciliation was
+used; unrelated local-only history was not copied wholesale.
+
+### Next device gate
+
+Do not deploy or reboot until an independent rescue path is demonstrated from
+the actual recovery host without relying on this running kernel, with the
+candidate-specific rollback/readback method ready and the exact experiment
+authorized. Resolve upper-layer accounting and destination free space before
+any root-overlay installation or staging. For NPU BOOTUP specifically,
+keep the preflight authorization false until the reviewed lifecycle candidate
+has its required runtime firmware/shutdown and live-probe evidence; no timeout
+or successful host build substitutes for those gates.

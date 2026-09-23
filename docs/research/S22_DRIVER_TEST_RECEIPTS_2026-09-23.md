@@ -465,3 +465,108 @@ This advances NPU evidence from source/model-tested to targeted translation
 units built under both relevant option values. It does not establish a full
 kernel build, firmware execution, safe NPU BOOTUP, inference, or a working
 driver on the phone. No firmware was staged; no device state changed.
+
+## Execution correction continuation — 2026-09-23 21:55 UTC
+
+### Hardware-free host CI and Luna review
+
+Implementation worker `/root/host_ci_runner_impl`, explicitly selected as
+`gpt-6-luna/max` by the native collaboration interface, delivered commits
+`5d029ffcf7a6a946e34666b0123052335b64ccd4`,
+`583e553a78a223e48857a9ea5ade2e24e9137616`, and
+`0b13812f8fa4a8e4374f4ea75ead20dc8dc16213` in its isolated worktree. The
+patch adds a fixed allowlist runner for seven hardware-free host scripts,
+policy tests, and `.github/workflows/host-regressions.yml`. The follow-up
+pins the exact path sequence and rejects final, internal-ancestor and
+external-ancestor symlinks. No caller-supplied test paths or discovery are
+used.
+
+Independent Luna reviewer `/root/host_ci_runner_independent_review` reviewed
+`583e553` and then exact commit `0b13812` in fresh detached worktrees. The
+first review found the internal-ancestor symlink gap; the final review
+confirmed the new negative regression and approved the bounded WIP patch.
+Both worker requests explicitly selected `gpt-6-luna/max`; the collaboration
+interface exposes no runtime/session metadata, so model identity is
+`explicitly_configured`, not `runtime_reported`. The current coordinator
+configuration is `gpt-6-luna/xhigh`; current-turn runtime metadata and a
+Max-effort coordinator selection are not exposed.
+
+The coordinator integrated those commits as `e1af7f2`, `daeb0b5`, and
+`38f5f12`. Reruns on the exact final implementation commit:
+
+| Command | Result | Evidence limit |
+|---|---|---|
+| `python3 -I -B tools/hardware/test-host-regression-runner.py` | 7/7 pass | Runner policy only |
+| `python3 -I -B -O tools/hardware/test-host-regression-runner.py` | 7/7 pass | Optimized-mode policy only |
+| `python3 -I -B tools/hardware/run-host-regressions.py --mode both` | Exit 0; 7 normal runs, 5 optimized runs, 2 documented `-O` skips, 0 failures | Host-only models, fixtures, PTYs and synthetic HCI; no phone/controller trial |
+| `python3 -m py_compile` on runner, policy test and seven allowlisted scripts | Pass | Syntax only |
+| `git diff --check 7b683219..HEAD` | Pass | Patch whitespace only |
+
+The workflow has not run on GitHub. It grants `contents: read`, disables
+checkout credential persistence and uses no secrets or device step. The test
+suite clears inherited device overrides/credentials and makes no IP/HTTP
+requests. Workflow runner egress itself is not blocked. A separate rerun of
+`test-recovery-deployment-hardening.py` with the trusted local AVB tool passed
+38 tests in normal, `python3 -O`, and `PYTHONOPTIMIZE=1` modes; this remains
+mocked host validation, not an operational deployment.
+
+### Full linked NPU candidate build and fail-closed preflight
+
+The coordinator completed a full `Image modules` link in the isolated kernel
+worktree at source commit `40b5c72cedfb87facca7391c3efb3871497f5393` (parent
+`4c20670269e800454a5daacb9a01856ad1a792ae`), based on running source
+`4e5c5ad7d950e4de0688b5663965f2075654b2ad`. It used a fresh output directory,
+the unchanged `CONFIG_NPU_USE_BOOT_IOCTL=y` config with SHA-256
+`a147841a53f5b10c366a759d0e83525996a0ec5d8227a103b020cf2111400f9e`, Android
+Clang 21.0.0 r563880c, `ARCH=arm64 LLVM=1 LLVM_IAS=1
+CROSS_COMPILE=aarch64-linux-gnu- -j2`; `olddefconfig` reported no changes.
+The build exited 0, linked `vmlinux`, an ARM64 Image and 329 modules, release
+`5.10.260-g40b5c72cedfb`. Hashes: `vmlinux`
+`dce21b81d73d8f8e4467c6be50b4a0e9473827f8ec3f985cfae5279a0a1a4045`, Image
+`ae089169bfabf8459162ca1df78704f27d04d303e71b08520547e4cf13b8fe52`, and
+`drivers/vision/npu.ko`
+`0fbe47b939971be05bb0e3696122d192d12400c21bb75eabe0280230b54343f0`.
+Build artifacts remain outside the public repository; none were packaged or
+deployed.
+
+The exact-source/config/local-firmware preflight exited 2. Artifact and
+source-route checks passed, but `bootup_ready=false`, `bootup_authorized=false`,
+device access/staging false. Remaining gates include firmware boot/shutdown,
+live probe, independent rescue and explicit owner authorization. No NPU
+BOOTUP or firmware staging was attempted. This is a successful host kernel
+build, not a working NPU driver.
+
+### Current bounded read-only device evidence
+
+The latest USB SSH read-only snapshot reports kernel
+`5.10.260-g4e5c5ad7d950`, PID 1 `native-guardian`, 325 loaded modules and
+resident assistant HTTP 200. The most recent Wi-Fi acceptance remains 13/13;
+it is not a new acceptance from this checkpoint. USB SSH depends on the
+running kernel and does not establish independent rescue. Current boot mode
+is left unclaimed because `bootmode=2` and the tail of `/proc/boot_reset` do
+not yield an unambiguous current BORE mode.
+
+The actual root overlay reports 610,861,056 total bytes, 563,433,472 used,
+34,844,672 available (94% used), and 8,620/38,400 inodes used. Its mount
+metadata names `/cache/s22-linux/upper`, which is outside the visible PID 1/
+SSH namespace; visible-root `du` accounts for only about 4.7 MiB. Upper-layer
+consumers therefore remain unidentified. Persistent `/srv/s22` has
+102,382,280,704 bytes and 1,652,508 inodes free. No cleanup, install, package
+operation, staging, deployment, reboot, or driver trial occurred; unrelated
+existing host processes were left untouched.
+
+The original dirty checkout remains untouched at `fb60a2c1...`, ahead 44 and
+behind 57 against fetched `origin/master`. Commits
+`5928e980ea32355c43ca5240eb41c8aa862533f3` and
+`295b8696b20ef2c342df1ea6031ac41d9bc52fe8` were inspected, remain unchanged
+on durable branch `codex/s22-luna-coordinator-20260923`, and are ancestors of
+the WIP branch. Only intended sanitized patches and receipts were selected;
+unrelated local history was not merged or cherry-picked wholesale.
+
+No physical or software driver functionality changed. Before any next device
+experiment, independently reachable rescue must be demonstrated from the
+actual recovery host without the running kernel, candidate-specific
+rollback/readback and the exact authorization must be ready. Root-overlay
+staging additionally requires resolving the upper-layer accounting and
+measuring destination-specific free space. NPU BOOTUP remains denied until
+the runtime lifecycle gates pass; the host build does not relax them.
