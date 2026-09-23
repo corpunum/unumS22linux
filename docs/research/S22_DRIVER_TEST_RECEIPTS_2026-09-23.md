@@ -137,19 +137,30 @@ storage statements above:
   receipt and uses `pty_cleanup_ioctl_result` without claiming N_HCI detach.
   Independent Luna review approved the delta; coordinator reran H4 12/12 and
   pinned-source HCI validation. No kernel build or runtime test occurred.
-- Deployment commit `0187e3c6e07a01b368bb558a95ddec96dfaceded` passes its 35
-  host cases in standard and optimized modes, and its original AVB/dirfd
-  review findings are closed. Independent review still blocks promotion on
-  wrapper identity pinning through execution and missing parent-directory
-  fsync after staging mkdir. The implementation worker is addressing both;
-  no deployment command ran.
-- NPU kernel ownership/unwind implementation is still in progress. During
-  review of the draft, the worker caught that storing an opaque waiter cookie
-  in `nw.session` would be dereferenced as a real session pointer by
-  `msgid_issue_save_ref()` under `CONFIG_DSP_USE_VS4L`. The worker is changing
-  the draft to preserve the session pointer and carry the cookie in unused
-  POWER_CTL parameters. This was caught before commit; no BOOTUP or device
-  action occurred.
+- Deployment follow-up `027c6cd49f56e77ecd85b9b61aa3d2f6e98cb28c`, integrated
+  as `ac52713`, closes the post-open wrapper pathname race by executing a
+  sealed memfd snapshot and closes the staging-parent durability gap with
+  parent fsync after mkdir. The new race, ordering and fsync-failure cases
+  passed. Coordinator and independent review each ran 37/37 tests in normal,
+  `-O`, and `PYTHONOPTIMIZE=1` modes with
+  `S22_AVBTOOL=/home/corpunum/s22-linux/tools/avb/avbtool.py`; no cases
+  skipped. Without that local tool, three AVB-specific tests skip. Independent
+  review found one remaining P2: the snapshot is not pinned to the canonical
+  `tools/s22-ssh` digest, so a regular executable Bash replacement present
+  before validation is accepted. The reviewer also found inherited PATH can
+  substitute the wrapper's bare `ssh`; both fixes are now assigned. No deploy
+  operation ran. The image-builder `--help` probe reads a required build cpio
+  before argument parsing and fails in the public worktree because that input
+  is absent; no build was attempted.
+- NPU kernel ownership/unwind implementation is still in progress. Source
+  review caught that a cookie placed in `nw.session` would be dereferenced as
+  a real session by `msgid_issue_save_ref()` with `CONFIG_DSP_USE_VS4L`. A
+  subsequent lifetime review established that POWER_CTL must pass a NULL
+  session because the request may outlive timeout/close; the pinned
+  `msgid_issue` path accepts NULL, and the POWER_CTL callback ignores that
+  argument. The worker is moving the opaque cookie to unused `param0/param1`.
+  These draft flaws were caught before commit; no BOOTUP or device action
+  occurred.
 - Current read-only USB SSH still reaches the running `5.10.260-g4e5c5ad7d950`
   kernel and resident assistant (health HTTP 200). `/` has 34,844,672 bytes
   free (94% used), 29,780 free inodes; `/srv/s22` has 102,382,280,704 bytes
