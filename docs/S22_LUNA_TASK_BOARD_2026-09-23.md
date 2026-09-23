@@ -102,8 +102,8 @@ attestation. No override/fallback is known for those explicit worker calls.
 
 | Actual task handle | Worktree / branch | Assignment and current result |
 |---|---|---|
-| `/root/recovery_deploy_impl` | `/tmp/s22-luna-wave1-deploy-20260923`, `codex/s22-wave1-deploy-20260923` | Initial hardening `03eba0700f65e0ef1576a50a1ab43dd2b325d5bd` integrated as `9dc83b3`; review fixes `0187e3c6e07a01b368bb558a95ddec96dfaceded` integrated as `9dfec4b`. Fixes pin AVB tool SHA and use sealed snapshot, reject SSH-wrapper symlinks, and anchor remote staging to validated dirfds. Coordinator reran 35 tests in normal, `-O`, and `PYTHONOPTIMIZE=1` modes; py_compile/help/diff checks pass. Second independent review is in progress. No device actions. |
-| `/root/bluetooth_impl` | `/tmp/s22-luna-wave1-bt-20260923`, `codex/s22-wave1-bt-20260923` | Initial bridge/test commit `7bade3f376bb0e810baca799e4dc5ec8f17b2443` integrated as `c7c2080`; hardening `d3f50668ecf19c117a503f6cafaca19cc72df4e0` integrated as `82542fe`; queue-overflow receipt `f7f0d161e7bd9b82d30cb4d8b75e1ca3ca1a8a39` integrated as `a5ca9d9`. H4 binaries use per-run temp storage, capability-denial tests reject allow/no-op, and overflow now asserts eight accepted records plus ninth-command failure and detach result. Coordinator H4 12/12 and exact-pinned HCI source validation passed. Final independent review pending. No kernel build/runtime HCI. |
+| `/root/recovery_deploy_impl` | `/tmp/s22-luna-wave1-deploy-20260923`, `codex/s22-wave1-deploy-20260923` | Initial hardening `03eba0700f65e0ef1576a50a1ab43dd2b325d5bd`, verifier/staging fixes `0187e3c6e07a01b368bb558a95ddec96dfaceded`, and residual fixes `027c6cd49f56e77ecd85b9b61aa3d2f6e98cb28c` are integrated (last as `ac52713`). The post-open wrapper race and stage-parent fsync are fixed. Coordinator reran 37 tests in normal, `-O`, and `PYTHONOPTIMIZE=1` with trusted local AVB tool. Independent final review found a remaining P2: no digest pin for canonical `tools/s22-ssh` content, plus inherited PATH can substitute the `ssh` binary. Both are assigned back to the same author for a bounded fix. No device actions. |
+| `/root/bluetooth_impl` | `/tmp/s22-luna-wave1-bt-20260923`, `codex/s22-wave1-bt-20260923` | Initial bridge/test commit `7bade3f376bb0e810baca799e4dc5ec8f17b2443`, hardening `d3f50668ecf19c117a503f6cafaca19cc72df4e0`, and queue-overflow follow-up `f7f0d161e7bd9b82d30cb4d8b75e1ca3ca1a8a39` are integrated. Final attribution/cleanup-label fix `2af4d23f66d9bc857f3de45bc3f550dd1a886491` is integrated as `4163b89`. Tests assert the full 36-byte write and explicit 8-slot overflow; cleanup label is not an N_HCI-detach claim. Coordinator H4 12/12 and exact-pinned HCI source validation passed; independent final review approved. No kernel build/runtime HCI. |
 | `/root/audio_diag_impl` | `/tmp/s22-luna-wave1-audio-20260923`, `codex/s22-wave1-audio-20260923` | Completed synchronized snapshot and cleanup classification; worker commit `2d6d9a40c3d97064ef4a5ccc5ceb90071970b715`, integrated as `2b55003`. Coordinator reran snapshot 13, route 18, wrapper cleanup 4, bind-node 4, PCM prepare 5, and sync-nodes 3 tests; all passed. Firmware-stage suite had 3 passes and 1 error because public worktree lacks `calliope_sram.bin`. No live audio. |
 | `/root/recovery_hardening` | `/tmp/s22-luna-wave1-npu-20260923`, `codex/s22-wave1-npu-20260923`; exact pinned kernel worktree `/tmp/s22-kernel-npu-lifecycle-20260923` at `4e5c5ad7d950e4de0688b5663965f2075654b2ad` | First delivered missing-source fail-closed readiness fix as `d2852765b2b58bba434ba8ae1b28c078615ff13f`, integrated as `4397d61`; normal and `-O` tests pass, and optimized CLI now reports the missing lifecycle gates false with overall exit 2. Continuing actual POWER_NOTIFY wait/request ownership and reverse-unwind implementation in the pinned kernel tree. No BOOTUP, full build, or device actions. |
 
@@ -111,8 +111,8 @@ attestation. No override/fallback is known for those explicit worker calls.
 
 | Actual task handle | Worktree / exact patch | Status |
 |---|---|---|
-| `/root/deployment_independent_review` | `/tmp/s22-luna-review-deploy-worker-20260923` (initial `03eba07`) and `/tmp/s22-luna-review-deploy-fix-20260923` (`0187e3c6e07a01b368bb558a95ddec96dfaceded`) | Explicit Luna Max. Initial independent review found the three deployment gaps; follow-up code addresses them. Second read-only review is in progress against the exact fix commit. No operational deployment/device commands. |
-| `/root/bluetooth_independent_review` | `/tmp/s22-luna-review-bt-worker-20260923`, `/tmp/s22-luna-review-bt-followup-20260923`, and `/tmp/s22-luna-review-bt-overflow-20260923` (`f7f0d161e7bd9b82d30cb4d8b75e1ca3ca1a8a39`) | Initial and second independent Luna Max reviews complete; found no C cleanup defect and the two P2 test issues are fixed. Final review of the overflow assertions is active. HCI restore patch remains unbuilt; no device/runtime proof. |
+| `/root/deployment_independent_review` | `/tmp/s22-luna-review-deploy-worker-20260923` (`03eba07`), `/tmp/s22-luna-review-deploy-fix-20260923` (`0187e3c6e07a01b368bb558a95ddec96dfaceded`), and `/tmp/s22-luna-review-deploy-final-20260923` (`027c6cd49f56e77ecd85b9b61aa3d2f6e98cb28c`) | Explicit Luna Max. Independent final review confirmed post-open path pinning and parent fsync, but found a P2: wrapper snapshot is not authenticated against the canonical digest, and inherited PATH can replace bare `ssh`. The exact canonical wrapper digest and tests are assigned to the author; no deployment/device commands. |
+| `/root/bluetooth_independent_review` | `/tmp/s22-luna-review-bt-worker-20260923`, `/tmp/s22-luna-review-bt-followup-20260923`, `/tmp/s22-luna-review-bt-overflow-20260923` (`f7f0d161e7bd9b82d30cb4d8b75e1ca3ca1a8a39`), and `/tmp/s22-luna-review-bt-final-20260923` (`2af4d23f66d9bc857f3de45bc3f550dd1a886491`) | Initial, second and final independent Luna Max reviews completed. Final review approved the byte-count, explicit overflow receipt, and precise cleanup label; H4 passed 12/12 and pinned-source validation passed. HCI patch remains unbuilt; no device/runtime proof. |
 
 The branches/worktrees are isolated from one another. The original checkout
 remains dirty and divergent (`master` at `fb60a2c1...`, 44 ahead of
@@ -213,14 +213,27 @@ privacy and architecture boundaries remain unchanged.
   checks, not a kernel build or live Bluetooth test.
 - Deployment independent review of `0187e3c6e07a01b368bb558a95ddec96dfaceded`
   confirms the AVB verifier snapshot and dirfd staging fixes, and the 35-case
-  normal/optimized suites pass. Two issues remain open: pin the SSH wrapper
-  identity through execution with a replacement-race test, and fsync the
-  staging parent after child-directory creation. Both fixes are assigned to
-  the existing deployment author worker; no deploy mode has run.
+  normal/optimized suites pass. Follow-up commit
+  `027c6cd49f56e77ecd85b9b61aa3d2f6e98cb28c` integrates as `ac52713`: the
+  approved SSH wrapper is copied to a sealed memfd and sourced via its passed
+  descriptor, with a pathname-replacement regression; the stage parent is
+  fsynced after mkdir, with ordering and fsync-failure regressions. Coordinator
+  reran 37/37 tests in normal, `-O`, and `PYTHONOPTIMIZE=1` using the trusted
+  local AVB tool (`S22_AVBTOOL`); independent final review confirmed these two
+  fixes but found a remaining P2: the wrapper bytes are not pinned to the
+  canonical digest, and inherited PATH can replace bare `ssh`. Those are now
+  assigned for a follow-up; no deployment mode has run. Without
+  `S22_AVBTOOL`, three AVB-specific test cases skip in this public worktree.
+  The builder `--help` probe reads its required cpio before parsing help and
+  cannot complete here because that build input is absent; no build was
+  attempted.
 - NPU lifecycle ownership/unwind edits remain in the existing exact-pinned
   kernel worktree. No BOOTUP, build, or live test has occurred; the next
   useful deliverable is the actual patch plus executable regressions, followed
-  by independent review.
+  by independent review. Source review caught that POWER_CTL request state
+  must not retain a session pointer across timeout/close; the worker is
+  updating it to pass NULL (supported by `msgid_issue`) and carry the opaque
+  completion cookie in unused POWER_CTL parameters.
 
 ### Refreshed phone and storage evidence — read-only
 
