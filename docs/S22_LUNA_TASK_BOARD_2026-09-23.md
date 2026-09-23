@@ -508,3 +508,52 @@ works without relying on the candidate kernel, and the existing rollback and
 owner authorization gates pass. Root-overlay installation/cleanup additionally
 requires resolving the upper-versus-merged `/usr` accounting and checking
 space at the exact destination.
+
+## NPU dual-config object build and independent review — 2026-09-23 21:19 UTC
+
+- NPU worker `/root/recovery_hardening` implemented compile-guard fixes in
+  kernel commit `40b5c72cedfb87facca7391c3efb3871497f5393`, parent
+  `4c20670269e800454a5daacb9a01856ad1a792ae`, based on running-kernel source
+  `4e5c5ad7d950e4de0688b5663965f2075654b2ad`. The corresponding patch and
+  static source regression are repo commit `07ac389c2718e05b2087e3c5b728aba053473bf8`,
+  integrated in this branch as `d237dee91a7d42e2b88def30b54aaa92ceb5e375`.
+  The fix guards POWER_CTL waiter-only calls for BOOT_IOCTL, limits the
+  legacy session-ref helper to mailbox versions below 8, and scopes `hids`
+  to the BOOT_IOCTL path. These address actual `-Werror` failures found only
+  in the optional no-ioctl configuration.
+- Object-only builds used the exact preserved config for `BOOT_IOCTL=y` and
+  a copy differing only in `CONFIG_NPU_USE_BOOT_IOCTL=n`. Config SHA-256 is
+  `a147841a53f5b10c366a759d0e83525996a0ec5d8227a103b020cf2111400f9e` for
+  the reference/y variant and
+  `8d74d53d6a9ceba28521fc814a4da1d684a364dd0d436602bbb9c495c5eb8141` for
+  the n variant. SCS, ThinLTO, CFI, MODVERSIONS, NPU hardware-device and DSP
+  settings remained enabled/unchanged. Both used Android Clang 21.0.0 from
+  r563880c (clang SHA-256
+  `af0f25ca6818aed54c1cab03dc591acd549f385b8447148326a413e3e59c22b7`,
+  ld.lld SHA-256
+  `784146955ed87545385bf5c89b3b920ca7fe3ac83e034c3e6c53783ce544adf1`),
+  `ARCH=arm64 LLVM=1 LLVM_IAS=1 -j1`, with all three target objects listed
+  explicitly. The `LLVM_IAS=1` requirement was discovered after a prepare
+  command normalized ThinLTO off; that altered config was never used to
+  compile candidate objects.
+- All six translation units compiled successfully. Their outputs are LLVM
+  ThinLTO bitcode, not linked machine-code modules or a kernel image:
+
+  | Config | `npu-session.o` SHA-256 | `npu-protodrv.o` SHA-256 | `npu-vertex.o` SHA-256 |
+  |---|---|---|---|
+  | BOOT_IOCTL=y | `7068c5ea8a492ab7426434b2012c70137f765159346442a9808dab83daf29b3c` | `3f369c3675f66646e9429c84073066c331d343383304ed7207d8eca10845154c` | `bd5ffb846176a9ca70a4456d289f27bbd150122add40e1972ad51d9395fef23e` |
+  | BOOT_IOCTL=n | `b6dd5c10a62151cf5521d3f96ec7eb86a320e979d905aa42a8cdb9f41983b82e` | `962420cebe1eee269c57e787a0d82736ad170857ea2048afb185dc21e018ef91` | `6ca683bb5247c9e70052d2b63631501b4bdeb68991ec0088f3184e0bfe7d2f2c` |
+
+- Coordinator reran NPU lifecycle/source tests and preflight synthetic tests
+  in normal and `python3 -O` modes: all four invocations passed. Patch
+  reverse-apply and byte-equivalence to the pinned-base kernel diff passed.
+  Independent Luna re-review of the exact kernel/repo commits found no
+  correctness defect; it confirmed the Kconfig dependencies and guards.
+  Reviewer notes the new source test checks guard placement but not all
+  compile-time combinations; the two successful compiles are author-run and
+  were not independently reproduced. The reviewer could not attest runtime
+  model identity.
+- No complete kernel link/build, recovery image, deployment, or phone action
+  resulted. The public-tree NPU preflight still fails closed because exact
+  config/AIE inputs are intentionally not published; independent rescue and
+  BOOTUP authorization remain false.

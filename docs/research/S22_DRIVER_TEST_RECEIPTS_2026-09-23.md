@@ -428,3 +428,40 @@ overlay had 34,844,672 bytes free and 29,780 free inodes, while persistent
 size discrepancy remains unresolved and no independent recovery path was
 proven. No hardware change, install, cleanup, deployment, reboot, or driver
 acceptance occurred.
+
+## NPU CONFIG variant compile and review receipt — 2026-09-23 21:19 UTC
+
+Kernel commit `40b5c72cedfb87facca7391c3efb3871497f5393` (parent `4c206702`)
+is based on exact running source `4e5c5ad7d950e4de0688b5663965f2075654b2ad`.
+The exported patch/test commit is `07ac389c2718e05b2087e3c5b728aba053473bf8`,
+integrated as `d237dee`. It fixes BOOT_IOCTL-only waiter names leaking into
+the generic POWER_CTL path, narrows the legacy `is_session_ref_exist()` helper
+to mailbox versions `<8`, and scopes `hids` to its BOOT_IOCTL shutdown path.
+
+The untouched/reference and BOOT_IOCTL=y config hash is
+`a147841a53f5b10c366a759d0e83525996a0ec5d8227a103b020cf2111400f9e`; the
+BOOT_IOCTL=n config hash is
+`8d74d53d6a9ceba28521fc814a4da1d684a364dd0d436602bbb9c495c5eb8141` and
+differs only at that symbol. Both preserve SCS, ThinLTO, CFI, MODVERSIONS, NPU
+hardware-device and DSP settings. The pinned Android Clang 21.0.0 r563880c
+binary hash is `af0f25ca6818aed54c1cab03dc591acd549f385b8447148326a413e3e59c22b7`;
+`ld.lld` hash is
+`784146955ed87545385bf5c89b3b920ca7fe3ac83e034c3e6c53783ce544adf1`.
+With `ARCH=arm64 LLVM=1 LLVM_IAS=1 -j1`, the explicit targets
+`npu-session.o`, `npu-protodrv.o`, and `npu-vertex.o` compiled in each
+configuration. The output object hashes are recorded in the task board. The
+outputs are ThinLTO LLVM bitcode; no linked kernel/module/image was produced.
+
+Coordinator checks passed: lifecycle model/source suite and preflight
+synthetic suite, each normal and `python3 -O`; exact patch byte-equivalence to
+the pinned-base diff and reverse-apply also passed. Independent reviewer
+`/root/npu_lifecycle_independent_review` found no correctness issue in the
+conditional fixes and confirmed the source/Kconfig relationships. Reviewer's
+coverage caveat: source-string guard regression is not a substitute for the
+reported dual-config compile, which the reviewer did not independently rerun.
+No runtime model identity was exposed.
+
+This advances NPU evidence from source/model-tested to targeted translation
+units built under both relevant option values. It does not establish a full
+kernel build, firmware execution, safe NPU BOOTUP, inference, or a working
+driver on the phone. No firmware was staged; no device state changed.
