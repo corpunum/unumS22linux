@@ -653,10 +653,11 @@ or successful host build substitutes for those gates.
 ### Publication audit
 
 The final pre-push fetch confirmed `origin/master=20605dbe623e0909cf219c3cae9ef7bb597b15a6`.
-This review branch contains 43 commits beyond that baseline across 29 changed
-tracked paths. No reachable blob exceeds 20 MiB, and the new-path audit found
-no firmware packages, recovery images, model weights, credentials, host keys,
-or private trace files. The unrelated large local commits
+At the code-audit snapshot `7c6a87e`, the review branch had 43 commits beyond
+that baseline across 29 changed tracked paths; subsequent commits changed
+only these receipt documents. No reachable blob exceeds 20 MiB, and the
+new-path audit found no firmware packages, recovery images, model weights,
+credentials, host keys, or private trace files. The unrelated large local commits
 `1ccf3395303d62e2c31aff8bb88d46155e68dcb6` and
 `a52151f24eb2c3ae4fdd750020cdaeb9c9468c1f` are not ancestors. The two
 preserved implementation commits remain ancestors as recorded above.
