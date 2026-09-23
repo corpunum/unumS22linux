@@ -372,3 +372,14 @@ invented. This remains internal WIP, not an upstream submission.
 
 All evidence is source plus host model/test. No kernel C compilation, full
 kernel build, BOOTUP, device deployment, or live NPU functionality was tested.
+
+## Current WLAN acceptance receipt — 2026-09-23 20:48 UTC
+
+The installed sanitized WLAN acceptance script passed all 13 checks over the
+existing strict-host-key USB session. Coverage includes CNSS driver readiness,
+WPA2/CCMP association, native/Arch DNS, DNS and TLS-verified HTTPS explicitly
+bound to `wlan0`, preserved USB carrier/default routing, and resident-model
+health. The script did not emit SSID, MAC, address, gateway, or DNS IP. It
+reports reboot/autostart, USB-disconnected rescue, suspend/resume, roaming and
+sustained throughput as not tested. This confirms WLAN works now; it does not
+prove Tailscale/remote rescue independent of USB or survival of a kernel fault.
