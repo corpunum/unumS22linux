@@ -102,10 +102,11 @@ attestation. No override/fallback is known for those explicit worker calls.
 
 | Actual task handle | Worktree / branch | Assignment and current result |
 |---|---|---|
-| `/root/recovery_deploy_impl` | `/tmp/s22-luna-wave1-deploy-20260923`, `codex/s22-wave1-deploy-20260923` | Initial hardening `03eba0700f65e0ef1576a50a1ab43dd2b325d5bd`, verifier/staging fixes `0187e3c6e07a01b368bb558a95ddec96dfaceded`, and residual fixes `027c6cd49f56e77ecd85b9b61aa3d2f6e98cb28c` are integrated (last as `ac52713`). The post-open wrapper race and stage-parent fsync are fixed. Coordinator reran 37 tests in normal, `-O`, and `PYTHONOPTIMIZE=1` with trusted local AVB tool. Independent final review found a remaining P2: no digest pin for canonical `tools/s22-ssh` content, plus inherited PATH can substitute the `ssh` binary. Both are assigned back to the same author for a bounded fix. No device actions. |
+| `/root/recovery_deploy_impl` | `/tmp/s22-luna-wave1-deploy-20260923`, `codex/s22-wave1-deploy-20260923` | Hardening chain `03eba0700f65e0ef1576a50a1ab43dd2b325d5bd`, `0187e3c6e07a01b368bb558a95ddec96dfaceded`, `027c6cd49f56e77ecd85b9b61aa3d2f6e98cb28c`, and final `fb479c9f28c294048a02ec19faf68363666400ba` are integrated (final as `dfb9ce3`). AVB verifier and SSH wrapper are content-pinned; execution is from a sealed snapshot; SSH PATH is trusted; staging fsync gates success. Final independent review approved. Coordinator reran 38 tests in normal, `-O`, and `PYTHONOPTIMIZE=1` with the trusted local AVB tool. No device actions. |
 | `/root/bluetooth_impl` | `/tmp/s22-luna-wave1-bt-20260923`, `codex/s22-wave1-bt-20260923` | Initial bridge/test commit `7bade3f376bb0e810baca799e4dc5ec8f17b2443`, hardening `d3f50668ecf19c117a503f6cafaca19cc72df4e0`, and queue-overflow follow-up `f7f0d161e7bd9b82d30cb4d8b75e1ca3ca1a8a39` are integrated. Final attribution/cleanup-label fix `2af4d23f66d9bc857f3de45bc3f550dd1a886491` is integrated as `4163b89`. Tests assert the full 36-byte write and explicit 8-slot overflow; cleanup label is not an N_HCI-detach claim. Coordinator H4 12/12 and exact-pinned HCI source validation passed; independent final review approved. No kernel build/runtime HCI. |
 | `/root/audio_diag_impl` | `/tmp/s22-luna-wave1-audio-20260923`, `codex/s22-wave1-audio-20260923` | Completed synchronized snapshot and cleanup classification; worker commit `2d6d9a40c3d97064ef4a5ccc5ceb90071970b715`, integrated as `2b55003`. Coordinator reran snapshot 13, route 18, wrapper cleanup 4, bind-node 4, PCM prepare 5, and sync-nodes 3 tests; all passed. Firmware-stage suite had 3 passes and 1 error because public worktree lacks `calliope_sram.bin`. No live audio. |
-| `/root/recovery_hardening` | `/tmp/s22-luna-wave1-npu-20260923`, `codex/s22-wave1-npu-20260923`; exact pinned kernel worktree `/tmp/s22-kernel-npu-lifecycle-20260923` at `4e5c5ad7d950e4de0688b5663965f2075654b2ad` | First delivered missing-source fail-closed readiness fix as `d2852765b2b58bba434ba8ae1b28c078615ff13f`, integrated as `4397d61`; normal and `-O` tests pass, and optimized CLI now reports the missing lifecycle gates false with overall exit 2. Continuing actual POWER_NOTIFY wait/request ownership and reverse-unwind implementation in the pinned kernel tree. No BOOTUP, full build, or device actions. |
+| `/root/recovery_hardening` | `/tmp/s22-luna-wave1-npu-20260923`, `codex/s22-wave1-npu-20260923`; kernel worktree `/tmp/s22-kernel-npu-lifecycle-20260923` | Readiness fix `d2852765b2b58bba434ba8ae1b28c078615ff13f` is integrated as `4397d61`. Lifecycle patch is kernel commit `f264b971c6917598347fc14823e7d41d1e4a54e0`, based on `4e5c5ad7d950e4de0688b5663965f2075654b2ad`; exported patch, source-check model and test are repo commit `07cc061226b400090e46ec4669d709803cd2255f`, integrated as `d07628f`. The draft now uses NULL session plus an opaque cookie in unused POWER_CTL params, request-ID matching and bounded close/error handling. Coordinator reran lifecycle/preflight normal and optimized tests; independent Luna review is running. Tests do not compile kernel C. No full build, BOOTUP, or device action. |
+| `/root/userspace_close_range_impl` | `/tmp/s22-luna-wave2-userspace-20260923`, `codex/s22-wave2-userspace-20260923` | Commit `6b6432e507e5fa12579d8e0d8531519447d11e17` is integrated as `b3483e4`; only `test_clone3_compat.py` changed. Adds captured-output fallback, concurrent/repeated child cleanup, normal close range, CLOEXEC inheritance, invalid inputs and unshare behavior. Normal, `-O`, and `PYTHONOPTIMIZE=1` each passed 14 tests. Independent review found no behavior bug but requested portability/optimized-assert test improvements; follow-up is running. No device or system change. |
 
 ### Independent review lane
 
@@ -113,6 +114,8 @@ attestation. No override/fallback is known for those explicit worker calls.
 |---|---|---|
 | `/root/deployment_independent_review` | `/tmp/s22-luna-review-deploy-worker-20260923` (`03eba07`), `/tmp/s22-luna-review-deploy-fix-20260923` (`0187e3c6e07a01b368bb558a95ddec96dfaceded`), and `/tmp/s22-luna-review-deploy-final-20260923` (`027c6cd49f56e77ecd85b9b61aa3d2f6e98cb28c`) | Explicit Luna Max. Independent final review confirmed post-open path pinning and parent fsync, but found a P2: wrapper snapshot is not authenticated against the canonical digest, and inherited PATH can replace bare `ssh`. The exact canonical wrapper digest and tests are assigned to the author; no deployment/device commands. |
 | `/root/bluetooth_independent_review` | `/tmp/s22-luna-review-bt-worker-20260923`, `/tmp/s22-luna-review-bt-followup-20260923`, `/tmp/s22-luna-review-bt-overflow-20260923` (`f7f0d161e7bd9b82d30cb4d8b75e1ca3ca1a8a39`), and `/tmp/s22-luna-review-bt-final-20260923` (`2af4d23f66d9bc857f3de45bc3f550dd1a886491`) | Initial, second and final independent Luna Max reviews completed. Final review approved the byte-count, explicit overflow receipt, and precise cleanup label; H4 passed 12/12 and pinned-source validation passed. HCI patch remains unbuilt; no device/runtime proof. |
+| `/root/npu_lifecycle_independent_review` | `/tmp/s22-luna-review-npu-repo-20260923` (`07cc061226b400090e46ec4669d709803cd2255f`) and `/tmp/s22-luna-review-npu-kernel-20260923` (`f264b971c6917598347fc14823e7d41d1e4a54e0`) | Explicit Luna Max independent review of ownership, timeout, callback/close and boot unwind is running; host model/source tests only, no kernel build or BOOTUP. |
+| `/root/userspace_close_range_review` | `/tmp/s22-luna-review-userspace-20260923` (`6b6432e507e5fa12579d8e0d8531519447d11e17`) | Explicit Luna Max review completed: 14/14 passed in normal, `-O`, and `PYTHONOPTIMIZE=1`; no functional bug. It found three test-quality gaps: syscall availability tied to libc export, invalid-range ENOSYS handling, and child asserts optimized away under `PYTHONOPTIMIZE=1`. Author follow-up is active; host-only, no phone access. |
 
 The branches/worktrees are isolated from one another. The original checkout
 remains dirty and divergent (`master` at `fb60a2c1...`, 44 ahead of
@@ -259,3 +262,59 @@ Tailscale ping observed over the same USB path does not change that. No new
 recovery experiment is queued until a genuinely independent rescue method and
 candidate-specific rollback are verified; this is the exact outstanding
 device gate, not a host-work blocker.
+
+## Follow-on host implementation — 2026-09-23 20:12 UTC
+
+- Independent deployment re-review of `027c6cd49f56e77ecd85b9b61aa3d2f6e98cb28c`
+  closed the post-open pathname race and parent-fsync findings, but found a
+  remaining P2: the opened wrapper snapshot is not authenticated against the
+  canonical helper digest, and inherited `PATH` can redirect its bare `ssh`
+  command. The author is implementing canonical SHA-256 pinning and a trusted
+  `ssh` lookup with negative tests. The current 37-test results do not close
+  this finding; deployment remains blocked.
+- A later-wave Luna worker `/root/userspace_close_range_impl` is implementing
+  the missing host behavior matrix in isolated worktree
+  `/tmp/s22-luna-wave2-userspace-20260923`, limited to the close_range filter
+  and tests. Coordinator baseline: `test_clone3_compat.py` passed 8 tests and
+  the separately compiled close_range filter self-test reported ENOSYS with
+  seccomp/NoNewPrivs; no device or package operation.
+- NPU source-lifetime review now requires POWER_CTL to carry no session pointer
+  across timeout/close: `msgid_issue` supports NULL and the POWER_CTL callback
+  ignores that argument, while the opaque waiter cookie travels in unused
+  `param0/param1`. The implementation worker is correcting and testing this;
+  no patch has yet been accepted or built.
+
+The native phone baseline remains the read-only `5.10.260-g4e5c5ad7d950`
+kernel with `native-guardian` and HTTP 200 assistant health from the 19:59 UTC
+probe. No phone state changed during this follow-on work.
+
+## Implementation results — 2026-09-23 20:18 UTC
+
+- Deployment follow-up `fb479c9f28c294048a02ec19faf68363666400ba` is
+  integrated as `dfb9ce3`. It pins canonical `tools/s22-ssh` SHA-256,
+  rejects regular-file impostors, replaces inherited PATH with the verified
+  root-owned `/usr/bin`, and retains sealed-FD race and staging-parent fsync
+  checks. Independent Luna review approved the exact commit. Coordinator and
+  reviewer each passed 38/38 in normal, `-O`, and `PYTHONOPTIMIZE=1` modes
+  with trusted local AVB tool; no deploy mode ran.
+- NPU lifecycle patch `f264b971c6917598347fc14823e7d41d1e4a54e0` is based on
+  pinned kernel `4e5c5ad7d950e4de0688b5663965f2075654b2ad`. Its sanitized
+  exported patch and host regressions are integrated as `d07628f`. Normal and
+  optimized lifecycle model/source tests plus preflight tests pass. Independent
+  Luna review is running. These tests do not compile/execute kernel C; no full
+  kernel build or BOOTUP occurred. `checkpatch.pl` reported no errors but four
+  warnings (two extern and two CamelCase uses of existing APIs).
+- Close-range userspace reliability suite `6b6432e507e5fa12579d8e0d8531519447d11e17`
+  is integrated as `b3483e4`. Coordinator and independent review each passed
+  14/14 in normal, `-O`, and `PYTHONOPTIMIZE=1`. Review found no functional
+  issue, but follow-up is improving older-libc/ENOSYS portability and replacing
+  child `assert`s removed by optimized Python. These tests establish host
+  syscall behavior only, not the phone kernel.
+- Coordinator reran deployment (38/38 × three modes), NPU four normal/
+  optimized invocations, Bluetooth H4 (12/12) and pinned-source validation,
+  plus audio route/snapshot/cleanup suites (18/13/4/4/5/3). These remain
+  separate from builds and physical driver acceptance.
+- The original dirty checkout and both preserved commits remain untouched.
+  All changes are WIP on the unmerged review branch; none has been merged or
+  deployed. Current phone state is unchanged from the read-only probe; no
+  coordinator device operation occurred.

@@ -172,3 +172,73 @@ storage statements above:
 - No new hardware functionality was verified. The next device experiment
   remains blocked on independently usable rescue plus a candidate-specific
   rollback gate; source and host tests continue independently.
+
+## Follow-on execution — 2026-09-23 20:12 UTC
+
+- Independent review of deployment follow-up `027c6cd49f56e77ecd85b9b61aa3d2f6e98cb28c`
+  confirms the post-open pathname replacement and staging-parent fsync fixes.
+  It found a remaining P2: a regular but malicious Bash wrapper present before
+  validation is accepted because the sealed snapshot is not compared to the
+  canonical `tools/s22-ssh` SHA-256; inherited `PATH` can also substitute bare
+  `ssh`. The worker is implementing the reviewed canonical digest pin and
+  trusted lookup with negative tests. No deployment or device access occurred.
+- The full 37-test deployment suite passed in normal, `python3 -O`, and
+  `PYTHONOPTIMIZE=1` modes with the trusted local AVB tool selected through
+  `S22_AVBTOOL`; no skips. `py_compile`, deployer `--help`, and diff checks
+  passed. Without that tool, three AVB-specific cases skip. The image builder
+  help attempt read its required `builds/audio-early-20260922/ramdisk.cpio`
+  before parsing arguments; that fixture is absent in the public worktree, so
+  the probe failed before build execution. No build was attempted.
+- The next-wave `/root/userspace_close_range_impl` Luna worker is implementing
+  a bounded host-only semantics/regression suite in an isolated worktree.
+  Before its changes, the coordinator ran `python3
+  tools/hardware/test_clone3_compat.py` (8 passed) and compiled/ran the filter's
+  `--self-test` (ENOSYS, seccomp filter, NoNewPrivs verified). No system or
+  phone state was changed.
+- NPU lifetime review now rejects retaining a session pointer across a
+  POWER_CTL wait that can outlive timeout/close; the draft uses a NULL session
+  (accepted by the pinned `msgid_issue`) and stores its opaque cookie in unused
+  POWER_CTL `param0/param1`. This is under implementation and still needs
+  executable tests and independent review. NPU BOOTUP remains disabled.
+- Current phone state remains as in the read-only 19:59 UTC probe; no new
+  hardware test, build, deployment, reboot, or filesystem cleanup occurred.
+
+## Implementation and review checkpoint — 2026-09-23 20:18 UTC
+
+- Deployment final follow-up `fb479c9f28c294048a02ec19faf68363666400ba`,
+  integrated as `dfb9ce3`, adds the canonical SSH-wrapper digest pin, rejects
+  a pre-validation regular Bash shim, and forces the verified root-owned
+  `/usr/bin` for `ssh`. Independent Luna review approved the exact commit.
+  Coordinator reran 38/38 tests in normal, `-O`, and `PYTHONOPTIMIZE=1` modes
+  with the trusted local AVB tool selected; no skips. Pycompile and diff checks
+  pass. This closes the review findings but does not mean deployment was run.
+- NPU lifecycle kernel commit `f264b971c6917598347fc14823e7d41d1e4a54e0`
+  targets exact base `4e5c5ad7d950e4de0688b5663965f2075654b2ad`. Its
+  sanitized patch and host tests are in repo commit
+  `07cc061226b400090e46ec4669d709803cd2255f`, integrated as `d07628f`.
+  Coordinator reran the lifecycle model/source test normal and `-O` with the
+  exact kernel worktree, and preflight tests normal and `-O`; all passed. The
+  patch reverse-applies to the committed candidate. `checkpatch.pl` reported
+  zero errors but two extern warnings and two CamelCase warnings against
+  existing APIs. Independent Luna review is active. These tests are a host
+  reference model and static source contracts only; no kernel C compilation,
+  full build, BOOTUP or device runtime was performed. Firmware work is not
+  cancelled on timeout; this remains a runtime concern.
+- The close_range follow-up `6b6432e507e5fa12579d8e0d8531519447d11e17`,
+  integrated as `b3483e4`, expands `test_clone3_compat.py` without changing the
+  C filter. Coordinator and independent reviewer each passed 14/14 tests in
+  normal, `python3 -O`, and `PYTHONOPTIMIZE=1` modes. Review found no
+  functional defect, but requested three quality fixes: use the syscall when
+  libc lacks an exported wrapper, handle ENOSYS consistently in unsupported
+  kernels, and avoid child `assert`s that disappear under `PYTHONOPTIMIZE=1`.
+  The author is implementing these. This validates host behavior, not the
+  phone's downstream close_range implementation.
+- Coordinator reran Bluetooth H4 12/12 and pinned-source HCI checks, plus
+  audio host suites with 18/13/4/4/5/3 passing tests. No kernel build,
+  deployment, live Bluetooth/audio, or NPU hardware trial occurred.
+- Last verified phone state remains the read-only 19:59 UTC snapshot:
+  `5.10.260-g4e5c5ad7d950`, `native-guardian`, healthy resident assistant,
+  root overlay 94% used and userdata with ample headroom. The upperdir path is
+  not visible from that root view; no cleanup/install was attempted. USB SSH
+  remains a current access path, not rescue for a failed kernel. No coordinator
+  device operation occurred after that probe.
