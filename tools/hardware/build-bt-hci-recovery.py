@@ -19,6 +19,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE_IMAGE = ROOT / "builds/audio-extra-v2-20260922/recovery.img"
+DEFAULT_AVBTOOL = ROOT / "tools/avb/avbtool.py"
 BASE_SHA256 = "758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b"
 PARTITION_SIZE = 100663296
 FINGERPRINT = "samsung/lineage_r0s/r0s:16/BP4A.251205.006/4a67c928b4:userdebug/release-keys"
@@ -43,6 +44,25 @@ def run(*args: str) -> None:
     subprocess.run(list(args), check=True)
 
 
+def verify_image(avbtool: Path, image: Path) -> str:
+    """Require cryptographic/footer verification before accepting a candidate."""
+    avbtool = Path(avbtool)
+    image = Path(image)
+    if not avbtool.is_file() or avbtool.is_symlink():
+        raise RuntimeError(f"pinned avbtool is missing or is not a regular file: {avbtool}")
+    if not image.is_file() or image.is_symlink():
+        raise RuntimeError(f"candidate image is missing or is not a regular file: {image}")
+    try:
+        result = subprocess.run(
+            [sys.executable, str(avbtool), "verify_image", "--image", str(image)],
+            check=True, capture_output=True, text=True,
+        )
+    except subprocess.CalledProcessError as error:
+        detail = (error.stderr or error.stdout or "verifier returned nonzero").strip()
+        raise RuntimeError(f"AVB verify_image failed for {image}: {detail}") from error
+    return result.stdout.strip()
+
+
 def load_unpacker():
     source = ROOT / "tools/mkbootimg/unpack_bootimg.py"
     spec = importlib.util.spec_from_file_location("bt_hci_unpacker", source)
@@ -64,16 +84,24 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--kernel", required=True, type=Path, help="built arm64 Image")
     parser.add_argument("--out-dir", required=True, type=Path, help="new candidate output directory")
+    parser.add_argument(
+        "--avbtool", type=Path, default=DEFAULT_AVBTOOL,
+        help="pinned avbtool.py path (defaults to tools/avb/avbtool.py)",
+    )
     args = parser.parse_args()
 
     if args.kernel.is_symlink():
         raise SystemExit("kernel input must not be a symlink")
     kernel = args.kernel.resolve(strict=True)
+    if args.out_dir.is_symlink():
+        raise SystemExit("output directory must not be a symlink")
     out = args.out_dir.resolve(strict=False)
     if not kernel.is_file() or kernel.stat().st_size == 0:
         raise SystemExit("kernel must be a nonempty regular file")
     if not BASE_IMAGE.is_file() or sha(BASE_IMAGE) != BASE_SHA256:
         raise SystemExit("pinned audio-extras base image is missing or has the wrong hash")
+    if not args.avbtool.is_file() or args.avbtool.is_symlink():
+        raise SystemExit(f"pinned avbtool.py is missing or is not a regular file: {args.avbtool}")
     if out.exists():
         raise SystemExit(f"refusing existing output directory: {out}")
     try:
@@ -102,7 +130,7 @@ def main() -> int:
             "--board", "", "--cmdline", " bootconfig",
         )
         run(
-            sys.executable, str(ROOT / "tools/avb/avbtool.py"), "add_hash_footer",
+            sys.executable, str(args.avbtool), "add_hash_footer",
             "--image", str(candidate), "--partition_size", str(PARTITION_SIZE),
             "--partition_name", "recovery", "--algorithm", "NONE",
             "--rollback_index", "0", "--salt", SALT,
@@ -110,6 +138,10 @@ def main() -> int:
         )
         if candidate.stat().st_size != PARTITION_SIZE:
             raise SystemExit("candidate size does not exactly match RECOVERY partition")
+
+        # A successful footer creation/info dump is not verification.  Require
+        # avbtool's full image verifier before header/payload review or output.
+        avb_verification = verify_image(args.avbtool, candidate)
 
         candidate_dir = work / "candidate"
         candidate_info = unpack(unpacker, candidate, candidate_dir)
@@ -127,7 +159,7 @@ def main() -> int:
                 raise SystemExit(f"candidate changed the base {name} payload")
 
         avb_report = subprocess.run(
-            [sys.executable, str(ROOT / "tools/avb/avbtool.py"), "info_image", "--image", str(candidate)],
+            [sys.executable, str(args.avbtool), "info_image", "--image", str(candidate)],
             check=True, capture_output=True, text=True,
         ).stdout
         out.mkdir()
@@ -146,7 +178,9 @@ def main() -> int:
             "unchanged_payloads": {
                 name: sha(candidate_dir / name) for name in ("ramdisk", "dtb", "recovery_dtbo")
             },
-            "avb_info": avb_report,
+            "avb_verify_image": avb_verification,
+            "avb_info_image": avb_report,
+            "avb_note": "algorithm NONE verifies the AVB footer/hash only; it does not establish Samsung authentication or bootability",
         }
         (out / "manifest.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
         print(json.dumps(report, indent=2, sort_keys=True))
