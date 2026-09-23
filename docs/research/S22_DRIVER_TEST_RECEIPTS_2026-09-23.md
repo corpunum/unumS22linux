@@ -409,9 +409,14 @@ public review snapshot lacks the exact config, AIE firmware artifacts, and
 private/pinned lifecycle source closure. This is the intended fail-closed
 result, not a reason to stage firmware or attempt BOOTUP.
 
-One follow-up object compilation is in progress in the existing isolated NPU
-worker context. It is limited to candidate translation units and does not
-authorize deployment, a full image build, BOOTUP, or any phone operation.
+Object-compile setup is in progress in the existing isolated NPU worker
+context. Its first Kconfig-prepare invocation omitted `LLVM_IAS=1`, which
+would have normalized ThinLTO off; the worker caught this before compiling a
+candidate translation unit and will not use those normalized configs. The
+worker is restoring copies from the untouched reference and rerunning prepare
+with the required flag. The planned check remains limited to candidate
+translation units and does not authorize deployment, a full image build,
+BOOTUP, or phone operation.
 Model evidence remains explicit selection only: local Codex CLI config is
 Luna/xhigh, the catalog supports Luna/max, worker calls were explicitly
 Luna/max, and this execution interface exposes no runtime/session attestation.
