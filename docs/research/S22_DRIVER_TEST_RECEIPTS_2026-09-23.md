@@ -196,14 +196,32 @@ functionality resulted from this read-only probe.
 
 ### Current worker queue
 
-- `/root/input_power_test_impl` was launched on
-  `/tmp/s22-luna-wave2-input-power-20260923` for host-only executable tests of
-  read-only input/power/thermal/camera inventory and bounded event observation.
-  The requested selection was `gpt-6-luna` / `max`; runtime/session metadata is
-  unavailable. It has no device authorization.
+- `/root/input_power_test_impl` implemented the host-only collector tests in
+  `/tmp/s22-luna-wave2-input-power-20260923`, commits `e2163e9` and `77a78c9`.
+  Independent review of `e2163e9` found a deadline overrun when an event FD
+  remained continuously readable; the follow-up adds an inner drain deadline
+  check and a deterministic regression. Coordinator passes five tests in each
+  normal, `-O`, and `PYTHONOPTIMIZE=1` run. Independent re-review by
+  `/root/input_power_independent_review` approved `77a78c9`; its deterministic
+  test also failed against the pre-fix parent as intended. Requested selection
+  was `gpt-6-luna` / `max`, but runtime/session metadata is unavailable. No
+  device authorization was given.
 - `/root/recovery_hardening` is implementing the reviewed NPU
   timeout/publication handshake in its existing exact-pinned kernel worktree.
   No BOOTUP, build, or live experiment is authorized by that assignment.
+
+### Read-only input/power/camera inventory
+
+At approximately 2026-09-23 20:36 UTC, the documented command
+`python3 /usr/local/bin/input-power-readiness.py --camera` failed because the
+script is absent from that installed path. No staging or installation was
+attempted. A direct read-only sysfs/dev-node fallback found `sec_touchscreen`
+at input event7 and power keys at event0/event1; battery reported 100%, Full,
+Good, 27.6 C; sampled CPU zones were 31 C, G3D 32 C, and NPU 31 C. Exynos
+ISP/MFC/JPEG/scaler video nodes were present. A `max77705-fuelgauge/online`
+read returned EINVAL. No physical finger/key event was observed, and no camera
+was opened or streamed. This is node enumeration and telemetry only, not
+physical acceptance.
 
 ## Continuation update — 2026-09-23
 
