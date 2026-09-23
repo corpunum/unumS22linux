@@ -431,3 +431,14 @@ capture, or complete power-driver acceptance.
 - Explicit `gpt-6-luna` / `max` was requested for the worker, but this runtime
   did not expose model/session attestation. It was an implementation task, not
   research-only. The high-risk patch remains unmerged and undeployed.
+
+## Wi-Fi and resident-service acceptance — 2026-09-23 20:48 UTC
+
+The installed sanitized WLAN acceptance script ran over strict-host-key SSH
+and passed all 13 checks: firmware/driver readiness, WPA2/CCMP association,
+native and Arch DNS, DNS plus TLS-verified HTTP 200 forced through `wlan0`,
+preserved USB carrier/default route, and resident model health. The script
+emits no SSID, MAC, address, gateway, or DNS IP. It explicitly leaves
+reboot/autostart, USB-disconnected rescue, suspend/resume, roaming, and
+sustained-throughput untested. This verifies current WLAN service, but does
+not establish independent rescue or cable-free persistence.
