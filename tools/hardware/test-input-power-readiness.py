@@ -145,6 +145,36 @@ class InputPowerReadinessTests(unittest.TestCase):
         self.assertLessEqual(observed_timeouts[0], 0.05)
         self.assertLess(elapsed, 0.5)
 
+    def test_continuously_ready_event_drain_stops_at_the_deadline(self) -> None:
+        self.put(self.sys_root, "class/input/event0/device/name", "synthetic-input\n")
+        event_path = self.dev_root / "input/event0"
+        event_path.parent.mkdir(parents=True, exist_ok=True)
+        event_path.touch()
+
+        sample = readiness.EVENT.pack(1700000000, 12345, 1, 30, 1)
+        clock_values = iter((0.0, 0.1, 0.2, 0.3, 0.4, 0.5))
+        reads = 0
+
+        def continuous_read(fd: int, size: int) -> bytes:
+            nonlocal reads
+            reads += 1
+            if reads > 2:
+                raise AssertionError("event FD was drained beyond the deadline")
+            return sample
+
+        def always_ready(readers: list[int], writers: object, errors: object,
+                         timeout: float | None = None) -> tuple[list[int], list[object], list[object]]:
+            return readers, [], []
+
+        with mock.patch.object(readiness.time, "monotonic", side_effect=lambda: next(clock_values)), \
+                mock.patch.object(readiness.select, "select", side_effect=always_ready), \
+                mock.patch.object(readiness.os, "read", side_effect=continuous_read):
+            events = readiness.observe(0.4, self.sys_root, self.dev_root)
+
+        self.assertEqual(reads, 2)
+        self.assertEqual(len(events), 2)
+        self.assertTrue(all(event["code"] == 30 and event["value"] == 1 for event in events))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
