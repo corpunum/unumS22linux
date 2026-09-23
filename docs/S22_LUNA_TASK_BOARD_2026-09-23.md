@@ -100,10 +100,16 @@ IDs or runtime identity attestation. There is no known worker override/fallback.
 
 | Actual task handle | Worktree / branch | Assignment and current result |
 |---|---|---|
-| `/root/recovery_deploy_impl` | `/tmp/s22-luna-wave1-deploy-20260923`, `codex/s22-wave1-deploy-20260923` | Implementing deployment/build hardening, embedded checks, AVB verify and negative tests. Checkpoint reports changes to the two assigned deploy/build paths plus `deploy-audio-recovery.py`, and a new host test. 22 focused tests passed before the latest `-O` additions; final all-mode run/review/commit pending. No device actions. |
+| `/root/recovery_deploy_impl` | `/tmp/s22-luna-wave1-deploy-20260923`, `codex/s22-wave1-deploy-20260923` | Completed deployment/build hardening in four paths; worker commit `03eba0700f65e0ef1576a50a1ab43dd2b325d5bd`, integrated as `9dc83b3`. Coordinator reran 28 tests successfully in normal, `-O`, and `PYTHONOPTIMIZE=1` modes; py_compile and diff checks passed. No device actions. |
 | `/root/bluetooth_impl` | `/tmp/s22-luna-wave1-bt-20260923`, `codex/s22-wave1-bt-20260923` | Completed host-only bridge/test improvements; commit `7bade3f376bb0e810baca799e4dc5ec8f17b2443`. Changed H4 bridge cleanup reporting and expanded bridge/HCI negative tests. H4 suite: 12 passed. Candidate HCI patch applied in a temporary directory to the clean pinned kernel source, lifecycle contract plus three mutation negatives passed. No kernel build/runtime HCI. Independent review is pending next available slot. |
-| `/root/audio_diag_impl` | `/tmp/s22-luna-wave1-audio-20260923`, `codex/s22-wave1-audio-20260923` | Implementing synchronized, bounded audio DMA snapshot and runner/cleanup classification. Current snapshot rewrite py-compiles; runner, tests, and commit pending. No live audio. |
+| `/root/audio_diag_impl` | `/tmp/s22-luna-wave1-audio-20260923`, `codex/s22-wave1-audio-20260923` | Completed synchronized snapshot and cleanup classification; worker commit `2d6d9a40c3d97064ef4a5ccc5ceb90071970b715`, integrated as `2b55003`. Coordinator reran snapshot 13, route 18, wrapper cleanup 4, bind-node 4, PCM prepare 5, and sync-nodes 3 tests; all passed. Firmware-stage suite had 3 passes and 1 error because public worktree lacks `calliope_sram.bin`. No live audio. |
 | `/root/recovery_hardening` | `/tmp/s22-luna-wave1-npu-20260923`, `codex/s22-wave1-npu-20260923`; exact pinned kernel worktree `/tmp/s22-kernel-npu-lifecycle-20260923` at `4e5c5ad7d950e4de0688b5663965f2075654b2ad` | Reassigned from recovery scouting to NPU implementation. Found missing-source fail-open in `power_notify_wait_resolved`, unbounded POWER_NOTIFY wait, ignored enqueue/result errors, and incomplete boot failure unwind. Implementing in the bounded kernel/preflight/test ownership. No BOOTUP, build, or device actions. |
+
+### Independent review lane
+
+| Actual task handle | Worktree / exact patch | Status |
+|---|---|---|
+| `/root/deployment_independent_review` | `/tmp/s22-luna-review-deploy-worker-20260923`, commit `03eba0700f65e0ef1576a50a1ab43dd2b325d5bd` | Explicit Luna Max, read-only review in progress. Inspecting deployment gates, remote quoting, rollback, partial I/O, AVB semantics and negative tests. No operational deployment/device commands. |
 
 The branches/worktrees are isolated from one another. The original checkout
 remains dirty and divergent (`master` at `fb60a2c1...`, 44 ahead of
@@ -136,6 +142,19 @@ review branch merges fetched `origin/master` correction commit
 - AVB `verify_image` on the two existing recovery artifacts passed footer/hash
   checks; both use algorithm `NONE`. This does not establish Samsung
   authentication or bootability. No image was built or flashed here.
+- Deployment hardening commit `03eba0700f65e0ef1576a50a1ab43dd2b325d5bd`
+  adds explicit target/artifact/manifest/rollback checks, embedded fail-closed
+  write handling and builder AVB verification. The coordinator reran
+  `test-recovery-deployment-hardening.py` in normal, `python3 -O`, and
+  `PYTHONOPTIMIZE=1` modes: 28/28 passed in each, including optimization-mode
+  target/hash refusal checks. Syntax and patch checks passed. This
+  is host-only; independent review is ongoing and no deployment command ran.
+- Audio diagnostics commit `2d6d9a40c3d97064ef4a5ccc5ceb90071970b715`
+  adds synchronized read-only source snapshots and child/PCM cleanup
+  classification. The six suites listed above all passed under coordinator
+  rerun. `test_audio_firmware_stage.py` remains 3/4 with one error because the
+  public checkout lacks `calliope_sram.bin`; no private firmware was copied.
+  No snapshot execute mode or live audio trial ran.
 - Bluetooth HCI validator invoked once with a stale temp source path failed
   due to that path being absent; rerunning with `--base-source` against the
   exact pinned source above passed. No test artifact or source was modified by
