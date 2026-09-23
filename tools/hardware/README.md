@@ -52,13 +52,15 @@ does not discover tests or accept test paths. The suite covers the NPU
 lifecycle model and preflight gates, audio DMA progress classification, input
 readiness against temporary fixtures, and the Bluetooth H4/IBS bridge against
 local PTYs. The bridge test needs the Ubuntu runner's existing `cc` compiler;
-it does not open a physical UART. Two small assertion-based scripts run only
-normally because Python `-O` would remove their checks. Other allowlisted tests
-also run with `-O`. All child processes receive a clean temporary home and an
-environment without inherited device overrides, credentials, or API tokens.
-This CI job makes no phone connection, hardware probe, firmware/model access,
-or network request from its tests; it uses no CI secrets and grants only
-read-only repository permission. Tests that require a private kernel tree,
-firmware/model assets, deployment transport, or live device interface are
-excluded. Review any proposed addition before adding its literal path to the
-runner allowlist.
+it attaches the `N_HCI` line discipline to its PTY, registers a synthetic
+kernel HCI device, and reads its `AF_BLUETOOTH` `HCI_GET_DEV_INFO` record. It
+does not access a physical controller, phone, or network. Two small
+assertion-based scripts run only normally because Python `-O` would remove
+their checks. Other allowlisted tests also run with `-O`. All child processes
+receive a clean temporary home and an environment without inherited device
+overrides, credentials, or API tokens. The tests make no phone connection,
+physical hardware probe, firmware/model access, or network request; the workflow
+uses no CI secrets and grants only read-only repository permission. Tests that
+require a private kernel tree, firmware/model assets, deployment transport, or
+live device interface are excluded. Review any proposed addition before
+adding its literal path to the runner allowlist.
