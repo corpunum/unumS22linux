@@ -19,11 +19,23 @@ runner = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = runner
 SPEC.loader.exec_module(runner)
 
+EXPECTED_HOST_TEST_PATHS = (
+    "tools/hardware/test-npu-session-lifecycle.py",
+    "tools/hardware/test-npu-boot-preflight.py",
+    "tools/hardware/test-audio-progress-snapshot.py",
+    "tools/hardware/test-input-power-readiness.py",
+    "tools/hardware/test-bt-h4-ibs-bridge.py",
+    "tools/hardware/test-bt-qca6490-patch-receipt.py",
+    "tools/hardware/test-close-range-kernel-fix.py",
+)
+
 
 class RunnerPolicyTests(unittest.TestCase):
     def test_allowlist_is_explicit_unique_and_local(self) -> None:
+        self.assertEqual(tuple(case.path for case in runner.HOST_TESTS),
+                         EXPECTED_HOST_TEST_PATHS)
         paths = runner.validate_allowlist()
-        self.assertEqual(len(paths), 7)
+        self.assertEqual(len(paths), len(EXPECTED_HOST_TEST_PATHS))
         self.assertEqual(len(set(paths)), len(paths))
         self.assertTrue(all(path.is_file() for path in paths))
         self.assertTrue(all(path.is_relative_to(runner.ROOT) for path in paths))
@@ -39,7 +51,18 @@ class RunnerPolicyTests(unittest.TestCase):
         )
         for tests in invalid:
             with self.subTest(tests=tests), self.assertRaises(ValueError):
-                runner.validate_allowlist(tests=tests)
+                runner._resolve_test_paths(runner.ROOT, tests)
+
+    def test_rejects_in_memory_substitution_of_live_device_script(self) -> None:
+        unsafe_path = "tools/hardware/wifi-bringup-once.py"
+        self.assertTrue((runner.ROOT / unsafe_path).is_file())
+        original = runner.HOST_TESTS
+        runner.HOST_TESTS = (runner.HostTest(unsafe_path), *original[1:])
+        try:
+            with self.assertRaisesRegex(ValueError, "reviewed allowlist"):
+                runner.validate_allowlist()
+        finally:
+            runner.HOST_TESTS = original
 
     def test_rejects_symlink_entries_and_path_escape(self) -> None:
         with tempfile.TemporaryDirectory(prefix="s22-runner-policy-") as temp:
@@ -50,7 +73,7 @@ class RunnerPolicyTests(unittest.TestCase):
             link = root / "tools/hardware/test-link.py"
             link.symlink_to(external)
             with self.assertRaises(FileNotFoundError):
-                runner.validate_allowlist(
+                runner._resolve_test_paths(
                     root, (runner.HostTest("tools/hardware/test-link.py"),))
 
         with tempfile.TemporaryDirectory(prefix="s22-runner-escape-") as temp, \
@@ -61,7 +84,7 @@ class RunnerPolicyTests(unittest.TestCase):
             (root / "tools").mkdir()
             (root / "tools/hardware").symlink_to(external, target_is_directory=True)
             with self.assertRaises(ValueError):
-                runner.validate_allowlist(
+                runner._resolve_test_paths(
                     root, (runner.HostTest("tools/hardware/test-escape.py"),))
 
     def test_child_environment_drops_inherited_credentials_and_device_overrides(self) -> None:

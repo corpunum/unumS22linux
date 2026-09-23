@@ -30,7 +30,18 @@ class HostTest:
 
 
 # Keep this an explicit allowlist. Do not replace it with unittest discovery,
-# globbing, a caller-supplied path, or a whole-directory scan.
+# globbing, a caller-supplied path, or a whole-directory scan. Validation below
+# checks this sequence against the independently pinned reviewed path set.
+REVIEWED_HOST_TEST_PATHS = (
+    "tools/hardware/test-npu-session-lifecycle.py",
+    "tools/hardware/test-npu-boot-preflight.py",
+    "tools/hardware/test-audio-progress-snapshot.py",
+    "tools/hardware/test-input-power-readiness.py",
+    "tools/hardware/test-bt-h4-ibs-bridge.py",
+    "tools/hardware/test-bt-qca6490-patch-receipt.py",
+    "tools/hardware/test-close-range-kernel-fix.py",
+)
+
 HOST_TESTS = (
     HostTest("tools/hardware/test-npu-session-lifecycle.py"),
     HostTest("tools/hardware/test-npu-boot-preflight.py"),
@@ -50,9 +61,8 @@ HOST_TESTS = (
 )
 
 
-def validate_allowlist(root: Path = ROOT,
-                       tests: Sequence[HostTest] = HOST_TESTS) -> tuple[Path, ...]:
-    """Resolve only fixed allowlist entries and reject symlinks or path escapes."""
+def _resolve_test_paths(root: Path, tests: Sequence[HostTest]) -> tuple[Path, ...]:
+    """Resolve entries after set-level validation; reject symlinks and escapes."""
     resolved_root = root.resolve(strict=True)
     paths: list[Path] = []
     seen: set[str] = set()
@@ -71,6 +81,17 @@ def validate_allowlist(root: Path = ROOT,
             raise ValueError(f"allowlisted test escapes repository: {test.path}")
         paths.append(resolved)
     return tuple(paths)
+
+
+def validate_allowlist(root: Path = ROOT,
+                       tests: Sequence[HostTest] | None = None) -> tuple[Path, ...]:
+    """Require the exact reviewed script sequence before resolving its files."""
+    if tests is None:
+        tests = HOST_TESTS
+    selected = tuple(test.path for test in tests)
+    if selected != REVIEWED_HOST_TEST_PATHS:
+        raise ValueError("host test paths differ from the reviewed allowlist")
+    return _resolve_test_paths(root, tests)
 
 
 def child_environment(temp_root: Path) -> dict[str, str]:
