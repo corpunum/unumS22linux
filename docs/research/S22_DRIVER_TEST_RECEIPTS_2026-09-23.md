@@ -15,6 +15,8 @@ or reboot was performed for this receipt.
   host regressions.
 - `d3f50668ecf19c117a503f6cafaca19cc72df4e0`, integrated as
   `82542fe` — Bluetooth test temp isolation and capability-denial mutations.
+- `f7f0d161e7bd9b82d30cb4d8b75e1ca3ca1a8a39`, integrated as
+  `a5ca9d9` — exact queue-overflow integration receipt assertions.
 - `03eba0700f65e0ef1576a50a1ab43dd2b325d5bd`, integrated as
   `9dc83b3` — RECOVERY deployment/build hardening and optimization-mode
   negative tests.
@@ -75,8 +77,11 @@ requested. The author follow-up is committed as
 independent re-review confirmed those fixes. It found one remaining P3: the
 integrated queue-overflow test does not assert that the ninth command caused
 termination rather than an unrelated early bridge failure. The author is
-adding queue-count/detach-result assertions. This does not verify the HCI
-kernel patch by compilation or runtime; device deployment remains blocked.
+follow-up `f7f0d161e7bd9b82d30cb4d8b75e1ca3ca1a8a39` adds exactly eight
+accepted-command records, ninth-command nonzero termination, and detach-result
+assertions; coordinator reruns pass. A final independent review of that small
+follow-up is active. This does not verify the HCI kernel patch by compilation
+or runtime; device deployment remains blocked.
 
 The earlier NPU missing-source subgate false-green is fixed in commit
 `d2852765b2b58bba434ba8ae1b28c078615ff13f` (integrated as `4397d61`). Normal
