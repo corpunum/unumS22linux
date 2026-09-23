@@ -1,0 +1,92 @@
+diff --git a/net/bluetooth/hci_sock.c b/net/bluetooth/hci_sock.c
+index 590424122..d60eeff5c 100644
+--- a/net/bluetooth/hci_sock.c
++++ b/net/bluetooth/hci_sock.c
+@@ -41,3 +41,3 @@ static DEFINE_MUTEX(mgmt_chan_list_lock);
+ 
+-// static DEFINE_IDA(sock_cookie_ida);
++static DEFINE_IDA(sock_cookie_ida);
+ 
+@@ -97,3 +97,2 @@ u32 hci_sock_get_cookie(struct sock *sk)
+ 
+-#if 0
+ static bool hci_sock_gen_cookie(struct sock *sk)
+@@ -124,3 +123,2 @@ static void hci_sock_free_cookie(struct sock *sk)
+ }
+-#endif
+ 
+@@ -503,3 +501,2 @@ static struct sk_buff *create_monitor_event(struct hci_dev *hdev, int event)
+ 
+-#if 0
+ static struct sk_buff *create_monitor_ctrl_open(struct sock *sk)
+@@ -599,3 +596,2 @@ static struct sk_buff *create_monitor_ctrl_close(struct sock *sk)
+ }
+-#endif
+ 
+@@ -628,3 +624,2 @@ static struct sk_buff *create_monitor_ctrl_command(struct sock *sk, u16 index,
+ 
+-#if 0
+ static void __printf(2, 3)
+@@ -722,3 +717,2 @@ static void send_monitor_control_replay(struct sock *mon_sk)
+ }
+-#endif
+ 
+@@ -843,3 +837,2 @@ static int hci_sock_release(struct socket *sock)
+ {
+-#if 0
+ 	struct sock *sk = sock->sk;
+@@ -900,3 +893,2 @@ static int hci_sock_release(struct socket *sock)
+ 	sock_put(sk);
+-#endif
+ 	return 0;
+@@ -904,3 +896,2 @@ static int hci_sock_release(struct socket *sock)
+ 
+-#if 0
+ static int hci_sock_blacklist_add(struct hci_dev *hdev, void __user *arg)
+@@ -982,3 +973,2 @@ static int hci_sock_bound_ioctl(struct sock *sk, unsigned int cmd,
+ }
+-#endif
+ 
+@@ -987,3 +977,2 @@ static int hci_sock_ioctl(struct socket *sock, unsigned int cmd,
+ {
+-#if 0
+ 	void __user *argp = (void __user *)arg;
+@@ -1113,4 +1102,2 @@ static int hci_sock_ioctl(struct socket *sock, unsigned int cmd,
+ 	return err;
+-#endif
+-	return 0;
+ }
+@@ -1136,3 +1123,2 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
+ {
+-#if 0
+ 	struct sockaddr_hci haddr;
+@@ -1428,4 +1414,2 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
+ 	return err;
+-#endif
+-    return 0;
+ }
+@@ -1435,3 +1419,2 @@ static int hci_sock_getname(struct socket *sock, struct sockaddr *addr,
+ {
+-#if 0
+ 	struct sockaddr_hci *haddr = (struct sockaddr_hci *)addr;
+@@ -1462,4 +1445,2 @@ static int hci_sock_getname(struct socket *sock, struct sockaddr *addr,
+ 	return err;
+-#endif
+-    return 0;
+ }
+@@ -2066,3 +2047,2 @@ static int hci_sock_getsockopt(struct socket *sock, int level, int optname,
+ 
+-#if 0
+ static void hci_sock_destruct(struct sock *sk)
+@@ -2072,3 +2052,2 @@ static void hci_sock_destruct(struct sock *sk)
+ }
+-#endif
+ 
+@@ -2106,3 +2085,2 @@ static int hci_sock_create(struct net *net, struct socket *sock, int protocol,
+ {
+-#if 0
+ 	struct sock *sk;
+@@ -2125,3 +2103,2 @@ static int hci_sock_create(struct net *net, struct socket *sock, int protocol,
+ 	bt_sock_link(&hci_sk_list, sk);
+-#endif
+ 	return 0;
