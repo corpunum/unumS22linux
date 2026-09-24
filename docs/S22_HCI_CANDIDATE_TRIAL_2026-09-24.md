@@ -420,3 +420,13 @@ passed 30/30 normally, under `-O`, and with `PYTHONOPTIMIZE=1`; TrustZone
 classifier tests passed 12/12 in all three modes. These are host checks, not
 phone acceptance. No second-trial flash, reboot request, or HCI attempt has yet
 occurred at this checkpoint.
+
+The first hosted run for this source, GitHub Actions run `36017639971`, passed
+runner policy and the other suites but failed the Pi-session fixture in normal
+and optimized modes. The test had inherited the CI host's socket UID rather
+than modeling the device's required UID 1000; production correctly rejected
+it. The fixture now sets the simulated socket owner explicitly and adds a
+wrong-owner/no-query regression. Independent review approved the fixture-only
+change; all nine Pi readiness tests pass normally, under `-O`, and with
+`PYTHONOPTIMIZE=1`, and the complete local suite again has zero failures. The
+new hosted run is pending; no device operation has occurred.

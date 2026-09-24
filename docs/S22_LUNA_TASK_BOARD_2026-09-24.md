@@ -517,3 +517,13 @@ unmounted `/dev/sda16`, 100663296 bytes; `/srv/s22` is userdata ext4 with about
 102 GB free. The second-trial marker/receipt/staging paths are absent. No
 second-trial write, reboot request, or raw-HCI operation has occurred yet.
 Independent hardware rescue remains unproven and is not claimed.
+
+The first hosted run of this continuation (`36017639971`) passed runner policy
+and all other suites, but its Pi-session regression failed in both execution
+modes because the synthetic UNIX socket inherited the CI runner's UID instead
+of simulating the device's UID 1000. Production behavior was correct. The
+fixture now controls only the synthetic `lstat` UID and adds a wrong-owner
+negative check. Independent Luna review approved this fixture adjustment; Pi
+readiness passed 9/9 normal, `-O`, and `PYTHONOPTIMIZE=1`, and the complete local
+suite has zero failures. Hosted CI for the fixture fix is pending; the phone
+remains untouched.
