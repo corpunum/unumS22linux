@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import shlex
 import shutil
+import stat
 import struct
 import subprocess
 import sys
@@ -30,6 +31,7 @@ REQUIRED_MODULES = ('wlan', 'cfg80211')
 REQUIRED_HCI_COMPONENTS = ('btpower', 'exynos_tty', 'bluetooth', 'hci_uart')
 EXPECTED_BOOT_MODEL = 'SM-S901B'
 EXPECTED_BOOT_HARDWARE = 's5e9925'
+EXPECTED_PERSISTENT_UUID = '1dd55c26-bd57-489a-9d9b-4c60e6f430eb'
 MIN_UPTIME_SECONDS = 180
 OBSERVATION_SECONDS = 600
 SERIOUS_FAULT = re.compile(r'Kernel panic|Oops:|BUG:|Unable to handle kernel|general protection fault|Out of memory:|oom-kill|Call trace:', re.I)
@@ -75,9 +77,19 @@ def gnu_build_id(data):
 ready=read('/run/s22-persistent-ready.json')
 try:persistent=json.loads(ready) if ready else None
 except Exception:persistent=None
-persistent_summary=({'ready':persistent.get('ready') is True,
- 'status':persistent.get('status') if isinstance(persistent.get('status'),str) else None}
- if isinstance(persistent,dict) else None)
+persistent_mount_ready=False
+try:
+ for line in read('/proc/self/mountinfo',131072).splitlines():
+  left,separator,right=line.partition(' - ')
+  fields=left.split();post=right.split()
+  if separator and len(fields)>5 and len(post)>2 and fields[4]=='/srv/s22':
+   persistent_mount_ready=(fields[2]=='259:20' and post[0]=='ext4' and
+                           'rw' in fields[5].split(','))
+   break
+except Exception:pass
+persistent_summary=({'ready':persistent.get('uuid')==__EXPECTED_PERSISTENT_UUID__ and persistent_mount_ready,
+ 'mount_ready':persistent_mount_ready}
+ if isinstance(persistent,dict) else {'ready':False,'mount_ready':persistent_mount_ready})
 try:
  op=urllib.request.build_opener(urllib.request.ProxyHandler({}))
  with op.open('http://127.0.0.1:8089/health',timeout=3) as f:health=json.load(f)
@@ -158,9 +170,13 @@ print(json.dumps(state))
 '''
 
 
+def render_snapshot_script():
+    return SNAPSHOT.replace('__EXPECTED_PERSISTENT_UUID__', repr(EXPECTED_PERSISTENT_UUID))
+
+
 def snapshot(project_root=ROOT):
     result = subprocess.run([str(validated_ssh_wrapper(project_root)),
-                             'python3 -c '+shlex.quote(SNAPSHOT)],
+                             'python3 -c '+shlex.quote(render_snapshot_script())],
                             capture_output=True, text=True, timeout=12)
     if result.returncode:
         raise RuntimeError('SSH snapshot unavailable')
@@ -192,8 +208,8 @@ def validate_flash_receipt(flash):
 
 
 def ready_value(value):
-    return (isinstance(value, dict) and
-            (value.get('ready') is True or value.get('status') == 'ready'))
+    return (isinstance(value, dict) and value.get('ready') is True and
+            value.get('mount_ready') is True)
 
 
 def summarize_slots(payload):
@@ -438,20 +454,15 @@ def request_reboot_once(marker, result_path, runner=subprocess.run, project_root
     return 'ACKNOWLEDGED'
 
 
-def approved_ssh_wrapper_sha256(project_root=ROOT):
+def approved_ssh_wrapper_sha256():
     policy_pattern = r"^APPROVED_SSH_WRAPPER_SHA256\s*=\s*'([0-9a-f]{64})'\s*$"
-    digests = []
-    for root in (ROOT, project_root) if project_root != ROOT else (ROOT,):
-        try:
-            source = (root/'tools/hardware/deploy-audio-recovery.py').read_text(encoding='utf-8')
-        except OSError as error:
-            raise ObserverError('trusted deployer policy is unavailable') from error
-        match = re.search(policy_pattern, source, re.M)
-        require(match is not None, 'trusted deployer has no approved SSH wrapper digest')
-        digests.append(match.group(1))
-    require(all(digest == digests[0] for digest in digests),
-            'project-root SSH policy differs from this observer source')
-    return digests[0]
+    try:
+        source = (ROOT/'tools/hardware/deploy-audio-recovery.py').read_text(encoding='utf-8')
+    except OSError as error:
+        raise ObserverError('trusted deployer policy is unavailable') from error
+    match = re.search(policy_pattern, source, re.M)
+    require(match is not None, 'trusted deployer has no approved SSH wrapper digest')
+    return match.group(1)
 
 
 def validated_ssh_wrapper(project_root=ROOT):
@@ -460,7 +471,7 @@ def validated_ssh_wrapper(project_root=ROOT):
         digest = hashlib.sha256(wrapper.read_bytes()).hexdigest()
     except OSError as error:
         raise ObserverError('trusted USB SSH wrapper is unavailable') from error
-    require(digest == approved_ssh_wrapper_sha256(project_root),
+    require(digest == approved_ssh_wrapper_sha256(),
             'USB SSH wrapper does not match the approved deployer SHA-256')
     return wrapper
 
@@ -473,11 +484,23 @@ def _ssh_transport(transport, host, remote, project_root=ROOT):
             f'invalid {transport} SSH host')
     known_hosts = project_root/'evidence/native-linux-20260919/native-v2-known-hosts'
     alias = pinned_usb_host_key_alias(known_hosts, project_root)
-    return ['ssh', '-o', 'StrictHostKeyChecking=yes', '-o',
+    return [trusted_system_executable('ssh'), '-o', 'StrictHostKeyChecking=yes', '-o',
             'UserKnownHostsFile='+str(known_hosts), '-o', 'HostKeyAlias='+alias,
             '-o', 'ConnectTimeout=5',
             '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3',
             'root@'+host, remote]
+
+
+def trusted_system_executable(name):
+    path = Path('/usr/bin')/name
+    try:
+        info = path.lstat()
+    except OSError as error:
+        raise ObserverError(f'trusted /usr/bin/{name} is unavailable') from error
+    require(stat.S_ISREG(info.st_mode) and info.st_uid == 0 and
+            (info.st_mode & 0o022) == 0 and (info.st_mode & 0o111) != 0,
+            f'/usr/bin/{name} is not a protected root-owned executable')
+    return str(path)
 
 
 def pinned_usb_host_key_alias(known_hosts=None, project_root=ROOT):
@@ -486,18 +509,18 @@ def pinned_usb_host_key_alias(known_hosts=None, project_root=ROOT):
     known_hosts = known_hosts or project_root/'evidence/native-linux-20260919/native-v2-known-hosts'
     try:
         wrapper_text = wrapper.read_text(encoding='utf-8')
-        pinned_text = known_hosts.read_text(encoding='utf-8')
+        pinned_info = known_hosts.lstat()
     except OSError as error:
         raise ObserverError('verified SSH host-key configuration is unavailable') from error
+    require(stat.S_ISREG(pinned_info.st_mode) and not known_hosts.is_symlink(),
+            'verified SSH host-key configuration is not a regular file')
     matches = re.findall(r'\broot@([A-Za-z0-9._:-]+)\s+"\$@"', wrapper_text)
     require(len(matches) == 1, 'USB SSH wrapper does not have one pinned endpoint')
     alias = matches[0]
-    pinned_names = set()
-    for line in pinned_text.splitlines():
-        if not line or line.startswith('#'):
-            continue
-        pinned_names.update(line.split()[0].split(','))
-    require(alias in pinned_names or '['+alias+']:22' in pinned_names,
+    result = subprocess.run([trusted_system_executable('ssh-keygen'), '-F', alias,
+                             '-f', str(known_hosts)], capture_output=True, text=True,
+                            timeout=5, check=False)
+    require(result.returncode == 0 and bool(result.stdout.strip()),
             'USB wrapper endpoint has no matching pinned host key')
     return alias
 
@@ -518,7 +541,8 @@ def discover_wifi_host(runner=subprocess.run, project_root=ROOT):
 
 
 def snapshot_over(transport='usb', host=None, runner=subprocess.run, project_root=ROOT):
-    result = runner(_ssh_transport(transport, host, 'python3 -c '+shlex.quote(SNAPSHOT), project_root),
+    result = runner(_ssh_transport(transport, host,
+                                   'python3 -c '+shlex.quote(render_snapshot_script()), project_root),
                     capture_output=True, text=True, timeout=15, check=False)
     if result.returncode:
         raise ObserverError(f'{transport} reconnect unavailable')
