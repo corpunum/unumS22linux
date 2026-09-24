@@ -785,7 +785,12 @@ def _run_hci_profile_operation(profile_name,mode,root,profile,image,receipt_dir,
     try:
         result=run_approved_ssh_wrapper(
             ssh,'python3 -c '+shlex.quote(code)+' '+mode,
-            input_data=image if mode=='stage' else b'',timeout=100,project_root=root)
+            input_data=image if mode=='stage' else b'',
+            # A client-side deadline must never tear down SSH while RECOVERY is
+            # being written. The remote path has its own exclusive lock and
+            # returns only after full readback; inspect the outcome manually if
+            # the transport itself is interrupted.
+            timeout=100 if mode=='stage' else None,project_root=root)
     except ValueError as error:
         raise SystemExit(str(error)) from error
     except (OSError,subprocess.TimeoutExpired) as error:

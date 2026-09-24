@@ -240,7 +240,33 @@ print("UNSAFE_ACCEPT");sys.exit(0)
         self.assertIn(profile["new_sha256"], remote_command)
         self.assertIn("bt-hci-forward-20260924", remote_command)
         self.assertEqual(kwargs["input_data"], b"candidate-image")
+        self.assertEqual(kwargs["timeout"], 100)
         self.assertTrue((receipts / "hci-recovery-forward-stage.json").is_file())
+
+    def test_forward_flash_has_no_client_deadline_during_partition_write(self):
+        receipts = self.root / "receipts"
+        profile = DEPLOY.resolve_hci_profile("hci-forward")
+        result = SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps({
+                "mode": "flash", "partition_written": "recovery",
+                "bytes": DEPLOY.SIZE,
+                "before_sha256": profile["before_sha256"],
+                "readback_sha256": profile["new_sha256"],
+                "reboot_performed": False,
+            }).encode(),
+            stderr=b"",
+        )
+        transport = mock.Mock(return_value=result)
+        with mock.patch.object(DEPLOY, "ROOT", self.root), \
+             mock.patch.object(DEPLOY, "validate_hci_profile_artifacts", return_value=b"candidate-image"), \
+             mock.patch.object(DEPLOY, "run_approved_ssh_wrapper", transport):
+            DEPLOY.main_hci_profile("hci-forward", "flash", receipt_dir=receipts)
+        transport.assert_called_once()
+        _, kwargs = transport.call_args
+        self.assertIsNone(kwargs["timeout"])
+        self.assertEqual(kwargs["input_data"], b"")
+        self.assertTrue((receipts / "hci-recovery-forward-flash.json").is_file())
 
     def test_reverse_stage_sends_only_the_exact_rollback_to_separate_stage(self):
         receipts = self.root / "receipts"
@@ -295,6 +321,7 @@ print("UNSAFE_ACCEPT");sys.exit(0)
         self.assertIn(profile["new_sha256"], remote_command)
         self.assertIn("bt-hci-reverse-20260924", remote_command)
         self.assertEqual(kwargs["input_data"], b"")
+        self.assertIsNone(kwargs["timeout"])
         self.assertTrue((receipts / "hci-recovery-reverse-flash.json").is_file())
 
     def test_receipt_directory_rejects_symlinks_and_existing_receipt(self):
