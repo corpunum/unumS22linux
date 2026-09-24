@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage, or explicitly write, the reviewed audio-only RECOVERY candidate.
+"""Stage, or explicitly write, an explicitly pinned RECOVERY candidate.
 
 Never reboots. The only block-device write is the separately selected --flash
 operation on exact recovery/sda16 (259:0), after old/new full-image hash checks.
@@ -500,6 +500,59 @@ def ensure_new_receipt(path):
     return path
 
 
+def prepare_private_receipt_directory(path):
+    """Create/check a private local receipt directory without following links."""
+    path=Path(path)
+    if not path.is_absolute() or path == Path('/'):
+        raise ValueError('receipt directory must be a non-root absolute path')
+    current=Path('/')
+    created=[]
+    for component in path.parts[1:]:
+        current=current/component
+        try:
+            info=current.lstat()
+        except FileNotFoundError:
+            current.mkdir(mode=0o700)
+            info=current.lstat()
+            created.append(current)
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+            raise ValueError(f'receipt path contains a symlink or non-directory: {current}')
+    for directory in created:
+        parent_fd=os.open(directory.parent,os.O_RDONLY|os.O_CLOEXEC|os.O_DIRECTORY|os.O_NOFOLLOW)
+        try:
+            os.fsync(parent_fd)
+        finally:
+            os.close(parent_fd)
+    final=path.lstat()
+    if final.st_uid!=os.geteuid() or (final.st_mode&0o077):
+        raise ValueError('receipt directory must be owned by the current user and private (0700)')
+    return path
+
+
+def persist_receipt(path, receipt):
+    """Create exactly one durable receipt under an already-verified directory."""
+    path=Path(path)
+    directory_fd=os.open(path.parent,os.O_RDONLY|os.O_CLOEXEC|os.O_DIRECTORY|os.O_NOFOLLOW)
+    receipt_fd=None
+    try:
+        receipt_fd=os.open(
+            path.name,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_CLOEXEC|os.O_NOFOLLOW,
+            0o600,dir_fd=directory_fd)
+        content=(json.dumps(receipt,indent=2)+'\n').encode()
+        offset=0
+        while offset<len(content):
+            count=os.write(receipt_fd,content[offset:])
+            if count<=0:
+                raise OSError('receipt write made no progress')
+            offset+=count
+        os.fsync(receipt_fd)
+        os.fsync(directory_fd)
+    finally:
+        if receipt_fd is not None:
+            os.close(receipt_fd)
+        os.close(directory_fd)
+
+
 def validate_approved_ssh_wrapper(path):
     """Return an immutable snapshot of the approved Bash wrapper's opened inode."""
     path=Path(path)
@@ -652,10 +705,11 @@ def validate_remote_receipt(receipt, *, mode, before_sha, candidate_sha, size):
     return receipt
 
 
-def main_hci_profile(profile_name, mode=None):
+def main_hci_profile(profile_name, mode=None, *, root=None, receipt_dir=None):
+    root=ROOT if root is None else Path(root)
     profile=resolve_hci_profile(profile_name)
     try:
-        image=validate_hci_profile_artifacts(profile_name)
+        image=validate_hci_profile_artifacts(profile_name,root=root)
     except (OSError,ValueError) as error:
         raise SystemExit(
             f'HCI artifact validation failed; no device operation attempted: {error}') from error
@@ -672,7 +726,13 @@ def main_hci_profile(profile_name, mode=None):
         print(json.dumps(plan,indent=2))
         return 0
 
-    out=ROOT/'rootfs/main-driver-loop-20260921'/(profile['receipt_prefix']+'-'+mode+'.json')
+    if receipt_dir is None:
+        receipt_dir=Path.home()/'.local/state/s22-hci-trial-20260924/receipts'
+    try:
+        receipt_dir=prepare_private_receipt_directory(receipt_dir)
+    except (OSError,ValueError) as error:
+        raise SystemExit(f'private receipt directory unavailable; no device operation attempted: {error}') from error
+    out=receipt_dir/(profile['receipt_prefix']+'-'+mode+'.json')
     try:
         ensure_new_receipt(out)
     except ValueError as error:
@@ -681,11 +741,11 @@ def main_hci_profile(profile_name, mode=None):
         base_sha=profile['before_sha256'],new_sha=profile['new_sha256'],
         staging_directory=profile['staging_directory'],
         rollback_filename=profile['rollback_filename'])
-    ssh=ROOT/'tools/s22-ssh'
+    ssh=root/'tools/s22-ssh'
     try:
         result=run_approved_ssh_wrapper(
             ssh,'python3 -c '+shlex.quote(code)+' '+mode,
-            input_data=image if mode=='stage' else b'',timeout=100,project_root=ROOT)
+            input_data=image if mode=='stage' else b'',timeout=100,project_root=root)
     except ValueError as error:
         raise SystemExit(str(error)) from error
     except (OSError,subprocess.TimeoutExpired) as error:
@@ -707,9 +767,7 @@ def main_hci_profile(profile_name, mode=None):
             mode+' returned an invalid receipt; operation outcome must be independently '
             'checked before retry: '+str(error)) from error
     try:
-        with out.open('x') as stream:
-            json.dump(receipt,stream,indent=2)
-            stream.write('\n')
+        persist_receipt(out,receipt)
     except OSError as error:
         raise RuntimeError(
             mode+' succeeded remotely but local receipt could not be persisted; '
@@ -725,10 +783,17 @@ def main(argv=None):
     choice.add_argument('--flash',action='store_true')
     parser.add_argument('--profile',choices=tuple(HCI_PROFILES),
                         help='select the explicit HCI forward or reverse manifest')
+    parser.add_argument('--repository-root',type=Path,
+                        help='use the existing artifact checkout for an explicit HCI profile')
+    parser.add_argument('--receipt-dir',type=Path,
+                        help='private rig directory for the one-shot HCI receipt')
     args=parser.parse_args(argv)
     if args.profile:
         mode='stage' if args.stage else 'flash' if args.flash else None
-        return main_hci_profile(args.profile,mode)
+        return main_hci_profile(args.profile,mode,root=args.repository_root or ROOT,
+                                receipt_dir=args.receipt_dir)
+    if args.repository_root or args.receipt_dir:
+        parser.error('--repository-root and --receipt-dir require an explicit --profile')
     try:
         image=validate_host_artifacts(
             IMAGE,ROOT/'builds/native_handoff_v3.img',
