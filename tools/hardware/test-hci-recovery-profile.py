@@ -319,6 +319,22 @@ print("UNSAFE_ACCEPT");sys.exit(0)
         with self.assertRaises(FileExistsError):
             DEPLOY.persist_receipt(output,{"phase":"unexpected"})
 
+    def test_receipt_uses_verified_directory_even_if_path_is_replaced(self):
+        receipts=DEPLOY.prepare_private_receipt_directory(self.root/"receipts")
+        moved=self.root/"receipts-original"
+        directory_fd=DEPLOY.open_private_receipt_directory(receipts)
+        try:
+            receipts.rename(moved)
+            receipts.mkdir(mode=0o700)
+            output=receipts/"receipt.json"
+            DEPLOY.ensure_new_receipt(output,directory_fd=directory_fd)
+            DEPLOY.persist_receipt(
+                output,{"phase":"remote-success"},directory_fd=directory_fd)
+        finally:
+            DEPLOY.os.close(directory_fd)
+        self.assertTrue((moved/"receipt.json").is_file())
+        self.assertFalse((receipts/"receipt.json").exists())
+
     def test_receipt_directory_sync_failure_is_not_retried(self):
         receipts=DEPLOY.prepare_private_receipt_directory(self.root/"receipts")
         output=receipts/"receipt.json"
