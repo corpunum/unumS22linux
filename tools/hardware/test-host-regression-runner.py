@@ -24,6 +24,7 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-npu-boot-preflight.py",
     "tools/hardware/test-audio-progress-snapshot.py",
     "tools/hardware/test-audio-snapshot-sync-20260924.py",
+    "tools/hardware/test-audio-recovery-observer.py",
     "tools/hardware/test-input-power-readiness.py",
     "tools/hardware/test-recovery-deployment-hardening.py",
     "tools/hardware/test-s22-hci-candidate-preflight-20260924.py",
