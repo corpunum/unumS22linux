@@ -52,6 +52,20 @@ class Planner(unittest.TestCase):
         self.assertEqual(result['periods_advanced'],2)
         self.assertFalse(result['irq_counter_available'])
         self.assertIn('proxy',result['irq_counter_reason'])
+        self.assertIn('Observed samples only',result['continuity_scope'])
+    def test_period_progress_rejects_missing_capture_sequence(self):
+        samples=[
+            {'sequence':0,'monotonic':1.0,
+             'alsa_counters':{'state':'RUNNING','hw_ptr':0},
+             'hw_params_parsed':{'period_size':1024}},
+            {'sequence':2,'monotonic':2.0,
+             'alsa_counters':{'state':'RUNNING','hw_ptr':2048},
+             'hw_params_parsed':{'period_size':1024}},
+        ]
+        result=module.period_progress(samples)
+        self.assertFalse(result['verified'])
+        self.assertEqual(result['periods_advanced'],0)
+        self.assertIn('sequence gap',result['reason'])
     def test_period_progress_fails_closed_on_missing_geometry_and_time_regression(self):
         samples=[
             {'monotonic':2.0,'alsa_counters':{'state':'RUNNING','hw_ptr':0},
@@ -81,12 +95,12 @@ class Planner(unittest.TestCase):
                 self.assertIn('separated',result['reason'])
     def test_nonrunning_samples_outside_running_window_do_not_hide_progress(self):
         samples=[
-            {'monotonic':0.5,'alsa_counters':{'state':'PREPARED'}},
-            {'monotonic':1.0,'alsa_counters':{'state':'RUNNING','hw_ptr':0},
+            {'sequence':0,'monotonic':0.5,'alsa_counters':{'state':'PREPARED'}},
+            {'sequence':1,'monotonic':1.0,'alsa_counters':{'state':'RUNNING','hw_ptr':0},
              'hw_params_parsed':{'period_size':1024}},
-            {'monotonic':2.0,'alsa_counters':{'state':'RUNNING','hw_ptr':2048},
+            {'sequence':2,'monotonic':2.0,'alsa_counters':{'state':'RUNNING','hw_ptr':2048},
              'hw_params_parsed':{'period_size':1024}},
-            {'monotonic':2.5,'alsa_counters':{'state':'SETUP'}},
+            {'sequence':3,'monotonic':2.5,'alsa_counters':{'state':'SETUP'}},
         ]
         self.assertTrue(module.period_progress(samples)['verified'])
     def test_timed_read_captures_monotonic_interval_and_bounds_content(self):

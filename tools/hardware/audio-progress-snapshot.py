@@ -153,11 +153,12 @@ def parse_hw_params(text):
 
 
 def period_progress(samples):
-    """Infer periods within one observed RUNNING window; this is not an IRQ counter."""
+    """Report period progress across contiguous observed samples, not an IRQ count."""
     if not isinstance(samples, list) or len(samples) > 256:
         return {'verified': False, 'periods_advanced': 0,
                 'reason': 'invalid sample collection', 'irq_counter_available': False}
     points = []
+    sequences = []
     period_sizes = set()
     gap_after_running = False
     for sample in samples:
@@ -178,9 +179,12 @@ def period_progress(samples):
         timestamp = sample.get('monotonic')
         hw_params = sample.get('hw_params_parsed')
         size = hw_params.get('period_size') if isinstance(hw_params, dict) else None
+        sequence = sample.get('sequence')
         if (isinstance(hw_ptr, bool) or not isinstance(hw_ptr, int) or hw_ptr < 0
                 or isinstance(timestamp, bool) or not isinstance(timestamp, (int, float))
-                or isinstance(size, bool) or not isinstance(size, int) or size <= 0):
+                or isinstance(size, bool) or not isinstance(size, int) or size <= 0
+                or ('sequence' in sample and
+                    (isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 0))):
             return {'verified': False, 'periods_advanced': 0,
                     'reason': 'invalid RUNNING sample', 'irq_counter_available': False}
         timestamp = float(timestamp)
@@ -188,10 +192,21 @@ def period_progress(samples):
             return {'verified': False, 'periods_advanced': 0,
                     'reason': 'invalid RUNNING sample', 'irq_counter_available': False}
         points.append((timestamp, hw_ptr))
+        sequences.append(sequence if 'sequence' in sample else None)
         period_sizes.add(size)
     if len(period_sizes) != 1:
         return {'verified': False, 'periods_advanced': 0,
                 'reason': 'period size unavailable or changed', 'irq_counter_available': False}
+    if any(sequence is not None for sequence in sequences):
+        if any(sequence is None for sequence in sequences):
+            return {'verified': False, 'periods_advanced': 0,
+                    'reason': 'capture sequence missing inside RUNNING observation window',
+                    'irq_counter_available': False}
+        for previous, current in zip(sequences, sequences[1:]):
+            if current != previous + 1:
+                return {'verified': False, 'periods_advanced': 0,
+                        'reason': 'capture sequence gap inside RUNNING observation window',
+                        'irq_counter_available': False}
     for previous, current in zip(points, points[1:]):
         if current[0] <= previous[0] or current[1] < previous[1]:
             return {'verified': False, 'periods_advanced': 0,
@@ -207,7 +222,8 @@ def period_progress(samples):
         'periods_advanced': completed,
         'irq_counter_available': False,
         'irq_counter_reason': 'No per-RDMA2 IRQ counter is exposed by the audited userspace ABI; hw_ptr period crossings are a callback proxy only.',
-        'reason': 'hw_ptr crossed ALSA period boundary' if completed else 'no complete ALSA period observed',
+        'continuity_scope': 'Observed samples only; state changes between captures are not detectable.',
+        'reason': 'hw_ptr crossed ALSA period boundary in observed RUNNING samples' if completed else 'no complete ALSA period observed',
     }
 
 
