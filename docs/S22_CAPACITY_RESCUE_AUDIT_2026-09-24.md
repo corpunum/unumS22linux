@@ -20,7 +20,7 @@ The coordinator's 2026-09-24 phone capture reports:
 | Phone destination/view | Free bytes | Free inodes | Interpretation |
 | --- | ---: | ---: | --- |
 | Native `/` overlay | 34,028 KiB (596,544 total; 550,228 used) | 29,780 | CACHE-backed rescue overlay; low headroom |
-| `/run` rootfs tmpfs | 2,303,660 KiB available (2,433,448 total) | 607,115 | transient native rootfs; `df` could not resolve this bind-mounted path, so values come from `stat -f` and mountinfo |
+| `/run` rootfs tmpfs | 2,303,656 KiB available (2,433,448 total) | 607,115 | transient native rootfs; `df` could not resolve this bind-mounted path, so values come from `stat -f` and mountinfo |
 | Persistent `/srv/s22` | 99,982,692 KiB | 1,652,508 | Persistent userdata filesystem |
 | `/tmp` | 256 MiB | 830,421 | separate tmpfs; not used by the current deployment script |
 
