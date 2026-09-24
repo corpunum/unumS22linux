@@ -111,8 +111,18 @@ and `flash` supports explicit `-p RECOVERY <image>` plus `--no-reboot`.
    `/home/corpunum/s22-linux/tools/samloader/samloader detect --verbose` and
    require successful detection. This is the independent-rescue qualification;
    USB SSH/Tailscale through the running kernel is not a substitute.
-3. Do not flash until the owner has authorized this specific RECOVERY write.
-   Then the only candidate-write command is:
+3. Before any partition write, test the return path on the currently installed
+   native RECOVERY image. The candidate is not involved yet. Use the physical
+   RECOVERY handoff in step 5 and require a live shell plus `/proc/boot_reset`
+   and BORE confirmation of actual RECOVERY. Then, while the owner remains
+   present, return to Download with the existing native helper
+   `s22-reboot download`, reconnect/check the screen, and require a second
+   successful read-only `samloader detect --verbose`. The helper accepts only
+   `recovery|download|normal`; this download-target trial has not yet been
+   tested on the phone. If either transition or detection fails, stop without
+   flashing.
+4. Do not flash until the owner has separately authorized this specific
+   RECOVERY write. Then the only candidate-write command is:
 
    ```sh
    /home/corpunum/s22-linux/tools/samloader/samloader flash --verbose --no-reboot -p RECOVERY /home/corpunum/s22-linux/builds/bt-hci-loader-compatible-20260924-repro/recovery.img
@@ -120,20 +130,22 @@ and `flash` supports explicit `-p RECOVERY <image>` plus `--no-reboot`.
 
    The command leaves the device in Download Mode. Do not auto-reboot or
    select Android BOOT.
-4. Keep the USB data cable connected. From Download Mode hold Volume Down +
-   Side for about 7 seconds until the screen goes black; immediately release
-   Volume Down, keep Side held and press/hold Volume Up until RECOVERY
-   appears. This is the S22/S22+ Download-exit-to-Recovery transition; Samsung
-   documents Volume Down + Side as Download-mode exit, and Samsung's Galaxy
-   S22 instructions use Volume Up + Side for Recovery with a USB host
-   connection ([Download exit](https://www.samsung.com/us/support/troubleshooting/TSG01212623/),
-   [S22 Recovery keys](https://us.community.samsung.com/t5/Galaxy-S22/Turning-on-screen-is-SLOW-since-one-ui-7/m-p/3217804/highlight/true)).
-   No recovery-menu item should be selected.
-5. After boot settles, immediately read `/proc/boot_reset`, BORE, `uname -r`,
+5. Keep the USB data cable connected. The proposed handoff is: hold Volume
+   Down + Side for about 7 seconds until the screen goes black; release
+   Volume Down while keeping Side held, then press/hold Volume Up until
+   RECOVERY appears. This is an inference combining Samsung's Download-exit
+   instruction with an S22+ guide's Volume Up + Side Recovery keys; neither
+   source documents this exact combined transition, so it must first pass the
+   no-write test in step 3 on this actual device
+   ([Samsung Download-mode exit](https://www.samsung.com/us/support/troubleshooting/TSG01212623/),
+   [S22+ Recovery keys](https://devicesupport.three.co.uk/guides/device/Samsung/GalaxyS22Plus5G/scenario/clear-cache-partition)).
+   If the screen does not clearly enter RECOVERY, stop; do not navigate the
+   boot menu or infer the mode. No recovery-menu item should be selected.
+6. After boot settles, immediately read `/proc/boot_reset`, BORE, `uname -r`,
    uptime, `/proc/modules`, USB/assistant health and Wi-Fi. Continue only if
    this is genuinely RECOVERY and the ordinary baseline is healthy. Do not
    trust a logo or inferred boot target.
-6. Run a single raw socket create/close test, before controller attachment,
+7. Run a single raw socket create/close test, before controller attachment,
    scanning or pairing:
 
    ```sh
@@ -142,7 +154,7 @@ and `flash` supports explicit `-p RECOVERY <image>` plus `--no-reboot`.
 
    On any failure, stop; do not retry or attach a controller. This tests only
    HCI raw-socket lifecycle, not Bluetooth radio operation.
-7. To roll back, return to Download Mode with the owner present, run
+8. To roll back, return to Download Mode with the owner present, run
    read-only `samloader detect --verbose`, verify the rollback SHA and exact
    RECOVERY target, and—after the separate rollback authorization—flash only
    the native rollback with `samloader flash --verbose --no-reboot -p RECOVERY
@@ -162,5 +174,7 @@ operation-specific authorization remain open. No candidate flash, reboot,
 Bluetooth socket operation or pairing occurred. The next owner action is one
 attended session: connect the phone to the recovery host, put it in Download
 Mode and confirm the Download screen. The coordinator will do read-only
-detection and hash checks first; candidate flashing waits for explicit
-authorization for that one RECOVERY write.
+detection and hash checks first, then test the no-write handoff into the
+currently installed native RECOVERY and its return to Download while the owner
+is present. Candidate flashing is a later, separate RECOVERY write and still
+waits for its own explicit authorization.
