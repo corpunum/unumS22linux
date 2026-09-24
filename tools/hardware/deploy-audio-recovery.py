@@ -50,6 +50,16 @@ def read_all(fd, expected_size, reader, label):
  validate_size(len(data),expected_size,label)
  return bytes(data)
 
+def sha256_open_fd(fd, expected_size, label):
+ digest=hashlib.sha256()
+ offset=0
+ while offset<expected_size:
+  chunk=os.pread(fd,min(expected_size-offset,1048576),offset)
+  require(bool(chunk),'short '+label+' read')
+  digest.update(chunk)
+  offset+=len(chunk)
+ return digest.hexdigest()
+
 def write_all_fd(fd, content, writer, flush, label):
  offset=0
  while offset<len(content):
@@ -231,6 +241,14 @@ def check_fd(fd):
  capacity=struct.unpack('<Q',fcntl.ioctl(fd,0x80081272,b'\0'*8))[0]
  validate_size(capacity,size,'opened RECOVERY fd')
 
+def require_recovery_unmounted():
+ current_mount_entries=p('/proc/self/mountinfo').read_text().splitlines()
+ currently_mounted=any(
+  len(line.split())>2 and line.split()[2]=='259:0'
+  for line in current_mount_entries)
+ require(not currently_mounted,
+         'RECOVERY target became mounted; refusing RECOVERY write')
+
 def read_recovery():
  fd=os.open(node,os.O_RDONLY|os.O_CLOEXEC|os.O_NOFOLLOW)
  try:
@@ -281,6 +299,11 @@ elif mode=='flash':
  validate_size(len(rollback),size,'rollback copy')
  fd=os.open(node,os.O_RDWR|os.O_CLOEXEC|os.O_NOFOLLOW)
  try:
+  check_fd(fd)
+  current_base_sha=sha256_open_fd(fd,size,'RECOVERY baseline immediately before write')
+  require(current_base_sha==base_sha,
+          'RECOVERY baseline changed before write; no flash permitted')
+  require_recovery_unmounted()
   check_fd(fd)
   write_all_fd(fd,data,os.pwrite,os.fsync,'RECOVERY write; do not retry or reboot')
  finally:
