@@ -96,6 +96,25 @@ remains available at SHA-256
 `b5bf01c4a47091eb95078fc69b133b44c2b453b31c23433594c5b605e3747b55`.
 Neither rollback writes Android userdata or any other partition.
 
+## Owner authorization for one unattended native trial — 2026-09-24
+
+The owner has explicitly authorized one unattended installation of this exact
+HCI-only candidate to RECOVERY, one targeted `s22-reboot recovery`, and the
+gated raw-HCI socket create/close check. The owner also accepts one
+conditional restoration of the exact native rollback image if a usable native
+shell and the reviewed write/readback route remain available. This narrow
+authorization supersedes the physical-attendance and Download-Mode
+demonstration prerequisites below for this trial only. It does not authorize
+another partition, Android BOOT, Download Mode, BCB/MISC edits, another kernel,
+or a retry after an unknown write or reboot outcome.
+
+Independent hardware rescue is still **not demonstrated**. USB/Wi-Fi SSH
+through the currently running native kernel are not independent recovery
+paths. If the candidate does not return a usable native shell, remote rollback
+is not guaranteed and the device may remain inaccessible until the owner is
+physically present. The rollback image is verified on the rig and its exact
+bytes currently match the phone's RECOVERY partition.
+
 ## Recovery-host procedure and single trial gate
 
 Installed `samloader` help confirms `detect` returns immediately by default
@@ -168,13 +187,15 @@ and `flash` supports explicit `-p RECOVERY <image>` plus `--no-reboot`.
 ## Current gate
 
 The host candidate, packaging verification and module compatibility checks
-are complete. Independent Download Mode detection from the actual recovery
-host, a fresh baseline, physical RECOVERY-entry confirmation and
-operation-specific authorization remain open. No candidate flash, reboot,
-Bluetooth socket operation or pairing occurred. The next owner action is one
-attended session: connect the phone to the recovery host, put it in Download
-Mode and confirm the Download screen. The coordinator will do read-only
-detection and hash checks first, then test the no-write handoff into the
-currently installed native RECOVERY and its return to Download while the owner
-is present. Candidate flashing is a later, separate RECOVERY write and still
-waits for its own explicit authorization.
+are complete. Independent Download Mode rescue remains unproven and is not
+claimed. The owner has accepted the specific unattended RECOVERY-only trial
+and its loss-of-remote-access risk. Before its one write, the coordinator must
+complete the reviewed adapter/observer tests, refresh the native baseline,
+stage both exact images on `/srv/s22`, and preserve receipts and a phase
+journal on the rig. The coordinator must then revalidate RECOVERY's full
+baseline hash and target, write only the candidate, verify full readback, and
+issue the single targeted recovery reboot as a separate checked action.
+Bluetooth testing remains contingent on a new boot, confirmed RECOVERY BORE
+record, candidate runtime identity, healthy readiness/assistant, and at least
+180 seconds of stable uptime. No candidate flash, reboot, raw-HCI operation or
+pairing has occurred as of this documentation update.
