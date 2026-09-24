@@ -288,7 +288,7 @@ elif mode=='flash':
  readback=read_recovery()
  validate_digest(readback,new_sha,'RECOVERY readback; do not reboot')
  actual=hashlib.sha256(readback).hexdigest()
-print(json.dumps({'mode':mode,'partition_written':'recovery','bytes':size,
+ print(json.dumps({'mode':mode,'partition_written':'recovery','bytes':size,
   'before_sha256':base_sha,'readback_sha256':actual,'reboot_performed':False}))
 '''
 
