@@ -669,3 +669,6 @@ artifact, the branch diff check is clean. The patch reverse-applies to the
 candidate kernel and is byte-equivalent to the complete diff from running
 kernel source `4e5c5ad7d950e4de0688b5663965f2075654b2ad` to candidate commit
 `40b5c72cedfb87facca7391c3efb3871497f5393`.
+
+The next continuation checkpoint is maintained in
+[`S22_LUNA_TASK_BOARD_2026-09-24.md`](S22_LUNA_TASK_BOARD_2026-09-24.md).
