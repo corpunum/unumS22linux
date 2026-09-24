@@ -16,6 +16,10 @@ _FATAL_PATTERNS = (
     ("kernel_panic", re.compile(r"\bkernel panic\b|\bpanic\s+-\s+not syncing\b", re.I)),
     ("oops", re.compile(r"\boops\s*:", re.I)),
     ("bug", re.compile(r"\bBUG\s*:|\bkernel BUG at\b", re.I)),
+    ("unable_to_handle_kernel", re.compile(r"\bUnable to handle kernel\b", re.I)),
+    ("general_protection_fault", re.compile(r"\bgeneral protection fault\b", re.I)),
+    ("out_of_memory", re.compile(r"\bOut of memory\b", re.I)),
+    ("oom_kill", re.compile(r"\boom-kill\b", re.I)),
     ("soft_lockup", re.compile(r"\bsoft\s+lockup\b", re.I)),
     ("hard_lockup", re.compile(r"\bhard\s+lockup\b", re.I)),
 )
