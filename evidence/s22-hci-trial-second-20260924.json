@@ -1,0 +1,80 @@
+{
+  "schema": "unum.s22.hci-trial/v2",
+  "date": "2026-09-24",
+  "trial_identity": "hci-candidate-20260924-second",
+  "device": "SM-S901B/DS r0s",
+  "candidate": {
+    "partition": "RECOVERY",
+    "sha256": "42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5",
+    "bytes": 100663296,
+    "gnu_build_id": "b2dda820b18d410d9bf12f1bd2584567d545991d",
+    "writes": 1,
+    "full_readback_verified": true,
+    "rollback_before_write_sha256": "758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b",
+    "independent_full_readback_sha256": "42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5"
+  },
+  "boot": {
+    "targeted_recovery_reboot_requests": 1,
+    "request_transport_result": "UNKNOWN_after_ssh_timeout; no retry",
+    "boot_confirmed_by_changed_boot_id_bore_mode_build_id_and_partition_hash": true,
+    "mode": "RECOVERY",
+    "runtime_gnu_build_id": "b2dda820b18d410d9bf12f1bd2584567d545991d",
+    "partition_sha256_after_boot": "42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5",
+    "continuous_observation_seconds": 600,
+    "uptime_at_observation_end_seconds": 580,
+    "full_boot_kernel_log_coverage": false
+  },
+  "readiness": {
+    "native_guardian": true,
+    "assistant_api_healthy_and_idle": true,
+    "hyprland": true,
+    "desktop_pi_process": true,
+    "browser_terminal": true,
+    "dedicated_pi_tmux_session": "absent_on_demand",
+    "guarded_pi_web_start_invocations_after_candidate_boot": 1,
+    "guarded_pi_web_start_result": "FAILED_returncode_1; not retried",
+    "read_only_guarded_helper_preflight_afterward": "passed",
+    "required_modules_present": true,
+    "loaded_module_count": 325,
+    "required_hci_components_present": true,
+    "wlan_network_ready": true,
+    "battery_percent": 100,
+    "battery_temperature_celsius": 28.2,
+    "thermal_zones_readable": 9,
+    "maximum_thermal_zone_celsius_after_hci": 42,
+    "serious_kernel_fault_indicators": 0
+  },
+  "trustzone": {
+    "available_ring_capture_complete": true,
+    "full_boot_coverage": false,
+    "fatal_indicators_during_candidate_observation": 0,
+    "hung_task_warnings_during_candidate_observation": 0,
+    "prior_candidate_capture_had_ten_pinned_wait_stack_matches": true,
+    "prior_progress_measurement": false,
+    "liveness_conclusion": "no_warning_in_available_second_trial_ring; progress_not_proven"
+  },
+  "post_hci_kernel_log": {
+    "available_dmesg_ring_captured_to_private_rig_storage": true,
+    "bytes": 255713,
+    "file_mode": "0600",
+    "raw_log_published": false,
+    "ring_cleared": false
+  },
+  "raw_hci_socket": {
+    "attempts": 1,
+    "result": "SUCCESS",
+    "socket_created_and_closed": true,
+    "controller_attached": false,
+    "scan_sent": false,
+    "pairing_started": false,
+    "retry_allowed": false
+  },
+  "rollback": {
+    "writes": 0,
+    "performed": false,
+    "known_good_sha256": "758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b"
+  },
+  "independent_hardware_rescue_demonstrated": false,
+  "raw_private_traces_published": false,
+  "credentials_or_network_identifiers_published": false
+}

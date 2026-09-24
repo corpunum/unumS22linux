@@ -421,6 +421,59 @@ classifier tests passed 12/12 in all three modes. These are host checks, not
 phone acceptance. No second-trial flash, reboot request, or HCI attempt has yet
 occurred at this checkpoint.
 
+## Second owner-authorized trial result
+
+The reviewed implementation under test was source SHA
+`517571539cbf71cd6f3ffab1538bd0411a41ebec`; hosted Actions run `36018135562`
+passed before the device operation.
+
+The owner authorized one distinct second attempt while accepting that
+independent hardware rescue remains unproven. The new journal and operation
+markers use `hci-candidate-20260924-second`; first-trial receipts remain
+unchanged. Candidate and rollback hashes were revalidated, both payloads were
+staged and independently hashed on `/srv/s22`, and the live RECOVERY baseline
+was rechecked before the single write. Exactly one RECOVERY write completed;
+the deployer receipt and a separate full live readback match candidate
+SHA-256 `42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5`.
+The pre-write image was the exact known-good rollback. No other partition was
+written.
+
+The single `s22-reboot recovery` request timed out over SSH and is recorded as
+`UNKNOWN`; it was not retried. The actual boot was identified by a changed boot
+ID, the newest BORE record selecting RECOVERY, the candidate's GNU build ID
+`b2dda820b18d410d9bf12f1bd2584567d545991d`, and the installed RECOVERY hash.
+A full 600-second observation completed, ending at about 580 seconds uptime.
+Native PID 1, model API and idle state, Hyprland, desktop Pi, browser terminal,
+Wi-Fi, required kernel components, all 325 loaded modules, and battery/thermal
+gates remained ready. The available dmesg ring was fully retrieved and had no
+fatal indicator or hung-task warning during this trial; full-boot log coverage
+is not claimed.
+
+The dedicated Pi tmux session remained absent, the expected on-demand state;
+the Pi process and browser terminal were ready. The authorized guarded web
+startup was invoked once after boot and returned exit code 1. It was not
+retried. A subsequent read-only run of its existing preflight passed, and the
+captured service checks remained healthy. This helper result is retained as
+an unresolved operational warning, not mislabeled as success or as a desktop
+Pi outage. No agent task or inference was submitted.
+
+The one raw-HCI operation succeeded: a raw Bluetooth socket was created and
+closed. It did not attach a controller, scan, or pair. A post-test snapshot
+identified the same candidate boot and partition, showed all 325 modules and
+the native/model/desktop/network readiness gates healthy, and found no serious
+faults or hung-task warnings in the completely captured available ring. The
+phone remains on the HCI-only candidate; conditional rollback was not needed
+and was not performed. Independent hardware rescue remains unproven, and the
+prior TrustZone progress question remains not fully proven despite the clean
+available ring in this trial. Bluetooth controller registration and radio
+operation are still untested.
+
+The sanitized receipt is
+[`evidence/s22-hci-trial-second-20260924.json`](../evidence/s22-hci-trial-second-20260924.json).
+Raw dmesg, boot identifiers, network identifiers, and image payloads remain
+private. Hardware acceptance is limited to this raw-socket create/close test;
+no broader Bluetooth acceptance is claimed.
+
 The first hosted run for this source, GitHub Actions run `36017639971`, passed
 runner policy and the other suites but failed the Pi-session fixture in normal
 and optimized modes. The test had inherited the CI host's socket UID rather
@@ -429,4 +482,6 @@ it. The fixture now sets the simulated socket owner explicitly and adds a
 wrong-owner/no-query regression. Independent review approved the fixture-only
 change; all nine Pi readiness tests pass normally, under `-O`, and with
 `PYTHONOPTIMIZE=1`, and the complete local suite again has zero failures. The
-new hosted run is pending; no device operation has occurred.
+hosted run was pending and no device operation had occurred at that checkpoint.
+It subsequently passed as GitHub Actions run `36018135562` for source SHA
+`517571539cbf71cd6f3ffab1538bd0411a41ebec`.
