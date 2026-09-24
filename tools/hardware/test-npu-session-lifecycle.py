@@ -271,6 +271,8 @@ def test_source_contract() -> None:
               "waiter->publishing" in cancel_body and
               "wait_for_completion(&waiter->publish_done)" in cancel_body,
               "timeout cancellation does not revoke or drain the publication lease")
+        check("wait_for_completion_timeout" not in cancel_body,
+              "current publication drain is unbounded and must remain a readiness blocker")
         check("!waiter->cancelled" in callback_body,
               "late completion must not revive a waiter once timeout cancellation starts")
         check("npu_power_wait_cancel_and_drain(&waiter)" in wait_body and
@@ -460,6 +462,66 @@ def test_timeout_publication_handshake() -> None:
           "committed timeout must still remove its waiter")
 
 
+def test_stalled_publication_retains_waiter_until_drain() -> None:
+    # This is deliberately a Python reference-model test: hold an authorized
+    # publisher indefinitely, let timeout cancellation start, and prove the
+    # registered waiter remains alive until the publisher releases its lease.
+    registry = WaitRegistry()
+    cookie = registry.register()
+    check(registry.assign(cookie, 90), "stalled publisher identity should be assigned")
+    with registry.lock:
+        cancel_seen = registry.waiters[cookie]["cancel_seen"]
+    publication_started = threading.Event()
+    release_publisher = threading.Event()
+    timeout_returned = threading.Event()
+    publish_authorization: list[bool] = []
+    post_returned: list[bool] = []
+    timeout_results: list[tuple[str, int | None]] = []
+
+    def stalled_publisher() -> None:
+        publish_authorization.append(registry.begin_publish(cookie, 90))
+        publish_authorization.append(registry.authorize_publish(cookie, 90))
+        publication_started.set()
+        release_publisher.wait()
+        post_returned.append(True)
+        registry.finish_publish(cookie, 90)
+
+    def timeout_waiter() -> None:
+        timeout_results.append(registry.cancel_and_drain(cookie))
+        timeout_returned.set()
+
+    publisher = threading.Thread(target=stalled_publisher, daemon=True)
+    canceller = threading.Thread(target=timeout_waiter, daemon=True)
+    publisher.start()
+    try:
+        check(publication_started.wait(1.0), "publisher did not enter its committed post")
+        canceller.start()
+        check(cancel_seen.wait(1.0), "timeout did not begin publication drain")
+        check(not timeout_returned.wait(0.02),
+              "timeout returned while the authorized publication was stalled")
+        with registry.lock:
+            waiter = registry.waiters.get(cookie)
+            check(waiter is not None, "stalled publisher lost its registered waiter")
+            check(waiter["cancelled"] and waiter["publishing"] and
+                  waiter["publish_committed"],
+                  "stalled publisher lease was not retained across timeout")
+        check(not registry.complete(cookie, 90, 0),
+              "late callback revived a waiter while timeout was draining")
+    finally:
+        release_publisher.set()
+        publisher.join(1.0)
+        if canceller.ident is not None:
+            canceller.join(1.0)
+
+    check(not publisher.is_alive() and not canceller.is_alive(),
+          "stalled publication cleanup workers did not drain")
+    check(publish_authorization == [True, True] and post_returned == [True],
+          "publication did not remain authorized until its modeled post returned")
+    check(timeout_returned.is_set() and timeout_results == [("timeout", None)],
+          "timeout did not return only after the publisher released its lease")
+    check(not registry.waiters, "drained stalled publication leaked its waiter")
+
+
 def test_close_barrier() -> None:
     registry = WaitRegistry()
     session = SessionModel(registry)
@@ -530,9 +592,10 @@ def main() -> None:
     test_queue_and_callback_edges()
     test_timeout_callback_race()
     test_timeout_publication_handshake()
+    test_stalled_publication_retains_waiter_until_drain()
     test_close_barrier()
     test_reverse_boot_unwind()
-    print("NPU lifecycle source contracts and host race/unwind model passed")
+    print("NPU lifecycle source contracts and Python reference model passed; kernel C was not executed")
 
 
 if __name__ == "__main__":

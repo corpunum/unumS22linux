@@ -77,6 +77,12 @@ def main() -> None:
         check(result["exit_code"] == status, "JSON and process exit status must match")
         check(result["checks"]["known_lifecycle_gaps"]["normal_boot_unwind_missing"] is True,
               "synthetic source must expose missing unwind")
+        check(result["readiness_gates"]["power_response_timeout_bounded"] is False,
+              "synthetic unbounded POWER response wait must fail that gate")
+        check(result["readiness_gates"]["publication_drain_liveness_resolved"] is False,
+              "host source checks must not claim publication-drain liveness")
+        check(result["readiness_gates"]["callback_lifetime_kernel_validated"] is False,
+              "host source checks must not claim kernel callback lifetime validation")
 
         bad = CONFIG.replace("CONFIG_NPU_MAILBOX_VERSION=9", "CONFIG_NPU_MAILBOX_VERSION=8")
         status, result = run(bad, root)
@@ -96,8 +102,10 @@ def main() -> None:
             status, result = run(CONFIG, root, **kwargs)
             check(status == 2, f"{mode} lifecycle source must fail closed")
             gates = result["readiness_gates"]
-            check(gates["power_notify_wait_resolved"] is False,
-                  f"{mode} lifecycle source must not resolve POWER wait")
+            check(gates["power_response_timeout_bounded"] is False,
+                  f"{mode} lifecycle source must not prove a bounded response wait")
+            check(gates["publication_drain_liveness_resolved"] is False,
+                  f"{mode} lifecycle source must not resolve publication-drain liveness")
             check(gates["normal_boot_error_unwind_resolved"] is False,
                   f"{mode} lifecycle source must not resolve boot unwind")
             check(not any(gates.values()), f"{mode} lifecycle source must leave all lifecycle gates false")
@@ -112,15 +120,25 @@ def main() -> None:
         source_route_pass=True,
         lifecycle_gaps={
             "normal_boot_unwind_missing": False,
-            "power_notify_has_unbounded_wait": False,
+            "power_response_timeout_missing": False,
+            "publication_drain_wait_unbounded": True,
         },
+        lifecycle_source_available=True,
     )
     check(readiness["artifact_preflight_pass"] is True, "synthetic artifacts should pass")
+    check(readiness["readiness_gates"]["power_response_timeout_bounded"] is True,
+          "bounded response timeout should be reported independently")
+    check(readiness["readiness_gates"]["publication_drain_liveness_resolved"] is False,
+          "bounded response timeout must not imply publication-drain liveness")
     check(readiness["bootup_ready"] is False, "unproven gates must block readiness")
     check(readiness["bootup_authorized"] is False, "host checker must never authorize")
     check(readiness["exit_code"] == 2, "unproven gates must return status 2")
-    check("callback_close_race_regressions_passed" in readiness["readiness_blockers"],
-          "callback race gate must remain a blocker")
+    check("callback_lifetime_kernel_validated" in readiness["readiness_blockers"],
+          "kernel callback lifetime must remain a blocker")
+    check("publication_drain_liveness_resolved" in readiness["readiness_blockers"],
+          "publication-drain liveness must remain a blocker")
+    check("firmware_boot_and_shutdown_device_tested" in readiness["readiness_blockers"],
+          "hardware validation must remain a blocker")
     check("live_probe_validated" in readiness["readiness_blockers"], "live gate must remain a blocker")
     print("npu boot preflight synthetic pass/mismatch cases passed")
 
