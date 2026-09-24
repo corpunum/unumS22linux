@@ -17,11 +17,17 @@ evidence, not runtime-reported identity.
 | `/root/deploy_stage_regression_impl` | `/tmp/s22-deploy-staging-20260924`, `codex/s22-stage-regression-20260924` | Commit `7f84aaf3770ebca3f5c7ad7e0b367ed99b199588`, integrated as `64a9ce3`: reproduce and fix staged receipt `NameError`; execute rendered deployment body in fake filesystem/sysfs/block-device sandbox; add fixed CI allowlist coverage. |
 | `/root/npu_liveness_impl` | `/tmp/s22-npu-liveness-20260924`, `codex/s22-npu-liveness-20260924` | Commit `b3f7a1bb8b7cae49757186f68dd1d9f4f1434d3c`, integrated as `e4b3ce3`: split timeout/drain/callback/device readiness and add stalled-publication Python reference-model test. |
 | `/root/storage_rescue_impl` | `/tmp/s22-storage-rescue-20260924`, `codex/s22-storage-rescue-20260924` | Commit `87d7ca8c91685268692c4035c195f71c7dd56535`, integrated as `7d05b61`: destination capacity auditor, seven sanitized tests, rescue/capacity note. Tests passed normal, `-O`, and `PYTHONOPTIMIZE=1`. |
-| `/root/hci_audio_trial_impl` | `/tmp/s22-hci-audio-prep-20260924`, `codex/s22-hci-audio-prep-20260924` | Active: HCI artifact/module release preflight and audio trial preparation. Host ABI evidence received; validator/tests/commit pending. No build or device access. |
+| `/root/hci_audio_trial_impl` | `/tmp/s22-hci-audio-prep-20260924`, `codex/s22-hci-audio-prep-20260924` | Commit `9d87080b25322f22ddcf56ddec3eed62c60a6b4b`, integrated as `cb20954`: host HCI artifact/module compatibility gate and synchronized audio snapshot regression. |
 
-The storage worker was reassigned a read-only, independent review of deployment
-commits `64a9ce3` and `98180d1`; it did not author that deployment work. Review
-is pending. Do not treat it as approved until its result is recorded.
+The storage worker was reassigned as a read-only independent reviewer of
+deployment, NPU status, and HCI preflight; it did not author these changes.
+Its initial review found a P2 deployment race and a partial-stage coverage gap.
+Coordinator commit `2c7c60a` rechecks the baseline hash on the opened RECOVERY
+fd, current mountinfo and fd identity/capacity immediately before `pwrite`;
+the new injected regressions simulate a post-validation mount and a changed
+partition baseline. The partial-stage test now attempts a flash from the
+partial directory and confirms refusal with no receipt or partition write.
+Independent review of this corrective commit is still pending.
 
 ## Deployment regression and CI
 
@@ -31,7 +37,9 @@ verified both full-size files, printed its stage receipt, then raised
 `NameError: name 'actual' is not defined`. This occurred without SSH or device
 access. Commit `64a9ce3` moves the final readback receipt into the flash branch.
 Coordinator commit `98180d1` adds a partial staging-file write failure case;
-it asserts no success receipt and zero partition writes.
+it asserts no success receipt and zero partition writes. After review found a
+stale-check race, commit `2c7c60a` adds immediate pre-write opened-fd baseline,
+mount and identity/capacity checks plus race-injection regressions.
 
 The integration test runs the rendered body unchanged while redirecting
 filesystem, sysfs and block-device operations to a temporary tree. It asserts:
@@ -42,9 +50,13 @@ filesystem, sysfs and block-device operations to a temporary tree. It asserts:
 - invalid mode and failed target validation perform no partition write and emit
   no success receipt;
 - partial stage and flash failures emit no success receipt.
+- mount state changing after initial validation and a baseline changing before
+  write both block partition writes.
 
 The deployment suite is in the explicit host-regression allowlist and its
-independently pinned path sequence. Three AVB-only cases explicitly skip in
+independently pinned path sequence. The HCI compatibility synthetic suite and
+audio synchronization suite are also in the fixed CI allowlist (integration
+commit `2572950`). Three AVB-only cases explicitly skip in
 this public worktree because the trusted public `avbtool.py` fixture is absent;
 no private tool asset was published.
 
@@ -52,8 +64,10 @@ Coordinator verification on the integrated worktree:
 
 | Check | Result |
 |---|---|
-| `test-recovery-deployment-hardening.py` normal, `python3 -O`, `PYTHONOPTIMIZE=1` | 40 passed in each mode; 3 explicit AVB skips per mode |
-| `run-host-regressions.py --mode both` | Exit 0; zero failures; normal and eligible optimized suites passed, with two documented `-O` skips |
+| `test-recovery-deployment-hardening.py` normal, `python3 -O`, `PYTHONOPTIMIZE=1` | 42 passed in each mode; 3 explicit AVB skips per mode |
+| `run-host-regressions.py --mode both` after deployment/NPU/storage/HCI/audio integration | Exit 0; all ten allowlisted scripts passed in normal mode and all optimization-safe scripts passed under `-O`, with two documented skips |
+| HCI synthetic preflight suite normal, `-O`, `PYTHONOPTIMIZE=1` | 5/5 each |
+| Audio snapshot synchronization suite normal, `-O`, `PYTHONOPTIMIZE=1` | 2/2 each |
 | `test-host-regression-runner.py` | 7/7 passed |
 | `test-s22-capacity-rescue-audit.py` normal, `-O`, `PYTHONOPTIMIZE=1` | 7/7 in each mode |
 | `git diff --check` for current source/docs | Passed |
@@ -114,10 +128,12 @@ the actual recovery host, then a read-only successful `samloader detect`.
 There is no flash in that check.
 
 Previously verified host-accessible native rollback:
-`/home/corpunum/s22-linux/builds/audio-extra-v2-20260922/recovery.img`,
-SHA-256 `758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b`;
-it matched the current RECOVERY partition in an earlier readback. It is not
-published. Never restore Android userdata or write unrelated partitions.
+`builds/audio-extra-v2-20260922/recovery.img`, SHA-256
+`758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b`; it
+was read back from `/dev/block/sda16` and matched the host artifact at
+`2026-09-24T05:09Z`. The artifact remains in the owner checkout; the image
+itself is not published. Never restore Android userdata or write unrelated
+partitions.
 
 ## Smallest HCI trial and current phone
 
@@ -132,9 +148,34 @@ release. The O-tree comparison found all 16,547 imported module symbol
 versions with zero missing exports and zero CRC mismatches; the `-dirty`
 vermagic mismatch still blocks deployment. Do not force-load these modules.
 
-Minimal build correction proposed by the HCI worker is an exact clean release
-`5.10.260-g4e5c5ad7d950`, followed by a full module vermagic and Module.symvers
-check. No corrected build was produced. The existing candidate is not ready.
+The HCI host preflight executed against the existing candidate and independently
+verified image SHA `6d7e2a4adefa32a87b4b47bf5eea59ba79b71e169dff8328acbcd3b68e06ae01`,
+embedded kernel SHA
+`9a694c093fd24031a7ece26741739ba52cfc6ff54651605533309ff9a5a9c1d6`, and
+unchanged ramdisk SHA
+`0dd9dda696c26ccf4c99d77f9d24f334f0c4baece5e19312bcc12f2963841e5d` (equal to
+the pinned base ramdisk). The source HEAD is
+`4e5c5ad7d950e4de0688b5663965f2075654b2ad`; only `net/bluetooth/hci_sock.c`
+was dirty in the inspected build source. `.config` SHA is
+`a147841a53f5b10c366a759d0e83525996a0ec5d8227a103b020cf2111400f9e`, with
+`CONFIG_LOCALVERSION_AUTO=y` and `CONFIG_LOCALVERSION=""`.
+
+The coordinator ran the new read-only preflight against the actual local image,
+manifest and O-tree; it exited 2 with the two expected blockers (dirty source
+and full-vermagic mismatch), without device access. The committed synthetic
+HCI tests exercise the pure module-vermagic and CRC verdict helpers; they do
+not exercise full image/header/manifest/cpio inspection. No private image or
+kernel artifacts are included to provide such a CI fixture.
+
+The preflight confirms 16,547 imported symbol CRCs match the O-tree
+`Module.symvers` with no missing symbols or mismatches, but all 324 ramdisk
+module vermagics still differ from the candidate's `-dirty` release. This is
+host artifact evidence, not a live query. Minimal build correction proposed by
+the HCI worker is to commit the repair into a clean source tree, set
+`CONFIG_LOCALVERSION_AUTO=n` and
+`CONFIG_LOCALVERSION="-g4e5c5ad7d950"`, verify `make kernelrelease` equals
+`5.10.260-g4e5c5ad7d950`, then rerun full module vermagic and Module.symvers
+checks. No corrected build was produced. The existing candidate is not ready.
 After release compatibility, independent Download Mode rescue qualification,
 and the existing operation-specific authorization, the first HCI test should
 be raw socket create/close only, before controller attach, discovery or
@@ -149,10 +190,10 @@ pairing, new Wi-Fi acceptance or independent rescue was established.
 
 ## Exact next gates
 
-1. Complete the HCI host-only validator/tests and record its commit.
-2. Receive independent deployment review, then inspect the complete sanitized
-   diff and publish the unmerged review branch; verify hosted Actions on its
-   exact SHA.
+1. Finish independent review of deployment, NPU status, and HCI preflight;
+   fix any findings and record reviewer evidence.
+2. Inspect the complete sanitized diff and publish the unmerged review branch;
+   verify hosted Actions on its exact SHA.
 3. Do not build/deploy HCI until the clean-release candidate and every loaded
    module pass exact compatibility checks.
 4. Do not start any device trial until the owner-assisted Download Mode check
