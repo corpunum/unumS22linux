@@ -7,10 +7,12 @@ reboot, firmware writes, Android targets or hardware-control probes.
 import argparse
 from datetime import datetime, timezone
 import hashlib
+import importlib.util
 import ipaddress
 import json
 import os
 from pathlib import Path
+import pwd
 import re
 import shlex
 import shutil
@@ -21,7 +23,9 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = Path.home() / '.local/state/s22-hci-trial-20260924/observer'
+RIG_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir)
+TRIAL_STATE_ROOT = RIG_HOME / '.local/state/s22-hci-trial-20260924'
+OUT = TRIAL_STATE_ROOT / 'observer'
 EXPECTED_TARGET = 'recovery'
 EXPECTED_FLASH_SHA256 = '42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5'
 EXPECTED_BASE_SHA256 = '758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b'
@@ -175,9 +179,9 @@ def render_snapshot_script():
 
 
 def snapshot(project_root=ROOT):
-    result = subprocess.run([str(validated_ssh_wrapper(project_root)),
-                             'python3 -c '+shlex.quote(render_snapshot_script())],
-                            capture_output=True, text=True, timeout=12)
+    result = run_trusted_remote('usb', None,
+                                'python3 -c '+shlex.quote(render_snapshot_script()),
+                                timeout=12, project_root=project_root)
     if result.returncode:
         raise RuntimeError('SSH snapshot unavailable')
     return json.loads(result.stdout)
@@ -372,6 +376,15 @@ def ensure_private_directory(path):
             'state directory must be private and owned by this user')
 
 
+def require_unused_trial_marker(path):
+    """Fail closed if this trial already attempted the irreversible request."""
+    try:
+        os.lstat(path)
+    except FileNotFoundError:
+        return
+    raise FileExistsError(f'trial one-shot marker already exists: {path.name}')
+
+
 def read_json(path):
     try:
         info = path.lstat()
@@ -437,8 +450,8 @@ def request_reboot_once(marker, result_path, runner=subprocess.run, project_root
                           'created_at': datetime.now(timezone.utc).isoformat(),
                           'retry_allowed': False})
     try:
-        result = runner([str(validated_ssh_wrapper(project_root)), 's22-reboot recovery'], capture_output=True,
-                        text=True, timeout=15, check=False)
+        result = run_trusted_remote('usb', None, 's22-reboot recovery', runner=runner,
+                                    timeout=15, project_root=project_root)
     except (subprocess.TimeoutExpired, OSError, ObserverError) as error:
         durable_json(result_path, {'status': 'unknown_disconnect_after_request',
                                    'outcome': 'UNKNOWN', 'retry_allowed': False,
@@ -474,6 +487,46 @@ def validated_ssh_wrapper(project_root=ROOT):
     require(digest == approved_ssh_wrapper_sha256(),
             'USB SSH wrapper does not match the approved deployer SHA-256')
     return wrapper
+
+
+def _trusted_deployer():
+    """Load the reviewed deployer's sealed-wrapper helpers, not caller code."""
+    path = ROOT/'tools/hardware/deploy-audio-recovery.py'
+    spec = importlib.util.spec_from_file_location('s22_reviewed_deployer', path)
+    require(spec is not None and spec.loader is not None,
+            'reviewed deployer wrapper helpers are unavailable')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def run_trusted_remote(transport, host, remote, *, runner=subprocess.run,
+                       timeout=15, project_root=ROOT):
+    """Use an opened, sealed SSH-wrapper snapshot and a trusted SSH PATH."""
+    deployer = _trusted_deployer()
+    if transport == 'usb':
+        wrapper = project_root/'tools/s22-ssh'
+        try:
+            wrapper_fd = deployer.validate_approved_ssh_wrapper(wrapper)
+        except (OSError, ValueError) as error:
+            raise ObserverError('approved USB SSH wrapper could not be pinned') from error
+        try:
+            argv, environment = deployer.build_approved_ssh_invocation(
+                wrapper_fd, wrapper, remote, project_root=project_root)
+            return runner(argv, capture_output=True, text=True, timeout=timeout,
+                          check=False, pass_fds=(wrapper_fd,), env=environment)
+        finally:
+            os.close(wrapper_fd)
+    command = _ssh_transport(transport, host, remote, project_root)
+    environment = os.environ.copy()
+    environment.pop('BASH_ENV', None)
+    environment.pop('ENV', None)
+    try:
+        environment['PATH'] = deployer.verified_ssh_path()
+    except (OSError, ValueError) as error:
+        raise ObserverError('trusted SSH executable path is unavailable') from error
+    return runner(command, capture_output=True, text=True, timeout=timeout,
+                  check=False, env=environment)
 
 
 def _ssh_transport(transport, host, remote, project_root=ROOT):
@@ -527,8 +580,8 @@ def pinned_usb_host_key_alias(known_hosts=None, project_root=ROOT):
 
 def discover_wifi_host(runner=subprocess.run, project_root=ROOT):
     """Read wlan0 IPv4 over verified USB, then keep it only in process memory."""
-    result = runner([str(validated_ssh_wrapper(project_root)), 'python3 -c '+shlex.quote(WIFI_ADDRESS)],
-                    capture_output=True, text=True, timeout=10, check=False)
+    result = run_trusted_remote('usb', None, 'python3 -c '+shlex.quote(WIFI_ADDRESS),
+                                runner=runner, timeout=10, project_root=project_root)
     require(result.returncode == 0, 'cannot discover wlan0 SSH address over USB')
     try:
         address = ipaddress.ip_address(result.stdout.strip())
@@ -541,9 +594,9 @@ def discover_wifi_host(runner=subprocess.run, project_root=ROOT):
 
 
 def snapshot_over(transport='usb', host=None, runner=subprocess.run, project_root=ROOT):
-    result = runner(_ssh_transport(transport, host,
-                                   'python3 -c '+shlex.quote(render_snapshot_script()), project_root),
-                    capture_output=True, text=True, timeout=15, check=False)
+    result = run_trusted_remote(transport, host,
+                                'python3 -c '+shlex.quote(render_snapshot_script()),
+                                runner=runner, timeout=15, project_root=project_root)
     if result.returncode:
         raise ObserverError(f'{transport} reconnect unavailable')
     try:
@@ -609,9 +662,9 @@ def redacted_host_enumeration(runner=subprocess.run):
 
 
 def candidate_hash(transport='usb', host=None, runner=subprocess.run, project_root=ROOT):
-    result = runner(_ssh_transport(transport, host,
-                    'sha256sum /dev/block/by-name/recovery', project_root),
-                    capture_output=True, text=True, timeout=60, check=False)
+    result = run_trusted_remote(transport, host,
+                                'sha256sum /dev/block/by-name/recovery', runner=runner,
+                                timeout=60, project_root=project_root)
     require(result.returncode == 0, 'cannot read live RECOVERY hash')
     match = re.match(r'^([0-9a-f]{64})\s+', result.stdout)
     require(match is not None and match.group(1) == EXPECTED_FLASH_SHA256,
@@ -623,6 +676,9 @@ def run_reboot_observer(state_root, name, flash, wifi_host=None, tailscale_host=
                         observation_seconds=OBSERVATION_SECONDS, sample_interval=5,
                         runner=subprocess.run, clock=time.monotonic, sleep=time.sleep,
                         enumerate_host=redacted_host_enumeration, project_root=ROOT):
+    ensure_private_directory(TRIAL_STATE_ROOT)
+    marker = TRIAL_STATE_ROOT/'hci-candidate-reboot-attempted.json'
+    require_unused_trial_marker(marker)
     validate_flash_receipt(flash)
     before = snapshot_over('usb', runner=runner, project_root=project_root)
     validate_snapshot(before, post_reboot=False)
@@ -638,7 +694,6 @@ def run_reboot_observer(state_root, name, flash, wifi_host=None, tailscale_host=
             wifi_host = discover_wifi_host(runner=runner, project_root=project_root)
         except (ObserverError, OSError, subprocess.TimeoutExpired):
             wifi_host = None
-    marker = state_root/'hci-candidate-reboot-attempted.json'
     started = clock()
     deadline = started + observation_seconds
 
@@ -770,6 +825,9 @@ def run_reboot_observer(state_root, name, flash, wifi_host=None, tailscale_host=
 def run_hci_once(state_root, name, observer, runner=subprocess.run,
                  route_selector=reconnect_snapshot, hasher=candidate_hash,
                  wifi_host=None, tailscale_host=None, project_root=ROOT):
+    ensure_private_directory(TRIAL_STATE_ROOT)
+    marker = TRIAL_STATE_ROOT/'hci-candidate-socket-attempted.json'
+    require_unused_trial_marker(marker)
     require(observer_receipt_valid(observer),
             'hci-once requires a valid completed observer receipt')
     current, transport = route_selector(wifi_host, tailscale_host, runner=runner,
@@ -798,28 +856,53 @@ def run_hci_once(state_root, name, observer, runner=subprocess.run,
         'network_state': current.get('network_state'),
         'power_state': current.get('power_state'),
     })
-    marker = state_root/'hci-candidate-socket-attempted.json'
     durable_json(marker, {'status': 'request_started', 'retry_allowed': False,
                           'observer_boot_id': observer.get('boot_id'),
                           'current_boot_id': current.get('boot_id'),
                           'recovery_sha256': recovery_sha256})
     probe = "import json,socket; s=socket.socket(socket.AF_BLUETOOTH,socket.SOCK_RAW,socket.BTPROTO_HCI); s.close(); print(json.dumps({'socket_created_and_closed':True,'attached':False,'scan_sent':False,'pairing_started':False}))"
     try:
-        result = runner(_ssh_transport(transport, route_host,
-                         'python3 -c '+shlex.quote(probe), project_root),
-                        capture_output=True, text=True, timeout=15, check=False)
+        result = run_trusted_remote(transport, route_host,
+                                    'python3 -c '+shlex.quote(probe), runner=runner,
+                                    timeout=15, project_root=project_root)
     except (subprocess.TimeoutExpired, OSError, ObserverError) as error:
         durable_json(out/'result.json', {'status': 'unknown_disconnect_after_request',
                                          'outcome': 'UNKNOWN', 'retry_allowed': False,
                                          'error_type': type(error).__name__})
         raise ObserverError('HCI request disconnected; outcome UNKNOWN; no retry')
+    expected_probe = {'socket_created_and_closed': True, 'attached': False,
+                      'scan_sent': False, 'pairing_started': False}
+    probe_receipt = None
+    if result.returncode == 0:
+        try:
+            def unique_json_object(pairs):
+                value = {}
+                for key, item in pairs:
+                    if key in value:
+                        raise ValueError('duplicate HCI receipt key')
+                    value[key] = item
+                return value
+            probe_receipt = json.loads(result.stdout, object_pairs_hook=unique_json_object)
+        except (json.JSONDecodeError, TypeError):
+            probe_receipt = None
+        except ValueError:
+            probe_receipt = None
+    verified_probe = (isinstance(probe_receipt, dict) and
+                      set(probe_receipt) == set(expected_probe) and
+                      all(type(probe_receipt[key]) is bool and
+                          probe_receipt[key] is expected_probe[key]
+                          for key in expected_probe))
+    unknown_transport = result.returncode == 255 or not verified_probe and result.returncode == 0
     receipt = {'schema': 's22-hci-socket-smoke/v1',
-               'status': 'completed' if result.returncode == 0 else 'unknown_transport_after_request',
-               'outcome': 'SUCCESS' if result.returncode == 0 else 'UNKNOWN',
-               'returncode': result.returncode, 'retry_allowed': False, 'attached': False,
+               'status': ('completed' if verified_probe else
+                          'unknown_transport_after_request' if unknown_transport else 'failed'),
+               'outcome': ('SUCCESS' if verified_probe else
+                           'UNKNOWN' if unknown_transport else 'FAILED'),
+               'returncode': result.returncode, 'remote_receipt_valid': verified_probe,
+               'retry_allowed': False, 'attached': False,
                'scan_sent': False, 'pairing_started': False}
     durable_json(out/'result.json', receipt)
-    require(result.returncode == 0, 'HCI socket smoke failed; no retry')
+    require(verified_probe, 'HCI socket result was not verified; no retry')
     return receipt
 
 
@@ -831,7 +914,7 @@ def main(argv=None):
     parser.add_argument('--project-root', type=Path, default=ROOT,
                         help='trusted project root containing the pinned SSH wrapper and deployer')
     parser.add_argument('--state-root', type=Path, default=OUT)
-    parser.add_argument('--flash-receipt', type=Path, default=(Path.home()/
+    parser.add_argument('--flash-receipt', type=Path, default=(RIG_HOME/
                         '.local/state/s22-hci-trial-20260924/receipts/hci-recovery-forward-flash.json'))
     parser.add_argument('--observer-receipt', type=Path)
     parser.add_argument('--wifi-host', default=os.environ.get('S22_WIFI_SSH_HOST'))

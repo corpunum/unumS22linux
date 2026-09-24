@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import struct
@@ -134,8 +135,19 @@ def completed_observer(**changes):
 
 class ObserverPolicyTests(unittest.TestCase):
     def test_default_observer_output_is_private_local_state_not_repo_rootfs(self):
-        self.assertEqual(observer.OUT, Path.home() / ".local/state/s22-hci-trial-20260924/observer")
+        self.assertEqual(observer.OUT, observer.RIG_HOME /
+                         ".local/state/s22-hci-trial-20260924/observer")
         self.assertNotIn("rootfs", observer.OUT.parts)
+
+    def test_trial_marker_root_ignores_caller_overridden_home(self):
+        environment = os.environ.copy()
+        environment["HOME"] = "/tmp/s22-untrusted-home"
+        program = ("import runpy; ns=runpy.run_path("+repr(str(SCRIPT))+
+                   ", run_name='s22_observer_fixture'); print(ns['TRIAL_STATE_ROOT'])")
+        result = subprocess.run([sys.executable, "-c", program], capture_output=True,
+                                text=True, env=environment, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(Path(result.stdout.strip()), observer.TRIAL_STATE_ROOT)
 
     def test_flash_receipt_pins_target_mode_byte_count_and_no_reboot(self):
         observer.validate_flash_receipt(flash_receipt())
@@ -273,6 +285,94 @@ class ObserverPolicyTests(unittest.TestCase):
                 observer.request_reboot_once(marker, result_path, runner=nonzero)
             self.assertEqual(len(calls), 1)
 
+    def test_usb_reboot_executes_only_the_sealed_wrapper_with_trusted_path(self):
+        with tempfile.TemporaryDirectory(prefix="s22-observer-sealed-ssh-") as temporary:
+            root = Path(temporary)
+            wrapper = root / "tools" / "s22-ssh"
+            wrapper.parent.mkdir()
+            original = (observer.ROOT / "tools/s22-ssh").read_bytes()
+            wrapper.write_bytes(original)
+            wrapper.chmod(0o700)
+            observed = {}
+            inherited_path = "/tmp/fake-ssh-bin"
+
+            def inspect_invocation(command, **kwargs):
+                wrapper_fd = kwargs["pass_fds"][0]
+                observed.update(command=command, kwargs=kwargs,
+                                sealed_wrapper=Path(f"/proc/self/fd/{wrapper_fd}").read_bytes())
+                # Simulate replacement after the wrapper was opened and sealed.
+                wrapper.write_text("#!/bin/bash\necho shim\n", encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            with mock.patch.dict(observer.os.environ, {"PATH": inherited_path}):
+                result = observer.run_trusted_remote("usb", None, "s22-reboot recovery",
+                                                     runner=inspect_invocation,
+                                                     project_root=root)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(observed["command"][0], "/bin/bash")
+            self.assertIn("source \"$S22_APPROVED_SSH_FD_PATH\"", observed["command"][2])
+            self.assertNotEqual(observed["kwargs"]["env"]["PATH"], inherited_path)
+            self.assertEqual(observed["kwargs"]["env"]["PATH"], "/usr/bin")
+            self.assertEqual(observed["sealed_wrapper"], original)
+
+    def test_hci_remote_zero_exit_without_exact_device_receipt_is_not_success(self):
+        with tempfile.TemporaryDirectory(prefix="s22-observer-hci-bad-receipt-") as temporary:
+            root = Path(temporary)
+            calls = []
+
+            def route_selector(*args, **kwargs):
+                return snapshot("candidate-boot-id"), "usb"
+
+            def hasher(*args, **kwargs):
+                return observer.EXPECTED_FLASH_SHA256
+
+            def successful_but_empty(command, **kwargs):
+                calls.append(command)
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            with mock.patch.object(observer, "TRIAL_STATE_ROOT", root / "trial-state"):
+                with self.assertRaisesRegex(observer.ObserverError, "result was not verified"):
+                    observer.run_hci_once(root / "first-state", "trial", completed_observer(),
+                                           runner=successful_but_empty,
+                                           route_selector=route_selector, hasher=hasher)
+                receipt = observer.read_json(root / "first-state" / "trial-hci" / "result.json")
+                self.assertEqual(receipt["outcome"], "UNKNOWN")
+                with self.assertRaises(FileExistsError):
+                    observer.run_hci_once(root / "second-state", "another-name",
+                                           completed_observer(), runner=successful_but_empty,
+                                           route_selector=route_selector, hasher=hasher)
+            self.assertEqual(len(calls), 1)
+
+    def test_hci_remote_receipt_requires_unique_boolean_fields(self):
+        malformed = (
+            '{"socket_created_and_closed":1,"attached":false,'
+            '"scan_sent":false,"pairing_started":false}',
+            '{"socket_created_and_closed":true,"socket_created_and_closed":false,'
+            '"attached":false,"scan_sent":false,"pairing_started":false}',
+        )
+        for payload in malformed:
+            with self.subTest(payload=payload), \
+                    tempfile.TemporaryDirectory(prefix="s22-observer-hci-strict-json-") as temporary:
+                root = Path(temporary)
+
+                def route_selector(*args, **kwargs):
+                    return snapshot("candidate-boot-id"), "usb"
+
+                def hasher(*args, **kwargs):
+                    return observer.EXPECTED_FLASH_SHA256
+
+                def malformed_success(command, **kwargs):
+                    return subprocess.CompletedProcess(command, 0, payload, "")
+
+                with mock.patch.object(observer, "TRIAL_STATE_ROOT", root / "trial-state"):
+                    with self.assertRaisesRegex(observer.ObserverError, "result was not verified"):
+                        observer.run_hci_once(root / "state", "trial", completed_observer(),
+                                               runner=malformed_success,
+                                               route_selector=route_selector, hasher=hasher)
+                    receipt = observer.read_json(root / "state" / "trial-hci" / "result.json")
+                self.assertEqual(receipt["outcome"], "UNKNOWN")
+                self.assertFalse(receipt["remote_receipt_valid"])
+
     def test_timeout_continues_reconnect_observation_and_accepts_once(self):
         with tempfile.TemporaryDirectory(prefix="s22-observer-integration-") as temporary:
             root = Path(temporary)
@@ -298,7 +398,7 @@ class ObserverPolicyTests(unittest.TestCase):
                 if remote.startswith("python3 -c ") and "addresses=" in remote:
                             return subprocess.CompletedProcess(command, 0, "192.0.2.10\n", "")
                 if remote.startswith("python3 -c ") and "device-tree/model" in remote:
-                    if command[0].endswith("tools/s22-ssh"):
+                    if command[0] == "/bin/bash":
                         usb_snapshots += 1
                         if usb_snapshots == 1:
                             payload = snapshot("baseline-boot-id", 5000)
@@ -319,6 +419,7 @@ class ObserverPolicyTests(unittest.TestCase):
             redacted = {"usb_device_count": 1, "interfaces": [], "wifi_devices": [],
                         "tailscale": None}
             with mock.patch.object(observer, "OBSERVATION_SECONDS", 2), \
+                    mock.patch.object(observer, "TRIAL_STATE_ROOT", root / "fixed-trial-state"), \
                     mock.patch.object(observer, "pinned_usb_host_key_alias", return_value="fixture-alias"):
                 result = observer.run_reboot_observer(
                     root, "trial", flash_receipt(),
@@ -344,6 +445,17 @@ class ObserverPolicyTests(unittest.TestCase):
             self.assertNotIn("192.0.2.10", rendered)
             self.assertNotIn("fixture-alias", rendered)
             self.assertTrue(any(command[0] == "/usr/bin/ssh" for command in calls))
+            reboot_count = len(reboot_calls)
+            with mock.patch.object(observer, "OBSERVATION_SECONDS", 2), \
+                    mock.patch.object(observer, "TRIAL_STATE_ROOT", root / "fixed-trial-state"), \
+                    mock.patch.object(observer, "pinned_usb_host_key_alias", return_value="fixture-alias"):
+                with self.assertRaises(FileExistsError):
+                    observer.run_reboot_observer(
+                        root / "alternate-state-root", "alternate-name", flash_receipt(),
+                        wifi_host="phone-wifi.invalid", observation_seconds=2,
+                        sample_interval=1, runner=fake_run, clock=fake_clock,
+                        sleep=fake_sleep, enumerate_host=lambda **kwargs: redacted)
+            self.assertEqual(len(reboot_calls), reboot_count)
 
     def test_hci_once_refuses_stale_boot_before_hash_or_socket(self):
         with tempfile.TemporaryDirectory(prefix="s22-observer-hci-stale-") as temporary:
@@ -357,9 +469,10 @@ class ObserverPolicyTests(unittest.TestCase):
                 calls.append("hash")
                 return observer.EXPECTED_FLASH_SHA256
 
-            with self.assertRaisesRegex(observer.ObserverError, "boot ID changed"):
-                observer.run_hci_once(root, "trial", completed_observer(),
-                                       route_selector=snapshotter, hasher=hasher)
+            with mock.patch.object(observer, "TRIAL_STATE_ROOT", root / "trial-state"):
+                with self.assertRaisesRegex(observer.ObserverError, "boot ID changed"):
+                    observer.run_hci_once(root, "trial", completed_observer(),
+                                           route_selector=snapshotter, hasher=hasher)
             self.assertEqual(calls, [])
             self.assertFalse((root / "hci-candidate-socket-attempted.json").exists())
 
@@ -378,15 +491,16 @@ class ObserverPolicyTests(unittest.TestCase):
                 socket_calls.append(command)
                 raise subprocess.TimeoutExpired(command, kwargs["timeout"])
 
-            with self.assertRaisesRegex(observer.ObserverError, "UNKNOWN"):
-                observer.run_hci_once(root, "trial", completed_observer(), runner=disconnect,
-                                       route_selector=route_selector, hasher=hasher)
-            result = observer.read_json(root / "trial-hci" / "result.json")
-            self.assertEqual(result["outcome"], "UNKNOWN")
-            self.assertFalse(result["retry_allowed"])
-            with self.assertRaises(FileExistsError):
-                observer.run_hci_once(root, "trial", completed_observer(), runner=disconnect,
-                                       route_selector=route_selector, hasher=hasher)
+            with mock.patch.object(observer, "TRIAL_STATE_ROOT", root / "trial-state"):
+                with self.assertRaisesRegex(observer.ObserverError, "UNKNOWN"):
+                    observer.run_hci_once(root, "trial", completed_observer(), runner=disconnect,
+                                           route_selector=route_selector, hasher=hasher)
+                result = observer.read_json(root / "trial-hci" / "result.json")
+                self.assertEqual(result["outcome"], "UNKNOWN")
+                self.assertFalse(result["retry_allowed"])
+                with self.assertRaises(FileExistsError):
+                    observer.run_hci_once(root, "trial", completed_observer(), runner=disconnect,
+                                           route_selector=route_selector, hasher=hasher)
             self.assertEqual(len(socket_calls), 1)
 
     def test_hci_nonzero_transport_result_is_unknown_and_cannot_be_retried(self):
@@ -404,15 +518,16 @@ class ObserverPolicyTests(unittest.TestCase):
                 socket_calls.append(command)
                 return subprocess.CompletedProcess(command, 255, "", "")
 
-            with self.assertRaises(observer.ObserverError):
-                observer.run_hci_once(root, "trial", completed_observer(), runner=nonzero,
-                                       route_selector=route_selector, hasher=hasher)
-            result = observer.read_json(root / "trial-hci" / "result.json")
-            self.assertEqual(result["outcome"], "UNKNOWN")
-            self.assertFalse(result["retry_allowed"])
-            with self.assertRaises(FileExistsError):
-                observer.run_hci_once(root, "trial", completed_observer(), runner=nonzero,
-                                       route_selector=route_selector, hasher=hasher)
+            with mock.patch.object(observer, "TRIAL_STATE_ROOT", root / "trial-state"):
+                with self.assertRaises(observer.ObserverError):
+                    observer.run_hci_once(root, "trial", completed_observer(), runner=nonzero,
+                                           route_selector=route_selector, hasher=hasher)
+                result = observer.read_json(root / "trial-hci" / "result.json")
+                self.assertEqual(result["outcome"], "UNKNOWN")
+                self.assertFalse(result["retry_allowed"])
+                with self.assertRaises(FileExistsError):
+                    observer.run_hci_once(root, "trial", completed_observer(), runner=nonzero,
+                                           route_selector=route_selector, hasher=hasher)
             self.assertEqual(len(socket_calls), 1)
 
     def test_hci_preflight_carries_selected_network_route_through_hash_and_request(self):
@@ -429,16 +544,21 @@ class ObserverPolicyTests(unittest.TestCase):
                 hash_routes.append((transport, host))
                 return observer.EXPECTED_FLASH_SHA256
 
+            probe_result = json.dumps({"socket_created_and_closed": True, "attached": False,
+                                       "scan_sent": False, "pairing_started": False})
+
             def socket_request(command, **kwargs):
                 calls.append(command)
-                return subprocess.CompletedProcess(command, 0, "", "")
+                return subprocess.CompletedProcess(command, 0, probe_result, "")
 
-            with mock.patch.object(observer, "pinned_usb_host_key_alias", return_value="ephemeral-alias"):
+            with mock.patch.object(observer, "TRIAL_STATE_ROOT", root / "trial-state"), \
+                    mock.patch.object(observer, "pinned_usb_host_key_alias", return_value="ephemeral-alias"):
                 result = observer.run_hci_once(
                     root, "trial", completed_observer(), runner=socket_request,
                     route_selector=route_selector, hasher=hasher,
                     wifi_host="phone-wifi.invalid", project_root=observer.ROOT)
             self.assertEqual(result["status"], "completed")
+            self.assertTrue(result["remote_receipt_valid"])
             self.assertEqual(hash_routes, [("wifi", "phone-wifi.invalid")])
             self.assertEqual(len(calls), 1)
             self.assertEqual(calls[0][0], "/usr/bin/ssh")
