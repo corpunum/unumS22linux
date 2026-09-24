@@ -876,6 +876,50 @@ def manifest_source_commit_issue(manifest: dict, source_head: str) -> str | None
     return None
 
 
+def manifest_build_provenance_issues(manifest: dict, source_head: str,
+                                     release: str, config_path: Path,
+                                     symvers_path: Path, image_path: Path) -> list[str]:
+    provenance = manifest.get("kernel_build_provenance")
+    if not isinstance(provenance, dict) or provenance.get("complete") is not True:
+        return ["candidate manifest lacks complete kernel build provenance"]
+
+    issues = []
+    source_issue = manifest_source_commit_issue(manifest, source_head)
+    if source_issue:
+        issues.append(source_issue)
+    if provenance.get("source_dirty") is not False:
+        issues.append("candidate manifest does not attest a clean kernel source tree")
+
+    recorded_files = (
+        ("kernel_release", release, "kernel release"),
+        ("config_sha256", sha256_file(config_path), "kernel config hash"),
+        ("module_symvers_sha256", sha256_file(symvers_path), "Module.symvers hash"),
+        ("kernel_image_sha256", sha256_file(image_path), "kernel Image hash"),
+    )
+    for key, expected, label in recorded_files:
+        if provenance.get(key) != expected:
+            issues.append(f"candidate manifest {label} differs from the supplied O-tree")
+
+    command = provenance.get("build_command")
+    if not isinstance(command, str) or not command.strip():
+        issues.append("candidate manifest lacks the kernel build command")
+    toolchain = provenance.get("toolchain_tools")
+    if not isinstance(toolchain, list) or not toolchain:
+        issues.append("candidate manifest lacks recorded toolchain identities")
+    else:
+        for index, tool in enumerate(toolchain):
+            if not isinstance(tool, dict):
+                issues.append(f"candidate manifest toolchain entry {index} is malformed")
+                continue
+            if not all(isinstance(tool.get(key), str) and tool[key].strip()
+                       for key in ("name", "version_first_line")):
+                issues.append(f"candidate manifest toolchain entry {index} lacks name or version")
+            digest = tool.get("sha256")
+            if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+                issues.append(f"candidate manifest toolchain entry {index} lacks a SHA-256 identity")
+    return issues
+
+
 def inspect_candidate(artifact_root: Path, image_path: Path,
                       manifest_path: Path, o_tree: Path) -> dict:
     artifact_root = artifact_root.resolve(strict=True)
@@ -952,9 +996,9 @@ def inspect_candidate(artifact_root: Path, image_path: Path,
     source_description = git_value(source, "describe", "--always", "--dirty")
     source_status = git_value(source, "status", "--porcelain", "--untracked-files=all")
     dirty_files = [line[2:].strip() for line in source_status.splitlines() if line]
-    manifest_source_issue = manifest_source_commit_issue(manifest, source_head)
-    if manifest_source_issue:
-        provenance_issues.append(manifest_source_issue)
+    provenance_issues.extend(manifest_build_provenance_issues(
+        manifest, source_head, release, config_path, symvers_path, image_o_path,
+    ))
     if dirty_files:
         provenance_issues.append(
             "kernel build source tree is dirty; source revision is not a complete provenance key"
