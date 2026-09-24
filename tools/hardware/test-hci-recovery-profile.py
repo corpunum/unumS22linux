@@ -216,6 +216,23 @@ print("UNSAFE_ACCEPT");sys.exit(0)
         transport.assert_called_once()
         self.assertFalse((receipts / "hci-recovery-forward-flash.json").exists())
 
+    def test_failed_readback_is_not_recorded_as_success_or_retried(self):
+        receipts = self.root / "receipts"
+        result = SimpleNamespace(
+            returncode=1,
+            stdout=b"",
+            stderr=b"RECOVERY readback; do not reboot SHA-256 mismatch",
+        )
+        transport = mock.Mock(return_value=result)
+        with mock.patch.object(DEPLOY, "ROOT", self.root), \
+             mock.patch.object(DEPLOY, "validate_hci_profile_artifacts", return_value=b"candidate"), \
+             mock.patch.object(DEPLOY, "run_approved_ssh_wrapper", transport):
+            with self.assertRaisesRegex(RuntimeError, "flash failed; no reboot was requested") as failure:
+                DEPLOY.main_hci_profile("hci-forward", "flash", receipt_dir=receipts)
+        self.assertIn("RECOVERY readback", str(failure.exception))
+        transport.assert_called_once()
+        self.assertFalse((receipts / "hci-recovery-forward-flash.json").exists())
+
     def test_forward_stage_passes_pinned_manifest_to_shared_remote_renderer(self):
         receipts = self.root / "receipts"
         profile = DEPLOY.resolve_hci_profile("hci-forward")
