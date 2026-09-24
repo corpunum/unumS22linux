@@ -493,13 +493,6 @@ def validate_hci_profile_artifacts(profile_name, *, root=ROOT, manifest=None):
         lineage_sha=manifest['lineage_sha256'])
 
 
-def ensure_new_receipt(path):
-    path=Path(path)
-    if path.exists() or path.is_symlink():
-        raise ValueError(f'refusing to overwrite existing deployment receipt: {path}')
-    return path
-
-
 def prepare_private_receipt_directory(path):
     """Create/check a private local receipt directory without following links."""
     path=Path(path)
@@ -529,10 +522,35 @@ def prepare_private_receipt_directory(path):
     return path
 
 
-def persist_receipt(path, receipt):
+def open_private_receipt_directory(path):
+    """Open a verified receipt directory without resolving path components later."""
+    path=Path(path)
+    if not path.is_absolute() or path == Path('/'):
+        raise ValueError('receipt directory must be a non-root absolute path')
+    flags=os.O_RDONLY|os.O_CLOEXEC|os.O_DIRECTORY|os.O_NOFOLLOW
+    directory_fd=os.open('/',flags)
+    try:
+        for component in path.parts[1:]:
+            if component in ('','.','..'):
+                raise ValueError('receipt directory contains an unsafe path component')
+            next_fd=os.open(component,flags,dir_fd=directory_fd)
+            os.close(directory_fd)
+            directory_fd=next_fd
+        info=os.fstat(directory_fd)
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.geteuid() or (info.st_mode&0o077):
+            raise ValueError('receipt directory must be owned by the current user and private (0700)')
+        return directory_fd
+    except BaseException:
+        os.close(directory_fd)
+        raise
+
+
+def persist_receipt(path, receipt, *, directory_fd=None):
     """Create exactly one durable receipt under an already-verified directory."""
     path=Path(path)
-    directory_fd=os.open(path.parent,os.O_RDONLY|os.O_CLOEXEC|os.O_DIRECTORY|os.O_NOFOLLOW)
+    owned_fd=directory_fd is None
+    if owned_fd:
+        directory_fd=open_private_receipt_directory(path.parent)
     receipt_fd=None
     try:
         receipt_fd=os.open(
@@ -550,7 +568,20 @@ def persist_receipt(path, receipt):
     finally:
         if receipt_fd is not None:
             os.close(receipt_fd)
-        os.close(directory_fd)
+        if owned_fd:
+            os.close(directory_fd)
+
+
+def ensure_new_receipt(path, *, directory_fd=None):
+    path=Path(path)
+    try:
+        if directory_fd is None:
+            info=path.lstat()
+        else:
+            info=os.stat(path.name,dir_fd=directory_fd,follow_symlinks=False)
+    except FileNotFoundError:
+        return path
+    raise ValueError(f'refusing to overwrite existing deployment receipt: {path}')
 
 
 def validate_approved_ssh_wrapper(path):
@@ -730,11 +761,20 @@ def main_hci_profile(profile_name, mode=None, *, root=None, receipt_dir=None):
         receipt_dir=Path.home()/'.local/state/s22-hci-trial-20260924/receipts'
     try:
         receipt_dir=prepare_private_receipt_directory(receipt_dir)
+        receipt_dir_fd=open_private_receipt_directory(receipt_dir)
     except (OSError,ValueError) as error:
         raise SystemExit(f'private receipt directory unavailable; no device operation attempted: {error}') from error
+    try:
+        return _run_hci_profile_operation(profile_name,mode,root,profile,image,
+                                          receipt_dir,receipt_dir_fd)
+    finally:
+        os.close(receipt_dir_fd)
+
+
+def _run_hci_profile_operation(profile_name,mode,root,profile,image,receipt_dir,receipt_dir_fd):
     out=receipt_dir/(profile['receipt_prefix']+'-'+mode+'.json')
     try:
-        ensure_new_receipt(out)
+        ensure_new_receipt(out,directory_fd=receipt_dir_fd)
     except ValueError as error:
         raise SystemExit(str(error)) from error
     code=render_remote(
@@ -767,7 +807,7 @@ def main_hci_profile(profile_name, mode=None, *, root=None, receipt_dir=None):
             mode+' returned an invalid receipt; operation outcome must be independently '
             'checked before retry: '+str(error)) from error
     try:
-        persist_receipt(out,receipt)
+        persist_receipt(out,receipt,directory_fd=receipt_dir_fd)
     except OSError as error:
         raise RuntimeError(
             mode+' succeeded remotely but local receipt could not be persisted; '
