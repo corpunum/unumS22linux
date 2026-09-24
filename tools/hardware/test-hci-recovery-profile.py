@@ -57,6 +57,8 @@ class HCIProfileManifestTests(unittest.TestCase):
         self.assertEqual(reverse["new_sha256"], manifest["baseline_sha256"])
         self.assertEqual(reverse["image"], manifest["baseline_image"])
         self.assertNotEqual(forward["staging_directory"], reverse["staging_directory"])
+        self.assertTrue(forward["staging_directory"].endswith("-second"))
+        self.assertTrue(reverse["staging_directory"].endswith("-second"))
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="s22-hci-profile-")
@@ -186,18 +188,28 @@ print("UNSAFE_ACCEPT");sys.exit(0)
                 self.assertIn("alias does not resolve", result.stdout)
 
     def test_transport_timeout_is_not_retried_or_recorded_as_success(self):
-        receipts = self.root / "receipts"
+        receipts = self.root / DEPLOY.HCI_TRIAL_ID
         transport = mock.Mock(side_effect=subprocess.TimeoutExpired("ssh", 100))
         with mock.patch.object(DEPLOY, "ROOT", self.root), \
              mock.patch.object(DEPLOY, "validate_hci_profile_artifacts", return_value=b"candidate"), \
              mock.patch.object(DEPLOY, "run_approved_ssh_wrapper", transport):
             with self.assertRaisesRegex(RuntimeError, "remote outcome may be unknown"):
-                DEPLOY.main_hci_profile("hci-forward", "stage", receipt_dir=receipts)
+                DEPLOY.main_hci_profile("hci-forward", "stage", receipt_dir=receipts,
+                                         trial_identity=DEPLOY.HCI_TRIAL_ID)
         transport.assert_called_once()
         self.assertFalse((receipts / "hci-recovery-forward-stage.json").exists())
 
+    def test_hci_execution_requires_the_one_authorized_trial_identity(self):
+        transport = mock.Mock()
+        with mock.patch.object(DEPLOY, "ROOT", self.root), \
+             mock.patch.object(DEPLOY, "validate_hci_profile_artifacts", return_value=b"candidate"), \
+             mock.patch.object(DEPLOY, "run_approved_ssh_wrapper", transport):
+            with self.assertRaisesRegex(SystemExit, "explicitly authorized trial identity"):
+                DEPLOY.main_hci_profile("hci-forward", "stage", trial_identity=None)
+        transport.assert_not_called()
+
     def test_invalid_flash_receipt_is_not_recorded_as_success(self):
-        receipts = self.root / "receipts"
+        receipts = self.root / DEPLOY.HCI_TRIAL_ID
         result = SimpleNamespace(
             returncode=0,
             stdout=json.dumps({
@@ -212,12 +224,13 @@ print("UNSAFE_ACCEPT");sys.exit(0)
              mock.patch.object(DEPLOY, "validate_hci_profile_artifacts", return_value=b"candidate"), \
              mock.patch.object(DEPLOY, "run_approved_ssh_wrapper", transport):
             with self.assertRaisesRegex(RuntimeError, "invalid receipt"):
-                DEPLOY.main_hci_profile("hci-forward", "flash", receipt_dir=receipts)
+                DEPLOY.main_hci_profile("hci-forward", "flash", receipt_dir=receipts,
+                                         trial_identity=DEPLOY.HCI_TRIAL_ID)
         transport.assert_called_once()
         self.assertFalse((receipts / "hci-recovery-forward-flash.json").exists())
 
     def test_failed_readback_is_not_recorded_as_success_or_retried(self):
-        receipts = self.root / "receipts"
+        receipts = self.root / DEPLOY.HCI_TRIAL_ID
         result = SimpleNamespace(
             returncode=1,
             stdout=b"",
@@ -228,13 +241,14 @@ print("UNSAFE_ACCEPT");sys.exit(0)
              mock.patch.object(DEPLOY, "validate_hci_profile_artifacts", return_value=b"candidate"), \
              mock.patch.object(DEPLOY, "run_approved_ssh_wrapper", transport):
             with self.assertRaisesRegex(RuntimeError, "flash failed; no reboot was requested") as failure:
-                DEPLOY.main_hci_profile("hci-forward", "flash", receipt_dir=receipts)
+                DEPLOY.main_hci_profile("hci-forward", "flash", receipt_dir=receipts,
+                                         trial_identity=DEPLOY.HCI_TRIAL_ID)
         self.assertIn("RECOVERY readback", str(failure.exception))
         transport.assert_called_once()
         self.assertFalse((receipts / "hci-recovery-forward-flash.json").exists())
 
     def test_forward_stage_passes_pinned_manifest_to_shared_remote_renderer(self):
-        receipts = self.root / "receipts"
+        receipts = self.root / DEPLOY.HCI_TRIAL_ID
         profile = DEPLOY.resolve_hci_profile("hci-forward")
         result = SimpleNamespace(
             returncode=0,
@@ -249,7 +263,8 @@ print("UNSAFE_ACCEPT");sys.exit(0)
         with mock.patch.object(DEPLOY, "ROOT", self.root), \
              mock.patch.object(DEPLOY, "validate_hci_profile_artifacts", return_value=b"candidate-image"), \
              mock.patch.object(DEPLOY, "run_approved_ssh_wrapper", transport):
-            DEPLOY.main_hci_profile("hci-forward", "stage", receipt_dir=receipts)
+            DEPLOY.main_hci_profile("hci-forward", "stage", receipt_dir=receipts,
+                                         trial_identity=DEPLOY.HCI_TRIAL_ID)
         transport.assert_called_once()
         args, kwargs = transport.call_args
         remote_command = args[1]
@@ -259,9 +274,12 @@ print("UNSAFE_ACCEPT");sys.exit(0)
         self.assertEqual(kwargs["input_data"], b"candidate-image")
         self.assertEqual(kwargs["timeout"], 100)
         self.assertTrue((receipts / "hci-recovery-forward-stage.json").is_file())
+        stage_receipt = json.loads((receipts / "hci-recovery-forward-stage.json").read_text())
+        self.assertEqual(stage_receipt["trial_identity"], DEPLOY.HCI_TRIAL_ID)
+        self.assertEqual(stage_receipt["profile"], "hci-forward")
 
     def test_forward_flash_has_no_client_deadline_during_partition_write(self):
-        receipts = self.root / "receipts"
+        receipts = self.root / DEPLOY.HCI_TRIAL_ID
         profile = DEPLOY.resolve_hci_profile("hci-forward")
         result = SimpleNamespace(
             returncode=0,
@@ -278,15 +296,19 @@ print("UNSAFE_ACCEPT");sys.exit(0)
         with mock.patch.object(DEPLOY, "ROOT", self.root), \
              mock.patch.object(DEPLOY, "validate_hci_profile_artifacts", return_value=b"candidate-image"), \
              mock.patch.object(DEPLOY, "run_approved_ssh_wrapper", transport):
-            DEPLOY.main_hci_profile("hci-forward", "flash", receipt_dir=receipts)
+                DEPLOY.main_hci_profile("hci-forward", "flash", receipt_dir=receipts,
+                                         trial_identity=DEPLOY.HCI_TRIAL_ID)
         transport.assert_called_once()
         _, kwargs = transport.call_args
         self.assertIsNone(kwargs["timeout"])
         self.assertEqual(kwargs["input_data"], b"")
         self.assertTrue((receipts / "hci-recovery-forward-flash.json").is_file())
+        flash_receipt = json.loads((receipts / "hci-recovery-forward-flash.json").read_text())
+        self.assertEqual(flash_receipt["trial_identity"], DEPLOY.HCI_TRIAL_ID)
+        self.assertEqual(flash_receipt["profile"], "hci-forward")
 
     def test_reverse_stage_sends_only_the_exact_rollback_to_separate_stage(self):
-        receipts = self.root / "receipts"
+        receipts = self.root / DEPLOY.HCI_TRIAL_ID
         profile = DEPLOY.resolve_hci_profile("hci-reverse")
         result = SimpleNamespace(
             returncode=0,
@@ -301,7 +323,8 @@ print("UNSAFE_ACCEPT");sys.exit(0)
         with mock.patch.object(DEPLOY, "ROOT", self.root), \
              mock.patch.object(DEPLOY, "validate_hci_profile_artifacts", return_value=b"exact-rollback-image"), \
              mock.patch.object(DEPLOY, "run_approved_ssh_wrapper", transport):
-            DEPLOY.main_hci_profile("hci-reverse", "stage", receipt_dir=receipts)
+                DEPLOY.main_hci_profile("hci-reverse", "stage", receipt_dir=receipts,
+                                         trial_identity=DEPLOY.HCI_TRIAL_ID)
         transport.assert_called_once()
         args, kwargs = transport.call_args
         remote_command = args[1]
@@ -313,7 +336,7 @@ print("UNSAFE_ACCEPT");sys.exit(0)
         self.assertTrue((receipts / "hci-recovery-reverse-stage.json").is_file())
 
     def test_reverse_flash_requires_candidate_before_and_writes_only_rollback(self):
-        receipts = self.root / "receipts"
+        receipts = self.root / DEPLOY.HCI_TRIAL_ID
         profile = DEPLOY.resolve_hci_profile("hci-reverse")
         result = SimpleNamespace(
             returncode=0,
@@ -330,7 +353,8 @@ print("UNSAFE_ACCEPT");sys.exit(0)
         with mock.patch.object(DEPLOY, "ROOT", self.root), \
              mock.patch.object(DEPLOY, "validate_hci_profile_artifacts", return_value=b"rollback-image"), \
              mock.patch.object(DEPLOY, "run_approved_ssh_wrapper", transport):
-            DEPLOY.main_hci_profile("hci-reverse", "flash", receipt_dir=receipts)
+                DEPLOY.main_hci_profile("hci-reverse", "flash", receipt_dir=receipts,
+                                         trial_identity=DEPLOY.HCI_TRIAL_ID)
         transport.assert_called_once()
         args, kwargs = transport.call_args
         remote_command = args[1]

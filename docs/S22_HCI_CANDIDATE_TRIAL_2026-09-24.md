@@ -270,3 +270,153 @@ Hardware acceptance remains **unproven**. Independent hardware rescue remains
 **not demonstrated**. The HCI candidate is not accepted for continued use.
 Before any later candidate trial, determine whether these TrustZone warnings
 represent a real liveness fault and restore a healthy resident Pi/tmux session.
+
+## 2026-09-24 continuation: corrected readiness and TrustZone review
+
+This section records the new user authorization and preflight evidence for a
+second, distinct trial. It does not claim that the second trial has started.
+The owner authorized exactly one additional installation of the same HCI-only
+candidate to RECOVERY, one targeted `s22-reboot recovery`, one gated raw-HCI
+socket create/close test, and one conditional exact rollback. The guarded
+existing Pi web helper may be used once on the current baseline and once after
+the candidate boot if needed. No Android BOOT, other partition, NPU BOOTUP,
+controller attachment, scan, pairing, retry, or independent-rescue claim is
+included. The first-trial authorization remains consumed.
+
+The new identity is `hci-candidate-20260924-second`. Deployment receipts use
+that identity; reboot, helper-start and HCI one-shot markers are under its own
+marker subdirectory, leaving the first-trial root-level markers and receipts
+unchanged. The device-wide `/run/s22-recovery-operation.lock` remains the
+exclusive operation lock. The new marker directory and forward receipt path
+were absent at preflight. At this checkpoint there have been **zero** second-
+trial writes, reboot requests, or raw-HCI attempts.
+
+Fresh read-only USB evidence identified the live installation as the exact
+known-good rollback: kernel release `5.10.260-g4e5c5ad7d950`, rollback GNU
+build ID `b651f4a3df19b10a0ce633b166e01d2758de44de`, a current RECOVERY BORE
+record, and full `/dev/block/by-name/recovery` SHA-256
+`758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b`. The
+resolved target is `/dev/sda16`, major:minor `259:0`, 196608 sectors
+(100663296 bytes), and it is not mounted. The exact candidate and rollback
+host files both re-hash to their pinned values and sizes. `/srv/s22` has
+101,979,549,696 available bytes and 1,652,502 free inodes; both second-trial
+staging paths are absent. The nearly-full root overlay has 34,844,672 bytes
+free and 29,780 inodes, but is not a staging destination and was not changed.
+The live WLAN module resolves to
+`/srv/s22/hardware/wifi-20260920/modules/wlan.ko`, SHA-256
+`cbf8932d079e97006a5b7aae0e1b5acfe65b3e8b5113ab8fa095daa36796738d`, matching
+the selected module in the candidate compatibility inventory. There are 325
+loaded modules. Independent Download Mode recovery remains **not demonstrated**
+and is an explicitly accepted risk for this one trial.
+
+At the read-only snapshot, PID 1 was `native-guardian`; persistent storage,
+Hyprland, the exact desktop Pi executable/UID, the Pi model API, idle slots,
+loopback browser service, WLAN, required modules/components and target identity
+were ready. Battery was Full/100%, 27.3 C, and the latest maximum thermal-zone
+reading was 41.0 C. The dedicated browser tmux session was `absent`, which is the designed
+on-demand standby state, not evidence that the desktop Pi process or kernel is
+broken. The current owner instruction supersedes the earlier interpretation
+above that absence itself made the Pi assistant unready. The exact installed
+launcher source was found in the preserved owner checkout at
+`tools/pi-web/start-agent-web.py`, SHA-256
+`9f3cf35237ba40574dc9efd50c7ef43e53786d961a4fa1ef103518a21fa9fb3c`, matching
+the pinned installed helper. Its guarded `--start` first verifies the native
+guardian, persistent mount, exact ttyd/tmux/library hashes, ownership and
+model health. If ttyd is already healthy it returns its existing PID; otherwise
+it may start the loopback-only unprivileged ttyd. It does not create the tmux
+session, submit an agent task, or request inference. The session is created by
+`pi-web-session` only when the browser terminal is actually opened. The guard
+was invoked once on the current baseline and reported the already-running
+terminal; no duplicate process or interactive session was created.
+
+TrustZone evidence is separated rather than suppressed. The private candidate
+capture (255180 bytes; its hash remains private) spans
+dmesg timestamps 176.66–354.90 seconds and contains ten hung-task warnings,
+ten call-trace markers, and no fatal indicator. All ten warning stacks match
+the exact pinned wait paths `tz_worker_handler`, `tz_iwlog_kthread_handler`,
+and `handle_log_kthread`; the match requires schedule and expected caller
+frames, not a thread name alone. In the pinned source, those functions sleep
+on request/event waitqueues. The relevant TrustZone and CHUB files are byte-
+identical between base `4e5c5ad7d950e4de0688b5663965f2075654b2ad` and candidate
+`f52cbbd7e2783d529e1e5742d94e0fd64889bbdf`; the candidate source delta remains
+only `net/bluetooth/hci_sock.c`. This supports treating the observed stacks as
+the existing event-wait paths, but it does **not** measure wake/progress and
+does not erase the hung-task warnings: `progress_measured=false` and liveness
+remains unresolved in every receipt.
+
+A fresh full available `dmesg` read from the rollback was saved privately on
+the rig (255691 bytes; its hash remains private), covering
+timestamps 8132.85–8429.39 seconds of the current boot. That ring tail has no
+fatal or hung-task entries, but it is not full-boot coverage; earlier records
+were overwritten and the candidate/rollback captures are not a synchronized
+same-uptime comparison. The current unchanged sysctls are timeout 120 seconds,
+`hung_task_panic=0`, `hung_task_warnings=0`, `panic=-1`,
+`panic_on_oops=1`, and `panic_on_warn=0`. The pinned kernel defaults the warning
+budget to 10, and no project sysctl-file or boot-command-line override was
+found. Therefore the zero remaining budget is consistent with (but does not
+prove the identity of) early rollback warnings that have since rotated out of
+the ring. No policy was changed. This is evidence of a repeated baseline-class
+warning, not proof that all TrustZone work progresses normally.
+
+The observer now classifies the entire available `dmesg` output up to a 4 MiB
+bound, requires complete retrieval and parsing of that available ring, records
+that full-boot coverage is false, preserves fatal/warning/trace classes, and
+labels exact wait stacks `pinned_wait_stacks_matched_progress_unmeasured`.
+Unknown or changed stacks fail the readiness gate; exact source waits remain
+explicitly unresolved rather than being reported as healthy progress. The
+intended conclusion is narrow: source review found no TrustZone change in the
+HCI candidate, the warning stacks are exact existing event waits, and the
+rollback's exhausted default warning budget is consistent with the same
+baseline behavior. This justifies at most the newly authorized bounded HCI
+socket experiment, not unrestricted use or a claim that TrustZone liveness is
+proved. A fatal indicator, incomplete ring capture, unknown wait stack, failed
+application service, changed boot/image identity, or any material regression
+still stops the operation.
+
+The deployment and observer code, tests, and CI allowlist are under independent
+review. The hardware-free suite currently passes all 15 scripts in normal mode
+and all 12 optimization-safe scripts under `-O`; the three AVB-fixture cases
+remain explicit skips and the three normal-only scripts are documented. The
+suite has not yet been published or run by hosted CI for this continuation.
+The next action is to finish that review and exact-head CI, then re-read the
+baseline and journal before staging. No new flash or reboot is implied by this
+preflight record.
+
+## Final host review and pre-deployment checkpoint
+
+The independent Luna review found a trace-boundary defect: frames from
+separate `Call trace:` blocks could be combined to explain one hung-task
+warning. The classifier now accepts a source-wait match only when that
+warning's interval contains exactly one trace marker. Hostile regressions split
+the expected frames across two traces and across a later warning boundary;
+both remain unmatched. Reclassification of the private candidate capture found
+ten warnings, ten individually delimited traces, ten source-path matches, and
+no measured progress. The warnings remain visible and liveness remains
+unresolved. The reviewer approved this fix.
+
+The observer's sequence is now explicit in code and tests: the forward flash
+receipt pins the old rollback hash as `before_sha256` and candidate hash as the
+full RECOVERY readback. The reboot observer runs after that flash and verifies
+the already-installed candidate hash before its one reboot request, then again
+after boot. The receipt's `baseline_recovery_sha256` therefore means
+pre-reboot observer baseline (candidate), not pre-flash image (rollback). An
+integration assertion verifies that hash read precedes the reboot request.
+Independent review approved the sequence and test.
+
+At this checkpoint, the latest read-only device snapshot still identifies the
+known-good rollback by its RECOVERY boot record, GNU build ID, and full
+partition hash. PID 1, persistent storage, Pi/model/browser services, Wi-Fi,
+required components, battery/thermal limits, and target identity pass. The
+optional dedicated Pi tmux session remains absent by design. `/srv/s22` is the
+userdata ext4 mount with about 102 GB free; RECOVERY resolves to unmounted
+`/dev/sda16` (259:0), exactly 100663296 bytes. Both trial staging paths, second-
+trial marker directory, and second-trial receipt directory remain absent.
+Independent Download Mode rescue remains unproven.
+
+The final fixed host suite passed: 15 scripts normally, 12 optimization-safe
+scripts under `-O`, zero failures, three explicit AVB-tool fixture skips, and
+three documented normal-only checks. Runner policy passed 7/7. Observer tests
+passed 30/30 normally, under `-O`, and with `PYTHONOPTIMIZE=1`; TrustZone
+classifier tests passed 12/12 in all three modes. These are host checks, not
+phone acceptance. No second-trial flash, reboot request, or HCI attempt has yet
+occurred at this checkpoint.

@@ -6,6 +6,8 @@ the persistent desktop, model, and web services.
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
+import json
 import stat
 from typing import Callable
 
@@ -14,6 +16,7 @@ PERSISTENT_UUID = "1dd55c26-bd57-489a-9d9b-4c60e6f430eb"
 MODEL_PROFILE = "qwen4b"
 MODEL_ID = "/mnt/model-bench/models/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf"
 PI_EXECUTABLE = Path("opt/s22-pi/0.86.1/pi/pi")
+DESKTOP_PI_EXECUTABLE = Path("/mnt/omarchy-trial/opt/s22-pi/0.86.1/pi/pi")
 TMUX_SOCKET = Path("home/alarm/.pi/agent/web-sessions/web-musl.tmux")
 
 
@@ -98,6 +101,94 @@ def runtime_process_readiness(runtime: object, proc_root: Path = Path("/proc")) 
     return {"desktop": desktop, "model_process": model}
 
 
+def exact_process_status(
+    proc_root: Path,
+    executable_path: Path,
+    *,
+    uid: int,
+) -> str:
+    """Report one exact executable/UID process as ready, absent, or failed."""
+    try:
+        expected = executable_path.stat()
+        if not stat.S_ISREG(expected.st_mode):
+            return "failed"
+    except OSError:
+        return "failed"
+
+    matches = 0
+    try:
+        entries = list(proc_root.iterdir())
+    except OSError:
+        return "failed"
+    for entry in entries:
+        if not entry.name.isdecimal():
+            continue
+        try:
+            stat_fields = (entry / "stat").read_text().rsplit(")", 1)[1].split()
+            if not stat_fields or stat_fields[0] in {"Z", "X"}:
+                continue
+            status_fields = {}
+            for line in (entry / "status").read_text().splitlines():
+                name, separator, value = line.partition(":")
+                if separator:
+                    status_fields[name] = value.strip()
+            uid_values = status_fields.get("Uid", "").split()
+            if len(uid_values) != 4 or any(int(value) != uid for value in uid_values):
+                continue
+            actual = (entry / "exe").stat()
+            if (actual.st_dev, actual.st_ino) == (expected.st_dev, expected.st_ino):
+                matches += 1
+        except (OSError, ValueError, IndexError):
+            continue
+
+    if matches == 0:
+        return "absent"
+    return "ready" if matches == 1 else "failed"
+
+
+def recorded_process_status(
+    record: object,
+    proc_root: Path,
+    *,
+    executable_sha256: str,
+    uid: int,
+) -> str:
+    """Verify a service PID against its start time, executable, UID, and caps."""
+    if record is None:
+        return "absent"
+    if not isinstance(record, dict):
+        return "failed"
+    pid = record.get("pid")
+    start_ticks = record.get("start_ticks")
+    if type(pid) is not int or pid <= 0 or type(start_ticks) is not str:
+        return "failed"
+    try:
+        entry = _proc_entry(proc_root, pid)
+        stat_fields = (entry / "stat").read_text().rsplit(")", 1)[1].split()
+        if not stat_fields or stat_fields[0] in {"Z", "X"}:
+            return "absent"
+        if len(stat_fields) <= 19 or stat_fields[19] != start_ticks:
+            return "absent"
+        if hashlib.sha256((entry / "exe").read_bytes()).hexdigest() != executable_sha256:
+            return "failed"
+        fields = {}
+        for line in (entry / "status").read_text().splitlines():
+            name, separator, value = line.partition(":")
+            if separator:
+                fields[name] = value.strip()
+        uid_values = fields.get("Uid", "").split()
+        if len(uid_values) != 4 or any(int(value) != uid for value in uid_values):
+            return "failed"
+        for name in ("CapEff", "CapPrm", "CapBnd"):
+            if int(fields.get(name, "-1"), 16) != 0:
+                return "failed"
+        if fields.get("NoNewPrivs") != "1":
+            return "failed"
+        return "ready"
+    except (OSError, ValueError, IndexError):
+        return "failed"
+
+
 def _result_status(result: object) -> tuple[str, str]:
     returncode = getattr(result, "returncode", None)
     stdout = getattr(result, "stdout", None)
@@ -166,6 +257,7 @@ def readiness_report(
     web_ready: object,
     model_ready: object,
     desktop_ready: object,
+    desktop_pi_status: object,
     pi_session_status: object,
 ) -> dict[str, object]:
     """Keep required services independent from the optional Pi session."""
@@ -173,12 +265,16 @@ def readiness_report(
         "web": web_ready is True,
         "model": model_ready is True,
         "desktop": desktop_ready is True,
+        "desktop_pi": desktop_pi_status == "ready",
     }
+    if desktop_pi_status not in ("absent", "ready", "failed"):
+        desktop_pi_status = "failed"
     if pi_session_status not in ("absent", "ready", "failed"):
         pi_session_status = "failed"
     return {
         "required_services": services,
         "required_services_ready": all(services.values()),
+        "desktop_pi_status": desktop_pi_status,
         "pi_session_status": pi_session_status,
         "pi_session_ready": pi_session_status == "ready",
     }

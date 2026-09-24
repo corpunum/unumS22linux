@@ -5,6 +5,7 @@ Requires the separate, successful audio RECOVERY flash receipt. No retries of
 reboot, firmware writes, Android targets or hardware-control probes.
 """
 import argparse
+import base64
 from datetime import datetime, timezone
 import hashlib
 import importlib.util
@@ -32,6 +33,7 @@ HCI_SCHEMA = 's22-hci-socket-smoke/v2'
 TRIAL_FLASH_RECEIPT = (TRIAL_STATE_ROOT / 'receipts' / TRIAL_ID /
                        'hci-recovery-forward-flash.json')
 REBOOT_MARKER = 'hci-candidate-reboot-attempted.json'
+WEB_START_MARKER = 'pi-web-start-attempted.json'
 HCI_MARKER = 'hci-candidate-socket-attempted.json'
 EXPECTED_TARGET = 'recovery'
 EXPECTED_FLASH_SHA256 = '42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5'
@@ -45,8 +47,10 @@ EXPECTED_BOOT_HARDWARE = 's5e9925'
 EXPECTED_PERSISTENT_UUID = '1dd55c26-bd57-489a-9d9b-4c60e6f430eb'
 MIN_UPTIME_SECONDS = 180
 OBSERVATION_SECONDS = 600
-SERIOUS_FAULT = re.compile(r'Kernel panic|Oops:|BUG:|Unable to handle kernel|general protection fault|Out of memory:|oom-kill|Call trace:', re.I)
 BORE_RECORD = re.compile(r'^\[\s*\d+\].*$', re.M)
+EXPECTED_PI_WEB_HELPER_SHA256 = '9f3cf35237ba40574dc9efd50c7ef43e53786d961a4fa1ef103518a21fa9fb3c'
+EXPECTED_TTYD_SHA256 = 'b38acadd89d1d396a0f5649aa52c539edbad07f4bc7348b27b4f4b7219dd4165'
+EXPECTED_TZ_SOURCE_COMMIT = '4e5c5ad7d950e4de0688b5663965f2075654b2ad'
 
 class ObserverError(RuntimeError):
     pass
@@ -63,8 +67,13 @@ print(private[0])
 '''
 
 SNAPSHOT = r'''
-import json,os,pathlib,re,struct,subprocess,urllib.request
+import base64,hashlib,json,os,pathlib,re,struct,subprocess,sys,types,urllib.request
 p=pathlib.Path
+pi_readiness={}
+exec(compile(base64.b64decode('__PI_READINESS_SOURCE__'),'<embedded-pi-readiness>','exec'),pi_readiness)
+tz_classifier=types.ModuleType('s22_embedded_trustzone_classifier')
+sys.modules[tz_classifier.__name__]=tz_classifier
+exec(compile(base64.b64decode('__TRUSTZONE_CLASSIFIER_SOURCE__'),'<embedded-trustzone-classifier>','exec'),tz_classifier.__dict__)
 def read(name,limit=16384):
  try:
   with open(name,'rb') as f:return f.read(limit).decode('utf-8','replace').rstrip('\0\n')
@@ -111,8 +120,24 @@ try:
 except Exception:raw_slots=None
 try:
  r=subprocess.run(['dmesg'],capture_output=True,text=True,timeout=5,check=False)
- log=r.stdout[-131072:] if r.returncode==0 else None
-except Exception:log=None
+ log_bytes=len(r.stdout.encode('utf-8','replace')) if isinstance(r.stdout,str) else 0
+ log_capture_complete=(r.returncode==0 and log_bytes<=4194304)
+ log=r.stdout if log_capture_complete else None
+except Exception:
+ log=None
+ log_bytes=0
+ log_capture_complete=False
+log_classification=tz_classifier.classify_kernel_log(
+ log,capture_complete=log_capture_complete)
+source_wait_review=tz_classifier.classify_source_wait_stacks(log)
+if not log_classification.hung_task_warnings:
+ liveness_review_status='no_hung_task_warning_in_available_ring'
+elif (source_wait_review['warning_count']==len(log_classification.hung_task_warnings) and
+      source_wait_review['unmatched_count']==0 and
+      source_wait_review['progress_measured'] is False):
+ liveness_review_status='pinned_wait_stacks_matched_progress_unmeasured'
+else:
+ liveness_review_status='unknown_or_unmatched_wait_stack'
 records=re.findall(r'^\[\s*\d+\].*$',read('/proc/boot_reset',16384) or '',re.M)
 module_lines=(read('/proc/modules',1048576) or '').splitlines()
 loaded_modules=sorted({line.split()[0] for line in module_lines if line.split()})
@@ -127,12 +152,42 @@ for item in p('/sys/class/net').glob('*'):
  interfaces.append({'name':item.name,'operstate':read(str(item/'operstate'),128),
   'carrier':read(str(item/'carrier'),128)})
 network_ready=any(x['name']=='wlan0' and x['operstate']=='up' and x['carrier']=='1' for x in interfaces)
-process_comms=[read(str(proc/'comm'),256) for proc in p('/proc').glob('[0-9]*')]
-hyprland='Hyprland' in process_comms
-pi_running='pi' in process_comms
-tmux_server=any(isinstance(x,str) and x.startswith('tmux') for x in process_comms)
-ttyd_running='ttyd' in process_comms
-pi_ready=pi_running and tmux_server
+try:runtime_processes=pi_readiness['runtime_process_readiness'](persistent,p('/proc'))
+except Exception:runtime_processes={'desktop':False,'model_process':False}
+hyprland=runtime_processes.get('desktop') is True
+model_process=runtime_processes.get('model_process') is True
+desktop_pi_status=pi_readiness['exact_process_status'](
+ p('/proc'),p('/mnt/omarchy-trial/opt/s22-pi/0.86.1/pi/pi'),uid=1000)
+try:
+ web_helper=p('/srv/s22/agent-web/start-agent-web.py')
+ helper_matches=hashlib.sha256(web_helper.read_bytes()).hexdigest()=='__EXPECTED_PI_WEB_HELPER_SHA256__'
+ record_path=p('/srv/s22/agent-web/private/process.json')
+ process_record=json.loads(record_path.read_text()) if record_path.exists() else None
+ ttyd_status=pi_readiness['recorded_process_status'](
+  process_record,p('/proc'),executable_sha256='__EXPECTED_TTYD_SHA256__',uid=1000)
+ if not helper_matches:browser_terminal_status='failed'
+ elif ttyd_status!='ready':browser_terminal_status=ttyd_status
+ else:
+  opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+  request=urllib.request.Request('http://127.0.0.1:8093/',headers={'Tailscale-User-Login':'local-readiness-check'})
+  with opener.open(request,timeout=2) as response:
+   browser_terminal_status='ready' if response.status==200 else 'failed'
+except Exception:browser_terminal_status='failed'
+arch=p('/mnt/omarchy-trial')
+tmux_socket=arch/'home/alarm/.pi/agent/web-sessions/web-musl.tmux'
+def tmux_query():
+ return subprocess.run(['chroot',str(arch),'/usr/bin/setpriv','--reuid=1000','--regid=1000',
+  '--clear-groups','--no-new-privs','--bounding-set=-all','--inh-caps=-all','--ambient-caps=-all',
+  '--reset-env','/usr/bin/env','HOME=/home/alarm','USER=alarm','LOGNAME=alarm',
+  'PATH=/usr/local/bin:/usr/bin:/bin','TERM=xterm-256color',
+  '/opt/s22-pi-web/tmux-musl/lib/ld-musl-aarch64.so.1',
+  '--library-path','/opt/s22-pi-web/tmux-musl/lib','/opt/s22-pi-web/tmux-musl/tmux',
+  '-f','/dev/null','-S','/home/alarm/.pi/agent/web-sessions/web-musl.tmux',
+  'list-panes','-a','-F','#{session_name}\\t#{pane_pid}'],capture_output=True,text=True,timeout=5,check=False)
+pi_session=pi_readiness['inspect_pi_session'](tmux_socket,proc_root=p('/proc'),query=tmux_query)
+pi_session_status=pi_session['status']
+kernel_remote_control_ready=(read('/proc/1/comm')=='native-guardian' and
+ p('/run/native-ready').exists() and persistent_summary.get('ready') is True)
 slot_processing=[]
 if isinstance(raw_slots,list):
  slot_processing=[x.get('is_processing') for x in raw_slots if isinstance(x,dict)]
@@ -143,6 +198,12 @@ idle=bool(slots_valid and all(x is False for x in slot_processing))
 slots_state={'count':len(raw_slots) if isinstance(raw_slots,list) else 0,
  'processing':[x for x in slot_processing if type(x) is bool]}
 safe_health={'status':health.get('status')} if isinstance(health,dict) else {'status':None}
+model_api_healthy=(model_process and safe_health.get('status')=='ok')
+readiness={'kernel_remote_control':kernel_remote_control_ready,
+ 'model_api_health':model_api_healthy,'model_idle':idle,
+ 'desktop_environment':hyprland,'desktop_pi_status':desktop_pi_status,
+ 'browser_terminal_status':browser_terminal_status,
+ 'dedicated_pi_session_status':pi_session_status}
 def read_int(name):
  value=read(name,128)
  try:return int(value.strip()) if value is not None else None
@@ -167,11 +228,26 @@ state=dict(boot_id=read('/proc/sys/kernel/random/boot_id'),
  gnu_build_id=gnu_build_id(readb('/sys/kernel/notes')),
  boot_reset_first_record=records[0] if records else None,
  native_ready=p('/run/native-ready').exists(),persistent_ready=persistent_summary,
- health=safe_health,slots=slots_state,assistant_idle=idle,serious_fault=None if log is None else bool(re.search(
-  r'Kernel panic|Oops:|BUG:|Unable to handle kernel|general protection fault|Out of memory:|oom-kill|Call trace:',log,re.I)),
+ health=safe_health,slots=slots_state,assistant_idle=idle,
+ serious_fault=None if not log_classification.input_available else log_classification.has_fatal_indicator,
+ kernel_log_classification={'assessment':log_classification.assessment,
+  'fatal_indicators':[x.kind for x in log_classification.fatal_indicators],
+  'hung_task_warning_count':len(log_classification.hung_task_warnings),
+  'hung_task_names':[x.task_name for x in log_classification.hung_task_warnings],
+  'source_wait_stacks':source_wait_review,
+  'call_trace_count':len(log_classification.call_trace_lines),
+  'liveness_unresolved':log_classification.material_liveness_unresolved,
+  'liveness_review_status':liveness_review_status,
+  'capture_complete':log_classification.capture_complete,
+  'coverage_complete':log_classification.coverage_complete,
+  'full_boot_log_coverage':False,
+  'bytes':log_bytes},
+ readiness=readiness,
  loaded_modules=sorted(loaded_modules),kernel_components=components,
- hyprland_running=hyprland,pi_process_running=pi_running,
- tmux_server_running=tmux_server,ttyd_running=ttyd_running,pi_assistant_ready=pi_ready,
+ hyprland_running=hyprland,pi_process_running=desktop_pi_status=='ready',
+ tmux_server_running=pi_session_status=='ready',
+ ttyd_running=browser_terminal_status=='ready',
+ pi_assistant_ready=(model_api_healthy and idle and desktop_pi_status=='ready'),
  network_state={'interfaces':interfaces,'ready':network_ready},
  power_state=power_state,
  device_tree_model=dt_model,device_tree_compatible=dt_compatible,
@@ -182,7 +258,22 @@ print(json.dumps(state))
 
 
 def render_snapshot_script():
-    return SNAPSHOT.replace('__EXPECTED_PERSISTENT_UUID__', repr(EXPECTED_PERSISTENT_UUID))
+    readiness_source = (ROOT/'tools/pi-web/pi_readiness.py').read_bytes()
+    classifier_source = (ROOT/'tools/hardware/trustzone_log_classifier.py').read_bytes()
+    rendered = SNAPSHOT.replace('__EXPECTED_PERSISTENT_UUID__', repr(EXPECTED_PERSISTENT_UUID))
+    rendered = rendered.replace('__EXPECTED_PI_WEB_HELPER_SHA256__', EXPECTED_PI_WEB_HELPER_SHA256)
+    rendered = rendered.replace('__EXPECTED_TTYD_SHA256__', EXPECTED_TTYD_SHA256)
+    rendered = rendered.replace('__PI_READINESS_SOURCE__',
+                                base64.b64encode(readiness_source).decode('ascii'))
+    rendered = rendered.replace('__TRUSTZONE_CLASSIFIER_SOURCE__',
+                                base64.b64encode(classifier_source).decode('ascii'))
+    unresolved = ('__EXPECTED_PERSISTENT_UUID__', '__EXPECTED_PI_WEB_HELPER_SHA256__',
+                 '__EXPECTED_TTYD_SHA256__',
+                 '__PI_READINESS_SOURCE__', '__TRUSTZONE_CLASSIFIER_SOURCE__')
+    if any(marker in rendered for marker in unresolved):
+        raise ObserverError('snapshot contains an unresolved source marker')
+    compile(rendered, 'embedded-native-readiness-snapshot', 'exec')
+    return rendered
 
 
 def snapshot(project_root=ROOT):
@@ -210,7 +301,7 @@ def validate_trial_identity(name):
 
 def trial_marker_path(name, marker_name):
     validate_trial_identity(name)
-    require(marker_name in (REBOOT_MARKER, HCI_MARKER),
+    require(marker_name in (REBOOT_MARKER, WEB_START_MARKER, HCI_MARKER),
             'trial operation marker is not authorized')
     return TRIAL_STATE_ROOT / name / marker_name
 
@@ -230,6 +321,8 @@ def validate_flash_receipt(flash):
     require(flash.get('trial_identity') == TRIAL_ID,
             'flash receipt belongs to another trial')
     require(flash.get('mode') == 'flash', "flash receipt mode must be 'flash'")
+    require(flash.get('profile') == 'hci-forward',
+            'flash receipt must use the exact HCI forward profile')
     require(flash.get('partition_written') == EXPECTED_TARGET,
             'flash receipt target must be RECOVERY')
     require(flash.get('before_sha256') == EXPECTED_BASE_SHA256,
@@ -245,6 +338,17 @@ def validate_flash_receipt(flash):
 def ready_value(value):
     return (isinstance(value, dict) and value.get('ready') is True and
             value.get('mount_ready') is True)
+
+
+def service_readiness_valid(value):
+    return (isinstance(value, dict) and
+            value.get('kernel_remote_control') is True and
+            value.get('model_api_health') is True and
+            value.get('model_idle') is True and
+            value.get('desktop_environment') is True and
+            value.get('desktop_pi_status') == 'ready' and
+            value.get('browser_terminal_status') == 'ready' and
+            value.get('dedicated_pi_session_status') in ('absent', 'ready'))
 
 
 def summarize_slots(payload):
@@ -338,6 +442,38 @@ def validate_snapshot(state, *, post_reboot):
             'assistant idleness is not established by a nonempty idle /slots response')
     require(state.get('serious_fault') is False,
             'serious-fault status is unknown or a serious fault was recorded')
+    kernel_log = state.get('kernel_log_classification')
+    require(isinstance(kernel_log, dict) and
+            isinstance(kernel_log.get('fatal_indicators'), list) and
+            type(kernel_log.get('hung_task_warning_count')) is int and
+            type(kernel_log.get('call_trace_count')) is int and
+            type(kernel_log.get('liveness_unresolved')) is bool and
+            kernel_log.get('capture_complete') is True and
+            kernel_log.get('coverage_complete') is True and
+            kernel_log.get('full_boot_log_coverage') is False,
+            'kernel diagnostic classification is unavailable or malformed')
+    wait_review = kernel_log.get('source_wait_stacks')
+    require(isinstance(wait_review, dict) and
+            wait_review.get('source_commit') == EXPECTED_TZ_SOURCE_COMMIT and
+            wait_review.get('warning_count') == kernel_log.get('hung_task_warning_count') and
+            type(wait_review.get('matched_count')) is int and
+            type(wait_review.get('unmatched_count')) is int and
+            type(wait_review.get('progress_measured')) is bool,
+            'TrustZone wait-stack review is unavailable or mismatched')
+    require(wait_review.get('unmatched_count') == 0 and
+            wait_review.get('matched_count') == kernel_log.get('hung_task_warning_count'),
+            'hung-task stack does not match the pinned source wait path')
+    if kernel_log['hung_task_warning_count'] == 0:
+        require(kernel_log.get('liveness_unresolved') is False and
+                kernel_log.get('liveness_review_status') ==
+                'no_hung_task_warning_in_available_ring',
+                'kernel log warning status is inconsistent')
+    else:
+        require(kernel_log.get('liveness_unresolved') is True and
+                kernel_log.get('liveness_review_status') ==
+                'pinned_wait_stacks_matched_progress_unmeasured' and
+                wait_review.get('progress_measured') is False,
+                'hung-task warning remains unresolved despite a pinned wait stack')
     loaded_value = state.get('loaded_modules')
     require(isinstance(loaded_value, list) and
             all(isinstance(value, str) for value in loaded_value),
@@ -352,12 +488,13 @@ def validate_snapshot(state, *, post_reboot):
     components = set(component_value)
     missing = sorted(set(REQUIRED_HCI_COMPONENTS) - components)
     require(not missing, 'required HCI kernel components missing: '+','.join(missing))
+    require(service_readiness_valid(state.get('readiness')),
+            'native/model/desktop/browser readiness is missing or failed')
     require(state.get('hyprland_running') is True and
             state.get('pi_process_running') is True and
-            state.get('tmux_server_running') is True and
             state.get('ttyd_running') is True and
             state.get('pi_assistant_ready') is True,
-            'Hyprland or Pi assistant readiness is missing')
+            'desktop Pi or browser-terminal process is missing')
     require(network_state_valid(state.get('network_state')),
             'redacted network readiness is missing')
     require(power_state_valid(state.get('power_state')),
@@ -457,6 +594,8 @@ def observer_receipt_valid(value):
             value.get('network_ready') is True and
             value.get('device_target_valid') is True and
             value.get('power_ready') is True and
+            service_readiness_valid(value.get('service_readiness')) and
+            service_readiness_valid(value.get('baseline_service_readiness')) and
             value.get('baseline_power_ready') is True and
             value.get('baseline_readiness') is True and
             value.get('baseline_assistant_idle') is True and
@@ -465,10 +604,11 @@ def observer_receipt_valid(value):
             value.get('baseline_hci_components_ready') is True and
             value.get('baseline_desktop_ready') is True and
             value.get('baseline_pi_process_running') is True and
-            value.get('baseline_tmux_server_running') is True and
+            value.get('baseline_dedicated_session_status') in ('absent', 'ready') and
             value.get('baseline_ttyd_running') is True and
+            value.get('baseline_recovery_sha256') == EXPECTED_FLASH_SHA256 and
             value.get('postboot_pi_process_running') is True and
-            value.get('postboot_tmux_server_running') is True and
+            value.get('postboot_dedicated_session_status') in ('absent', 'ready') and
             value.get('postboot_ttyd_running') is True and
             value.get('baseline_network_ready') is True and
             value.get('baseline_device_target_valid') is True and
@@ -506,6 +646,41 @@ def request_reboot_once(marker, result_path, runner=subprocess.run, project_root
     durable_json(result_path, {'trial_identity': trial_identity,
                                'status': 'request_returned', 'returncode': 0,
                                'retry_allowed': False})
+    return 'ACKNOWLEDGED'
+
+
+def start_pi_web_once(marker, result_path, runner=subprocess.run, project_root=ROOT,
+                      trial_identity=TRIAL_ID):
+    """Run the existing guarded ttyd launcher once; it does not create a tmux session."""
+    validate_trial_identity(trial_identity)
+    require(Path(marker) == trial_marker_path(trial_identity, WEB_START_MARKER),
+            'Pi web-start marker path is not namespaced for this trial')
+    require(Path(result_path).parent.name == trial_identity,
+            'Pi web-start receipt path is not namespaced for this trial')
+    durable_json(marker, {'trial_identity': trial_identity,
+                          'operation': 'guarded_pi_web_start',
+                          'status': 'request_started',
+                          'created_at': datetime.now(timezone.utc).isoformat(),
+                          'retry_allowed': False})
+    try:
+        result = run_trusted_remote(
+            'usb', None, 'python3 /srv/s22/agent-web/start-agent-web.py --start',
+            runner=runner, timeout=20, project_root=project_root)
+    except (subprocess.TimeoutExpired, OSError, ObserverError) as error:
+        durable_json(result_path, {'trial_identity': trial_identity,
+                                   'status': 'unknown_after_request',
+                                   'outcome': 'UNKNOWN', 'retry_allowed': False,
+                                   'error_type': type(error).__name__})
+        return 'UNKNOWN'
+    if result.returncode != 0:
+        durable_json(result_path, {'trial_identity': trial_identity,
+                                   'status': 'failed', 'outcome': 'FAILED',
+                                   'retry_allowed': False,
+                                   'returncode': result.returncode})
+        return 'FAILED'
+    durable_json(result_path, {'trial_identity': trial_identity,
+                               'status': 'request_returned',
+                               'outcome': 'ACKNOWLEDGED', 'retry_allowed': False})
     return 'ACKNOWLEDGED'
 
 
@@ -710,7 +885,7 @@ def candidate_hash(transport='usb', host=None, runner=subprocess.run, project_ro
     require(result.returncode == 0, 'cannot read live RECOVERY hash')
     match = re.match(r'^([0-9a-f]{64})\s+', result.stdout)
     require(match is not None and match.group(1) == EXPECTED_FLASH_SHA256,
-            'live RECOVERY hash does not match the candidate')
+            'live RECOVERY hash does not match the HCI candidate')
     return match.group(1)
 
 
@@ -721,11 +896,16 @@ def run_reboot_observer(state_root, name, flash, wifi_host=None, tailscale_host=
     validate_trial_identity(name)
     ensure_private_directory(TRIAL_STATE_ROOT)
     marker = trial_marker_path(name, REBOOT_MARKER)
+    web_start_marker = trial_marker_path(name, WEB_START_MARKER)
     ensure_private_directory(marker.parent)
     require_unused_trial_marker(marker)
     validate_flash_receipt(flash)
     before = snapshot_over('usb', runner=runner, project_root=project_root)
     validate_snapshot(before, post_reboot=False)
+    # This observer is invoked only after the forward deployer wrote and read
+    # back the candidate. The pre-reboot partition must therefore already be
+    # the candidate; the flash receipt separately pins the rollback as the
+    # pre-write image.
     baseline_hash = candidate_hash(runner=runner, project_root=project_root)
     ensure_private_directory(state_root)
     out = observer_receipt_path(state_root, name).parent
@@ -758,6 +938,7 @@ def run_reboot_observer(state_root, name, flash, wifi_host=None, tailscale_host=
     candidate_boot = None
     accepted = None
     verified_hash = None
+    pi_web_start_outcome = 'not_needed'
     samples = 0
     last_valid_elapsed = -1
     while clock() < deadline:
@@ -778,20 +959,45 @@ def run_reboot_observer(state_root, name, flash, wifi_host=None, tailscale_host=
                                                   project_root=project_root)
             route_host = (wifi_host if transport == 'wifi' else
                           tailscale_host if transport == 'tailscale' else None)
-            state['host_elapsed_seconds'] = elapsed
-            state['transport'] = transport
-            state['host_network_redacted'] = host_observation
-            durable_json(out/('sample-%03d.json' % samples), state)
             boot_id = state.get('boot_id')
             if candidate_boot is None and boot_id and boot_id != prior_boot:
                 candidate_boot = boot_id
             if candidate_boot is not None:
                 require(boot_id == candidate_boot, 'boot ID changed during observation')
+                readiness = state.get('readiness')
+                if (isinstance(readiness, dict) and
+                        readiness.get('dedicated_pi_session_status') == 'absent' and
+                        not web_start_marker.exists()):
+                    outcome = start_pi_web_once(
+                        web_start_marker, out/'pi-web-start-result.json',
+                        runner=bounded_runner, project_root=project_root,
+                        trial_identity=name)
+                    pi_web_start_outcome = outcome
+                    durable_json(out/'pi-web-start-outcome.json', {
+                        'trial_identity': name, 'outcome': outcome,
+                        'retry_allowed': False,
+                    })
+                    state, transport = reconnect_snapshot(
+                        wifi_host, tailscale_host, runner=bounded_runner,
+                        project_root=project_root)
+                    route_host = (wifi_host if transport == 'wifi' else
+                                  tailscale_host if transport == 'tailscale' else None)
+                    require(state.get('boot_id') == candidate_boot,
+                            'boot changed while running guarded Pi web startup')
+                state['host_elapsed_seconds'] = elapsed
+                state['transport'] = transport
+                state['host_network_redacted'] = host_observation
+                durable_json(out/('sample-%03d.json' % samples), state)
                 validate_snapshot(state, post_reboot=True)
                 if verified_hash is None:
                     verified_hash = candidate_hash(transport, route_host, bounded_runner, project_root)
                 accepted = state
                 last_valid_elapsed = elapsed
+            else:
+                state['host_elapsed_seconds'] = elapsed
+                state['transport'] = transport
+                state['host_network_redacted'] = host_observation
+                durable_json(out/('sample-%03d.json' % samples), state)
         except (ObserverError, OSError, subprocess.TimeoutExpired, ValueError) as error:
             accepted = None
             print(json.dumps({'elapsed_seconds': round(clock()-started, 2),
@@ -816,6 +1022,11 @@ def run_reboot_observer(state_root, name, flash, wifi_host=None, tailscale_host=
                'wifi_route_available': bool(wifi_host),
                'observed_seconds': observed,
                'continuous_uptime_seconds': accepted.get('uptime_seconds') if accepted else None,
+               'service_readiness': accepted.get('readiness') if accepted else None,
+               'baseline_service_readiness': before.get('readiness'),
+               'pi_web_start_outcome': pi_web_start_outcome,
+               'kernel_log_classification': accepted.get('kernel_log_classification') if accepted else None,
+               'baseline_kernel_log_classification': before.get('kernel_log_classification'),
                'readiness': bool(accepted and accepted.get('native_ready') and
                                  ready_value(accepted.get('persistent_ready'))),
                'assistant_idle': bool(accepted and accepted.get('assistant_idle') is True),
@@ -855,9 +1066,12 @@ def run_reboot_observer(state_root, name, flash, wifi_host=None, tailscale_host=
                'baseline_pi_process_running': before.get('pi_process_running') is True,
                'baseline_tmux_server_running': before.get('tmux_server_running') is True,
                'baseline_ttyd_running': before.get('ttyd_running') is True,
+               'baseline_dedicated_session_status': before.get('readiness', {}).get('dedicated_pi_session_status'),
                'postboot_pi_process_running': accepted.get('pi_process_running') is True if accepted else False,
                'postboot_tmux_server_running': accepted.get('tmux_server_running') is True if accepted else False,
                'postboot_ttyd_running': accepted.get('ttyd_running') is True if accepted else False,
+               'postboot_dedicated_session_status': (accepted.get('readiness', {}).get('dedicated_pi_session_status')
+                                                      if accepted else None),
                'baseline_recovery_sha256': baseline_hash,
                'recovery_sha256': verified_hash,
                'recovery_sha256_after_boot': verified_hash,
@@ -899,6 +1113,8 @@ def run_hci_once(state_root, name, observer, runner=subprocess.run,
         'transport': transport,
         'recovery_sha256': recovery_sha256,
         'device_target_valid': target_identity_valid(current),
+        'readiness': current.get('readiness'),
+        'kernel_log_classification': current.get('kernel_log_classification'),
         'required_modules_ready': True, 'hci_components_ready': True,
         'hyprland_running': True, 'pi_assistant_ready': True,
         'network_state': current.get('network_state'),
