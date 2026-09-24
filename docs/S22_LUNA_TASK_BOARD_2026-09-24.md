@@ -275,3 +275,99 @@ it in Download Mode and confirm the screen. The coordinator will first run
 read-only detection and verify candidate/rollback hashes; the flash still
 requires explicit authorization for that specific RECOVERY write. `master`
 remains unchanged and no image/module/firmware artifact is published.
+
+## 2026-09-24 independent HCI review and candidate validation
+
+An explicitly selected `gpt-6-luna` independent reviewer with Max reasoning
+used isolated worktree `/tmp/s22-hci-candidate-review-20260924` and committed
+`9a3277cd174759d6272bc024fe06f4837cdd3db8`; it was reviewed and integrated
+here as `8ece563`. Runtime/session metadata was unavailable, so this records
+the explicit model configuration, not runtime-reported identity. The reviewer
+found a real source-provenance gap: the builder could pair a supplied source
+tree's HEAD with an O-tree linked to a different source. The builder now
+requires the O-tree `source` link to resolve to the supplied tree, and
+preflight compares manifest `source_commit` with that O-tree's HEAD. Matching
+and mismatch tests cover both checks. For this candidate, the clean source,
+manifest commit, and O-tree link all resolve to
+`f52cbbd7e2783d529e1e5742d94e0fd64889bbdf`.
+
+Post-integration validation at `8ece563`:
+
+- `python3 -I -B tools/hardware/run-host-regressions.py --mode both`: all
+  allowlisted host suites passed in normal and optimized modes. The deployment
+  suite passed 45 tests each time, with three expected AVB-fixture skips
+  because the public review worktree does not contain the private trusted
+  `avbtool.py`; the actual candidate footer/hash was separately checked with
+  the pinned owner-checkout tool.
+- The HCI preflight suite passed 23 tests normally, under `python3 -O`, and
+  with `PYTHONOPTIMIZE=1`. The deployment suite passed 45 tests in all three
+  modes, with the same three AVB-fixture skips.
+- The actual local candidate preflight exited 0 with no issues: 324 ramdisk
+  modules plus the selected Lineage WLAN module, 17,042 version records, and
+  325 `module_layout` records passed. The candidate image SHA-256 remains
+  `42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5`.
+  Actual `/proc/modules` membership and any other boot/runtime module sources
+  remain unknown; no device evidence is implied.
+- The reviewer confirmed pinned `kernel/module.c` behavior and the rollback
+  image hash. It also found that the Recovery key handoff had been overstated:
+  Samsung's support page documents Download-mode exit but not the complete
+  RECOVERY transition. The trial note now labels the S22+ key sequence as a
+  third-party-described, physically unverified procedure; mode must be
+  confirmed from `/proc/boot_reset`/BORE after boot.
+- A fresh read-only `samloader detect --verbose` on the recovery host returned
+  `Failed to detect compatible download-mode device` (exit 1). The host still
+  has no independent Download Mode rescue qualification. Candidate and native
+  rollback files each remain exactly 100,663,296 bytes and their recorded
+  SHA-256 values were freshly verified. No device write, reboot, or Bluetooth
+  operation occurred.
+
+Additional implementation-worker spawning was attempted for this follow-up,
+but the collaboration runtime returned `agent thread limit reached`; no
+replacement model or fictitious worker was used. Existing explicitly selected
+Luna workers delivered loader/preflight implementation, candidate packaging,
+recovery/storage work, and the independent review described above. At this
+checkpoint the only owner action is one attended session: connect the phone to
+the actual recovery host, put it in Download Mode, and confirm the screen.
+The coordinator will first run read-only detection and verify both local
+images. That action does not authorize flashing; the one RECOVERY write still
+requires its own explicit authorization after rescue is proven. `master`
+remains unchanged.
+
+## 2026-09-24 final HCI provenance review and recovery-path gate
+
+The independent Luna reviewer identified one further provenance bypass at
+`bb62089`: arbitrary tool names/version strings could pass despite a valid
+64-character hash shape. Commit `8c7cc329dffa53240fc23d50dd1b22117b5ad2ed`
+closes that case by requiring recorded clang and ld.lld identities whose
+version lines match the kernel O-tree's embedded `LINUX_COMPILER`; the exact
+malicious-name/version case is now tested. A follow-up independent review
+confirmed that bypass is closed and found no additional concrete defect.
+Tool binary SHA-256 values are preserved in the build record, but the
+preflight explicitly does not claim to re-hash executable binaries from the
+kernel image; it validates the names and version strings against embedded
+compiler metadata.
+
+At this revision the focused HCI suite passed 27 tests in normal,
+`python3 -O`, and `PYTHONOPTIMIZE=1` modes. The complete host runner passed in
+normal and optimized modes; deployment passed 45 tests with three expected
+AVB-fixture skips. Actual candidate preflight still exits 0 with loader and
+build-provenance verdicts true. No image or other private build artifact is
+tracked.
+
+The recovery note now requires a no-write test of the Download-to-current-
+RECOVERY handoff and BORE/ADB confirmation before any candidate write. From
+that known-good native session, the owner-present session can test
+`s22-reboot download` and re-run read-only Download detection; that target is
+accepted by the installed helper but has not been exercised on the phone.
+Samsung documents Download-mode exit, and an S22+ carrier guide documents the
+Volume Up + Side Recovery keys, but the combined handoff remains an inference
+until physically verified. This is now an explicit stop gate, not claimed as
+proven.
+
+Current host detection still reports no connected Download Mode device.
+Nothing was flashed or rebooted. The single owner action requested is to be at
+the phone, connect it to the actual recovery host, enter Download Mode, and
+confirm the screen. The coordinator will first detect read-only and check both
+image hashes; then it can guide the no-write Recovery-path verification. A
+candidate RECOVERY write still needs separate explicit authorization after
+rescue and return-to-RECOVERY are proven. `master` remains unchanged.
