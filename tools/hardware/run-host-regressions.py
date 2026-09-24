@@ -40,6 +40,7 @@ REVIEWED_HOST_TEST_PATHS = (
     "tools/hardware/test-audio-recovery-observer.py",
     "tools/hardware/test-input-power-readiness.py",
     "tools/hardware/test-recovery-deployment-hardening.py",
+    "tools/hardware/test-hci-recovery-profile.py",
     "tools/hardware/test-s22-hci-candidate-preflight-20260924.py",
     "tools/hardware/test-bt-h4-ibs-bridge.py",
     "tools/hardware/test-bt-qca6490-patch-receipt.py",
@@ -54,6 +55,7 @@ HOST_TESTS = (
     HostTest("tools/hardware/test-audio-recovery-observer.py"),
     HostTest("tools/hardware/test-input-power-readiness.py"),
     HostTest("tools/hardware/test-recovery-deployment-hardening.py"),
+    HostTest("tools/hardware/test-hci-recovery-profile.py"),
     HostTest("tools/hardware/test-s22-hci-candidate-preflight-20260924.py"),
     HostTest("tools/hardware/test-bt-h4-ibs-bridge.py"),
     HostTest(
