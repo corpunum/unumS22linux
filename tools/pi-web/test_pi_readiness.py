@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import unittest
 import hashlib
+import os
 from unittest import mock
 import importlib.util
 import sys
@@ -41,6 +42,23 @@ def make_socket(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
         listener.bind(str(path))
+
+
+def inspect_with_socket_owner(socket_path: Path, *, socket_uid: int = 1000,
+                              proc_root: Path = Path("/proc"), query):
+    """Model the device socket owner independently of the host runner UID."""
+    original_lstat = Path.lstat
+
+    def controlled_lstat(path: Path):
+        result = original_lstat(path)
+        if path == socket_path:
+            fields = list(result)
+            fields[4] = socket_uid
+            return os.stat_result(fields)
+        return result
+
+    with mock.patch.object(Path, "lstat", new=controlled_lstat):
+        return readiness.inspect_pi_session(socket_path, proc_root=proc_root, query=query)
 
 
 class PiSessionReadinessTest(unittest.TestCase):
@@ -84,7 +102,7 @@ class PiSessionReadinessTest(unittest.TestCase):
             pi_root = root / "arch"
             make_process(proc_root, pi_root, 234, uid=1000,
                          argv=("/opt/s22-pi/0.86.1/pi/pi", "--offline"))
-            result = readiness.inspect_pi_session(
+            result = inspect_with_socket_owner(
                 socket_path, proc_root=proc_root,
                 query=lambda: subprocess.CompletedProcess(
                     ["tmux"], 0, stdout="pi\t234\n", stderr=""),
@@ -106,12 +124,22 @@ class PiSessionReadinessTest(unittest.TestCase):
                 make_process(proc_root, pi_root, 235, uid=uid,
                              argv=("/opt/s22-pi/0.86.1/pi/pi",),
                              executable=executable)
-                result = readiness.inspect_pi_session(
+                result = inspect_with_socket_owner(
                     socket_path, proc_root=proc_root,
                     query=lambda: subprocess.CompletedProcess(
                         ["tmux"], 0, stdout="pi\t235\n", stderr=""),
                 )
                 self.assertEqual(result["status"], "failed")
+
+    def test_wrong_dedicated_socket_owner_fails_before_query(self):
+        with tempfile.TemporaryDirectory(prefix="pr-", dir="/tmp") as temporary:
+            socket_path = Path(temporary) / "arch" / readiness.TMUX_SOCKET
+            make_socket(socket_path)
+            query = mock.Mock(side_effect=AssertionError("untrusted socket must not be queried"))
+            result = inspect_with_socket_owner(socket_path, socket_uid=0, query=query)
+
+        self.assertEqual(result, {"status": "failed", "ready": False})
+        query.assert_not_called()
 
     def test_missing_or_failed_required_service_blocks_service_readiness(self):
         for service in ("web", "model", "desktop"):
