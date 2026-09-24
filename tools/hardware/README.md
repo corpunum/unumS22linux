@@ -50,9 +50,11 @@ native Hyprland power binding.
 `run-host-regressions.py` runs a fixed allowlist of synthetic host tests. It
 does not discover tests or accept test paths. The suite covers the NPU
 lifecycle model and preflight gates, audio DMA progress classification, input
-readiness against temporary fixtures, recovery deployment validation and the
-rendered stage/flash body against a fake filesystem and block device, and the
-Bluetooth H4/IBS bridge against local PTYs. Deployment integration executes the
+readiness against temporary fixtures, synchronized audio snapshot accounting,
+recovery deployment validation and the rendered stage/flash body against a
+fake filesystem and block device, HCI image/module compatibility checks using
+synthetic module records, and the Bluetooth H4/IBS bridge against local PTYs.
+Deployment integration executes the
 embedded command directly with a narrow import/syscall seam; it does not mock
 an SSH response or contact a device. The bridge test needs the Ubuntu runner's
 existing `cc` compiler;
