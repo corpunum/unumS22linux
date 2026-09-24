@@ -20,8 +20,9 @@ The coordinator's 2026-09-24 phone capture reports:
 | Phone destination/view | Free bytes | Free inodes | Interpretation |
 | --- | ---: | ---: | --- |
 | Native `/` overlay | 34,028 KiB (596,544 total; 550,228 used) | 29,780 | CACHE-backed rescue overlay; low headroom |
+| `/run` rootfs tmpfs | 2,303,660 KiB available (2,433,448 total) | 607,115 | transient native rootfs; `df` could not resolve this bind-mounted path, so values come from `stat -f` and mountinfo |
 | Persistent `/srv/s22` | 99,982,692 KiB | 1,652,508 | Persistent userdata filesystem |
-| `/tmp` | 256 MiB | not supplied | tmpfs; incidental phone-side staging has a separate budget |
+| `/tmp` | 256 MiB | 830,421 | separate tmpfs; not used by the current deployment script |
 
 The same capture reports that the SSH root cannot see `/cache`, while PID 1's
 mount information names the CACHE-backed overlay and
@@ -43,6 +44,18 @@ as reusable free space. For phone paths, this host-only tool is not a live
 measurement source: the coordinator must first collect bounded read-only
 capacity and mount evidence in the actual phone namespace for the exact
 destination.
+
+For the current recovery deployment script specifically, the host reads the
+candidate image and records its receipt under the project rootfs tree; the
+phone receives the candidate through SSH stdin and creates the rollback image
+and staged candidate under `/srv/s22` (100,663,296 bytes each, plus directory
+and filesystem overhead; two files plus one directory inode). Its serialization
+lock is a small file under `/run`. No package install or phone `/tmp` output is
+part of that script. The measured `/srv/s22` headroom is about 102.4 GB and
+1,652,508 inodes; `/run` has about 2.36 GB and 607,115 inodes available. These
+measurements exceed the known destinations' needs and do not imply the nearly
+full overlay is safe to clean or suitable for arbitrary writes. Host tests use
+temporary directories on the host's ext4 filesystem, not phone storage.
 
 Example plan shape (replace the illustrative path with the exact local
 destination before auditing):

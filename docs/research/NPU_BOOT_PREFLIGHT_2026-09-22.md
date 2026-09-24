@@ -91,3 +91,45 @@ root, tested firmware boot/shutdown, an independent recovery path, a live
 validation receipt, and explicit owner authorization for the exact operation.
 No probe C program is supplied or executed here; there is no safe “hold fd then
 reboot” protocol until those kernel ownership conditions are met.
+
+## 2026-09-24 POWER publication-liveness clarification
+
+The lifecycle source audit separates four different claims; none authorize
+BOOTUP:
+
+| Status field | Evidence / current result |
+| --- | --- |
+| `power_response_timeout_bounded` | Source checks the 12,000 ms completion wait in the request waiter; true for the inspected candidate source. |
+| `publication_drain_liveness_resolved` | Always false: cancellation can block in `wait_for_completion(&waiter->publish_done)` with no timeout. |
+| `callback_lifetime_kernel_validated` | Always false: source-level cookie/request-id locking and the Python model are not execution or lifetime instrumentation of kernel C. |
+| `firmware_boot_and_shutdown_device_tested` | Always false: no NPU boot/shutdown was performed on the phone. |
+
+The publication path in the inspected lifecycle candidate is: session code
+registers a stack-owned waiter under `npu_power_waiters_lock`, queues a
+`POWER_CTL` request with `npu_ncp_mgmt_put()`, then waits up to 12 seconds for
+the callback completion. The protocol worker recognizes this callback,
+reserves and authorizes a publication lease under the same spinlock, then calls
+`__mbox_nw_ops_put(entry)` synchronously. The worker finishes the lease only
+after that call returns (or after an authorization/emergency branch). The
+callback reconstructs the cookie, takes the spinlock, matches cookie plus
+request ID, and ignores canceled waiters. If enqueue fails, the waiter is
+removed under the lock and the caller returns the enqueue error. If the
+response times out, cancellation marks the waiter canceled and drains any
+already-authorized synchronous post before removing the stack waiter.
+
+This ownership is why replacing the drain with a timeout and returning is not
+safe: a publisher may still hold a lease referencing stack storage. The
+unbounded drain preserves that storage but also means the whole operation is
+not bounded if the synchronous mailbox post stalls. A post that returns
+without a matching callback can still leave the response waiter to its
+12-second timeout; that is distinct from a post that never returns. The
+independent statuses in `npu-boot-preflight.py` intentionally keep those cases
+separate.
+
+`test_stalled_publication_retains_waiter_until_drain` is a deterministic
+threaded **Python reference model**, not a test that executes kernel C. Source
+contract checks inspect the candidate text, and the host tool labels the
+publication-drain, callback-lifetime, firmware-runtime, and authorization
+gates unresolved. No change here authorizes first BOOTUP; any future
+owner-approved first experiment remains a separate operation requiring its
+own reviewed containment and recovery procedure.

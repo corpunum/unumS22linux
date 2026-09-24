@@ -378,6 +378,7 @@ class _SandboxOS:
         self.sandbox = sandbox
         self.real = os
         self.fd_kinds = {}
+        self.fd_paths = {}
 
     def __getattr__(self, name):
         return getattr(self.real, name)
@@ -429,16 +430,39 @@ class _SandboxOS:
         if dir_fd is None:
             mapped = self._mapped_path(path)
             fd = self.real.open(mapped, flags, mode)
-            kind = "partition" if os.path.abspath(os.fspath(mapped)) == str(self.sandbox.partition) else "file"
+            actual_path = Path(mapped)
         else:
             fd = self.real.open(path, flags, mode, dir_fd=dir_fd)
-            kind = "file"
+            parent = self.fd_paths.get(dir_fd)
+            actual_path = parent / os.fspath(path) if parent is not None else None
+        kind = "partition" if actual_path == self.sandbox.partition else "file"
+        if flags & os.O_DIRECTORY:
+            kind = "directory"
+        elif flags & os.O_WRONLY and dir_fd is not None:
+            kind = "staged-file"
         self.fd_kinds[fd] = kind
+        if actual_path is not None:
+            self.fd_paths[fd] = actual_path
         return fd
 
     def close(self, fd):
         self.fd_kinds.pop(fd, None)
+        self.fd_paths.pop(fd, None)
         return self.real.close(fd)
+
+    def write(self, fd, data):
+        if self.fd_kinds.get(fd) != "staged-file":
+            return self.real.write(fd, data)
+        limit = self.sandbox.fail_staged_write_after
+        written = self.sandbox.current_operation_staged_writes
+        if limit is not None:
+            if written >= limit:
+                raise OSError("injected fake staging-file write failure")
+            data = data[:limit - written]
+        count = self.real.write(fd, data)
+        self.sandbox.current_operation_staged_writes += count
+        self.sandbox.staged_write_bytes += count
+        return count
 
     def pwrite(self, fd, data, offset):
         if self.fd_kinds.get(fd) != "partition":
@@ -498,6 +522,9 @@ class RenderedRemoteSandbox:
         self.device_write_bytes = 0
         self.current_operation_writes = 0
         self.fail_partition_write_after = None
+        self.staged_write_bytes = 0
+        self.current_operation_staged_writes = 0
+        self.fail_staged_write_after = None
         self._create_filesystem()
         self.fake_os = _SandboxOS(self)
         self.rendered = BASE.render_remote(
@@ -554,6 +581,7 @@ class RenderedRemoteSandbox:
 
     def execute(self, mode, *, candidate_input=False):
         self.current_operation_writes = 0
+        self.current_operation_staged_writes = 0
         input_stream = _RepeatedInput(self.CANDIDATE_BYTE, self.SIZE) if candidate_input \
             else _RepeatedInput(self.CANDIDATE_BYTE, 0)
         fake_sys = SimpleNamespace(
@@ -670,6 +698,20 @@ class EmbeddedTargetGateTests(unittest.TestCase):
             with sandbox.partition.open("rb") as stream:
                 self.assertEqual(stream.read(4096), bytes([sandbox.CANDIDATE_BYTE]) * 4096)
                 self.assertEqual(stream.read(4096), bytes([sandbox.BASE_BYTE]) * 4096)
+        finally:
+            sandbox.close()
+
+    def test_partial_staging_write_emits_no_success_receipt_and_never_flashes(self):
+        sandbox = RenderedRemoteSandbox()
+        sandbox.fail_staged_write_after = 4096
+        try:
+            result = sandbox.execute("stage", candidate_input=True)
+            self.assertIsNotNone(result.error)
+            self.assertIn("staging did not complete", str(result.error))
+            self.assertIn("outcome may be partial", str(result.error))
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(sandbox.current_operation_staged_writes, 4096)
+            self.assertEqual(sandbox.device_write_bytes, 0)
         finally:
             sandbox.close()
 
