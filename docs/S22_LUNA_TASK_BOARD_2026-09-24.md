@@ -80,8 +80,11 @@ Coordinator verification on the integrated worktree:
 | `test-s22-capacity-rescue-audit.py` normal, `-O`, `PYTHONOPTIMIZE=1` | 7/7 in each mode |
 | `git diff --check` for current source/docs | Passed |
 
-Hosted Actions for the eventual new branch head remains to be checked against
-the exact pushed SHA.
+Hosted GitHub Actions run `35960241159` completed successfully in 24 seconds
+for review-branch SHA
+`6caf701d027a7f1293343ef941df8dd55aa28ab7`. It ran the allowlist and fixed
+host suite with no secrets or device steps. A documentation follow-up will
+advance the branch; its exact head must be checked in a separate hosted run.
 
 ## NPU readiness and publication ownership
 
