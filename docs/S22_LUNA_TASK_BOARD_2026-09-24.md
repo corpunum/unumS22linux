@@ -364,10 +364,59 @@ Volume Up + Side Recovery keys, but the combined handoff remains an inference
 until physically verified. This is now an explicit stop gate, not claimed as
 proven.
 
-Current host detection still reports no connected Download Mode device.
-Nothing was flashed or rebooted. The single owner action requested is to be at
-the phone, connect it to the actual recovery host, enter Download Mode, and
-confirm the screen. The coordinator will first detect read-only and check both
-image hashes; then it can guide the no-write Recovery-path verification. A
-candidate RECOVERY write still needs separate explicit authorization after
-rescue and return-to-RECOVERY are proven. `master` remains unchanged.
+At this pre-trial checkpoint, host detection reported no connected Download
+Mode device, and no image had yet been flashed. This historical statement is
+superseded by the later owner-authorized trial below. `master` remained
+unchanged.
+
+## Owner-authorized HCI trial and rollback — later checkpoint
+
+The later, explicit owner authorization superseded the physical-presence and
+Download-Mode prerequisite for this single RECOVERY trial only. The exact HCI
+candidate (`42da267f…`) was staged, written once to RECOVERY, and fully read
+back. One targeted recovery request returned `UNKNOWN` on SSH disconnect; it
+was not retried. A new BORE RECOVERY record and candidate GNU build ID confirmed
+the candidate booted. No raw-HCI socket operation, controller attachment,
+scan, or pairing was attempted because the Pi tmux assistant gate was not met.
+
+Candidate dmesg recorded ten TrustZone worker/log-thread hung-task warnings
+with call traces. Pinned source review shows those workers intentionally wait
+uninterruptibly; this log alone does not prove a new kernel defect or link it
+to the HCI patch. The candidate observation stopped before its full ten-minute
+window once the warnings and missing Pi tmux session were known. The private
+rollback observer did not capture a paired full dmesg log.
+
+The conditional exact native rollback (`758fc9d3…`) was staged, written once
+to RECOVERY, and fully read back. One targeted rollback recovery request also
+returned `UNKNOWN` and was not retried. BORE, the rollback GNU build ID, and
+the full partition hash verified the resulting boot. A private 600-second
+read-only observation recorded 58/58 samples on that same recovery boot with
+native PID 1, persistent storage, health/idle, Hyprland, WLAN, required modules,
+and power ready, and no serious-fault patterns. On all samples the Pi process
+and ttyd existed but tmux did not; the native image is restored, while the
+resident Pi assistant is not fully restored. A final current snapshot confirmed
+the same boot and rollback image. No extra phone mutation or reboot was made.
+
+Independent hardware rescue remains **not demonstrated**; hardware acceptance
+remains **unproven**. The sanitized execution summary is
+[`evidence/s22-hci-trial-20260924.json`](../evidence/s22-hci-trial-20260924.json);
+full operation receipts and raw diagnostics remain private on the rig.
+
+### Post-trial Luna host work
+
+Two additional implementation workers and independent reviewers were
+explicitly configured through the collaboration runtime as `gpt-6-luna` with
+Max reasoning. The worker reports did not have independent runtime metadata;
+the configuration is recorded as such. A separate reviewer session's
+turn-context metadata did confirm `gpt-6-luna/max`.
+
+| Worker | Worktree / commit | Result |
+|---|---|---|
+| `/root/posttrial_audio_dma` | `/tmp/s22-luna-posttrial-audio-20260924`, commits `9b550f947afbe3cb2f203bf47fa66fc5223b935`, `4eb20155af6f9ec15980067a1d6faae7aef313ec`, and `89146226c978cf2e568e2465d04a366c2c7dddc2` | Audio progress now rejects observed errors/non-RUNNING gaps, missing or invalid sequence fields, and nonconsecutive RUNNING capture sequences. Independent review first found the missing-sequence gap; a second review approved the complete diff through `8914622` with no blockers. Focused progress (17) and route-assessment (18) tests passed normally and under `-O`; the worker's allowlisted runner passed with 0 failures. Continuity applies only to observed samples; it cannot detect state changes between captures. Host diagnostics only; no live audio/phone acceptance. |
+| `/root/candidate_regression_analysis` | `/tmp/s22-luna-posttrial-kernel-20260924`, no commit | Compared candidate source delta and TrustZone wait paths. No evidence-backed kernel fix or host regression justified; no causal attribution established. No phone access or rebuild. |
+| `/root/audio_gap_review` | reviewer worktree unchanged | Found and reported the audio missing-sequence blocker, prompting commit `4eb2015`; independently approved the corrected combined diff through `8914622` with no blockers. |
+| `/root/trial_receipt_review` | read-only review | Confirmed public receipt/hash/reboot claims, matching observer counts, and privacy; initial staleness/causality findings were corrected and the final re-review passed. |
+
+`master` remains unchanged. Publish the sanitized device-result update and any
+independently approved audio regression fix only to the existing unmerged
+review branch, then verify the remote SHA and hosted CI.
