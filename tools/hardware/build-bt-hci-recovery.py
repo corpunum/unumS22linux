@@ -64,9 +64,12 @@ def git_output(source: Path, *args: str) -> str:
 
 def kernel_build_provenance(source_tree: Path | None, build_output: Path | None,
                             toolchain_tools: list[Path], build_command: str | None) -> dict:
-    supplied = (source_tree is not None, build_output is not None, bool(toolchain_tools))
+    supplied = (
+        source_tree is not None, build_output is not None,
+        bool(toolchain_tools), bool(build_command),
+    )
     if any(supplied) and not all(supplied):
-        raise RuntimeError("source tree, build output, and at least one toolchain tool must be supplied together")
+        raise RuntimeError("source tree, build output, toolchain tools, and build command must be supplied together")
     if not any(supplied):
         return {"complete": False, "reason": "kernel build provenance arguments were not supplied"}
 
