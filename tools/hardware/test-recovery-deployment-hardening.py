@@ -1132,9 +1132,9 @@ class AvbVerificationTests(unittest.TestCase):
         source, output = self.provenance_fixture()
         (source / "untracked.c").write_text("uncommitted\n")
         with self.assertRaisesRegex(RuntimeError, "must be clean and committed"):
-            BUILDER.kernel_build_provenance(source, output, [Path(sys.executable)], None)
+            BUILDER.kernel_build_provenance(source, output, [Path(sys.executable)], "make Image modules")
         with self.assertRaisesRegex(RuntimeError, "must be supplied together"):
-            BUILDER.kernel_build_provenance(source, output, [], None)
+            BUILDER.kernel_build_provenance(source, output, [], "make Image modules")
 
     def test_real_avb_footer_verifies_and_corruption_fails(self):
         if not self.avbtool.is_file():
