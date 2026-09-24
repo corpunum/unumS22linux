@@ -17,7 +17,10 @@ class TrustZoneLogClassifierTests(unittest.TestCase):
 
         self.assertEqual(result.assessment, "fatal")
         self.assertTrue(result.has_fatal_indicator)
-        self.assertEqual([item.kind for item in result.fatal_indicators], ["bug"])
+        self.assertEqual(
+            [item.kind for item in result.fatal_indicators],
+            ["bug", "unable_to_handle_kernel"],
+        )
         self.assertEqual(len(result.hung_task_warnings), 1)
         self.assertEqual(result.hung_task_warnings[0].task_name, "tz_kthread_pool")
         self.assertEqual(result.hung_task_warnings[0].pid, 41)
@@ -42,8 +45,15 @@ class TrustZoneLogClassifierTests(unittest.TestCase):
         cases = (
             ("[ 1.0] Kernel panic - not syncing: fatal exception\n", {"kernel_panic"}),
             ("[ 1.0] Internal error: Oops: 96000004 [#1] PREEMPT SMP\n", {"oops"}),
-            ("[ 1.0] BUG: unable to handle kernel paging request\n", {"bug"}),
+            ("[ 1.0] BUG: unable to handle kernel paging request\n",
+             {"bug", "unable_to_handle_kernel"}),
             ("[ 1.0] kernel BUG at drivers/example.c:42!\n", {"bug"}),
+            ("[ 1.0] Unable to handle kernel NULL pointer dereference\n",
+             {"unable_to_handle_kernel"}),
+            ("[ 1.0] general protection fault, probably for address 0x0\n",
+             {"general_protection_fault"}),
+            ("[ 1.0] Out of memory: Killed process 123 (example)\n", {"out_of_memory"}),
+            ("[ 1.0] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null)\n", {"oom_kill"}),
             ("[ 1.0] watchdog: BUG: soft lockup - CPU#0 stuck for 22s!\n",
              {"bug", "soft_lockup"}),
             ("[ 1.0] watchdog: Watchdog detected hard LOCKUP on cpu 0\n", {"hard_lockup"}),
@@ -56,6 +66,16 @@ class TrustZoneLogClassifierTests(unittest.TestCase):
                 self.assertEqual(
                     {item.kind for item in result.fatal_indicators}, expected_kinds
                 )
+
+    def test_fatal_lines_keep_call_trace_as_a_separate_signal(self):
+        result = classify_kernel_log(
+            "[ 1.0] Out of memory: Killed process 123 (example)\n"
+            "[ 1.1] Call trace:\n"
+        )
+
+        self.assertEqual(result.assessment, "fatal")
+        self.assertEqual([item.kind for item in result.fatal_indicators], ["out_of_memory"])
+        self.assertEqual(result.call_trace_lines, (2,))
 
     def test_known_and_unknown_thread_names_do_not_downgrade_hung_tasks(self):
         known = classify_kernel_log(
