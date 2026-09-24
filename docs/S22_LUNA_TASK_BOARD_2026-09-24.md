@@ -27,7 +27,15 @@ fd, current mountinfo and fd identity/capacity immediately before `pwrite`;
 the new injected regressions simulate a post-validation mount and a changed
 partition baseline. The partial-stage test now attempts a flash from the
 partial directory and confirms refusal with no receipt or partition write.
-Independent review of this corrective commit is still pending.
+Independent re-review of `2c7c60a` by `/root/storage_rescue_impl` passed at
+branch head `c27474e`; the branch changed only documentation afterward. The
+review confirms the long stale-state gap is closed to the requested
+immediate-pre-write checks and the partial-stage-to-flash gap is closed. This
+is not an atomic exclusion against a non-cooperating external actor changing
+mount or partition state after the final checks. The HCI tests still cover the
+pure vermagic/CRC decision helpers rather than the complete image/manifest/
+cpio pipeline; coordinator separately ran the actual local candidate through
+the checker and recorded its fail-closed result above.
 
 ## Deployment regression and CI
 
