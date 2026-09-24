@@ -272,6 +272,76 @@ class CandidateModuleSourcePlanTests(unittest.TestCase):
 
 
 class ManifestSourceProvenanceTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        root = Path(self.temp.name)
+        self.config = root / ".config"
+        self.symvers = root / "Module.symvers"
+        self.image = root / "Image"
+        self.config.write_text("CONFIG_MODVERSIONS=y\n")
+        self.symvers.write_text("0x12345678\tmodule_layout\tvmlinux\tEXPORT_SYMBOL\n")
+        self.image.write_bytes(b"kernel image fixture")
+
+    def complete_manifest(self):
+        return {"kernel_build_provenance": {
+            "complete": True,
+            "source_commit": "abc123",
+            "source_dirty": False,
+            "kernel_release": CLEAN_RELEASE,
+            "config_sha256": GATE.sha256_file(self.config),
+            "module_symvers_sha256": GATE.sha256_file(self.symvers),
+            "kernel_image_sha256": GATE.sha256_file(self.image),
+            "toolchain_tools": [{
+                "name": "clang", "version_first_line": "clang version fixture",
+                "sha256": "a" * 64,
+            }],
+            "build_command": "make ARCH=arm64 Image modules",
+        }}
+
+    def test_complete_matching_build_provenance_is_accepted(self):
+        self.assertEqual([], GATE.manifest_build_provenance_issues(
+            self.complete_manifest(), "abc123", CLEAN_RELEASE,
+            self.config, self.symvers, self.image,
+        ))
+
+    def test_missing_or_incomplete_build_provenance_is_rejected(self):
+        self.assertIn(
+            "candidate manifest lacks complete kernel build provenance",
+            GATE.manifest_build_provenance_issues(
+                {}, "abc123", CLEAN_RELEASE, self.config, self.symvers, self.image,
+            ),
+        )
+        incomplete = self.complete_manifest()
+        incomplete["kernel_build_provenance"]["complete"] = False
+        self.assertIn(
+            "candidate manifest lacks complete kernel build provenance",
+            GATE.manifest_build_provenance_issues(
+                incomplete, "abc123", CLEAN_RELEASE, self.config, self.symvers, self.image,
+            ),
+        )
+
+    def test_source_config_symvers_image_and_toolchain_mismatches_are_rejected(self):
+        manifest = self.complete_manifest()
+        provenance = manifest["kernel_build_provenance"]
+        provenance["source_commit"] = "def456"
+        provenance["source_dirty"] = True
+        provenance["config_sha256"] = "0" * 64
+        provenance["module_symvers_sha256"] = "0" * 64
+        provenance["kernel_image_sha256"] = "0" * 64
+        provenance["toolchain_tools"] = []
+        issues = GATE.manifest_build_provenance_issues(
+            manifest, "abc123", CLEAN_RELEASE + "-wrong",
+            self.config, self.symvers, self.image,
+        )
+        self.assertTrue(any("source commit" in issue for issue in issues))
+        self.assertTrue(any("clean kernel source" in issue for issue in issues))
+        self.assertTrue(any("kernel release" in issue for issue in issues))
+        self.assertTrue(any("kernel config hash" in issue for issue in issues))
+        self.assertTrue(any("Module.symvers hash" in issue for issue in issues))
+        self.assertTrue(any("kernel Image hash" in issue for issue in issues))
+        self.assertTrue(any("toolchain identities" in issue for issue in issues))
+
     def test_matching_manifest_source_commit_is_accepted(self):
         manifest = {"kernel_build_provenance": {
             "complete": True, "source_commit": "abc123",
