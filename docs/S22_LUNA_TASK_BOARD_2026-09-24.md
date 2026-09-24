@@ -412,11 +412,13 @@ turn-context metadata did confirm `gpt-6-luna/max`.
 
 | Worker | Worktree / commit | Result |
 |---|---|---|
-| `/root/posttrial_audio_dma` | `/tmp/s22-luna-posttrial-audio-20260924`, commits `9b550f947afbe3cb2f203bf47fa66fc5223b935`, `4eb20155af6f9ec15980067a1d6faae7aef313ec`, and `89146226c978cf2e568e2465d04a366c2c7dddc2` | Audio progress now rejects observed errors/non-RUNNING gaps, missing or invalid sequence fields, and nonconsecutive RUNNING capture sequences. Independent review first found the missing-sequence gap; a second review approved the complete diff through `8914622` with no blockers. Focused progress (17) and route-assessment (18) tests passed normally and under `-O`; the worker's allowlisted runner passed with 0 failures. Continuity applies only to observed samples; it cannot detect state changes between captures. Host diagnostics only; no live audio/phone acceptance. |
+| `/root/posttrial_audio_dma` | Worker worktree `/tmp/s22-luna-posttrial-audio-20260924`, commits `9b550f947afbe3cb2f203bf47fa66fc5223b935`, `4eb20155af6f9ec15980067a1d6faae7aef313ec`, `89146226c978cf2e568e2465d04a366c2c7dddc2`; integrated as `3b779f5`, `20b042e`, `1caa26c` | Audio progress now rejects observed errors/non-RUNNING gaps, missing or invalid sequence fields, and nonconsecutive RUNNING capture sequences. Independent review first found the missing-sequence gap; a second review approved the complete diff through `8914622` with no blockers. Focused progress (17) and route-assessment (18) tests passed normally and under `-O`; the integrated host regression suite passed in both modes with 0 failures. Continuity applies only to observed samples; it cannot detect state changes between captures. Host diagnostics only; no live audio/phone acceptance. |
 | `/root/candidate_regression_analysis` | `/tmp/s22-luna-posttrial-kernel-20260924`, no commit | Compared candidate source delta and TrustZone wait paths. No evidence-backed kernel fix or host regression justified; no causal attribution established. No phone access or rebuild. |
 | `/root/audio_gap_review` | reviewer worktree unchanged | Found and reported the audio missing-sequence blocker, prompting commit `4eb2015`; independently approved the corrected combined diff through `8914622` with no blockers. |
 | `/root/trial_receipt_review` | read-only review | Confirmed public receipt/hash/reboot claims, matching observer counts, and privacy; initial staleness/causality findings were corrected and the final re-review passed. |
 
-`master` remains unchanged. Publish the sanitized device-result update and any
-independently approved audio regression fix only to the existing unmerged
-review branch, then verify the remote SHA and hosted CI.
+`master` remains unchanged. The sanitized device-result update and
+independently reviewed audio fix are committed locally on the existing
+unmerged review branch; after pushing, record the remote SHA and hosted CI run
+here. Neither the host audio classifier nor the candidate trial establishes
+audio hardware acceptance or independent rescue.
