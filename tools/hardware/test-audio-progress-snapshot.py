@@ -63,6 +63,32 @@ class Planner(unittest.TestCase):
         self.assertFalse(module.period_progress([samples[0],{
             'monotonic':3.0,'alsa_counters':{'state':'RUNNING','hw_ptr':2048},
             'hw_params_parsed':{}}])['verified'])
+    def test_period_progress_rejects_gaps_inside_running_window(self):
+        def running(timestamp, pointer):
+            return {'monotonic':timestamp,
+                    'alsa_counters':{'state':'RUNNING','hw_ptr':pointer},
+                    'hw_params_parsed':{'period_size':1024}}
+        gaps=(
+            {'error_type':'OSError','monotonic':1.5,'sample_monotonic_ns':1500000000},
+            {'monotonic':1.5,'alsa_counters':{'state':'XRUN','hw_ptr':1024},
+             'hw_params_parsed':{'period_size':1024}},
+        )
+        for gap in gaps:
+            with self.subTest(gap=gap):
+                result=module.period_progress([running(1.0,0),gap,running(2.0,2048)])
+                self.assertFalse(result['verified'])
+                self.assertEqual(result['periods_advanced'],0)
+                self.assertIn('separated',result['reason'])
+    def test_nonrunning_samples_outside_running_window_do_not_hide_progress(self):
+        samples=[
+            {'monotonic':0.5,'alsa_counters':{'state':'PREPARED'}},
+            {'monotonic':1.0,'alsa_counters':{'state':'RUNNING','hw_ptr':0},
+             'hw_params_parsed':{'period_size':1024}},
+            {'monotonic':2.0,'alsa_counters':{'state':'RUNNING','hw_ptr':2048},
+             'hw_params_parsed':{'period_size':1024}},
+            {'monotonic':2.5,'alsa_counters':{'state':'SETUP'}},
+        ]
+        self.assertTrue(module.period_progress(samples)['verified'])
     def test_timed_read_captures_monotonic_interval_and_bounds_content(self):
         with tempfile.TemporaryDirectory() as temp:
             path=Path(temp)/'sample';path.write_text('observed\n')
