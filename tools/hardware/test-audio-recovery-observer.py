@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import re
 import struct
 import subprocess
 import sys
@@ -43,7 +44,7 @@ def snapshot(boot_id="candidate-boot-id", uptime=240, **changes):
     value = {
         "pid1": "native-guardian",
         "native_ready": True,
-        "persistent_ready": {"ready": True, "status": "ready"},
+        "persistent_ready": {"ready": True, "mount_ready": True},
         "health": {"status": "ok"},
         "slots": slots,
         "assistant_idle": idle,
@@ -202,6 +203,7 @@ class ObserverPolicyTests(unittest.TestCase):
             {"power_state": dict(state["power_state"], battery_temperature_celsius=42)},
             {"power_state": dict(state["power_state"], thermal_all_readable=False)},
             {"power_state": dict(state["power_state"], thermal_max_temperature_celsius=65)},
+            {"persistent_ready": {"ready": True, "mount_ready": False}},
         )
         for changes in cases:
             with self.subTest(changes=changes), self.assertRaises(observer.ObserverError):
@@ -294,7 +296,7 @@ class ObserverPolicyTests(unittest.TestCase):
                         command, 0,
                         observer.EXPECTED_FLASH_SHA256 + "  /dev/block/by-name/recovery\n", "")
                 if remote.startswith("python3 -c ") and "addresses=" in remote:
-                    return subprocess.CompletedProcess(command, 0, "10.23.4.5\n", "")
+                            return subprocess.CompletedProcess(command, 0, "192.0.2.10\n", "")
                 if remote.startswith("python3 -c ") and "device-tree/model" in remote:
                     if command[0].endswith("tools/s22-ssh"):
                         usb_snapshots += 1
@@ -339,9 +341,9 @@ class ObserverPolicyTests(unittest.TestCase):
             self.assertEqual(len(list((root / "trial").glob("host-window-*.json"))), result["samples"])
             rendered = json.dumps(result) + "\n".join(
                 path.read_text() for path in (root / "trial").glob("*.json"))
-            self.assertNotIn("10.23.4.5", rendered)
+            self.assertNotIn("192.0.2.10", rendered)
             self.assertNotIn("fixture-alias", rendered)
-            self.assertTrue(any(command[0] == "ssh" for command in calls))
+            self.assertTrue(any(command[0] == "/usr/bin/ssh" for command in calls))
 
     def test_hci_once_refuses_stale_boot_before_hash_or_socket(self):
         with tempfile.TemporaryDirectory(prefix="s22-observer-hci-stale-") as temporary:
@@ -420,7 +422,7 @@ class ObserverPolicyTests(unittest.TestCase):
             hash_routes = []
 
             def route_selector(wifi_host, tailscale_host, **kwargs):
-                self.assertEqual(wifi_host, "10.23.4.5")
+                self.assertEqual(wifi_host, "phone-wifi.invalid")
                 return snapshot("candidate-boot-id"), "wifi"
 
             def hasher(transport, host, runner, project_root):
@@ -435,15 +437,15 @@ class ObserverPolicyTests(unittest.TestCase):
                 result = observer.run_hci_once(
                     root, "trial", completed_observer(), runner=socket_request,
                     route_selector=route_selector, hasher=hasher,
-                    wifi_host="10.23.4.5", project_root=observer.ROOT)
+                    wifi_host="phone-wifi.invalid", project_root=observer.ROOT)
             self.assertEqual(result["status"], "completed")
-            self.assertEqual(hash_routes, [("wifi", "10.23.4.5")])
+            self.assertEqual(hash_routes, [("wifi", "phone-wifi.invalid")])
             self.assertEqual(len(calls), 1)
-            self.assertEqual(calls[0][0], "ssh")
-            self.assertIn("root@10.23.4.5", calls[0])
+            self.assertEqual(calls[0][0], "/usr/bin/ssh")
+            self.assertIn("root@phone-wifi.invalid", calls[0])
             preflight = observer.read_json(root / "trial-hci" / "preflight.json")
             self.assertEqual(preflight["transport"], "wifi")
-            self.assertNotIn("10.23.4.5", json.dumps(preflight))
+            self.assertNotIn("phone-wifi.invalid", json.dumps(preflight))
 
     def test_hci_mode_requires_observer_receipt_before_any_device_operation(self):
         with tempfile.TemporaryDirectory(prefix="s22-observer-hci-gate-") as temporary:
@@ -479,23 +481,74 @@ class ObserverPolicyTests(unittest.TestCase):
             known_hosts.parent.mkdir(parents=True)
             wrapper_bytes = (observer.ROOT / "tools" / "s22-ssh").read_bytes()
             digest = hashlib.sha256(wrapper_bytes).hexdigest()
+            wrapper_alias = re.search(
+                r'\broot@([A-Za-z0-9._:-]+)\s+"\$@"',
+                wrapper_bytes.decode("utf-8"),
+            ).group(1)
             wrapper.write_bytes(wrapper_bytes)
-            deployer.write_text("APPROVED_SSH_WRAPPER_SHA256 = '" + digest + "'\n")
-            known_hosts.write_text("10.55.0.2 ssh-ed25519 AAAATESTKEY\n")
+            # The private project root may be an older dirty checkout whose
+            # deployer predates this policy constant. Trust comes from the
+            # reviewed observer's deployer, while this root supplies only the
+            # exact pinned wrapper and its private known-hosts file.
+            deployer.write_text("# older local deployer without wrapper policy\n")
+            known_hosts.write_text(wrapper_alias + " ssh-ed25519 AAAATESTKEY\n")
             self.assertEqual(hashlib.sha256(observer.validated_ssh_wrapper(root).read_bytes()).hexdigest(), digest)
-            command = observer._ssh_transport("wifi", "10.23.4.5", "true", root)
-            self.assertIn("HostKeyAlias=10.55.0.2", command)
+            checked = subprocess.CompletedProcess(
+                ["/usr/bin/ssh-keygen"], 0, "# Host match\n", ""
+            )
+            with mock.patch.object(observer.subprocess, "run", return_value=checked) as key_lookup:
+                command = observer._ssh_transport("wifi", "phone-wifi.invalid", "true", root)
+            key_lookup.assert_called_once()
+            self.assertEqual(key_lookup.call_args.args[0][0], "/usr/bin/ssh-keygen")
+            self.assertIn("HostKeyAlias=" + wrapper_alias, command)
             self.assertTrue(any(item.startswith("UserKnownHostsFile=") for item in command))
+
+            wrapper.write_text(wrapper.read_text() + "# modified\n")
+            with self.assertRaisesRegex(observer.ObserverError, "approved deployer SHA-256"):
+                observer.validated_ssh_wrapper(root)
+
+    @unittest.skipUnless(Path("/usr/bin/ssh-keygen").is_file(), "OpenSSH ssh-keygen unavailable")
+    def test_hashed_usb_pinned_known_host_entry_is_resolved(self):
+        with tempfile.TemporaryDirectory(prefix="s22-observer-hashed-hostkey-") as temporary:
+            root = Path(temporary)
+            wrapper = root / "tools" / "s22-ssh"
+            deployer = root / "tools" / "hardware" / "deploy-audio-recovery.py"
+            known_hosts = root / "evidence" / "native-linux-20260919" / "native-v2-known-hosts"
+            key_path = root / "fixture-host-key"
+            wrapper.parent.mkdir(parents=True)
+            deployer.parent.mkdir(parents=True)
+            known_hosts.parent.mkdir(parents=True)
+            wrapper.write_bytes((observer.ROOT / "tools" / "s22-ssh").read_bytes())
+            deployer.write_text("# source-only alternate project root\n")
+            wrapper_alias = re.search(
+                r'\broot@([A-Za-z0-9._:-]+)\s+"\$@"',
+                wrapper.read_text(encoding="utf-8"),
+            ).group(1)
+            generated = subprocess.run(
+                ["/usr/bin/ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key_path)],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(generated.returncode, 0, generated.stderr)
+            key_type, public_key = Path(str(key_path) + ".pub").read_text().split()[:2]
+            known_hosts.write_text(f"{wrapper_alias} {key_type} {public_key}\n")
+            hashed = subprocess.run(
+                ["/usr/bin/ssh-keygen", "-H", "-f", str(known_hosts)],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(hashed.returncode, 0, hashed.stderr)
+            self.assertTrue(known_hosts.read_text().split()[0].startswith("|1|"))
+            self.assertNotIn(wrapper_alias, known_hosts.read_text())
+            self.assertEqual(observer.pinned_usb_host_key_alias(known_hosts, root), wrapper_alias)
 
     def test_host_enumeration_redacts_addresses_ssids_and_tailscale_names(self):
         outputs = {
-            "lsusb": "Bus 001 Device 002: ID 04e8:6860 Samsung Device\n",
-            "ip": "eth0 UP 00:11:22:33:44:55\n",
+            "lsusb": "Bus 001 Device 002: ID 0000:0000 Test Device\n",
+            "ip": "eth0 UP 02:00:00:00:00:01\n",
             "nmcli": "wlan0:wifi:connected\n",
             "tailscale": (
-                '{"BackendState":"Running","Self":{"DNSName":"private-phone.ts.net"},'
-                '"Peer":{"peer-id":{"Online":true,"DNSName":"other-device.ts.net",'
-                '"TailscaleIPs":["100.101.102.103"]}}}'
+                '{"BackendState":"Running","Self":{"DNSName":"phone.invalid"},'
+                '"Peer":{"peer-1":{"Online":true,"DNSName":"peer.invalid",'
+                '"TailscaleIPs":["192.0.2.11"]}}}'
             ),
         }
 
@@ -509,8 +562,8 @@ class ObserverPolicyTests(unittest.TestCase):
         with mock.patch.object(observer.shutil, "which", side_effect=available):
             inventory = observer.redacted_host_enumeration(runner=fake_run)
         rendered = str(inventory)
-        for private_value in ("00:11:22:33:44:55", "private-phone.ts.net",
-                              "other-device.ts.net", "100.101.102.103"):
+        for private_value in ("02:00:00:00:00:01", "phone.invalid",
+                              "peer.invalid", "192.0.2.11"):
             self.assertNotIn(private_value, rendered)
 
 
