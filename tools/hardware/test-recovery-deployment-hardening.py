@@ -5,6 +5,9 @@ from __future__ import annotations
 import hashlib
 import fcntl
 import importlib.util
+import builtins
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -344,7 +347,332 @@ class ExtraDeploymentEntrypointTests(unittest.TestCase):
         transport.assert_called_once()
 
 
+class _SandboxPath:
+    def __init__(self, value, sandbox):
+        self.sandbox = sandbox
+        self.virtual = str(value)
+        self.real = sandbox.root / self.virtual.lstrip("/")
+
+    def __fspath__(self):
+        return os.fspath(self.real)
+
+    def __str__(self):
+        return self.virtual
+
+    def read_text(self, *args, **kwargs):
+        return self.real.read_text(*args, **kwargs)
+
+    def stat(self):
+        return self.sandbox.fake_os.stat(self)
+
+    def is_symlink(self):
+        return self.real.is_symlink()
+
+    def resolve(self, strict=False):
+        resolved = self.real.resolve(strict=strict)
+        return _SandboxPath("/" + resolved.relative_to(self.sandbox.root).as_posix(), self.sandbox)
+
+
+class _SandboxOS:
+    def __init__(self, sandbox):
+        self.sandbox = sandbox
+        self.real = os
+        self.fd_kinds = {}
+
+    def __getattr__(self, name):
+        return getattr(self.real, name)
+
+    def _mapped_path(self, path):
+        if isinstance(path, str) and path.startswith("/"):
+            return self.sandbox.root / path.lstrip("/")
+        return path
+
+    def _metadata(self, info, path=None, *, block=False):
+        mode = info.st_mode
+        rdev = getattr(info, "st_rdev", 0)
+        if block or (path is not None and os.path.abspath(os.fspath(path)) == str(self.sandbox.partition)):
+            mode = (mode & 0o7777) | __import__("stat").S_IFBLK
+            rdev = os.makedev(259, 0)
+        fields = ("st_mode", "st_ino", "st_dev", "st_nlink", "st_gid", "st_size",
+                  "st_atime", "st_mtime", "st_ctime")
+        result = {field: getattr(info, field) for field in fields if hasattr(info, field)}
+        result.update(st_uid=0, st_rdev=rdev, st_mode=mode)
+        return SimpleNamespace(**result)
+
+    def getuid(self):
+        return 0
+
+    def geteuid(self):
+        return 0
+
+    def umask(self, _mask):
+        return 0o022
+
+    def stat(self, path, *, dir_fd=None, follow_symlinks=True):
+        mapped = self._mapped_path(path) if dir_fd is None else path
+        info = self.real.stat(mapped, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
+        return self._metadata(info, mapped if dir_fd is None else None)
+
+    def lstat(self, path, *, dir_fd=None):
+        mapped = self._mapped_path(path) if dir_fd is None else path
+        info = self.real.lstat(mapped, dir_fd=dir_fd)
+        return self._metadata(info, mapped if dir_fd is None else None)
+
+    def fstat(self, fd):
+        info = self.real.fstat(fd)
+        return self._metadata(info, block=self.fd_kinds.get(fd) == "partition")
+
+    def fstatvfs(self, _fd):
+        return SimpleNamespace(f_bavail=1_000_000, f_frsize=4096, f_favail=1_000_000)
+
+    def open(self, path, flags, mode=0o777, *, dir_fd=None):
+        if dir_fd is None:
+            mapped = self._mapped_path(path)
+            fd = self.real.open(mapped, flags, mode)
+            kind = "partition" if os.path.abspath(os.fspath(mapped)) == str(self.sandbox.partition) else "file"
+        else:
+            fd = self.real.open(path, flags, mode, dir_fd=dir_fd)
+            kind = "file"
+        self.fd_kinds[fd] = kind
+        return fd
+
+    def close(self, fd):
+        self.fd_kinds.pop(fd, None)
+        return self.real.close(fd)
+
+    def pwrite(self, fd, data, offset):
+        if self.fd_kinds.get(fd) != "partition":
+            return self.real.pwrite(fd, data, offset)
+        limit = self.sandbox.fail_partition_write_after
+        written = self.sandbox.current_operation_writes
+        if limit is not None:
+            if written >= limit:
+                raise OSError("injected fake block-device write failure")
+            data = data[:limit - written]
+        count = self.real.pwrite(fd, data, offset)
+        self.sandbox.current_operation_writes += count
+        self.sandbox.device_write_bytes += count
+        return count
+
+
+class _SandboxFcntl:
+    def __init__(self):
+        self.real = fcntl
+
+    def __getattr__(self, name):
+        return getattr(self.real, name)
+
+    def ioctl(self, fd, request, argument=0, mutate_flag=True):
+        if request == 0x80081272:
+            return __import__("struct").pack("<Q", BASE.SIZE)
+        return self.real.ioctl(fd, request, argument, mutate_flag)
+
+
+class _RepeatedInput:
+    def __init__(self, byte_value, size):
+        self.byte_value = byte_value
+        self.size = size
+        self.sent = False
+
+    def read(self, limit=-1):
+        if self.sent:
+            return b""
+        self.sent = True
+        amount = self.size if limit < 0 else min(self.size, limit)
+        return bytes([self.byte_value]) * amount
+
+
+class RenderedRemoteSandbox:
+    SIZE = BASE.SIZE
+    BASE_BYTE = 0x42
+    CANDIDATE_BYTE = 0x43
+    CHUNK_SIZE = 1024 * 1024
+
+    def __init__(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="s22-rendered-deployer-")
+        self.root = Path(self.temp.name)
+        self.partition = self.root / "dev/sda16"
+        self.stage_dir = self.root / "srv/s22/rendered-integration"
+        self.base_sha = self.digest_repeated(self.BASE_BYTE)
+        self.candidate_sha = self.digest_repeated(self.CANDIDATE_BYTE)
+        self.device_write_bytes = 0
+        self.current_operation_writes = 0
+        self.fail_partition_write_after = None
+        self._create_filesystem()
+        self.fake_os = _SandboxOS(self)
+        self.rendered = BASE.render_remote(
+            base_sha=self.base_sha, new_sha=self.candidate_sha,
+            staging_directory="/srv/s22/rendered-integration",
+            rollback_filename="rollback.img",
+        )
+
+    @classmethod
+    def digest_repeated(cls, byte_value):
+        digest = hashlib.sha256()
+        chunk = bytes([byte_value]) * cls.CHUNK_SIZE
+        for _ in range(cls.SIZE // cls.CHUNK_SIZE):
+            digest.update(chunk)
+        return digest.hexdigest()
+
+    @classmethod
+    def write_repeated(cls, path, byte_value):
+        chunk = bytes([byte_value]) * cls.CHUNK_SIZE
+        with path.open("wb") as stream:
+            for _ in range(cls.SIZE // cls.CHUNK_SIZE):
+                stream.write(chunk)
+
+    @classmethod
+    def hash_file(cls, path):
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(cls.CHUNK_SIZE), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def _create_filesystem(self):
+        for relative in (
+            "run", "dev/block/by-name", "sys/class/block/sda16",
+            "sys/class/power_supply/battery", "proc/1", "proc/sys/kernel",
+            "proc/self", "srv/s22",
+        ):
+            (self.root / relative).mkdir(parents=True, exist_ok=True)
+        (self.root / "srv/s22").chmod(0o755)
+        (self.root / "proc/1/comm").write_text("native-guardian\n")
+        (self.root / "proc/sys/kernel/osrelease").write_text("5.10.260-g4e5c5ad7d950\n")
+        (self.root / "sys/class/power_supply/battery/temp").write_text("278\n")
+        (self.root / "sys/class/block/sda16/uevent").write_text("PARTNAME=recovery\n")
+        (self.root / "sys/class/block/sda16/size").write_text("196608\n")
+        (self.root / "proc/self/mountinfo").write_text("")
+        self.write_repeated(self.partition, self.BASE_BYTE)
+        (self.root / "dev/block/by-name/recovery").symlink_to(self.partition)
+
+    def set_pid1(self, value):
+        (self.root / "proc/1/comm").write_text(value + "\n")
+
+    def write_partition(self, byte_value):
+        self.write_repeated(self.partition, byte_value)
+
+    def execute(self, mode, *, candidate_input=False):
+        self.current_operation_writes = 0
+        input_stream = _RepeatedInput(self.CANDIDATE_BYTE, self.SIZE) if candidate_input \
+            else _RepeatedInput(self.CANDIDATE_BYTE, 0)
+        fake_sys = SimpleNamespace(
+            argv=["remote-deployer", mode],
+            stdin=SimpleNamespace(buffer=input_stream),
+        )
+        fake_pathlib = SimpleNamespace(Path=lambda value: _SandboxPath(value, self))
+        fake_fcntl = _SandboxFcntl()
+        fake_modules = {
+            "fcntl": fake_fcntl, "os": self.fake_os,
+            "pathlib": fake_pathlib, "sys": fake_sys,
+        }
+        real_import = builtins.__import__
+
+        def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if level == 0 and name in fake_modules:
+                return fake_modules[name]
+            return real_import(name, globals, locals, fromlist, level)
+
+        builtin_namespace = vars(builtins).copy()
+        builtin_namespace["__import__"] = fake_import
+        namespace = {"__builtins__": builtin_namespace}
+        output = io.StringIO()
+        error = None
+        with contextlib.redirect_stdout(output):
+            try:
+                exec(self.rendered, namespace)
+            except Exception as caught:
+                error = caught
+        self.close_open_fds()
+        return SimpleNamespace(stdout=output.getvalue(), error=error)
+
+    def close_open_fds(self):
+        for fd in tuple(self.fake_os.fd_kinds):
+            try:
+                self.fake_os.close(fd)
+            except OSError:
+                pass
+
+    def close(self):
+        self.close_open_fds()
+        self.temp.cleanup()
+
+
 class EmbeddedTargetGateTests(unittest.TestCase):
+    def test_rendered_stage_flash_and_failure_dispatch(self):
+        """Run the exact remote body with import/syscall shims over a temp FS.
+
+        The rendered operation is executed unchanged. Only its imported sys,
+        pathlib, os, and fcntl interfaces are redirected to a temporary tree;
+        a regular file models the RECOVERY block device and reports the
+        reviewed 259:0 identity and capacity. SSH is not involved.
+        """
+        sandbox = RenderedRemoteSandbox()
+        try:
+            before = sandbox.device_write_bytes
+            stage = sandbox.execute("stage", candidate_input=True)
+            self.assertEqual(
+                stage.stdout.count("\n"), 1,
+                f"stdout={stage.stdout!r}; error={type(stage.error).__name__}: {stage.error}",
+            )
+            stage_receipt = json.loads(stage.stdout)
+            self.assertEqual(stage_receipt, {
+                "mode": "stage", "partition_written": False,
+                "backup_sha256": sandbox.base_sha,
+                "candidate_sha256": sandbox.candidate_sha,
+            })
+            self.assertEqual(sandbox.device_write_bytes, before)
+            rollback = sandbox.stage_dir / "rollback.img"
+            candidate = sandbox.stage_dir / "recovery.img"
+            self.assertEqual(rollback.stat().st_size, sandbox.SIZE)
+            self.assertEqual(candidate.stat().st_size, sandbox.SIZE)
+            self.assertEqual(sandbox.hash_file(rollback), sandbox.base_sha)
+            self.assertEqual(sandbox.hash_file(candidate), sandbox.candidate_sha)
+            self.assertIsNone(
+                stage.error,
+                "rendered stage emitted its verified staging receipt, then failed: "
+                f"{type(stage.error).__name__}: {stage.error}; stdout={stage.stdout!r}",
+            )
+
+            flash = sandbox.execute("flash")
+            self.assertIsNone(flash.error, f"rendered flash failed: {flash.error}; {flash.stdout!r}")
+            self.assertEqual(flash.stdout.count("\n"), 1, flash.stdout)
+            self.assertEqual(json.loads(flash.stdout), {
+                "mode": "flash", "partition_written": "recovery",
+                "bytes": sandbox.SIZE, "before_sha256": sandbox.base_sha,
+                "readback_sha256": sandbox.candidate_sha,
+                "reboot_performed": False,
+            })
+            self.assertEqual(sandbox.device_write_bytes - before, sandbox.SIZE)
+
+            writes_before_refusals = sandbox.device_write_bytes
+            invalid_mode = sandbox.execute("invalid")
+            self.assertIsNotNone(invalid_mode.error)
+            self.assertIn("unknown operation", str(invalid_mode.error))
+            self.assertEqual(invalid_mode.stdout, "")
+            self.assertEqual(sandbox.device_write_bytes, writes_before_refusals)
+
+            sandbox.set_pid1("unexpected-init")
+            failed_validation = sandbox.execute("flash")
+            self.assertIsNotNone(failed_validation.error)
+            self.assertIn("unexpected PID 1", str(failed_validation.error))
+            self.assertEqual(failed_validation.stdout, "")
+            self.assertEqual(sandbox.device_write_bytes, writes_before_refusals)
+
+            sandbox.set_pid1("native-guardian")
+            sandbox.write_partition(sandbox.BASE_BYTE)
+            sandbox.fail_partition_write_after = 4096
+            partial_flash = sandbox.execute("flash")
+            self.assertIsNotNone(partial_flash.error)
+            self.assertIn("outcome may be partial", str(partial_flash.error))
+            self.assertEqual(partial_flash.stdout, "")
+            self.assertEqual(sandbox.device_write_bytes - writes_before_refusals, 4096)
+            with sandbox.partition.open("rb") as stream:
+                self.assertEqual(stream.read(4096), bytes([sandbox.CANDIDATE_BYTE]) * 4096)
+                self.assertEqual(stream.read(4096), bytes([sandbox.BASE_BYTE]) * 4096)
+        finally:
+            sandbox.close()
+
     def _optimized_probe(self, mode):
         probe = r'''import importlib.util,sys
 path=sys.argv[1]

@@ -37,6 +37,7 @@ REVIEWED_HOST_TEST_PATHS = (
     "tools/hardware/test-npu-boot-preflight.py",
     "tools/hardware/test-audio-progress-snapshot.py",
     "tools/hardware/test-input-power-readiness.py",
+    "tools/hardware/test-recovery-deployment-hardening.py",
     "tools/hardware/test-bt-h4-ibs-bridge.py",
     "tools/hardware/test-bt-qca6490-patch-receipt.py",
     "tools/hardware/test-close-range-kernel-fix.py",
@@ -47,6 +48,7 @@ HOST_TESTS = (
     HostTest("tools/hardware/test-npu-boot-preflight.py"),
     HostTest("tools/hardware/test-audio-progress-snapshot.py"),
     HostTest("tools/hardware/test-input-power-readiness.py"),
+    HostTest("tools/hardware/test-recovery-deployment-hardening.py"),
     HostTest("tools/hardware/test-bt-h4-ibs-bridge.py"),
     HostTest(
         "tools/hardware/test-bt-qca6490-patch-receipt.py",
