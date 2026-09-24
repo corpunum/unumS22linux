@@ -3,8 +3,21 @@
 from __future__ import annotations
 
 import unittest
+import importlib.util
+from pathlib import Path
+import sys
 
-from trustzone_log_classifier import classify_kernel_log
+_SOURCE = Path(__file__).with_name("trustzone_log_classifier.py")
+_SPEC = importlib.util.spec_from_file_location("trustzone_log_classifier", _SOURCE)
+if _SPEC is None or _SPEC.loader is None:
+    raise ImportError(f"could not load classifier at {_SOURCE}")
+classifier = importlib.util.module_from_spec(_SPEC)
+sys.modules[_SPEC.name] = classifier
+_SPEC.loader.exec_module(classifier)
+
+PINNED_KERNEL_SOURCE_COMMIT = classifier.PINNED_KERNEL_SOURCE_COMMIT
+classify_kernel_log = classifier.classify_kernel_log
+classify_source_wait_stacks = classifier.classify_source_wait_stacks
 
 
 class TrustZoneLogClassifierTests(unittest.TestCase):
@@ -135,6 +148,87 @@ class TrustZoneLogClassifierTests(unittest.TestCase):
         self.assertTrue(result.unterminated_final_line)
         self.assertFalse(result.coverage_complete)
         self.assertEqual(result.assessment, "incomplete")
+
+    def test_exact_source_wait_stack_is_explained_but_warning_and_no_progress_remain(self):
+        log = (
+            "[ 10.0] INFO: task tz_worker_threa:41 blocked for more than 120 seconds.\n"
+            "[ 10.1] Call trace:\n"
+            "[ 10.2] __switch_to+0x120/0x1d0\n"
+            "[ 10.3] __schedule+0x390/0x7a0\n"
+            "[ 10.4] schedule+0x70/0x110\n"
+            "[ 10.5] tz_worker_handler+0x20/0x40\n"
+            "[ 10.6] smpboot_thread_fn+0x1a0/0x260\n"
+            "[ 10.7] kthread+0x110/0x140\n"
+            "[ 10.8] ret_from_fork+0x10/0x20\n"
+        )
+        warning = classify_kernel_log(log, capture_complete=False)
+        review = classify_source_wait_stacks(log)
+
+        self.assertEqual(warning.assessment, "hung_task_warning")
+        self.assertEqual(len(warning.hung_task_warnings), 1)
+        self.assertTrue(warning.material_liveness_unresolved)
+        self.assertEqual(review["source_commit"], PINNED_KERNEL_SOURCE_COMMIT)
+        self.assertEqual(review["matched_count"], 1)
+        self.assertEqual(review["unmatched_count"], 0)
+        self.assertFalse(review["progress_measured"])
+
+    def test_thread_name_without_exact_source_wait_stack_remains_unmatched(self):
+        log = (
+            "[ 11.0] INFO: task tz_worker_threa:41 blocked for more than 120 seconds.\n"
+            "[ 11.1] Call trace:\n"
+            "[ 11.2] schedule+0x70/0x110\n"
+            "[ 11.3] unrelated_worker+0x20/0x40\n"
+        )
+        review = classify_source_wait_stacks(log)
+        self.assertEqual(review["warning_count"], 1)
+        self.assertEqual(review["matched_count"], 0)
+        self.assertEqual(review["unmatched_count"], 1)
+        self.assertEqual(review["unmatched_task_names"], ["tz_worker_threa"])
+
+    def test_symbols_from_separate_traces_cannot_complete_one_wait_stack(self):
+        # This reproduces the reviewer-found bypass: the warning's own trace
+        # is partial, while a later unrelated trace supplies its missing
+        # symbols before another hung-task warning appears.
+        log = (
+            "[ 12.0] INFO: task tz_worker_threa:41 blocked for more than 120 seconds.\n"
+            "[ 12.1] Call trace:\n"
+            "[ 12.2] schedule+0x70/0x110\n"
+            "[ 12.3] tz_worker_handler+0x20/0x40\n"
+            "[ 12.4] Call trace:\n"
+            "[ 12.5] __schedule+0x390/0x7a0\n"
+            "[ 12.6] smpboot_thread_fn+0x1a0/0x260\n"
+            "[ 12.7] kthread+0x110/0x140\n"
+            "[ 12.8] ret_from_fork+0x10/0x20\n"
+        )
+
+        review = classify_source_wait_stacks(log)
+
+        self.assertEqual(review["warning_count"], 1)
+        self.assertEqual(review["matched_count"], 0)
+        self.assertEqual(review["unmatched_count"], 1)
+        self.assertEqual(review["unmatched_task_names"], ["tz_worker_threa"])
+
+    def test_later_warning_stack_cannot_complete_earlier_warning(self):
+        log = (
+            "[ 13.0] INFO: task tz_worker_threa:41 blocked for more than 120 seconds.\n"
+            "[ 13.1] Call trace:\n"
+            "[ 13.2] schedule+0x70/0x110\n"
+            "[ 14.0] INFO: task unrelated_worker:42 blocked for more than 120 seconds.\n"
+            "[ 14.1] Call trace:\n"
+            "[ 14.2] __schedule+0x390/0x7a0\n"
+            "[ 14.3] tz_worker_handler+0x20/0x40\n"
+            "[ 14.4] smpboot_thread_fn+0x1a0/0x260\n"
+            "[ 14.5] kthread+0x110/0x140\n"
+            "[ 14.6] ret_from_fork+0x10/0x20\n"
+        )
+
+        review = classify_source_wait_stacks(log)
+
+        self.assertEqual(review["warning_count"], 2)
+        self.assertEqual(review["matched_count"], 0)
+        self.assertEqual(review["unmatched_count"], 2)
+        self.assertEqual(review["unmatched_task_names"],
+                         ["tz_worker_threa", "unrelated_worker"])
 
 
 if __name__ == "__main__":

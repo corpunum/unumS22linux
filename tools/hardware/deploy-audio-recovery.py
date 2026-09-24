@@ -22,6 +22,7 @@ APPROVED_SSH_WRAPPER_SHA256 = '7e9d31035762de50ccc6c5614d8348532fd912bf59c41c9d4
 # This root-owned directory is verified before it is the only SSH PATH entry.
 TRUSTED_SSH_BIN_DIR = Path('/usr/bin')
 SIZE = 100663296
+HCI_TRIAL_ID = 'hci-candidate-20260924-second'
 BASE_SHA = '1a827b43d29141efb47f530902dd4e4ee2b6d780515893c9ecd676ad27efd7d1'
 NEW_SHA = '1c1b77a5e532e50b8274cfc68921aa9b1bfe6d4ae9a3459281be0cc033c5c3d5'
 LINEAGE_SHA = 'b5bf01c4a47091eb95078fc69b133b44c2b453b31c23433594c5b605e3747b55'
@@ -45,13 +46,13 @@ HCI_FORWARD_MANIFEST = {
 HCI_PROFILES = {
     'hci-forward': {
         'before_role': 'baseline', 'write_role': 'candidate',
-        'staging_directory': '/srv/s22/bt-hci-forward-20260924',
+        'staging_directory': '/srv/s22/bt-hci-forward-20260924-second',
         'rollback_filename': 'native-recovery-rollback.img',
         'receipt_prefix': 'hci-recovery-forward',
     },
     'hci-reverse': {
         'before_role': 'candidate', 'write_role': 'baseline',
-        'staging_directory': '/srv/s22/bt-hci-reverse-20260924',
+        'staging_directory': '/srv/s22/bt-hci-reverse-20260924-second',
         'rollback_filename': 'hci-candidate-rollback.img',
         'receipt_prefix': 'hci-recovery-reverse',
     },
@@ -736,7 +737,8 @@ def validate_remote_receipt(receipt, *, mode, before_sha, candidate_sha, size):
     return receipt
 
 
-def main_hci_profile(profile_name, mode=None, *, root=None, receipt_dir=None):
+def main_hci_profile(profile_name, mode=None, *, root=None, receipt_dir=None,
+                     trial_identity=None):
     root=ROOT if root is None else Path(root)
     profile=resolve_hci_profile(profile_name)
     try:
@@ -757,8 +759,14 @@ def main_hci_profile(profile_name, mode=None, *, root=None, receipt_dir=None):
         print(json.dumps(plan,indent=2))
         return 0
 
+    if trial_identity != HCI_TRIAL_ID:
+        raise SystemExit('HCI execution requires the explicitly authorized trial identity')
+
     if receipt_dir is None:
-        receipt_dir=Path.home()/'.local/state/s22-hci-trial-20260924/receipts'
+        receipt_dir=(Path.home()/'.local/state/s22-hci-trial-20260924/receipts'/
+                     HCI_TRIAL_ID)
+    if Path(receipt_dir).name != HCI_TRIAL_ID:
+        raise SystemExit('HCI receipt directory must be namespaced by the trial identity')
     try:
         receipt_dir=prepare_private_receipt_directory(receipt_dir)
         receipt_dir_fd=open_private_receipt_directory(receipt_dir)
@@ -766,12 +774,13 @@ def main_hci_profile(profile_name, mode=None, *, root=None, receipt_dir=None):
         raise SystemExit(f'private receipt directory unavailable; no device operation attempted: {error}') from error
     try:
         return _run_hci_profile_operation(profile_name,mode,root,profile,image,
-                                          receipt_dir,receipt_dir_fd)
+                                          receipt_dir,receipt_dir_fd,trial_identity)
     finally:
         os.close(receipt_dir_fd)
 
 
-def _run_hci_profile_operation(profile_name,mode,root,profile,image,receipt_dir,receipt_dir_fd):
+def _run_hci_profile_operation(profile_name,mode,root,profile,image,receipt_dir,
+                               receipt_dir_fd,trial_identity):
     out=receipt_dir/(profile['receipt_prefix']+'-'+mode+'.json')
     try:
         ensure_new_receipt(out,directory_fd=receipt_dir_fd)
@@ -807,6 +816,8 @@ def _run_hci_profile_operation(profile_name,mode,root,profile,image,receipt_dir,
         validate_remote_receipt(
             receipt,mode=mode,before_sha=profile['before_sha256'],
             candidate_sha=profile['new_sha256'],size=HCI_FORWARD_MANIFEST['partition_size_bytes'])
+        receipt['trial_identity']=trial_identity
+        receipt['profile']=profile_name
     except (TypeError,ValueError) as error:
         raise RuntimeError(
             mode+' returned an invalid receipt; operation outcome must be independently '
@@ -832,13 +843,20 @@ def main(argv=None):
                         help='use the existing artifact checkout for an explicit HCI profile')
     parser.add_argument('--receipt-dir',type=Path,
                         help='private rig directory for the one-shot HCI receipt')
+    parser.add_argument('--trial-identity',
+                        help='bind HCI execution to the explicitly authorized trial')
     args=parser.parse_args(argv)
     if args.profile:
         mode='stage' if args.stage else 'flash' if args.flash else None
+        if mode is not None and args.trial_identity != HCI_TRIAL_ID:
+            parser.error('--stage/--flash require --trial-identity '+HCI_TRIAL_ID)
+        if mode is None and args.trial_identity is not None:
+            parser.error('--trial-identity is only valid for an HCI operation')
         return main_hci_profile(args.profile,mode,root=args.repository_root or ROOT,
-                                receipt_dir=args.receipt_dir)
-    if args.repository_root or args.receipt_dir:
-        parser.error('--repository-root and --receipt-dir require an explicit --profile')
+                                receipt_dir=args.receipt_dir,
+                                trial_identity=args.trial_identity)
+    if args.repository_root or args.receipt_dir or args.trial_identity:
+        parser.error('--repository-root, --receipt-dir and --trial-identity require an explicit --profile')
     try:
         image=validate_host_artifacts(
             IMAGE,ROOT/'builds/native_handoff_v3.img',

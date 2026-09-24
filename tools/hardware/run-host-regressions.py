@@ -45,6 +45,9 @@ REVIEWED_HOST_TEST_PATHS = (
     "tools/hardware/test-bt-h4-ibs-bridge.py",
     "tools/hardware/test-bt-qca6490-patch-receipt.py",
     "tools/hardware/test-close-range-kernel-fix.py",
+    "tools/hardware/test_trustzone_log_classifier.py",
+    "tools/pi-web/test_pi_readiness.py",
+    "tools/pi-web/test_agent_web.py",
 )
 
 HOST_TESTS = (
@@ -68,6 +71,13 @@ HOST_TESTS = (
         optimization_safe=False,
         normal_only_reason="its standalone contract checks use bare assert statements",
     ),
+    HostTest("tools/hardware/test_trustzone_log_classifier.py"),
+    HostTest("tools/pi-web/test_pi_readiness.py"),
+    HostTest(
+        "tools/pi-web/test_agent_web.py",
+        optimization_safe=False,
+        normal_only_reason="the launcher deliberately refuses Python optimization",
+    ),
 )
 
 
@@ -79,7 +89,10 @@ def _resolve_test_paths(root: Path, tests: Sequence[HostTest]) -> tuple[Path, ..
     for test in tests:
         relative = Path(test.path)
         if (relative.is_absolute() or ".." in relative.parts or
-                test.path in seen or not test.path.startswith("tools/hardware/") or
+                test.path in seen or not (
+                    test.path.startswith("tools/hardware/") or
+                    test.path.startswith("tools/pi-web/")
+                ) or
                 not test.optimization_safe and not test.normal_only_reason):
             raise ValueError(f"invalid or duplicate allowlist entry: {test.path}")
         seen.add(test.path)

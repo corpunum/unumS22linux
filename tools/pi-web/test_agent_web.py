@@ -1,7 +1,16 @@
 import importlib.util
 from pathlib import Path
+import sys
 import unittest
 from unittest import mock
+
+readiness_spec=importlib.util.spec_from_file_location(
+    'pi_readiness', Path(__file__).with_name('pi_readiness.py'))
+if readiness_spec is None or readiness_spec.loader is None:
+    raise ImportError('could not load Pi readiness module')
+readiness=importlib.util.module_from_spec(readiness_spec)
+sys.modules[readiness_spec.name]=readiness
+readiness_spec.loader.exec_module(readiness)
 
 spec=importlib.util.spec_from_file_location('agent_web', Path(__file__).with_name('start-agent-web.py'))
 m=importlib.util.module_from_spec(spec)
@@ -47,6 +56,7 @@ class CommandTest(unittest.TestCase):
     def test_status_keeps_idle_web_service_ready_when_pi_session_is_absent(self):
         with mock.patch.object(m, 'runtime_process_readiness',
                                return_value={'desktop':True,'model_process':True}), \
+             mock.patch.object(m, 'exact_process_status', return_value='ready'), \
              mock.patch.object(m, 'running', return_value=123), \
              mock.patch.object(m, 'endpoint_ready', side_effect=[True,True]) as endpoint, \
              mock.patch.object(m, 'inspect_pi_session',
@@ -54,7 +64,8 @@ class CommandTest(unittest.TestCase):
             result=m.collect_readiness()
 
         self.assertTrue(result['required_services_ready'])
-        self.assertEqual(result['required_services'], {'web':True,'model':True,'desktop':True})
+        self.assertEqual(result['required_services'], {
+            'web':True,'model':True,'desktop':True,'desktop_pi':True})
         self.assertEqual(result['pi_session_status'], 'absent')
         self.assertFalse(result['pi_session_ready'])
         self.assertEqual(endpoint.call_args_list, [
@@ -75,6 +86,7 @@ class CommandTest(unittest.TestCase):
         for failed,processes,pid,probes in cases:
             with self.subTest(failed=failed), \
                  mock.patch.object(m, 'runtime_process_readiness', return_value=processes), \
+                 mock.patch.object(m, 'exact_process_status', return_value='ready'), \
                  mock.patch.object(m, 'running', return_value=pid), \
                  mock.patch.object(m, 'endpoint_ready', side_effect=probes), \
                  mock.patch.object(m, 'inspect_pi_session',
@@ -88,6 +100,22 @@ class CommandTest(unittest.TestCase):
                     self.assertFalse(result['required_services']['model'])
                 else:
                     self.assertFalse(result['required_services']['desktop'])
+
+    def test_missing_desktop_pi_is_reported_without_conflating_the_on_demand_session(self):
+        with mock.patch.object(m, 'runtime_process_readiness',
+                               return_value={'desktop':True,'model_process':True}), \
+             mock.patch.object(m, 'exact_process_status', return_value='absent'), \
+             mock.patch.object(m, 'running', return_value=123), \
+             mock.patch.object(m, 'endpoint_ready', side_effect=[True,True]), \
+             mock.patch.object(m, 'inspect_pi_session',
+                               return_value={'status':'absent','ready':False}):
+            result=m.collect_readiness()
+
+        self.assertTrue(result['required_services']['desktop'])
+        self.assertFalse(result['required_services']['desktop_pi'])
+        self.assertEqual(result['desktop_pi_status'], 'absent')
+        self.assertEqual(result['pi_session_status'], 'absent')
+        self.assertFalse(result['required_services_ready'])
 
     def test_reuses_existing_correct_virtual_ptmx(self):
         import os, stat

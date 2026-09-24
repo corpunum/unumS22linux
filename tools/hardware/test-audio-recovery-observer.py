@@ -32,6 +32,7 @@ TRIAL = observer.TRIAL_ID
 def flash_receipt(**changes):
     value = {
         "trial_identity": observer.TRIAL_ID,
+        "profile": "hci-forward",
         "mode": "flash",
         "partition_written": "recovery",
         "before_sha256": observer.EXPECTED_BASE_SHA256,
@@ -55,6 +56,26 @@ def snapshot(boot_id="candidate-boot-id", uptime=240, **changes):
         "slots": slots,
         "assistant_idle": idle,
         "serious_fault": False,
+        "kernel_log_classification": {
+            "assessment": "no_indicators", "fatal_indicators": [],
+            "hung_task_warning_count": 0, "hung_task_names": [],
+            "call_trace_count": 0, "liveness_unresolved": False,
+            "liveness_review_status": "no_hung_task_warning_in_available_ring",
+            "source_wait_stacks": {
+                "source_commit": observer.EXPECTED_TZ_SOURCE_COMMIT,
+                "warning_count": 0, "matched_count": 0,
+                "unmatched_count": 0, "progress_measured": False,
+                "matches": [], "unmatched_task_names": [],
+            },
+            "capture_complete": True, "coverage_complete": True,
+            "full_boot_log_coverage": False, "bytes": 1024,
+        },
+        "readiness": {
+            "kernel_remote_control": True, "model_api_health": True,
+            "model_idle": True, "desktop_environment": True,
+            "desktop_pi_status": "ready", "browser_terminal_status": "ready",
+            "dedicated_pi_session_status": "absent",
+        },
         "uptime_seconds": uptime,
         "boot_id": boot_id,
         "gnu_build_id": observer.EXPECTED_GNU_BUILD_ID,
@@ -66,7 +87,7 @@ def snapshot(boot_id="candidate-boot-id", uptime=240, **changes):
         "kernel_components": ["btpower", "exynos_tty", "bluetooth", "hci_uart"],
         "hyprland_running": True,
         "pi_process_running": True,
-        "tmux_server_running": True,
+        "tmux_server_running": False,
         "ttyd_running": True,
         "pi_assistant_ready": True,
         "network_state": {
@@ -108,6 +129,18 @@ def completed_observer(**changes):
         "observed_seconds": observer.OBSERVATION_SECONDS,
         "continuous_uptime_seconds": observer.MIN_UPTIME_SECONDS,
         "readiness": True,
+        "service_readiness": {
+            "kernel_remote_control": True, "model_api_health": True,
+            "model_idle": True, "desktop_environment": True,
+            "desktop_pi_status": "ready", "browser_terminal_status": "ready",
+            "dedicated_pi_session_status": "absent",
+        },
+        "baseline_service_readiness": {
+            "kernel_remote_control": True, "model_api_health": True,
+            "model_idle": True, "desktop_environment": True,
+            "desktop_pi_status": "ready", "browser_terminal_status": "ready",
+            "dedicated_pi_session_status": "absent",
+        },
         "assistant_idle": True,
         "no_serious_fault": True,
         "required_modules_ready": True,
@@ -125,13 +158,16 @@ def completed_observer(**changes):
         "baseline_hci_components_ready": True,
         "baseline_desktop_ready": True,
         "baseline_pi_process_running": True,
-        "baseline_tmux_server_running": True,
+        "baseline_tmux_server_running": False,
+        "baseline_dedicated_session_status": "absent",
         "baseline_ttyd_running": True,
         "postboot_pi_process_running": True,
-        "postboot_tmux_server_running": True,
+        "postboot_tmux_server_running": False,
+        "postboot_dedicated_session_status": "absent",
         "postboot_ttyd_running": True,
         "baseline_network_ready": True,
         "baseline_device_target_valid": True,
+        "baseline_recovery_sha256": observer.EXPECTED_FLASH_SHA256,
         "recovery_sha256": observer.EXPECTED_FLASH_SHA256,
         "recovery_sha256_after_boot": observer.EXPECTED_FLASH_SHA256,
     }
@@ -151,13 +187,45 @@ def write_snapshot_fixture(root, *, persistent_uuid, mountinfo):
     descriptor = bytes.fromhex(observer.EXPECTED_GNU_BUILD_ID)
     notes = (struct.pack("<III", 4, len(descriptor), 3) + b"GNU\0" + descriptor +
              b"\0" * ((-len(descriptor)) % 4))
-    write("run/s22-persistent-ready.json", json.dumps({"uuid": persistent_uuid}))
+    write("run/s22-persistent-ready.json", json.dumps({
+        "uuid": persistent_uuid, "model_profile": "qwen4b",
+        "desktop_pid": 2, "model_pid": 6,
+    }))
     write("proc/self/mountinfo", mountinfo)
     write("proc/boot_reset", "[ 900] / R / INFORM3(12345674) > RECOVERY >\n")
     write("proc/modules", "wlan 1 0 - Live 0x0\ncfg80211 1 0 - Live 0x0\n")
     write("proc/1/comm", "native-guardian\n")
-    for pid, comm in ((2, "Hyprland"), (3, "pi"), (4, "tmux: server"), (5, "ttyd")):
+    for pid, comm in ((2, "Hyprland"), (3, "pi"), (6, "llama-server")):
         write(f"proc/{pid}/comm", comm + "\n")
+    desktop_argv = ("/usr/bin/dbus-run-session", "--", "/usr/bin/Hyprland",
+                    "--i-am-really-stupid", "--config", "/root/hyprland-omarchy-ui.lua")
+    model_argv = ("/mnt/model-bench/server/bin/llama-server", "-m",
+                  "/mnt/model-bench/models/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf")
+    for pid, uid, argv in ((2, 0, desktop_argv), (6, 0, model_argv)):
+        write(f"proc/{pid}/stat", f"{pid} (service) S 1\n")
+        write(f"proc/{pid}/status", f"Name:\tservice\nUid:\t{uid}\t{uid}\t{uid}\t{uid}\n")
+        write(f"proc/{pid}/cmdline", b"\0".join(x.encode() for x in argv) + b"\0")
+
+    pi_binary = root / "mnt/omarchy-trial/opt/s22-pi/0.86.1/pi/pi"
+    pi_binary.parent.mkdir(parents=True, exist_ok=True)
+    pi_binary.write_bytes(b"synthetic exact desktop Pi executable")
+    write("proc/3/stat", "3 (pi) S 1\n")
+    write("proc/3/status", "Name:\tpi\nUid:\t1000\t1000\t1000\t1000\n")
+    (root / "proc/3/exe").symlink_to(pi_binary)
+
+    web_helper = b"synthetic reviewed helper fixture"
+    write("srv/s22/agent-web/start-agent-web.py", web_helper)
+    write("srv/s22/agent-web/private/process.json", json.dumps({
+        "pid": 400, "start_ticks": "777",
+    }))
+    ttyd_binary = root / "mnt/omarchy-trial/opt/s22-pi-web/ttyd"
+    ttyd_binary.parent.mkdir(parents=True, exist_ok=True)
+    ttyd_binary.write_bytes(b"synthetic exact ttyd executable")
+    write("proc/400/stat", "400 (ttyd) " + " ".join(["S"] + ["0"] * 18 + ["777"]) + "\n")
+    write("proc/400/status", "Name:\tttyd\nUid:\t1000\t1000\t1000\t1000\n"
+          "CapEff:\t0000000000000000\nCapPrm:\t0000000000000000\n"
+          "CapBnd:\t0000000000000000\nNoNewPrivs:\t1\n")
+    (root / "proc/400/exe").symlink_to(ttyd_binary)
     write("proc/sys/kernel/random/boot_id", "candidate-boot-id\n")
     write("proc/sys/kernel/osrelease", "5.10.260-gfixture-custom\n")
     write("proc/uptime", "5000.00 0.00\n")
@@ -179,7 +247,7 @@ def write_snapshot_fixture(root, *, persistent_uuid, mountinfo):
     (root / "run/native-ready").touch()
 
 
-def execute_snapshot_fixture(root):
+def execute_snapshot_fixture(root, *, dmesg_text="[ 1.0] synthetic boot record\n"):
     redirect_paths = f"""
 _fixture_root = pathlib.Path({str(root)!r})
 _fixture_open = open
@@ -198,10 +266,9 @@ def p(name):
   return _fixture_root / path.lstrip('/')
  return pathlib.Path(name)
 """
-    script = observer.render_snapshot_script().replace(
-        "ready=read(", redirect_paths + "\nready=read(", 1)
-
     class FakeResponse(io.BytesIO):
+        status = 200
+
         def __enter__(self):
             return self
 
@@ -210,19 +277,27 @@ def p(name):
 
     class FakeOpener:
         def open(self, url, timeout):
+            url = url.full_url if hasattr(url, "full_url") else url
             payload = (b'{"status":"ok"}' if url.endswith("/health") else
-                       b'[{"is_processing":false}]')
+                       b'[{"is_processing":false}]' if url.endswith("/slots") else
+                       b'{"status":"ok"}')
             return FakeResponse(payload)
 
     def fake_run(command, **kwargs):
         if command == ["dmesg"]:
-            return subprocess.CompletedProcess(command, 0, "", "")
+            return subprocess.CompletedProcess(command, 0, dmesg_text, "")
         raise AssertionError(f"unexpected snapshot command: {command!r}")
 
     output = io.StringIO()
-    with mock.patch.object(observer.subprocess, "run", side_effect=fake_run), \
+    with mock.patch.object(observer, "EXPECTED_PI_WEB_HELPER_SHA256",
+                           hashlib.sha256(b"synthetic reviewed helper fixture").hexdigest()), \
+            mock.patch.object(observer, "EXPECTED_TTYD_SHA256",
+                              hashlib.sha256(b"synthetic exact ttyd executable").hexdigest()), \
+            mock.patch.object(observer.subprocess, "run", side_effect=fake_run), \
             mock.patch.object(urllib.request, "build_opener", return_value=FakeOpener()), \
             contextlib.redirect_stdout(output):
+        script = observer.render_snapshot_script().replace(
+            "ready=read(", redirect_paths + "\nready=read(", 1)
         exec(compile(script, "<observer snapshot fixture>", "exec"), {})
     return json.loads(output.getvalue())
 
@@ -291,6 +366,7 @@ class ObserverPolicyTests(unittest.TestCase):
     def test_flash_receipt_pins_target_mode_byte_count_and_no_reboot(self):
         observer.validate_flash_receipt(flash_receipt())
         for receipt in (
+            flash_receipt(profile="hci-reverse"),
             flash_receipt(partition_written="boot"),
             flash_receipt(mode="stage"),
             flash_receipt(readback_sha256="0" * 64),
@@ -345,9 +421,13 @@ class ObserverPolicyTests(unittest.TestCase):
             {"kernel_components": ["btpower", "exynos_tty", "bluetooth"]},
             {"hyprland_running": False},
             {"pi_process_running": False},
-            {"tmux_server_running": False},
             {"ttyd_running": False},
             {"pi_assistant_ready": False},
+            {"readiness": dict(snapshot()["readiness"], model_api_health=False)},
+            {"readiness": dict(snapshot()["readiness"], model_idle=False)},
+            {"readiness": dict(snapshot()["readiness"], desktop_pi_status="absent")},
+            {"readiness": dict(snapshot()["readiness"], browser_terminal_status="failed")},
+            {"readiness": dict(snapshot()["readiness"], dedicated_pi_session_status="failed")},
             {"network_state": {"ready": False, "interfaces": []}},
             {"network_state": {"ready": True, "interfaces": [
                 {"name": "ecm0", "operstate": "up", "carrier": "1"}]}},
@@ -407,6 +487,66 @@ class ObserverPolicyTests(unittest.TestCase):
                                                 "native readiness is not established"):
                         observer.validate_snapshot(state, post_reboot=False)
 
+    def test_executed_snapshot_separates_expected_wait_warning_from_fatal_and_unknown_stack(self):
+        mountinfo = ("36 25 259:20 / /srv/s22 rw,relatime shared:1 - "
+                     "ext4 /dev/mmcblk0p1 rw,relatime\n")
+        known_wait = (
+            "[ 120.0] INFO: task tz_worker_threa:41 blocked for more than 120 seconds.\n"
+            "[ 120.1] Call trace:\n"
+            "[ 120.2] __schedule+0x390/0x7a0\n"
+            "[ 120.3] schedule+0x70/0x110\n"
+            "[ 120.4] tz_worker_handler+0x20/0x40\n"
+            "[ 120.5] smpboot_thread_fn+0x1a0/0x260\n"
+            "[ 120.6] kthread+0x110/0x140\n"
+            "[ 120.7] ret_from_fork+0x10/0x20\n"
+        )
+        with tempfile.TemporaryDirectory(prefix="s22-observer-known-wait-") as temporary:
+            root = Path(temporary)
+            write_snapshot_fixture(root, persistent_uuid=observer.EXPECTED_PERSISTENT_UUID,
+                                   mountinfo=mountinfo)
+            state = execute_snapshot_fixture(root, dmesg_text=known_wait)
+            diagnostics = state["kernel_log_classification"]
+            self.assertFalse(state["serious_fault"])
+            self.assertEqual(diagnostics["hung_task_warning_count"], 1)
+            self.assertEqual(diagnostics["call_trace_count"], 1)
+            self.assertTrue(diagnostics["liveness_unresolved"])
+            self.assertEqual(diagnostics["liveness_review_status"],
+                             "pinned_wait_stacks_matched_progress_unmeasured")
+            self.assertTrue(diagnostics["capture_complete"])
+            self.assertTrue(diagnostics["coverage_complete"])
+            self.assertFalse(diagnostics["full_boot_log_coverage"])
+            self.assertFalse(diagnostics["source_wait_stacks"]["progress_measured"])
+            self.assertEqual(diagnostics["source_wait_stacks"]["matched_count"], 1)
+            observer.validate_snapshot(state, post_reboot=False)
+
+        incomplete = snapshot()
+        incomplete["kernel_log_classification"]["capture_complete"] = False
+        with self.assertRaisesRegex(observer.ObserverError,
+                                    "kernel diagnostic classification"):
+            observer.validate_snapshot(incomplete, post_reboot=False)
+
+        unknown_stack = known_wait.replace("tz_worker_handler+0x20", "unexpected_fn+0x20")
+        with tempfile.TemporaryDirectory(prefix="s22-observer-unknown-wait-") as temporary:
+            root = Path(temporary)
+            write_snapshot_fixture(root, persistent_uuid=observer.EXPECTED_PERSISTENT_UUID,
+                                   mountinfo=mountinfo)
+            state = execute_snapshot_fixture(root, dmesg_text=unknown_stack)
+            self.assertEqual(state["kernel_log_classification"]["source_wait_stacks"][
+                "unmatched_count"], 1)
+            with self.assertRaisesRegex(observer.ObserverError,
+                                        "does not match the pinned source wait path"):
+                observer.validate_snapshot(state, post_reboot=False)
+
+        trace_only = "[ 10.0] Call trace:\n[ 10.1] schedule+0x70/0x110\n"
+        with tempfile.TemporaryDirectory(prefix="s22-observer-trace-only-") as temporary:
+            root = Path(temporary)
+            write_snapshot_fixture(root, persistent_uuid=observer.EXPECTED_PERSISTENT_UUID,
+                                   mountinfo=mountinfo)
+            state = execute_snapshot_fixture(root, dmesg_text=trace_only)
+            self.assertFalse(state["serious_fault"])
+            self.assertEqual(state["kernel_log_classification"]["assessment"], "trace_only")
+            observer.validate_snapshot(state, post_reboot=False)
+
     def test_hci_mode_rejects_wrong_target_mode_hash_or_incomplete_receipts(self):
         self.assertTrue(observer.observer_receipt_valid(completed_observer()))
         for receipt in (
@@ -417,6 +557,7 @@ class ObserverPolicyTests(unittest.TestCase):
             completed_observer(actual_mode="NORMAL"),
             completed_observer(candidate_sha256="0" * 64),
             completed_observer(candidate_sha256=observer.EXPECTED_BASE_SHA256),
+            completed_observer(baseline_recovery_sha256=observer.EXPECTED_BASE_SHA256),
             completed_observer(recovery_sha256=observer.EXPECTED_BASE_SHA256),
             completed_observer(recovery_sha256_after_boot="0" * 64),
             completed_observer(observed_seconds=observer.OBSERVATION_SECONDS - 1),
@@ -487,6 +628,28 @@ class ObserverPolicyTests(unittest.TestCase):
                     self.assertRaises(FileExistsError):
                 observer.request_reboot_once(marker, result_path, runner=disconnect)
             self.assertEqual(len(calls), 1)
+
+    def test_guarded_pi_web_start_is_trial_scoped_and_never_repeated(self):
+        with tempfile.TemporaryDirectory(prefix="s22-observer-web-start-") as temporary:
+            root = Path(temporary)
+            trial_state = root / "state"
+            marker = trial_state / TRIAL / observer.WEB_START_MARKER
+            result_path = trial_state / TRIAL / "pi-web-start-result.json"
+            marker.parent.mkdir(parents=True, mode=0o700)
+            calls = []
+
+            def guarded_start(transport, host, remote, **kwargs):
+                calls.append((transport, host, remote, kwargs["timeout"]))
+                return subprocess.CompletedProcess(["ssh"], 0, '{"preflight":"ok"}', "")
+
+            with mock.patch.object(observer, "TRIAL_STATE_ROOT", trial_state), \
+                    mock.patch.object(observer, "run_trusted_remote", side_effect=guarded_start):
+                self.assertEqual(observer.start_pi_web_once(marker, result_path), "ACKNOWLEDGED")
+                self.assertEqual(observer.read_json(result_path)["outcome"], "ACKNOWLEDGED")
+                with self.assertRaises(FileExistsError):
+                    observer.start_pi_web_once(marker, result_path)
+            self.assertEqual(calls, [("usb", None,
+                                      "python3 /srv/s22/agent-web/start-agent-web.py --start", 20)])
 
     def test_reboot_nonzero_transport_result_is_unknown_and_never_retried(self):
         with tempfile.TemporaryDirectory(prefix="s22-observer-reboot-nonzero-") as temporary:
@@ -606,6 +769,7 @@ class ObserverPolicyTests(unittest.TestCase):
             reboot_calls = []
             reboot_timeouts = []
             hash_requests = []
+            operation_events = []
             snapshot_requests = []
             usb_snapshots = 0
             tick = [0.0]
@@ -616,14 +780,18 @@ class ObserverPolicyTests(unittest.TestCase):
                 remote = command[-1]
                 if remote == "s22-reboot recovery":
                     reboot_calls.append(command)
+                    operation_events.append("reboot")
                     reboot_timeouts.append(kwargs["timeout"])
                     tick[0] += 0.25
                     raise subprocess.TimeoutExpired(command, kwargs["timeout"])
                 if remote == "sha256sum /dev/block/by-name/recovery":
                     hash_requests.append(command)
+                    operation_events.append("hash")
                     return subprocess.CompletedProcess(
                         command, 0,
                         observer.EXPECTED_FLASH_SHA256 + "  /dev/block/by-name/recovery\n", "")
+                if remote == "python3 /srv/s22/agent-web/start-agent-web.py --start":
+                    return subprocess.CompletedProcess(command, 0, '{"preflight":"ok"}', "")
                 if remote.startswith("python3 -c ") and "addresses=" in remote:
                             return subprocess.CompletedProcess(command, 0, "192.0.2.10\n", "")
                 if remote.startswith("python3 -c ") and "device-tree/model" in remote:
@@ -663,6 +831,7 @@ class ObserverPolicyTests(unittest.TestCase):
                     enumerate_host=lambda **kwargs: redacted)
 
             self.assertEqual(len(reboot_calls), 1)
+            self.assertEqual(operation_events[:2], ["hash", "reboot"])
             self.assertLessEqual(reboot_timeouts[0], 2)
             self.assertEqual(result["reboot_request_outcome"], "UNKNOWN")
             self.assertEqual(result["reboot_requests"], 1)

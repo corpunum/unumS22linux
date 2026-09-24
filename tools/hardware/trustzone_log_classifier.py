@@ -29,6 +29,25 @@ _HUNG_TASK_RE = re.compile(
 _TASK_ID_RE = re.compile(r"\btask\s+(?P<name>[^\s:]+):(?P<pid>\d+)\b", re.I)
 _CALL_TRACE_RE = re.compile(r"\bCall trace\s*:", re.I)
 _PARTIAL_TIMESTAMP_RE = re.compile(r"^\s*\[\s*\d+(?:\.\d+)?[^\]]*$")
+_STACK_FRAME_RE = re.compile(r"\b(?P<symbol>[A-Za-z_][A-Za-z0-9_.]*)\+0x[0-9a-f]+", re.I)
+PINNED_KERNEL_SOURCE_COMMIT = "4e5c5ad7d950e4de0688b5663965f2075654b2ad"
+_SOURCE_WAIT_PATHS = {
+    "tz_worker_threa": (
+        "tz_worker_handler",
+        {"schedule", "__schedule", "tz_worker_handler", "smpboot_thread_fn",
+         "kthread", "ret_from_fork"},
+    ),
+    "tz_iwlog_thread": (
+        "tz_iwlog_kthread_handler",
+        {"schedule", "__schedule", "tz_iwlog_kthread_handler", "kthread",
+         "ret_from_fork"},
+    ),
+    "chub_log_kthrea": (
+        "handle_log_kthread",
+        {"schedule", "__schedule", "handle_log_kthread", "kthread",
+         "ret_from_fork"},
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -130,6 +149,7 @@ def classify_kernel_log(
         and not unterminated_final_line
         and not malformed_line_numbers
     )
+
     if fatal_indicators:
         assessment = "fatal"
     elif hung_task_warnings:
@@ -158,9 +178,60 @@ def classify_kernel_log(
     )
 
 
+def classify_source_wait_stacks(log: str | bytes | None) -> dict[str, object]:
+    """Match hung-task stacks to exact idle wait paths in the pinned source.
+
+    This does not erase or downgrade a hung-task warning and does not claim
+    observed progress. A thread name without its expected schedule/wait stack
+    remains unmatched and therefore unresolved for trial gating.
+    """
+    if isinstance(log, bytes):
+        text = log.decode("utf-8", errors="replace")
+    elif isinstance(log, str):
+        text = log
+    else:
+        text = ""
+    lines = text.splitlines()
+    warning_indices = [index for index, line in enumerate(lines)
+                       if _HUNG_TASK_RE.search(line)]
+    matched: list[dict[str, str]] = []
+    unmatched: list[str | None] = []
+    for position, start in enumerate(warning_indices):
+        end = warning_indices[position + 1] if position + 1 < len(warning_indices) else len(lines)
+        warning = lines[start]
+        task_match = _TASK_ID_RE.search(warning)
+        task_name = task_match.group("name") if task_match else None
+        path = _SOURCE_WAIT_PATHS.get(task_name or "")
+        trace_starts = [index for index in range(start + 1, end)
+                        if _CALL_TRACE_RE.search(lines[index])]
+        # A hung-task warning is not itself a trace boundary. Never union all
+        # symbols up to the next warning: unrelated traces can occur in that
+        # interval and would otherwise complete a partial stack. The source
+        # explanation is accepted only when this warning interval contains
+        # exactly one explicitly delimited Call trace.
+        frames: set[str] = set()
+        if len(trace_starts) == 1:
+            trace_end = end
+            frames = {match.group("symbol")
+                      for line in lines[trace_starts[0] + 1:trace_end]
+                      for match in _STACK_FRAME_RE.finditer(line)}
+        if path is not None and len(trace_starts) == 1 and path[1].issubset(frames):
+            matched.append({"task_name": task_name, "wait_path": path[0]})
+        else:
+            unmatched.append(task_name)
+    return {
+        "source_commit": PINNED_KERNEL_SOURCE_COMMIT,
+        "warning_count": len(warning_indices),
+        "matched_count": len(matched),
+        "unmatched_count": len(unmatched),
+        "matches": matched,
+        "unmatched_task_names": unmatched,
+        "progress_measured": False,
+    }
 __all__ = [
     "FatalIndicator",
     "HungTaskWarning",
     "KernelLogClassification",
     "classify_kernel_log",
+    "classify_source_wait_stacks",
 ]

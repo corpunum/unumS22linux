@@ -32,6 +32,9 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-bt-h4-ibs-bridge.py",
     "tools/hardware/test-bt-qca6490-patch-receipt.py",
     "tools/hardware/test-close-range-kernel-fix.py",
+    "tools/hardware/test_trustzone_log_classifier.py",
+    "tools/pi-web/test_pi_readiness.py",
+    "tools/pi-web/test_agent_web.py",
 )
 
 
@@ -118,6 +121,7 @@ class RunnerPolicyTests(unittest.TestCase):
         self.assertEqual(normal_only, {
             "tools/hardware/test-bt-qca6490-patch-receipt.py",
             "tools/hardware/test-close-range-kernel-fix.py",
+            "tools/pi-web/test_agent_web.py",
         })
         for case in runner.HOST_TESTS:
             command = runner.command_for(Path("/repo") / case.path,

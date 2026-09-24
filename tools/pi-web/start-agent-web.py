@@ -15,7 +15,9 @@ import stat
 import subprocess
 import time
 import urllib.request
-from pi_readiness import inspect_pi_session, readiness_report, runtime_process_readiness
+from pi_readiness import (DESKTOP_PI_EXECUTABLE, exact_process_status,
+                          inspect_pi_session, readiness_report,
+                          runtime_process_readiness)
 
 BASE = Path('/srv/s22/agent-web')
 ARCH = Path('/mnt/omarchy-trial')
@@ -129,10 +131,14 @@ def collect_readiness():
         ARCH / TMUX_SOCKET.lstrip('/'),
         query=tmux_panes,
     )
+    desktop_pi_status = exact_process_status(
+        Path('/proc'), DESKTOP_PI_EXECUTABLE, uid=1000,
+    )
     return readiness_report(
         web_ready=web_ready,
         model_ready=model_ready,
         desktop_ready=processes['desktop'],
+        desktop_pi_status=desktop_pi_status,
         pi_session_status=session['status'],
     )
 

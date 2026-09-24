@@ -216,6 +216,67 @@ pairing, new Wi-Fi acceptance or independent rescue was established.
    unauthorized. Continue audio diagnostics without opening streams until its
    experiment-specific approval gate is satisfied.
 
+## 2026-09-24 second HCI-trial continuation
+
+The owner then explicitly authorized one distinct same-image HCI-only
+RECOVERY trial, one targeted recovery reboot, one raw-HCI socket create/close,
+and one conditional exact rollback. This current authorization supersedes the
+historical physical-attendance gate only for that operation. It does not prove
+independent rescue. The prior trial and rollback remain consumed; no second-
+trial device mutation has occurred at this checkpoint.
+
+Actual worker work was completed in isolated worktrees by `/root/pi_readiness`
+(`bde740856dd3fd3753d38ba3602b7d11d796efba`), `/root/trial_identity`
+(`88620ed22799ed47b3c41bb8b6aac19c076ddaf3`), and `/root/trustzone_classifier`
+(`1a3fc…`, follow-up `205c2f2c227d8f387d523ab7d9b84549e8377fe7`). The
+coordinator integrated their changes and extended the observer, deployment
+receipt namespacing, exact Pi readiness, source-stack classification and CI
+allowlist. A separate `/root/second_trial_review` review was launched with an
+explicit `gpt-6-luna`/Max selection request; runtime model metadata was not
+available. Its first review identified the full-ring capture gap and raised
+questions about unresolved liveness, on-demand tmux interpretation, and the
+installed helper source. A follow-up review is pending after evidence and
+observer changes below.
+
+Coordinator tests: runner policy 7/7; full allowlist 15/15 normal and 12/12
+optimization-safe under `-O`; three explicit AVB-fixture skips and three
+documented normal-only checks. The Pi launcher suite is normal-only because it
+deliberately rejects optimized Python. The observer now consumes the complete
+available dmesg ring (up to a bounded 4 MiB), rejects incomplete parsing,
+explicitly records that full-boot log coverage is unavailable, and keeps
+source-matched hung tasks visible as `liveness_unresolved` when progress was not
+measured. Unknown stacks still fail closed. Hosted CI for these new changes is
+pending review and publication.
+
+The phone remains on the exact rollback image, confirmed in RECOVERY by BORE,
+full RECOVERY hash and GNU build ID. Fresh evidence reports 325 loaded modules,
+with selected WLAN resolved to the expected staged `wlan.ko` hash; the device
+target is unmounted and exactly 100663296 bytes. `/srv/s22` has ample space for
+the exact candidate and rollback; root-overlay backing data was not touched.
+Battery, thermal, Wi-Fi, PID 1, Hyprland, exact desktop Pi, model API/idle and
+browser terminal all passed. The dedicated browser tmux session is intentionally
+on demand and currently absent; it is not a kernel or desktop-Pi failure. The
+existing guarded launcher was inspected at its exact installed SHA and returned
+the already-running web-terminal process without opening a session or starting
+inference.
+
+Candidate TrustZone logs had ten source-stack-matched event-wait warnings and
+zero fatal markers. The candidate differs only in `net/bluetooth/hci_sock.c`;
+the pinned TrustZone/CHUB files are unchanged. Current rollback dmesg is a full
+read of the available ring, but only covers its newest ~297 seconds; no earlier
+boot records remain. Current `hung_task_warnings=0` matches the pinned kernel's
+default budget having been consumed, and no project override was found. Thus
+the evidence supports a bounded, HCI-only trial but leaves liveness
+unresolved—no progress or TrustZone hardware acceptance is claimed. A specific
+unknown stack, fatal marker, incomplete capture, unhealthy service or material
+regression remains a stop condition.
+
+Next: complete independent review, inspect the sanitized diff, publish only
+source/tests/docs to this unmerged branch, verify hosted CI on its exact SHA,
+then re-inspect the operation journal/lock and live baseline before the one
+authorized flash. Master stays unchanged; no image, firmware, model or private
+trace is published.
+
 The original owner checkout remains dirty and untouched. `master` remains
 unchanged; this document and code are for the unmerged review branch only.
 
@@ -424,3 +485,35 @@ branch at `c5602b3e852a409c4837fb534023578876c1b8e4`. GitHub Actions run
 passed the runner policy and fixed hardware-free host suite on that exact
 SHA. Neither the host audio classifier nor the candidate trial establishes
 audio hardware acceptance or independent rescue.
+
+## Resumed second-trial pre-deployment checkpoint
+
+The coordinator resumed on the same review branch without changing master or
+the dirty owner checkout. The Luna reviewer closed the TrustZone classifier
+trace-combination bypass and approved the subsequent operation-order test. The
+classifier now rejects multiple traces in one hung-warning interval; the
+candidate's private capture reclassifies as 10/10 individually delimited
+source-wait stacks, with progress still unmeasured and liveness unresolved.
+
+Review clarified the operation sequence: flash receipt proves rollback SHA to
+candidate SHA on RECOVERY; the observer then checks the candidate partition
+hash before issuing its one targeted recovery reboot. The source and test now
+make that ordering explicit. The candidate artifact remains the same pinned
+image; no rebuild was needed.
+
+The final host run passed all 15 normal allowlisted scripts and 12
+optimization-safe scripts under `-O`, with zero failures, three AVB fixture
+skips, and three documented normal-only scripts. Runner policy passed 7/7.
+The observer suite passed 30/30 normally, `-O`, and `PYTHONOPTIMIZE=1`; the
+TrustZone classifier passed 12/12 in those modes. Independent review is
+complete for the revised classifier and observer sequence; hosted CI for the
+publication commit remains pending.
+
+Latest fresh read-only phone evidence still shows the known-good rollback
+image and RECOVERY boot record, healthy native/desktop/Pi/browser/model/Wi-Fi
+services, and safe battery/thermal readings. The dedicated tmux session is
+absent in its intended on-demand standby state. RECOVERY remains the exact
+unmounted `/dev/sda16`, 100663296 bytes; `/srv/s22` is userdata ext4 with about
+102 GB free. The second-trial marker/receipt/staging paths are absent. No
+second-trial write, reboot request, or raw-HCI operation has occurred yet.
+Independent hardware rescue remains unproven and is not claimed.
