@@ -76,16 +76,27 @@ def evaluate_readiness(
 ) -> dict[str, object]:
     """Keep host artifact checks separate from permission to touch the NPU.
 
-    The final lifecycle/runtime/authorization gates are deliberately false:
-    this checker cannot prove them from files, and no CLI argument may
-    override them. In particular, a passing artifact audit still exits 2.
+    The response-timeout property is source-derived. Publication-drain
+    liveness, kernel callback lifetime, device validation, and authorization
+    remain false because this checker cannot prove them from host files, and
+    no CLI argument may override them. A passing artifact audit still exits 2.
     """
     artifact_pass = bool(config_matches and required_artifacts_match and source_route_pass)
     lifecycle_source_available = bool(lifecycle_source_available)
     gates = {
-        "power_notify_wait_resolved": lifecycle_source_available and not lifecycle_gaps.get("power_notify_has_unbounded_wait", True),
+        # The POWER response wait can time out even though the caller may
+        # still block forever while draining an in-flight publication. Keep
+        # these separate so the response timeout is not mistaken for full
+        # publication-path liveness.
+        "power_response_timeout_bounded": (
+            lifecycle_source_available
+            and not lifecycle_gaps.get("power_response_timeout_missing", True)
+        ),
+        # The current drain waits indefinitely for a publisher lease. A host
+        # checker cannot promise liveness if that publication stalls.
+        "publication_drain_liveness_resolved": False,
         "normal_boot_error_unwind_resolved": lifecycle_source_available and not lifecycle_gaps.get("normal_boot_unwind_missing", True),
-        "callback_close_race_regressions_passed": False,
+        "callback_lifetime_kernel_validated": False,
         "firmware_boot_and_shutdown_device_tested": False,
         "live_probe_validated": False,
         "independent_recovery_path_verified": False,
@@ -141,19 +152,30 @@ def main() -> int:
     session_c = source / "drivers/vision/npu/core/npu-session.c"
     vertex_c = source / "drivers/vision/npu/core/npu-vertex.c"
     system_c = source / "drivers/vision/npu/core/npu-system.c"
+    protodrv_c = source / "drivers/vision/npu/core/npu-protodrv.c"
     binary, binary_available = read_source(binary_h)
     session, session_available = read_source(session_c)
     vertex, vertex_available = read_source(vertex_c)
     system, system_available = read_source(system_c)
-    proto, proto_available = read_source(source / "drivers/vision/npu/core/npu-protodrv.c")
+    proto, proto_available = read_source(protodrv_c)
     lifecycle_source_available = all((session_available, vertex_available, proto_available))
     normal_boot = function_body(vertex, "int npu_hwdev_normal_bootup(")
     power_notify = function_body(session, "int npu_session_NW_CMD_POWER_NOTIFY(")
     power_wait = function_body(session, "static int npu_session_wait_power_request(")
-    bounded_power_wait = (
-        "npu_session_wait_power_request(session, NPU_NW_CMD_POWER_CTL)" in power_notify
-        and "wait_for_completion_timeout" in power_wait
+    publish_drain = function_body(session, "static void npu_power_wait_cancel_and_drain(")
+    timeout_ms = re.search(
+        r"^#define\s+NPU_POWER_WAIT_TIMEOUT_MS\s+(\d+)\s*$",
+        session,
+        re.MULTILINE,
     )
+    power_response_timeout_bounded = (
+        "npu_session_wait_power_request(session, NPU_NW_CMD_POWER_CTL)" in power_notify
+        and "timeout = msecs_to_jiffies(NPU_POWER_WAIT_TIMEOUT_MS)" in power_wait
+        and "wait_for_completion_timeout(&waiter.completion, timeout)" in power_wait
+        and timeout_ms is not None
+        and int(timeout_ms.group(1)) > 0
+    )
+    callback = function_body(session, "int npu_session_save_power_result(")
 
     checks["source"] = {
         "normal_fw_name_AIE": (
@@ -161,8 +183,17 @@ def main() -> int:
             and '#define NPU_FW_NAME\t\t(FW_BASE_NAME ".bin")' in binary
         ),
         "normal_boot_has_power_notify": "npu_session_NW_CMD_POWER_NOTIFY(session, true)" in normal_boot,
-        "power_notify_has_unbounded_wait": (
-            "wait_event(session->wq" in power_notify or not bounded_power_wait
+        "power_response_timeout_bounded": power_response_timeout_bounded,
+        "publication_drain_wait_unbounded": (
+            "npu_power_wait_cancel_and_drain(&waiter)" in power_wait
+            and "wait_for_completion(&waiter->publish_done)" in publish_drain
+            and "wait_for_completion_timeout" not in publish_drain
+        ),
+        "callback_lookup_is_cookie_and_req_id_scoped": (
+            "spin_lock_irqsave(&npu_power_waiters_lock, flags)" in callback
+            and "npu_power_waiter_find(cookie)" in callback
+            and "waiter->req_id == result.nw.npu_req_id" in callback
+            and "!waiter->cancelled" in callback
         ),
         "normal_boot_unwind_missing": "npu_hwdev_shutdown(device, ctrl->value)" not in normal_boot,
         "system_calls_signature_loader": "npu_firmware_file_read_signature" in system,
@@ -192,7 +223,8 @@ def main() -> int:
     }
     checks["known_lifecycle_gaps"] = {
         "normal_boot_unwind_missing": checks["source"]["normal_boot_unwind_missing"],
-        "power_notify_has_unbounded_wait": checks["source"]["power_notify_has_unbounded_wait"],
+        "power_response_timeout_missing": not checks["source"]["power_response_timeout_bounded"],
+        "publication_drain_wait_unbounded": checks["source"]["publication_drain_wait_unbounded"],
     }
     result["config_matches"] = checks["config"]["matches"]
     result["artifact_closure_pass"] = checks["artifact_closure"]["required_matches"]
@@ -207,8 +239,9 @@ def main() -> int:
     result.update(readiness)
     result["live_probe_validated"] = readiness["readiness_gates"]["live_probe_validated"]
     result["reason"] = (
-        "host artifact/source audit only; no lifecycle, firmware runtime, live probe, "
-        "independent recovery, or BOOTUP authorization is established"
+        "host artifact/source audit only; the POWER response timeout does not establish "
+        "publication-drain liveness or kernel callback lifetime; firmware runtime, live "
+        "probe, independent recovery, and BOOTUP authorization remain unestablished"
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return int(result["exit_code"])
