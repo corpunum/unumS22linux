@@ -282,6 +282,9 @@ class ManifestSourceProvenanceTests(unittest.TestCase):
         self.config.write_text("CONFIG_MODVERSIONS=y\n")
         self.symvers.write_text("0x12345678\tmodule_layout\tvmlinux\tEXPORT_SYMBOL\n")
         self.image.write_bytes(b"kernel image fixture")
+        self.compiler_metadata = {
+            "LINUX_COMPILER": "Ubuntu clang version fixture, Ubuntu LLD fixture",
+        }
 
     def complete_manifest(self):
         return {"kernel_build_provenance": {
@@ -293,8 +296,11 @@ class ManifestSourceProvenanceTests(unittest.TestCase):
             "module_symvers_sha256": GATE.sha256_file(self.symvers),
             "kernel_image_sha256": GATE.sha256_file(self.image),
             "toolchain_tools": [{
-                "name": "clang", "version_first_line": "clang version fixture",
+                "name": "clang", "version_first_line": "Ubuntu clang version fixture",
                 "sha256": "a" * 64,
+            }, {
+                "name": "ld.lld", "version_first_line": "Ubuntu LLD fixture (compatible)",
+                "sha256": "b" * 64,
             }],
             "build_command": "make ARCH=arm64 Image modules",
         }}
@@ -302,7 +308,7 @@ class ManifestSourceProvenanceTests(unittest.TestCase):
     def test_complete_matching_build_provenance_is_accepted(self):
         self.assertEqual([], GATE.manifest_build_provenance_issues(
             self.complete_manifest(), "abc123", CLEAN_RELEASE,
-            self.config, self.symvers, self.image,
+            self.config, self.symvers, self.image, self.compiler_metadata,
         ))
 
     def test_missing_or_incomplete_build_provenance_is_rejected(self):
@@ -310,6 +316,7 @@ class ManifestSourceProvenanceTests(unittest.TestCase):
             "candidate manifest lacks complete kernel build provenance",
             GATE.manifest_build_provenance_issues(
                 {}, "abc123", CLEAN_RELEASE, self.config, self.symvers, self.image,
+                self.compiler_metadata,
             ),
         )
         incomplete = self.complete_manifest()
@@ -318,6 +325,7 @@ class ManifestSourceProvenanceTests(unittest.TestCase):
             "candidate manifest lacks complete kernel build provenance",
             GATE.manifest_build_provenance_issues(
                 incomplete, "abc123", CLEAN_RELEASE, self.config, self.symvers, self.image,
+                self.compiler_metadata,
             ),
         )
 
@@ -332,7 +340,7 @@ class ManifestSourceProvenanceTests(unittest.TestCase):
         provenance["toolchain_tools"] = []
         issues = GATE.manifest_build_provenance_issues(
             manifest, "abc123", CLEAN_RELEASE + "-wrong",
-            self.config, self.symvers, self.image,
+            self.config, self.symvers, self.image, self.compiler_metadata,
         )
         self.assertTrue(any("source commit" in issue for issue in issues))
         self.assertTrue(any("clean kernel source" in issue for issue in issues))
@@ -341,6 +349,33 @@ class ManifestSourceProvenanceTests(unittest.TestCase):
         self.assertTrue(any("Module.symvers hash" in issue for issue in issues))
         self.assertTrue(any("kernel Image hash" in issue for issue in issues))
         self.assertTrue(any("toolchain identities" in issue for issue in issues))
+
+    def test_toolchain_names_and_versions_must_match_kernel_compiler_metadata(self):
+        manifest = self.complete_manifest()
+        manifest["kernel_build_provenance"]["toolchain_tools"] = [{
+            "name": "not-clang-or-linker", "version_first_line": "unrelated tool version",
+            "sha256": "f" * 64,
+        }]
+        issues = GATE.manifest_build_provenance_issues(
+            manifest, "abc123", CLEAN_RELEASE,
+            self.config, self.symvers, self.image, self.compiler_metadata,
+        )
+        self.assertTrue(any("recorded clang version" in issue for issue in issues))
+        self.assertTrue(any("recorded ld.lld identity" in issue for issue in issues))
+
+        manifest = self.complete_manifest()
+        manifest["kernel_build_provenance"]["toolchain_tools"][0]["version_first_line"] = (
+            "Ubuntu clang version unrelated"
+        )
+        manifest["kernel_build_provenance"]["toolchain_tools"][1]["version_first_line"] = (
+            "Ubuntu LLD unrelated (compatible)"
+        )
+        issues = GATE.manifest_build_provenance_issues(
+            manifest, "abc123", CLEAN_RELEASE,
+            self.config, self.symvers, self.image, self.compiler_metadata,
+        )
+        self.assertTrue(any("recorded clang version" in issue for issue in issues))
+        self.assertTrue(any("recorded ld.lld version" in issue for issue in issues))
 
     def test_matching_manifest_source_commit_is_accepted(self):
         manifest = {"kernel_build_provenance": {

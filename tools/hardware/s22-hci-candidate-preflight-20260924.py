@@ -878,7 +878,8 @@ def manifest_source_commit_issue(manifest: dict, source_head: str) -> str | None
 
 def manifest_build_provenance_issues(manifest: dict, source_head: str,
                                      release: str, config_path: Path,
-                                     symvers_path: Path, image_path: Path) -> list[str]:
+                                     symvers_path: Path, image_path: Path,
+                                     compiler_metadata: dict) -> list[str]:
     provenance = manifest.get("kernel_build_provenance")
     if not isinstance(provenance, dict) or provenance.get("complete") is not True:
         return ["candidate manifest lacks complete kernel build provenance"]
@@ -907,6 +908,7 @@ def manifest_build_provenance_issues(manifest: dict, source_head: str,
     if not isinstance(toolchain, list) or not toolchain:
         issues.append("candidate manifest lacks recorded toolchain identities")
     else:
+        compiler_identities = {}
         for index, tool in enumerate(toolchain):
             if not isinstance(tool, dict):
                 issues.append(f"candidate manifest toolchain entry {index} is malformed")
@@ -917,6 +919,25 @@ def manifest_build_provenance_issues(manifest: dict, source_head: str,
             digest = tool.get("sha256")
             if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
                 issues.append(f"candidate manifest toolchain entry {index} lacks a SHA-256 identity")
+            name = tool.get("name")
+            if name in ("clang", "ld.lld"):
+                if name in compiler_identities:
+                    issues.append(f"candidate manifest repeats the {name} toolchain identity")
+                compiler_identities[name] = tool.get("version_first_line")
+        embedded_compiler = compiler_metadata.get("LINUX_COMPILER")
+        if not isinstance(embedded_compiler, str) or not embedded_compiler:
+            issues.append("O-tree lacks embedded LINUX_COMPILER provenance")
+        else:
+            clang_version = compiler_identities.get("clang")
+            linker_version = compiler_identities.get("ld.lld")
+            if not isinstance(clang_version, str) or not embedded_compiler.startswith(clang_version):
+                issues.append("recorded clang version does not match embedded LINUX_COMPILER")
+            if not isinstance(linker_version, str):
+                issues.append("candidate manifest lacks the recorded ld.lld identity")
+            else:
+                linker_identity = linker_version.split(" (", 1)[0]
+                if linker_identity not in embedded_compiler:
+                    issues.append("recorded ld.lld version does not match embedded LINUX_COMPILER")
     return issues
 
 
@@ -996,8 +1017,10 @@ def inspect_candidate(artifact_root: Path, image_path: Path,
     source_description = git_value(source, "describe", "--always", "--dirty")
     source_status = git_value(source, "status", "--porcelain", "--untracked-files=all")
     dirty_files = [line[2:].strip() for line in source_status.splitlines() if line]
+    compiler_metadata = config_compile_metadata(o_tree / "include/generated/compile.h")
     provenance_issues.extend(manifest_build_provenance_issues(
         manifest, source_head, release, config_path, symvers_path, image_o_path,
+        compiler_metadata,
     ))
     if dirty_files:
         provenance_issues.append(
@@ -1176,10 +1199,16 @@ def inspect_candidate(artifact_root: Path, image_path: Path,
                 "CONFIG_LOCALVERSION", "CONFIG_LOCALVERSION_AUTO", "CONFIG_MODVERSIONS",
                 "CONFIG_BT", "CONFIG_BT_HCIUART", "CONFIG_BT_HCIUART_QCA",
             )},
-            "compiler": config_compile_metadata(o_tree / "include/generated/compile.h"),
+            "compiler": compiler_metadata,
             "image_sha256": sha256_file(image_o_path),
             "module_symvers_sha256": sha256_file(symvers_path),
             "expected_full_vermagic": expected_vermagic,
+        },
+        "toolchain_provenance": {
+            "recorded_tools": manifest["kernel_build_provenance"]["toolchain_tools"],
+            "version_crosscheck": "clang and ld.lld names/versions matched O-tree LINUX_COMPILER",
+            "binary_sha256_rehashed_by_preflight": False,
+            "hash_note": "tool binary hashes are recorded build provenance; the kernel image does not contain those executables",
         },
         "ramdisk_modules": modules,
         "module_inventory": modules["source_completeness"],
