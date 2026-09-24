@@ -26,6 +26,13 @@ ROOT = Path(__file__).resolve().parents[2]
 RIG_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir)
 TRIAL_STATE_ROOT = RIG_HOME / '.local/state/s22-hci-trial-20260924'
 OUT = TRIAL_STATE_ROOT / 'observer'
+TRIAL_ID = 'hci-candidate-20260924-second'
+OBSERVER_SCHEMA = 's22-hci-recovery-observer/v2'
+HCI_SCHEMA = 's22-hci-socket-smoke/v2'
+TRIAL_FLASH_RECEIPT = (TRIAL_STATE_ROOT / 'receipts' / TRIAL_ID /
+                       'hci-recovery-forward-flash.json')
+REBOOT_MARKER = 'hci-candidate-reboot-attempted.json'
+HCI_MARKER = 'hci-candidate-socket-attempted.json'
 EXPECTED_TARGET = 'recovery'
 EXPECTED_FLASH_SHA256 = '42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5'
 EXPECTED_BASE_SHA256 = '758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b'
@@ -196,8 +203,32 @@ def require(condition, message):
         raise ObserverError(message)
 
 
+def validate_trial_identity(name):
+    require(name == TRIAL_ID, 'trial identity is not authorized')
+    return name
+
+
+def trial_marker_path(name, marker_name):
+    validate_trial_identity(name)
+    require(marker_name in (REBOOT_MARKER, HCI_MARKER),
+            'trial operation marker is not authorized')
+    return TRIAL_STATE_ROOT / name / marker_name
+
+
+def observer_receipt_path(state_root, name):
+    validate_trial_identity(name)
+    return Path(state_root) / name / 'result.json'
+
+
+def hci_receipt_path(state_root, name):
+    validate_trial_identity(name)
+    return Path(state_root) / (name + '-hci') / 'result.json'
+
+
 def validate_flash_receipt(flash):
     require(isinstance(flash, dict), 'flash receipt must be a JSON object')
+    require(flash.get('trial_identity') == TRIAL_ID,
+            'flash receipt belongs to another trial')
     require(flash.get('mode') == 'flash', "flash receipt mode must be 'flash'")
     require(flash.get('partition_written') == EXPECTED_TARGET,
             'flash receipt target must be RECOVERY')
@@ -403,7 +434,8 @@ def observer_receipt_valid(value):
     observed = value.get('observed_seconds') if isinstance(value, dict) else None
     uptime = value.get('continuous_uptime_seconds') if isinstance(value, dict) else None
     return (isinstance(value, dict) and
-            value.get('schema') == 's22-hci-recovery-observer/v1' and
+            value.get('schema') == OBSERVER_SCHEMA and
+            value.get('trial_identity') == TRIAL_ID and
             value.get('status') == 'completed' and
             value.get('target') == EXPECTED_TARGET and
             value.get('candidate_sha256') == EXPECTED_FLASH_SHA256 and
@@ -445,24 +477,34 @@ def observer_receipt_valid(value):
             value.get('recovery_sha256_after_boot') == EXPECTED_FLASH_SHA256)
 
 
-def request_reboot_once(marker, result_path, runner=subprocess.run, project_root=ROOT):
-    durable_json(marker, {'target': EXPECTED_TARGET, 'status': 'request_started',
+def request_reboot_once(marker, result_path, runner=subprocess.run, project_root=ROOT,
+                        trial_identity=TRIAL_ID):
+    validate_trial_identity(trial_identity)
+    require(Path(marker) == trial_marker_path(trial_identity, REBOOT_MARKER),
+            'reboot marker path is not namespaced for this trial')
+    require(Path(result_path).parent.name == trial_identity,
+            'reboot receipt path is not namespaced for this trial')
+    durable_json(marker, {'trial_identity': trial_identity,
+                          'target': EXPECTED_TARGET, 'status': 'request_started',
                           'created_at': datetime.now(timezone.utc).isoformat(),
                           'retry_allowed': False})
     try:
         result = run_trusted_remote('usb', None, 's22-reboot recovery', runner=runner,
                                     timeout=15, project_root=project_root)
     except (subprocess.TimeoutExpired, OSError, ObserverError) as error:
-        durable_json(result_path, {'status': 'unknown_disconnect_after_request',
+        durable_json(result_path, {'trial_identity': trial_identity,
+                                   'status': 'unknown_disconnect_after_request',
                                    'outcome': 'UNKNOWN', 'retry_allowed': False,
                                    'error_type': type(error).__name__})
         return 'UNKNOWN'
     if result.returncode != 0:
-        durable_json(result_path, {'status': 'unknown_disconnect_after_request',
+        durable_json(result_path, {'trial_identity': trial_identity,
+                                   'status': 'unknown_disconnect_after_request',
                                    'outcome': 'UNKNOWN', 'returncode': result.returncode,
                                    'retry_allowed': False})
         return 'UNKNOWN'
-    durable_json(result_path, {'status': 'request_returned', 'returncode': 0,
+    durable_json(result_path, {'trial_identity': trial_identity,
+                               'status': 'request_returned', 'returncode': 0,
                                'retry_allowed': False})
     return 'ACKNOWLEDGED'
 
@@ -676,15 +718,17 @@ def run_reboot_observer(state_root, name, flash, wifi_host=None, tailscale_host=
                         observation_seconds=OBSERVATION_SECONDS, sample_interval=5,
                         runner=subprocess.run, clock=time.monotonic, sleep=time.sleep,
                         enumerate_host=redacted_host_enumeration, project_root=ROOT):
+    validate_trial_identity(name)
     ensure_private_directory(TRIAL_STATE_ROOT)
-    marker = TRIAL_STATE_ROOT/'hci-candidate-reboot-attempted.json'
+    marker = trial_marker_path(name, REBOOT_MARKER)
+    ensure_private_directory(marker.parent)
     require_unused_trial_marker(marker)
     validate_flash_receipt(flash)
     before = snapshot_over('usb', runner=runner, project_root=project_root)
     validate_snapshot(before, post_reboot=False)
     baseline_hash = candidate_hash(runner=runner, project_root=project_root)
     ensure_private_directory(state_root)
-    out = state_root/name
+    out = observer_receipt_path(state_root, name).parent
     out.mkdir(mode=0o700)
     durable_json(out/'before.json', before)
     durable_json(out/'baseline-recovery-hash.json', {'sha256': baseline_hash})
@@ -707,7 +751,8 @@ def run_reboot_observer(state_root, name, flash, wifi_host=None, tailscale_host=
         return runner(command, **kwargs)
 
     request_outcome = request_reboot_once(marker, out/'request-result.json',
-                                           runner=bounded_runner, project_root=project_root)
+                                           runner=bounded_runner, project_root=project_root,
+                                           trial_identity=name)
 
     prior_boot = before.get('boot_id')
     candidate_boot = None
@@ -759,7 +804,7 @@ def run_reboot_observer(state_root, name, flash, wifi_host=None, tailscale_host=
                last_valid_elapsed >= observation_seconds-sample_interval and
                accepted.get('uptime_seconds', 0) >= MIN_UPTIME_SECONDS and
                verified_hash == EXPECTED_FLASH_SHA256)
-    receipt = {'schema': 's22-hci-recovery-observer/v1',
+    receipt = {'schema': OBSERVER_SCHEMA, 'trial_identity': name,
                'status': 'completed' if success else 'incomplete',
                'target': EXPECTED_TARGET, 'candidate_sha256': EXPECTED_FLASH_SHA256,
                'gnu_build_id': EXPECTED_GNU_BUILD_ID,
@@ -825,8 +870,10 @@ def run_reboot_observer(state_root, name, flash, wifi_host=None, tailscale_host=
 def run_hci_once(state_root, name, observer, runner=subprocess.run,
                  route_selector=reconnect_snapshot, hasher=candidate_hash,
                  wifi_host=None, tailscale_host=None, project_root=ROOT):
+    validate_trial_identity(name)
     ensure_private_directory(TRIAL_STATE_ROOT)
-    marker = TRIAL_STATE_ROOT/'hci-candidate-socket-attempted.json'
+    marker = trial_marker_path(name, HCI_MARKER)
+    ensure_private_directory(marker.parent)
     require_unused_trial_marker(marker)
     require(observer_receipt_valid(observer),
             'hci-once requires a valid completed observer receipt')
@@ -843,9 +890,10 @@ def run_hci_once(state_root, name, observer, runner=subprocess.run,
     require(recovery_sha256 == EXPECTED_FLASH_SHA256,
             'live RECOVERY hash changed since observation')
     ensure_private_directory(state_root)
-    out = state_root/(name+'-hci')
+    out = hci_receipt_path(state_root, name).parent
     out.mkdir(mode=0o700)
     durable_json(out/'preflight.json', {
+        'trial_identity': name,
         'boot_id': current.get('boot_id'), 'gnu_build_id': current.get('gnu_build_id'),
         'kernel_release': current.get('kernel_release'),
         'transport': transport,
@@ -856,7 +904,8 @@ def run_hci_once(state_root, name, observer, runner=subprocess.run,
         'network_state': current.get('network_state'),
         'power_state': current.get('power_state'),
     })
-    durable_json(marker, {'status': 'request_started', 'retry_allowed': False,
+    durable_json(marker, {'trial_identity': name,
+                          'status': 'request_started', 'retry_allowed': False,
                           'observer_boot_id': observer.get('boot_id'),
                           'current_boot_id': current.get('boot_id'),
                           'recovery_sha256': recovery_sha256})
@@ -866,7 +915,8 @@ def run_hci_once(state_root, name, observer, runner=subprocess.run,
                                     'python3 -c '+shlex.quote(probe), runner=runner,
                                     timeout=15, project_root=project_root)
     except (subprocess.TimeoutExpired, OSError, ObserverError) as error:
-        durable_json(out/'result.json', {'status': 'unknown_disconnect_after_request',
+        durable_json(out/'result.json', {'trial_identity': name,
+                                         'status': 'unknown_disconnect_after_request',
                                          'outcome': 'UNKNOWN', 'retry_allowed': False,
                                          'error_type': type(error).__name__})
         raise ObserverError('HCI request disconnected; outcome UNKNOWN; no retry')
@@ -893,7 +943,7 @@ def run_hci_once(state_root, name, observer, runner=subprocess.run,
                           probe_receipt[key] is expected_probe[key]
                           for key in expected_probe))
     unknown_transport = result.returncode == 255 or not verified_probe and result.returncode == 0
-    receipt = {'schema': 's22-hci-socket-smoke/v1',
+    receipt = {'schema': HCI_SCHEMA, 'trial_identity': name,
                'status': ('completed' if verified_probe else
                           'unknown_transport_after_request' if unknown_transport else 'failed'),
                'outcome': ('SUCCESS' if verified_probe else
@@ -910,20 +960,21 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--mode', choices=('reboot-observe', 'hci-once'), required=True)
     parser.add_argument('--execute', action='store_true')
-    parser.add_argument('--name', default='hci-candidate-20260924')
+    parser.add_argument('--name', default=TRIAL_ID)
     parser.add_argument('--project-root', type=Path, default=ROOT,
                         help='trusted project root containing the pinned SSH wrapper and deployer')
     parser.add_argument('--state-root', type=Path, default=OUT)
-    parser.add_argument('--flash-receipt', type=Path, default=(RIG_HOME/
-                        '.local/state/s22-hci-trial-20260924/receipts/hci-recovery-forward-flash.json'))
+    parser.add_argument('--flash-receipt', type=Path, default=TRIAL_FLASH_RECEIPT)
     parser.add_argument('--observer-receipt', type=Path)
     parser.add_argument('--wifi-host', default=os.environ.get('S22_WIFI_SSH_HOST'))
     parser.add_argument('--tailscale-host', default=os.environ.get('S22_TAILSCALE_SSH_HOST'))
     args = parser.parse_args(argv)
-    if re.fullmatch(r'[a-z0-9-]+', args.name) is None:
-        parser.error('use a unique lowercase evidence name')
+    if args.name != TRIAL_ID:
+        parser.error('the only authorized trial name is ' + TRIAL_ID)
     if not args.execute:
         print(json.dumps({'plan_only': True, 'mode': args.mode,
+                          'trial_identity': TRIAL_ID,
+                          'marker_directory': str(TRIAL_STATE_ROOT / TRIAL_ID),
                           'target': EXPECTED_TARGET,
                           'project_root_configured': args.project_root.is_dir(),
                           'observation_seconds': OBSERVATION_SECONDS if args.mode == 'reboot-observe' else None,
@@ -932,6 +983,8 @@ def main(argv=None):
     os.umask(0o077)
     try:
         if args.mode == 'reboot-observe':
+            require(args.flash_receipt == TRIAL_FLASH_RECEIPT,
+                    'flash receipt path is not namespaced for this trial')
             result = run_reboot_observer(args.state_root, args.name,
                                          read_json(args.flash_receipt), args.wifi_host,
                                          args.tailscale_host,
@@ -939,6 +992,9 @@ def main(argv=None):
         else:
             require(args.observer_receipt is not None,
                     'hci-once requires --observer-receipt')
+            expected_observer = observer_receipt_path(args.state_root, TRIAL_ID)
+            require(args.observer_receipt == expected_observer,
+                    'observer receipt path is not namespaced for this trial')
             result = run_hci_once(args.state_root, args.name,
                                   read_json(args.observer_receipt),
                                   wifi_host=args.wifi_host,
