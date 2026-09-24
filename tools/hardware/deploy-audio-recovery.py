@@ -27,6 +27,36 @@ NEW_SHA = '1c1b77a5e532e50b8274cfc68921aa9b1bfe6d4ae9a3459281be0cc033c5c3d5'
 LINEAGE_SHA = 'b5bf01c4a47091eb95078fc69b133b44c2b453b31c23433594c5b605e3747b55'
 IMAGE = ROOT/'builds/audio-early-20260922/recovery.img'
 
+# The HCI Phase A candidate is an ignored host build artifact. Keep its
+# forward manifest explicit here so every invocation pins both the image to
+# write and the only accepted current RECOVERY baseline. The reverse profile
+# uses the same artifacts in the opposite direction and therefore only writes
+# the exact rollback after observing the exact HCI candidate on-device.
+HCI_FORWARD_MANIFEST = {
+    'candidate_image': 'builds/bt-hci-loader-compatible-20260924-repro/recovery.img',
+    'candidate_sha256': '42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5',
+    'candidate_build_manifest': 'builds/bt-hci-loader-compatible-20260924-repro/manifest.json',
+    'baseline_image': 'builds/audio-extra-v2-20260922/recovery.img',
+    'baseline_sha256': '758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b',
+    'lineage_image': 'lineage/build-20260915/recovery.img',
+    'lineage_sha256': LINEAGE_SHA,
+    'partition_size_bytes': SIZE,
+}
+HCI_PROFILES = {
+    'hci-forward': {
+        'before_role': 'baseline', 'write_role': 'candidate',
+        'staging_directory': '/srv/s22/bt-hci-forward-20260924',
+        'rollback_filename': 'native-recovery-rollback.img',
+        'receipt_prefix': 'hci-recovery-forward',
+    },
+    'hci-reverse': {
+        'before_role': 'candidate', 'write_role': 'baseline',
+        'staging_directory': '/srv/s22/bt-hci-reverse-20260924',
+        'rollback_filename': 'hci-candidate-rollback.img',
+        'receipt_prefix': 'hci-recovery-reverse',
+    },
+}
+
 # Kept separately so the exact identity gate can be exercised in host-only
 # subprocesses under ordinary Python, -O, and PYTHONOPTIMIZE=1.
 REMOTE_GUARDS = r'''
@@ -377,17 +407,90 @@ def read_host_artifact(path, label):
         os.close(fd)
 
 
-def validate_host_artifacts(image_path, base_path, lineage_path):
+def validate_host_artifacts(image_path, base_path, lineage_path, *, size=SIZE,
+                            candidate_sha=NEW_SHA, base_sha=BASE_SHA,
+                            lineage_sha=LINEAGE_SHA):
     image=read_host_artifact(image_path,'candidate image')
     base=read_host_artifact(base_path,'rollback/base image')
     lineage=read_host_artifact(lineage_path,'known-good LineageOS recovery image')
-    if len(image)!=SIZE or hashlib.sha256(image).hexdigest()!=NEW_SHA:
+    if len(image)!=size or hashlib.sha256(image).hexdigest()!=candidate_sha:
         raise ValueError('candidate image has an incorrect size or SHA-256')
-    if len(base)!=SIZE or hashlib.sha256(base).hexdigest()!=BASE_SHA:
+    if len(base)!=size or hashlib.sha256(base).hexdigest()!=base_sha:
         raise ValueError('rollback/base image has an incorrect size or SHA-256')
-    if hashlib.sha256(lineage).hexdigest()!=LINEAGE_SHA:
+    if hashlib.sha256(lineage).hexdigest()!=lineage_sha:
         raise ValueError('known-good LineageOS recovery image SHA-256 mismatch')
     return image
+
+
+def resolve_hci_profile(profile_name, manifest=None):
+    """Resolve a named HCI direction into its pinned before/write identities."""
+    manifest=HCI_FORWARD_MANIFEST if manifest is None else manifest
+    try:
+        profile=HCI_PROFILES[profile_name]
+    except KeyError as error:
+        raise ValueError(f'unknown HCI deployment profile: {profile_name}') from error
+    artifacts={
+        'candidate': (manifest['candidate_image'],manifest['candidate_sha256']),
+        'baseline': (manifest['baseline_image'],manifest['baseline_sha256']),
+    }
+    try:
+        before_path,before_sha=artifacts[profile['before_role']]
+        image_path,new_sha=artifacts[profile['write_role']]
+    except KeyError as error:
+        raise ValueError(f'invalid HCI deployment manifest role: {error}') from error
+    return {
+        **profile,
+        'name': profile_name,
+        'before_image': before_path,
+        'before_sha256': before_sha,
+        'image': image_path,
+        'new_sha256': new_sha,
+    }
+
+
+def _manifest_artifact(root, relative, label):
+    path=Path(relative)
+    if path.is_absolute() or '..' in path.parts or not path.parts:
+        raise ValueError(f'{label} must be a repository-relative path')
+    return Path(root)/path
+
+
+def validate_hci_profile_artifacts(profile_name, *, root=ROOT, manifest=None):
+    """Validate the HCI candidate provenance and both exact RECOVERY images."""
+    manifest=HCI_FORWARD_MANIFEST if manifest is None else manifest
+    if manifest.get('partition_size_bytes')!=SIZE:
+        raise ValueError('HCI deployment manifest has an incorrect RECOVERY capacity')
+    profile=resolve_hci_profile(profile_name,manifest)
+    root=Path(root)
+    candidate_manifest_path=_manifest_artifact(
+        root,manifest['candidate_build_manifest'],'HCI candidate build manifest')
+    try:
+        candidate_manifest=json.loads(read_host_artifact(
+            candidate_manifest_path,'HCI candidate build manifest'))
+    except (TypeError,ValueError) as error:
+        raise ValueError(f'HCI candidate build manifest is not valid JSON: {error}') from error
+    if not isinstance(candidate_manifest,dict):
+        raise ValueError('HCI candidate build manifest must be a JSON object')
+    expected_manifest={
+        'image': manifest['candidate_image'],
+        'image_sha256': manifest['candidate_sha256'],
+        'base_image': manifest['baseline_image'],
+        'base_image_sha256': manifest['baseline_sha256'],
+        'partition_size_bytes': manifest['partition_size_bytes'],
+        'phone_access': False,
+    }
+    for key,value in expected_manifest.items():
+        if candidate_manifest.get(key)!=value:
+            raise ValueError(f'HCI candidate build manifest mismatch for {key}')
+
+    image_path=_manifest_artifact(root,profile['image'],'HCI image')
+    before_path=_manifest_artifact(root,profile['before_image'],'HCI baseline image')
+    lineage_path=_manifest_artifact(root,manifest['lineage_image'],'LineageOS recovery image')
+    return validate_host_artifacts(
+        image_path,before_path,lineage_path,
+        size=manifest['partition_size_bytes'],
+        candidate_sha=profile['new_sha256'],base_sha=profile['before_sha256'],
+        lineage_sha=manifest['lineage_sha256'])
 
 
 def ensure_new_receipt(path):
@@ -549,12 +652,83 @@ def validate_remote_receipt(receipt, *, mode, before_sha, candidate_sha, size):
     return receipt
 
 
+def main_hci_profile(profile_name, mode=None):
+    profile=resolve_hci_profile(profile_name)
+    try:
+        image=validate_hci_profile_artifacts(profile_name)
+    except (OSError,ValueError) as error:
+        raise SystemExit(
+            f'HCI artifact validation failed; no device operation attempted: {error}') from error
+    plan={
+        'profile': profile_name, 'partition': 'recovery',
+        'before_sha256': profile['before_sha256'],
+        'image_sha256': profile['new_sha256'],
+        'image': profile['image'],
+        'staging_directory': profile['staging_directory'],
+        'operation': mode, 'execution': mode is not None,
+        'reboot_performed': False,
+    }
+    if mode is None:
+        print(json.dumps(plan,indent=2))
+        return 0
+
+    out=ROOT/'rootfs/main-driver-loop-20260921'/(profile['receipt_prefix']+'-'+mode+'.json')
+    try:
+        ensure_new_receipt(out)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+    code=render_remote(
+        base_sha=profile['before_sha256'],new_sha=profile['new_sha256'],
+        staging_directory=profile['staging_directory'],
+        rollback_filename=profile['rollback_filename'])
+    ssh=ROOT/'tools/s22-ssh'
+    try:
+        result=run_approved_ssh_wrapper(
+            ssh,'python3 -c '+shlex.quote(code)+' '+mode,
+            input_data=image if mode=='stage' else b'',timeout=100,project_root=ROOT)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+    except (OSError,subprocess.TimeoutExpired) as error:
+        raise RuntimeError(
+            mode+' transport failed or timed out; remote outcome may be unknown; '
+            'inspect before retry: '+str(error)) from error
+    if result.returncode:
+        detail=result.stderr.decode(errors='replace')
+        raise RuntimeError(
+            mode+' failed; no reboot was requested; inspect write outcome before any retry: '
+            +detail)
+    try:
+        receipt=json.loads(result.stdout)
+        validate_remote_receipt(
+            receipt,mode=mode,before_sha=profile['before_sha256'],
+            candidate_sha=profile['new_sha256'],size=HCI_FORWARD_MANIFEST['partition_size_bytes'])
+    except (TypeError,ValueError) as error:
+        raise RuntimeError(
+            mode+' returned an invalid receipt; operation outcome must be independently '
+            'checked before retry: '+str(error)) from error
+    try:
+        with out.open('x') as stream:
+            json.dump(receipt,stream,indent=2)
+            stream.write('\n')
+    except OSError as error:
+        raise RuntimeError(
+            mode+' succeeded remotely but local receipt could not be persisted; '
+            'inspect device state before retry: '+str(error)) from error
+    print(json.dumps(receipt,indent=2))
+    return 0
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     choice=parser.add_mutually_exclusive_group()
     choice.add_argument('--stage',action='store_true')
     choice.add_argument('--flash',action='store_true')
+    parser.add_argument('--profile',choices=tuple(HCI_PROFILES),
+                        help='select the explicit HCI forward or reverse manifest')
     args=parser.parse_args(argv)
+    if args.profile:
+        mode='stage' if args.stage else 'flash' if args.flash else None
+        return main_hci_profile(args.profile,mode)
     try:
         image=validate_host_artifacts(
             IMAGE,ROOT/'builds/native_handoff_v3.img',
