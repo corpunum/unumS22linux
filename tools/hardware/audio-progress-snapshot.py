@@ -153,18 +153,27 @@ def parse_hw_params(text):
 
 
 def period_progress(samples):
-    """Infer elapsed ALSA periods from hw_ptr; this is not an IRQ counter."""
+    """Infer periods within one observed RUNNING window; this is not an IRQ counter."""
     if not isinstance(samples, list) or len(samples) > 256:
         return {'verified': False, 'periods_advanced': 0,
                 'reason': 'invalid sample collection', 'irq_counter_available': False}
     points = []
     period_sizes = set()
+    gap_after_running = False
     for sample in samples:
         if not isinstance(sample, dict):
+            if points:
+                gap_after_running = True
             continue
         alsa = sample.get('alsa_counters')
         if not isinstance(alsa, dict) or alsa.get('state') != 'RUNNING':
+            if points:
+                gap_after_running = True
             continue
+        if gap_after_running:
+            return {'verified': False, 'periods_advanced': 0,
+                    'reason': 'RUNNING observations separated by a missing or non-RUNNING sample',
+                    'irq_counter_available': False}
         hw_ptr = alsa.get('hw_ptr')
         timestamp = sample.get('monotonic')
         hw_params = sample.get('hw_params_parsed')
