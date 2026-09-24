@@ -15,6 +15,7 @@ import stat
 import subprocess
 import time
 import urllib.request
+from pi_readiness import inspect_pi_session, readiness_report, runtime_process_readiness
 
 BASE = Path('/srv/s22/agent-web')
 ARCH = Path('/mnt/omarchy-trial')
@@ -70,13 +71,70 @@ def preflight():
         assert digest(ARCH / name.lstrip('/')) == expected
     for path in [ARCH / TTYD.lstrip('/'), ARCH / TMUX.lstrip('/'),
                  *(ARCH / name.lstrip('/') for name in TMUX_LIBS),
-                 ARCH / 'usr/local/bin/pi-web-session', BASE / 'start-agent-web.py']:
+                 ARCH / 'usr/local/bin/pi-web-session', BASE / 'start-agent-web.py',
+                 BASE / 'pi_readiness.py']:
         info = path.stat()
         assert not path.is_symlink() and info.st_uid == 0 and not info.st_mode & 0o022, path
     assert (ARCH / 'home/alarm/.pi/agent/web-sessions').stat().st_uid == 1000
     op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with op.open('http://127.0.0.1:8089/health', timeout=4) as response:
         assert json.load(response)['status'] == 'ok'
+
+
+def endpoint_ready(url, headers=None, *, expected_json_status=None):
+    try:
+        op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        request = urllib.request.Request(url, headers=headers or {})
+        with op.open(request, timeout=2) as response:
+            if response.status != 200:
+                return False
+            if expected_json_status is None:
+                return True
+            return json.load(response).get('status') == expected_json_status
+    except Exception:
+        return False
+
+
+def tmux_query_command():
+    return user_command([
+        MUSL, '--library-path', '/opt/s22-pi-web/tmux-musl/lib', TMUX,
+        '-f', '/dev/null', '-S', TMUX_SOCKET,
+        'list-panes', '-a', '-F', '#{session_name}\t#{pane_pid}',
+    ])
+
+
+def tmux_panes():
+    return subprocess.run(tmux_query_command(), capture_output=True, text=True,
+                          timeout=5, check=False)
+
+
+def collect_readiness():
+    """Read service readiness without starting or attaching a Pi session."""
+    try:
+        runtime = json.loads(Path('/run/s22-persistent-ready.json').read_text())
+    except (OSError, ValueError):
+        runtime = None
+    processes = runtime_process_readiness(runtime)
+    model_ready = (processes['model_process'] and
+                   endpoint_ready('http://127.0.0.1:8089/health',
+                                  expected_json_status='ok'))
+    try:
+        web_process_ready = running() is not None
+    except (OSError, RuntimeError, ValueError, KeyError):
+        web_process_ready = False
+    web_ready = (web_process_ready and endpoint_ready(
+        'http://127.0.0.1:8093/',
+        {'Tailscale-User-Login': 'local-readiness-check'}))
+    session = inspect_pi_session(
+        ARCH / TMUX_SOCKET.lstrip('/'),
+        query=tmux_panes,
+    )
+    return readiness_report(
+        web_ready=web_ready,
+        model_ready=model_ready,
+        desktop_ready=processes['desktop'],
+        pi_session_status=session['status'],
+    )
 
 
 def running():
@@ -127,7 +185,15 @@ def main():
     action = parser.add_mutually_exclusive_group()
     action.add_argument('--start', action='store_true')
     action.add_argument('--stop', action='store_true')
+    action.add_argument('--status', action='store_true',
+                        help='read service and on-demand Pi session readiness')
     args = parser.parse_args()
+    if args.status:
+        if os.geteuid() != 0:
+            raise RuntimeError('Root required for verified readiness inspection')
+        result = collect_readiness()
+        print(json.dumps(result, sort_keys=True))
+        return 0 if result['required_services_ready'] else 2
     if not args.stop:
         preflight()
     elif os.geteuid() != 0:
