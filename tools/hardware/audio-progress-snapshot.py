@@ -197,16 +197,15 @@ def period_progress(samples):
     if len(period_sizes) != 1:
         return {'verified': False, 'periods_advanced': 0,
                 'reason': 'period size unavailable or changed', 'irq_counter_available': False}
-    if any(sequence is not None for sequence in sequences):
-        if any(sequence is None for sequence in sequences):
+    if any(sequence is None for sequence in sequences):
+        return {'verified': False, 'periods_advanced': 0,
+                'reason': 'capture sequence missing inside RUNNING observation window',
+                'irq_counter_available': False}
+    for previous, current in zip(sequences, sequences[1:]):
+        if current != previous + 1:
             return {'verified': False, 'periods_advanced': 0,
-                    'reason': 'capture sequence missing inside RUNNING observation window',
+                    'reason': 'capture sequence gap inside RUNNING observation window',
                     'irq_counter_available': False}
-        for previous, current in zip(sequences, sequences[1:]):
-            if current != previous + 1:
-                return {'verified': False, 'periods_advanced': 0,
-                        'reason': 'capture sequence gap inside RUNNING observation window',
-                        'irq_counter_available': False}
     for previous, current in zip(points, points[1:]):
         if current[0] <= previous[0] or current[1] < previous[1]:
             return {'verified': False, 'periods_advanced': 0,

@@ -42,9 +42,9 @@ class Planner(unittest.TestCase):
             'channels':2,'rate':48000,'period_size':1024,'buffer_size':8192})
     def test_period_boundaries_are_a_proxy_not_irq_or_sound_acceptance(self):
         samples=[
-            {'monotonic':1.0,'alsa_counters':{'state':'RUNNING','hw_ptr':1024},
+            {'sequence':0,'monotonic':1.0,'alsa_counters':{'state':'RUNNING','hw_ptr':1024},
              'hw_params_parsed':{'period_size':1024}},
-            {'monotonic':2.0,'alsa_counters':{'state':'RUNNING','hw_ptr':3072},
+            {'sequence':1,'monotonic':2.0,'alsa_counters':{'state':'RUNNING','hw_ptr':3072},
              'hw_params_parsed':{'period_size':1024}},
         ]
         result=module.period_progress(samples)
@@ -53,7 +53,7 @@ class Planner(unittest.TestCase):
         self.assertFalse(result['irq_counter_available'])
         self.assertIn('proxy',result['irq_counter_reason'])
         self.assertIn('Observed samples only',result['continuity_scope'])
-    def test_period_progress_rejects_missing_capture_sequence(self):
+    def test_period_progress_rejects_capture_sequence_gap(self):
         samples=[
             {'sequence':0,'monotonic':1.0,
              'alsa_counters':{'state':'RUNNING','hw_ptr':0},
@@ -66,41 +66,65 @@ class Planner(unittest.TestCase):
         self.assertFalse(result['verified'])
         self.assertEqual(result['periods_advanced'],0)
         self.assertIn('sequence gap',result['reason'])
+    def test_period_progress_requires_complete_valid_sequences(self):
+        def running(timestamp, pointer, sequence_marker=None, include_sequence=True):
+            sample={'monotonic':timestamp,
+                    'alsa_counters':{'state':'RUNNING','hw_ptr':pointer},
+                    'hw_params_parsed':{'period_size':1024}}
+            if include_sequence:
+                sample['sequence']=sequence_marker
+            return sample
+        all_missing=[running(1.0,0,include_sequence=False),
+                     running(2.0,2048,include_sequence=False)]
+        mixed=[running(1.0,0,0),running(2.0,2048,include_sequence=False)]
+        for samples in (all_missing,mixed):
+            with self.subTest(samples=samples):
+                result=module.period_progress(samples)
+                self.assertFalse(result['verified'])
+                self.assertIn('sequence missing',result['reason'])
+        for invalid in (None,True,-1,'1'):
+            with self.subTest(invalid=invalid):
+                result=module.period_progress([running(1.0,0,0),
+                                               running(2.0,2048,invalid)])
+                self.assertFalse(result['verified'])
+                self.assertEqual(result['reason'],'invalid RUNNING sample')
     def test_period_progress_fails_closed_on_missing_geometry_and_time_regression(self):
         samples=[
-            {'monotonic':2.0,'alsa_counters':{'state':'RUNNING','hw_ptr':0},
+            {'sequence':0,'monotonic':2.0,'alsa_counters':{'state':'RUNNING','hw_ptr':0},
              'hw_params_parsed':{'period_size':1024}},
-            {'monotonic':1.0,'alsa_counters':{'state':'RUNNING','hw_ptr':2048},
+            {'sequence':1,'monotonic':1.0,'alsa_counters':{'state':'RUNNING','hw_ptr':2048},
              'hw_params_parsed':{'period_size':1024}},
         ]
         self.assertFalse(module.period_progress(samples)['verified'])
         self.assertFalse(module.period_progress([samples[0],{
-            'monotonic':3.0,'alsa_counters':{'state':'RUNNING','hw_ptr':2048},
+            'sequence':1,'monotonic':3.0,'alsa_counters':{'state':'RUNNING','hw_ptr':2048},
             'hw_params_parsed':{}}])['verified'])
     def test_period_progress_rejects_gaps_inside_running_window(self):
-        def running(timestamp, pointer):
-            return {'monotonic':timestamp,
+        def running(timestamp, pointer, sequence):
+            return {'sequence':sequence,'monotonic':timestamp,
                     'alsa_counters':{'state':'RUNNING','hw_ptr':pointer},
                     'hw_params_parsed':{'period_size':1024}}
         gaps=(
-            {'error_type':'OSError','monotonic':1.5,'sample_monotonic_ns':1500000000},
-            {'monotonic':1.5,'alsa_counters':{'state':'XRUN','hw_ptr':1024},
+            {'sequence':1,'error_type':'OSError','monotonic':1.5,
+             'sample_monotonic_ns':1500000000},
+            {'sequence':1,'monotonic':1.5,'alsa_counters':{'state':'XRUN','hw_ptr':1024},
              'hw_params_parsed':{'period_size':1024}},
         )
         for gap in gaps:
             with self.subTest(gap=gap):
-                result=module.period_progress([running(1.0,0),gap,running(2.0,2048)])
+                result=module.period_progress([running(1.0,0,0),gap,
+                                               running(2.0,2048,2)])
                 self.assertFalse(result['verified'])
                 self.assertEqual(result['periods_advanced'],0)
                 self.assertIn('separated',result['reason'])
     def test_nonrunning_samples_outside_running_window_do_not_hide_progress(self):
         samples=[
-            {'sequence':0,'monotonic':0.5,'alsa_counters':{'state':'PREPARED'}},
+            {'monotonic':0.5,'alsa_counters':{'state':'PREPARED'}},
             {'sequence':1,'monotonic':1.0,'alsa_counters':{'state':'RUNNING','hw_ptr':0},
              'hw_params_parsed':{'period_size':1024}},
             {'sequence':2,'monotonic':2.0,'alsa_counters':{'state':'RUNNING','hw_ptr':2048},
              'hw_params_parsed':{'period_size':1024}},
-            {'sequence':3,'monotonic':2.5,'alsa_counters':{'state':'SETUP'}},
+            {'monotonic':2.5,'alsa_counters':{'state':'SETUP'}},
         ]
         self.assertTrue(module.period_progress(samples)['verified'])
     def test_timed_read_captures_monotonic_interval_and_bounds_content(self):
