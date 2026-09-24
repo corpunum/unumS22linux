@@ -360,6 +360,8 @@ class _SandboxPath:
         return self.virtual
 
     def read_text(self, *args, **kwargs):
+        if self.virtual == "/proc/self/mountinfo":
+            return self.sandbox.read_mountinfo()
         return self.real.read_text(*args, **kwargs)
 
     def stat(self):
@@ -429,8 +431,14 @@ class _SandboxOS:
     def open(self, path, flags, mode=0o777, *, dir_fd=None):
         if dir_fd is None:
             mapped = self._mapped_path(path)
-            fd = self.real.open(mapped, flags, mode)
             actual_path = Path(mapped)
+            if (actual_path == self.sandbox.partition
+                    and flags & os.O_ACCMODE == os.O_RDWR
+                    and self.sandbox.change_partition_on_write_open_byte is not None):
+                self.sandbox.write_partition(
+                    self.sandbox.change_partition_on_write_open_byte
+                )
+            fd = self.real.open(mapped, flags, mode)
         else:
             fd = self.real.open(path, flags, mode, dir_fd=dir_fd)
             parent = self.fd_paths.get(dir_fd)
@@ -522,6 +530,9 @@ class RenderedRemoteSandbox:
         self.device_write_bytes = 0
         self.current_operation_writes = 0
         self.fail_partition_write_after = None
+        self.change_partition_on_write_open_byte = None
+        self.mount_after_initial_validation = False
+        self.current_operation_mount_reads = 0
         self.staged_write_bytes = 0
         self.current_operation_staged_writes = 0
         self.fail_staged_write_after = None
@@ -579,9 +590,17 @@ class RenderedRemoteSandbox:
     def write_partition(self, byte_value):
         self.write_repeated(self.partition, byte_value)
 
+    def read_mountinfo(self):
+        self.current_operation_mount_reads += 1
+        if (self.mount_after_initial_validation
+                and self.current_operation_mount_reads >= 2):
+            return "1 1 259:0 / /mnt/recovery rw - ext4 fake rw\n"
+        return (self.root / "proc/self/mountinfo").read_text()
+
     def execute(self, mode, *, candidate_input=False):
         self.current_operation_writes = 0
         self.current_operation_staged_writes = 0
+        self.current_operation_mount_reads = 0
         input_stream = _RepeatedInput(self.CANDIDATE_BYTE, self.SIZE) if candidate_input \
             else _RepeatedInput(self.CANDIDATE_BYTE, 0)
         fake_sys = SimpleNamespace(
@@ -703,14 +722,52 @@ class EmbeddedTargetGateTests(unittest.TestCase):
 
     def test_partial_staging_write_emits_no_success_receipt_and_never_flashes(self):
         sandbox = RenderedRemoteSandbox()
-        sandbox.fail_staged_write_after = 4096
+        sandbox.fail_staged_write_after = sandbox.SIZE + 4096
         try:
             result = sandbox.execute("stage", candidate_input=True)
             self.assertIsNotNone(result.error)
             self.assertIn("staging did not complete", str(result.error))
             self.assertIn("outcome may be partial", str(result.error))
             self.assertEqual(result.stdout, "")
-            self.assertEqual(sandbox.current_operation_staged_writes, 4096)
+            self.assertEqual(
+                sandbox.current_operation_staged_writes, sandbox.SIZE + 4096,
+            )
+            self.assertEqual(sandbox.device_write_bytes, 0)
+
+            sandbox.fail_staged_write_after = None
+            flash_partial = sandbox.execute("flash")
+            self.assertIsNotNone(flash_partial.error)
+            self.assertIn("staged candidate has incorrect size", str(flash_partial.error))
+            self.assertEqual(flash_partial.stdout, "")
+            self.assertEqual(sandbox.device_write_bytes, 0)
+        finally:
+            sandbox.close()
+
+    def test_mount_state_is_rechecked_after_open_and_before_partition_write(self):
+        sandbox = RenderedRemoteSandbox()
+        try:
+            staged = sandbox.execute("stage", candidate_input=True)
+            self.assertIsNone(staged.error, staged.stdout)
+            sandbox.mount_after_initial_validation = True
+            result = sandbox.execute("flash")
+            self.assertIsNotNone(result.error)
+            self.assertIn("RECOVERY target became mounted", str(result.error))
+            self.assertEqual(sandbox.current_operation_mount_reads, 2)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(sandbox.device_write_bytes, 0)
+        finally:
+            sandbox.close()
+
+    def test_changed_partition_baseline_is_rechecked_from_opened_write_fd(self):
+        sandbox = RenderedRemoteSandbox()
+        try:
+            staged = sandbox.execute("stage", candidate_input=True)
+            self.assertIsNone(staged.error, staged.stdout)
+            sandbox.change_partition_on_write_open_byte = 0x44
+            result = sandbox.execute("flash")
+            self.assertIsNotNone(result.error)
+            self.assertIn("RECOVERY baseline changed before write", str(result.error))
+            self.assertEqual(result.stdout, "")
             self.assertEqual(sandbox.device_write_bytes, 0)
         finally:
             sandbox.close()
