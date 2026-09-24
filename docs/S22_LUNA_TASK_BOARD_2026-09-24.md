@@ -2,8 +2,10 @@
 
 This checkpoint continues the existing review branch. It does not replace the
 historical board or claim that a new driver works. The original dirty checkout
-and current phone installation were preserved. No device write, reboot,
-package install, image build, or driver trial occurred in this wave.
+and current phone installation were preserved. The initial checkpoint below
+preceded candidate packaging; the HCI follow-up at the end records the host
+image build/package completed afterward. No device write, reboot, package
+install, or driver trial occurred.
 
 ## Luna workers
 
@@ -216,3 +218,60 @@ pairing, new Wi-Fi acceptance or independent rescue was established.
 
 The original owner checkout remains dirty and untouched. `master` remains
 unchanged; this document and code are for the unmerged review branch only.
+
+## 2026-09-24 HCI candidate follow-up — supersedes the earlier HCI blocker
+
+The request to build the HCI candidate was host-side and did not require
+physical phone access. The earlier circular task-board instruction not to
+build until a clean-release candidate passed checks is superseded: host build
+and compatibility validation are complete; deployment still waits for the
+independent Download Mode rescue check and operation-specific authorization.
+
+An explicitly selected `gpt-6-luna` implementation worker with Max reasoning
+completed the loader-compatible preflight and tests in isolated worktree
+`/tmp/s22-hci-vermagic-20260924`, commit
+`5a968184153bf3122a0a2785fceb350a29c1f245`, integrated as `3c21cf7`. Runtime
+session metadata was unavailable, so the evidence is the explicit configured
+selection, not runtime-reported identity. Its 21 focused tests passed in
+normal, `python3 -O`, and `PYTHONOPTIMIZE=1` modes. Attempts to start additional
+independent workers were refused by the collaboration runtime with
+`agent thread limit reached`; no worker was fabricated or silently replaced.
+
+Pinned `kernel/module.c` semantics now govern vermagic checks. All 324
+ramdisk modules and the selected external Lineage WLAN module pass the loader
+comparison and recorded CRC checks. The release prefix may differ when
+`__versions` exists and remaining vermagic flags match; version-section
+presence, `module_layout`, missing/mismatched CRCs and evidence completeness
+are checked separately. Source/artifact provenance and operational exact-name
+assumptions are separate verdicts. The inactive FYI3 WLAN alternate fails its
+CRC checks and is not included. The known candidate source inventory is 325;
+actual loaded membership and any further boot/runtime sources remain unknown
+until a live query.
+
+The coordinator reused the clean, committed HCI-only kernel output from source
+commit `f52cbbd7e2783d529e1e5742d94e0fd64889bbdf`; no heavy rebuild was needed.
+Source/config/toolchain/image hashes and reproducible packaging procedure are
+in [the HCI trial record](S22_HCI_CANDIDATE_TRIAL_2026-09-24.md). The local
+RECOVERY image SHA-256 is
+`42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5`. The
+preflight passed with 17,042 version records and 325 `module_layout` records.
+This is host evidence only: no candidate boot, raw HCI socket test, radio
+attachment, scanning or pairing has occurred.
+
+The candidate keeps the exact release name currently required by the
+initramfs and release-sensitive Wi-Fi/audio/deployment helpers. The source
+commit and byte hashes expose the changed kernel; it was not binary-edited or
+force-loaded. Rollback is the existing host-accessible native RECOVERY image
+`builds/audio-extra-v2-20260922/recovery.img`; historical `/dev/block/sda16`
+readback matched at 2026-09-24 05:09 UTC and the host copy was re-hashed.
+Current phone state was not re-queried during this preparation.
+
+Installed `samloader` help confirms read-only `detect --verbose` and explicit
+`flash --verbose --no-reboot -p RECOVERY <image>`. The exact controlled
+procedure, including Download-to-RECOVERY buttons, baseline gate, raw-socket
+test and RECOVERY-only rollback, is in the trial record. The sole next owner
+action is to attend with the phone connected to the actual recovery host, put
+it in Download Mode and confirm the screen. The coordinator will first run
+read-only detection and verify candidate/rollback hashes; the flash still
+requires explicit authorization for that specific RECOVERY write. `master`
+remains unchanged and no image/module/firmware artifact is published.
