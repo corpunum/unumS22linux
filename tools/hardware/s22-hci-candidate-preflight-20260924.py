@@ -857,6 +857,25 @@ def uts_release(path: Path) -> str:
     return match[1]
 
 
+def manifest_source_commit_issue(manifest: dict, source_head: str) -> str | None:
+    build_provenance = manifest.get("kernel_build_provenance")
+    if not isinstance(build_provenance, dict):
+        return None
+    manifest_commit = build_provenance.get("source_commit")
+    if manifest_commit is None:
+        if build_provenance.get("complete") is True:
+            return "candidate manifest claims complete build provenance without a source commit"
+        return None
+    if not isinstance(manifest_commit, str) or not manifest_commit:
+        return "candidate manifest kernel build source commit is malformed"
+    if manifest_commit != source_head:
+        return (
+            "candidate manifest kernel build source commit "
+            f"{manifest_commit} differs from O-tree source HEAD {source_head}"
+        )
+    return None
+
+
 def inspect_candidate(artifact_root: Path, image_path: Path,
                       manifest_path: Path, o_tree: Path) -> dict:
     artifact_root = artifact_root.resolve(strict=True)
@@ -933,6 +952,9 @@ def inspect_candidate(artifact_root: Path, image_path: Path,
     source_description = git_value(source, "describe", "--always", "--dirty")
     source_status = git_value(source, "status", "--porcelain", "--untracked-files=all")
     dirty_files = [line[2:].strip() for line in source_status.splitlines() if line]
+    manifest_source_issue = manifest_source_commit_issue(manifest, source_head)
+    if manifest_source_issue:
+        provenance_issues.append(manifest_source_issue)
     if dirty_files:
         provenance_issues.append(
             "kernel build source tree is dirty; source revision is not a complete provenance key"

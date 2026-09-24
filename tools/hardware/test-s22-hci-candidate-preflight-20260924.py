@@ -271,6 +271,22 @@ class CandidateModuleSourcePlanTests(unittest.TestCase):
         self.assertEqual(GATE.EXPECTED_RAMDISK_MODULE_COUNT + 1, 325)
 
 
+class ManifestSourceProvenanceTests(unittest.TestCase):
+    def test_matching_manifest_source_commit_is_accepted(self):
+        manifest = {"kernel_build_provenance": {
+            "complete": True, "source_commit": "abc123",
+        }}
+        self.assertIsNone(GATE.manifest_source_commit_issue(manifest, "abc123"))
+
+    def test_mismatched_manifest_source_commit_is_reported(self):
+        manifest = {"kernel_build_provenance": {
+            "complete": True, "source_commit": "abc123",
+        }}
+        issue = GATE.manifest_source_commit_issue(manifest, "def456")
+        self.assertIn("abc123", issue)
+        self.assertIn("def456", issue)
+
+
 class ModuleSymbolVersionComparisonTests(unittest.TestCase):
     def test_candidate_symvers_accepts_every_imported_crc(self):
         result = GATE.compare_symbol_versions(

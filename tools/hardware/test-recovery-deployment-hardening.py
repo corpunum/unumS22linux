@@ -1102,6 +1102,7 @@ class AvbVerificationTests(unittest.TestCase):
         output = self.root / "out"
         image = output / "arch/arm64/boot/Image"
         image.parent.mkdir(parents=True)
+        (output / "source").symlink_to(source, target_is_directory=True)
         image.write_bytes(b"candidate kernel")
         (output / "include/config").mkdir(parents=True)
         (output / "include/config/kernel.release").write_text("5.10.260-fixture\n")
@@ -1135,6 +1136,17 @@ class AvbVerificationTests(unittest.TestCase):
             BUILDER.kernel_build_provenance(source, output, [Path(sys.executable)], "make Image modules")
         with self.assertRaisesRegex(RuntimeError, "must be supplied together"):
             BUILDER.kernel_build_provenance(source, output, [], "make Image modules")
+
+    def test_kernel_provenance_rejects_output_linked_to_different_source(self):
+        source, output = self.provenance_fixture()
+        unrelated = self.root / "unrelated-source"
+        unrelated.mkdir()
+        (output / "source").unlink()
+        (output / "source").symlink_to(unrelated, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "source link does not match"):
+            BUILDER.kernel_build_provenance(
+                source, output, [Path(sys.executable)], "make Image modules",
+            )
 
     def test_real_avb_footer_verifies_and_corruption_fails(self):
         if not self.avbtool.is_file():

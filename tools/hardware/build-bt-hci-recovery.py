@@ -75,6 +75,12 @@ def kernel_build_provenance(source_tree: Path | None, build_output: Path | None,
 
     source = source_tree.resolve(strict=True)
     output = build_output.resolve(strict=True)
+    if output != source:
+        source_link = output / "source"
+        if not source_link.exists():
+            raise RuntimeError("build output must identify its kernel source tree with a source link")
+        if source_link.resolve(strict=True) != source:
+            raise RuntimeError("build output source link does not match the supplied source tree")
     status = git_output(source, "status", "--porcelain", "--untracked-files=all")
     if status:
         raise RuntimeError("kernel source tree must be clean and committed before packaging")
