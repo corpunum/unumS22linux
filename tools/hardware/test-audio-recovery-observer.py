@@ -2,8 +2,10 @@
 """Focused host-only policy tests for the RECOVERY observer and HCI smoke."""
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -12,6 +14,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import urllib.request
 import unittest
 from unittest import mock
 
@@ -133,6 +136,94 @@ def completed_observer(**changes):
     return value
 
 
+def write_snapshot_fixture(root, *, persistent_uuid, mountinfo):
+    def write(relative, value):
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(value, bytes):
+            path.write_bytes(value)
+        else:
+            path.write_text(value, encoding="utf-8")
+
+    descriptor = bytes.fromhex(observer.EXPECTED_GNU_BUILD_ID)
+    notes = (struct.pack("<III", 4, len(descriptor), 3) + b"GNU\0" + descriptor +
+             b"\0" * ((-len(descriptor)) % 4))
+    write("run/s22-persistent-ready.json", json.dumps({"uuid": persistent_uuid}))
+    write("proc/self/mountinfo", mountinfo)
+    write("proc/boot_reset", "[ 900] / R / INFORM3(12345674) > RECOVERY >\n")
+    write("proc/modules", "wlan 1 0 - Live 0x0\ncfg80211 1 0 - Live 0x0\n")
+    write("proc/1/comm", "native-guardian\n")
+    for pid, comm in ((2, "Hyprland"), (3, "pi"), (4, "tmux: server"), (5, "ttyd")):
+        write(f"proc/{pid}/comm", comm + "\n")
+    write("proc/sys/kernel/random/boot_id", "candidate-boot-id\n")
+    write("proc/sys/kernel/osrelease", "5.10.260-gfixture-custom\n")
+    write("proc/uptime", "5000.00 0.00\n")
+    write("proc/device-tree/model", "Samsung R0S board based on S5E9925\0")
+    write("proc/device-tree/compatible", b"samsung,armv8\0samsung,s5e9925\0")
+    write("proc/cmdline", "androidboot.em.model=SM-S901B androidboot.hardware=s5e9925 "
+          "androidboot.bootloader=S901BXXUfixture\n")
+    write("sys/kernel/notes", notes)
+    for component in observer.REQUIRED_HCI_COMPONENTS:
+        (root / "sys/module" / component).mkdir(parents=True, exist_ok=True)
+    write("sys/class/net/wlan0/operstate", "up\n")
+    write("sys/class/net/wlan0/carrier", "1\n")
+    write("sys/class/power_supply/battery/status", "Full\n")
+    write("sys/class/power_supply/battery/capacity", "100\n")
+    write("sys/class/power_supply/battery/temp", "274\n")
+    write("sys/class/thermal/thermal_zone0/temp", "39000\n")
+    write("sys/class/thermal/thermal_zone1/temp", "38000\n")
+    (root / "run/native-ready").parent.mkdir(parents=True, exist_ok=True)
+    (root / "run/native-ready").touch()
+
+
+def execute_snapshot_fixture(root):
+    redirect_paths = f"""
+_fixture_root = pathlib.Path({str(root)!r})
+_fixture_open = open
+def open(name, mode='r', *args, **kwargs):
+ path = os.fspath(name)
+ fixture_prefix = os.fspath(_fixture_root) + os.sep
+ if path.startswith('/') and path != os.fspath(_fixture_root) and not path.startswith(fixture_prefix):
+  name = _fixture_root / path.lstrip('/')
+ return _fixture_open(name, mode, *args, **kwargs)
+def p(name):
+ path = os.fspath(name)
+ fixture_prefix = os.fspath(_fixture_root) + os.sep
+ if path == os.fspath(_fixture_root) or path.startswith(fixture_prefix):
+  return pathlib.Path(path)
+ if path.startswith('/'):
+  return _fixture_root / path.lstrip('/')
+ return pathlib.Path(name)
+"""
+    script = observer.render_snapshot_script().replace(
+        "ready=read(", redirect_paths + "\nready=read(", 1)
+
+    class FakeResponse(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            self.close()
+
+    class FakeOpener:
+        def open(self, url, timeout):
+            payload = (b'{"status":"ok"}' if url.endswith("/health") else
+                       b'[{"is_processing":false}]')
+            return FakeResponse(payload)
+
+    def fake_run(command, **kwargs):
+        if command == ["dmesg"]:
+            return subprocess.CompletedProcess(command, 0, "", "")
+        raise AssertionError(f"unexpected snapshot command: {command!r}")
+
+    output = io.StringIO()
+    with mock.patch.object(observer.subprocess, "run", side_effect=fake_run), \
+            mock.patch.object(urllib.request, "build_opener", return_value=FakeOpener()), \
+            contextlib.redirect_stdout(output):
+        exec(compile(script, "<observer snapshot fixture>", "exec"), {})
+    return json.loads(output.getvalue())
+
+
 class ObserverPolicyTests(unittest.TestCase):
     def test_default_observer_output_is_private_local_state_not_repo_rootfs(self):
         self.assertEqual(observer.OUT, observer.RIG_HOME /
@@ -220,6 +311,48 @@ class ObserverPolicyTests(unittest.TestCase):
         for changes in cases:
             with self.subTest(changes=changes), self.assertRaises(observer.ObserverError):
                 observer.validate_snapshot(snapshot(**changes), post_reboot=True)
+
+    def test_executed_snapshot_requires_expected_uuid_and_exact_rw_ext4_mount(self):
+        def mountinfo(device="259:20", mountpoint="/srv/s22", options="rw,relatime",
+                      filesystem="ext4"):
+            return (f"36 25 {device} / {mountpoint} {options} shared:1 - "
+                    f"{filesystem} /dev/mmcblk0p1 rw,relatime\n")
+
+        cases = (
+            ("valid", observer.EXPECTED_PERSISTENT_UUID, mountinfo(), True, True),
+            ("wrong UUID", "0" * 36, mountinfo(), False, True),
+            ("wrong major:minor", observer.EXPECTED_PERSISTENT_UUID,
+             mountinfo(device="259:21"), False, False),
+            ("wrong filesystem", observer.EXPECTED_PERSISTENT_UUID,
+             mountinfo(filesystem="f2fs"), False, False),
+            ("read only", observer.EXPECTED_PERSISTENT_UUID,
+             mountinfo(options="ro,relatime"), False, False),
+            ("wrong mountpoint", observer.EXPECTED_PERSISTENT_UUID,
+             mountinfo(mountpoint="/srv/other"), False, False),
+        )
+        for label, persistent_uuid, mount_record, expected_ready, expected_mount in cases:
+            with self.subTest(mount=label), tempfile.TemporaryDirectory(
+                    prefix="s22-observer-snapshot-") as temporary:
+                root = Path(temporary)
+                write_snapshot_fixture(root, persistent_uuid=persistent_uuid,
+                                       mountinfo=mount_record)
+                state = execute_snapshot_fixture(root)
+                self.assertEqual(state["persistent_ready"], {
+                    "ready": expected_ready,
+                    "mount_ready": expected_mount,
+                })
+                if expected_ready:
+                    observer.validate_snapshot(state, post_reboot=False)
+                    observer.validate_snapshot(state, post_reboot=True)
+                    self.assertEqual(state["gnu_build_id"], observer.EXPECTED_GNU_BUILD_ID)
+                    self.assertEqual(state["kernel_release"], "5.10.260-gfixture-custom")
+                    self.assertEqual(state["loaded_modules"], ["cfg80211", "wlan"])
+                    self.assertTrue(set(observer.REQUIRED_HCI_COMPONENTS).issubset(
+                        state["kernel_components"]))
+                else:
+                    with self.assertRaisesRegex(observer.ObserverError,
+                                                "native readiness is not established"):
+                        observer.validate_snapshot(state, post_reboot=False)
 
     def test_hci_mode_rejects_wrong_target_mode_hash_or_incomplete_receipts(self):
         self.assertTrue(observer.observer_receipt_valid(completed_observer()))
@@ -379,6 +512,8 @@ class ObserverPolicyTests(unittest.TestCase):
             calls = []
             reboot_calls = []
             reboot_timeouts = []
+            hash_requests = []
+            snapshot_requests = []
             usb_snapshots = 0
             tick = [0.0]
 
@@ -392,12 +527,14 @@ class ObserverPolicyTests(unittest.TestCase):
                     tick[0] += 0.25
                     raise subprocess.TimeoutExpired(command, kwargs["timeout"])
                 if remote == "sha256sum /dev/block/by-name/recovery":
+                    hash_requests.append(command)
                     return subprocess.CompletedProcess(
                         command, 0,
                         observer.EXPECTED_FLASH_SHA256 + "  /dev/block/by-name/recovery\n", "")
                 if remote.startswith("python3 -c ") and "addresses=" in remote:
                             return subprocess.CompletedProcess(command, 0, "192.0.2.10\n", "")
                 if remote.startswith("python3 -c ") and "device-tree/model" in remote:
+                    snapshot_requests.append(command)
                     if command[0] == "/bin/bash":
                         usb_snapshots += 1
                         if usb_snapshots == 1:
@@ -435,6 +572,17 @@ class ObserverPolicyTests(unittest.TestCase):
             self.assertLessEqual(result["observed_seconds"], 2)
             self.assertEqual(result["baseline_recovery_sha256"], observer.EXPECTED_FLASH_SHA256)
             self.assertEqual(result["recovery_sha256_after_boot"], observer.EXPECTED_FLASH_SHA256)
+            wrapper = str(observer.ROOT / "tools/s22-ssh")
+            self.assertEqual(reboot_calls[0][0], "/bin/bash")
+            self.assertEqual(reboot_calls[0][-2], wrapper)
+            self.assertEqual(hash_requests[0][0], "/bin/bash")
+            self.assertEqual(hash_requests[0][-2], wrapper)
+            self.assertTrue(any(command[0] == "/usr/bin/ssh" and
+                                "root@192.0.2.10" in command
+                                for command in snapshot_requests))
+            self.assertTrue(any(command[0] == "/usr/bin/ssh" and
+                                "root@192.0.2.10" in command
+                                for command in hash_requests[1:]))
             with mock.patch.object(observer, "OBSERVATION_SECONDS", 2):
                 self.assertTrue(observer.observer_receipt_valid(result),
                                 json.dumps(result, sort_keys=True))
@@ -535,10 +683,12 @@ class ObserverPolicyTests(unittest.TestCase):
             root = Path(temporary)
             calls = []
             hash_routes = []
+            wifi_host = "phone-wifi.invalid"
+            wifi_state = snapshot("candidate-boot-id")
 
             def route_selector(wifi_host, tailscale_host, **kwargs):
                 self.assertEqual(wifi_host, "phone-wifi.invalid")
-                return snapshot("candidate-boot-id"), "wifi"
+                return wifi_state, "wifi"
 
             def hasher(transport, host, runner, project_root):
                 hash_routes.append((transport, host))
@@ -556,16 +706,18 @@ class ObserverPolicyTests(unittest.TestCase):
                 result = observer.run_hci_once(
                     root, "trial", completed_observer(), runner=socket_request,
                     route_selector=route_selector, hasher=hasher,
-                    wifi_host="phone-wifi.invalid", project_root=observer.ROOT)
+                    wifi_host=wifi_host, project_root=observer.ROOT)
             self.assertEqual(result["status"], "completed")
             self.assertTrue(result["remote_receipt_valid"])
-            self.assertEqual(hash_routes, [("wifi", "phone-wifi.invalid")])
+            self.assertEqual(hash_routes, [("wifi", wifi_host)])
             self.assertEqual(len(calls), 1)
             self.assertEqual(calls[0][0], "/usr/bin/ssh")
-            self.assertIn("root@phone-wifi.invalid", calls[0])
+            self.assertIn("root@" + wifi_host, calls[0])
             preflight = observer.read_json(root / "trial-hci" / "preflight.json")
             self.assertEqual(preflight["transport"], "wifi")
-            self.assertNotIn("phone-wifi.invalid", json.dumps(preflight))
+            self.assertEqual(preflight["network_state"], wifi_state["network_state"])
+            self.assertTrue(observer.network_state_valid(preflight["network_state"]))
+            self.assertNotIn(wifi_host, json.dumps(preflight))
 
     def test_hci_mode_requires_observer_receipt_before_any_device_operation(self):
         with tempfile.TemporaryDirectory(prefix="s22-observer-hci-gate-") as temporary:
