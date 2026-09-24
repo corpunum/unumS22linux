@@ -319,6 +319,18 @@ print("UNSAFE_ACCEPT");sys.exit(0)
         with self.assertRaises(FileExistsError):
             DEPLOY.persist_receipt(output,{"phase":"unexpected"})
 
+    def test_receipt_directory_sync_failure_is_not_retried(self):
+        receipts=DEPLOY.prepare_private_receipt_directory(self.root/"receipts")
+        output=receipts/"receipt.json"
+        sync=mock.Mock(side_effect=[None,OSError("injected directory fsync failure")])
+        with mock.patch.object(DEPLOY.os,"fsync",sync):
+            with self.assertRaisesRegex(OSError,"directory fsync failure"):
+                DEPLOY.persist_receipt(output,{"phase":"remote-success"})
+        self.assertEqual(sync.call_count,2)
+        self.assertTrue(output.is_file())
+        with self.assertRaises(FileExistsError):
+            DEPLOY.persist_receipt(output,{"phase":"do-not-repeat"})
+
     def test_stage_has_zero_partition_writes_and_failed_readback_has_no_success_receipt(self):
         sandbox = REMOTE_TESTS.RenderedRemoteSandbox()
         profile = DEPLOY.resolve_hci_profile("hci-forward")
