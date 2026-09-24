@@ -1089,6 +1089,53 @@ class AvbVerificationTests(unittest.TestCase):
         self.assertLess(footer, verify)
         self.assertLess(verify, publish)
 
+    def provenance_fixture(self):
+        source = self.root / "source"
+        source.mkdir()
+        subprocess.run(["git", "init", "--quiet", str(source)], check=True)
+        subprocess.run(["git", "-C", str(source), "config", "user.name", "CI"], check=True)
+        subprocess.run(["git", "-C", str(source), "config", "user.email", "ci@example.invalid"], check=True)
+        (source / "module.c").write_text("/* committed fixture */\n")
+        subprocess.run(["git", "-C", str(source), "add", "module.c"], check=True)
+        subprocess.run(["git", "-C", str(source), "commit", "--quiet", "-m", "fixture"], check=True)
+
+        output = self.root / "out"
+        image = output / "arch/arm64/boot/Image"
+        image.parent.mkdir(parents=True)
+        image.write_bytes(b"candidate kernel")
+        (output / "include/config").mkdir(parents=True)
+        (output / "include/config/kernel.release").write_text("5.10.260-fixture\n")
+        (output / ".config").write_text("CONFIG_MODVERSIONS=y\n")
+        (output / "Module.symvers").write_text("0x12345678 module_layout vmlinux EXPORT_SYMBOL\n")
+        return source, output
+
+    def test_kernel_provenance_records_clean_commit_build_inputs_and_tool_hashes(self):
+        source, output = self.provenance_fixture()
+        report = BUILDER.kernel_build_provenance(
+            source, output, [Path(sys.executable)], "make ARCH=arm64 Image modules",
+        )
+        self.assertTrue(report["complete"])
+        self.assertFalse(report["source_dirty"])
+        self.assertEqual(report["source_commit"], subprocess.check_output(
+            ["git", "-C", str(source), "rev-parse", "HEAD"], text=True,
+        ).strip())
+        self.assertEqual(report["kernel_release"], "5.10.260-fixture")
+        self.assertEqual(report["kernel_image_sha256"], hashlib.sha256(
+            (output / "arch/arm64/boot/Image").read_bytes(),
+        ).hexdigest())
+        self.assertEqual(len(report["toolchain_tools"]), 1)
+        self.assertEqual(report["toolchain_tools"][0]["sha256"], hashlib.sha256(
+            Path(sys.executable).resolve().read_bytes(),
+        ).hexdigest())
+
+    def test_kernel_provenance_rejects_dirty_source_and_partial_identity(self):
+        source, output = self.provenance_fixture()
+        (source / "untracked.c").write_text("uncommitted\n")
+        with self.assertRaisesRegex(RuntimeError, "must be clean and committed"):
+            BUILDER.kernel_build_provenance(source, output, [Path(sys.executable)], None)
+        with self.assertRaisesRegex(RuntimeError, "must be supplied together"):
+            BUILDER.kernel_build_provenance(source, output, [], None)
+
     def test_real_avb_footer_verifies_and_corruption_fails(self):
         if not self.avbtool.is_file():
             self.skipTest(f"avbtool.py unavailable: {self.avbtool}")
