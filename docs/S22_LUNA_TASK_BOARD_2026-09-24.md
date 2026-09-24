@@ -418,7 +418,9 @@ turn-context metadata did confirm `gpt-6-luna/max`.
 | `/root/trial_receipt_review` | read-only review | Confirmed public receipt/hash/reboot claims, matching observer counts, and privacy; initial staleness/causality findings were corrected and the final re-review passed. |
 
 `master` remains unchanged. The sanitized device-result update and
-independently reviewed audio fix are committed locally on the existing
-unmerged review branch; after pushing, record the remote SHA and hosted CI run
-here. Neither the host audio classifier nor the candidate trial establishes
+independently reviewed audio fix were pushed to the existing unmerged review
+branch at `c5602b3e852a409c4837fb534023578876c1b8e4`. GitHub Actions run
+[36001212193](https://github.com/corpunum/unumS22linux/actions/runs/36001212193)
+passed the runner policy and fixed hardware-free host suite on that exact
+SHA. Neither the host audio classifier nor the candidate trial establishes
 audio hardware acceptance or independent rescue.
