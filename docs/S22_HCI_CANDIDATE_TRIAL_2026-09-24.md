@@ -1,8 +1,10 @@
 # S22 HCI-only candidate and controlled trial — 2026-09-24
 
-This is a host-built, RECOVERY-only candidate. Nothing was flashed or rebooted
-for this preparation. Source/build checks and module compatibility are not
-hardware acceptance.
+This records the pre-trial host build and compatibility review for a
+RECOVERY-only candidate. No device write or reboot had occurred when that
+preparation record was first written; the later authorized attempt and exact
+rollback are recorded at the end. Source/build checks are not hardware
+acceptance.
 
 ## Candidate identity and build evidence
 
@@ -89,9 +91,10 @@ string check. It must be invoked only as `s22-reboot recovery`, never `normal`.
 The independent rollback is the host-side native RECOVERY image
 `builds/audio-extra-v2-20260922/recovery.img`, SHA-256
 `758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b`.
-That file was historically read back from `/dev/block/sda16` byte-identically
-at 2026-09-24 05:09 UTC; it was re-hashed on the host during this preparation,
-but the phone was not queried again. A separate known-good Lineage recovery
+Before the trial, that file had historical byte-identical readback evidence
+from `/dev/block/sda16` at 2026-09-24 05:09 UTC and was re-hashed on the host.
+It was subsequently staged and fully read back from the live device during
+the authorized rollback recorded below. A separate known-good Lineage recovery
 remains available at SHA-256
 `b5bf01c4a47091eb95078fc69b133b44c2b453b31c23433594c5b605e3747b55`.
 Neither rollback writes Android userdata or any other partition.
@@ -112,10 +115,17 @@ Independent hardware rescue is still **not demonstrated**. USB/Wi-Fi SSH
 through the currently running native kernel are not independent recovery
 paths. If the candidate does not return a usable native shell, remote rollback
 is not guaranteed and the device may remain inaccessible until the owner is
-physically present. The rollback image is verified on the rig and its exact
-bytes currently match the phone's RECOVERY partition.
+physically present. At the start of the trial, the rollback image was verified
+on the rig and matched RECOVERY; the completed rollback readback is recorded
+below.
 
-## Recovery-host procedure and single trial gate
+## Pre-trial recovery-host procedure (historical; superseded for this attempt)
+
+The following Download-Mode/button sequence was the proposed owner-attended
+rescue qualification before the narrow unattended authorization. It was not
+performed and remains unproven, but it was explicitly superseded as a
+prerequisite for the one RECOVERY trial recorded below. It is not a pending
+step for that completed attempt.
 
 Installed `samloader` help confirms `detect` returns immediately by default
 and `flash` supports explicit `-p RECOVERY <image>` plus `--no-reboot`.
@@ -184,7 +194,7 @@ and `flash` supports explicit `-p RECOVERY <image>` plus `--no-reboot`.
    is not the independent rescue mechanism and should not be relied on if
    USB or PID 1 is unhealthy.
 
-## Current gate
+## Pre-trial gate (historical)
 
 The host candidate, packaging verification and module compatibility checks
 are complete. Independent Download Mode rescue remains unproven and is not
@@ -195,7 +205,68 @@ stage both exact images on `/srv/s22`, and preserve receipts and a phase
 journal on the rig. The coordinator must then revalidate RECOVERY's full
 baseline hash and target, write only the candidate, verify full readback, and
 issue the single targeted recovery reboot as a separate checked action.
-Bluetooth testing remains contingent on a new boot, confirmed RECOVERY BORE
-record, candidate runtime identity, healthy readiness/assistant, and at least
-180 seconds of stable uptime. No candidate flash, reboot, raw-HCI operation or
-pairing has occurred as of this documentation update.
+This was the pre-trial checklist and is superseded by the execution record
+below. It must not be read as saying the authorized attempt did not occur.
+
+## Actual owner-authorized trial and conditional rollback
+
+The owner authorized one unattended write of the exact HCI-only candidate to
+RECOVERY, one targeted `s22-reboot recovery`, a gated raw-HCI create/close
+test, and one conditional exact rollback. Independent hardware rescue was
+not demonstrated and is not claimed.
+
+- The candidate and rollback were staged on `/srv/s22`; both staged files
+  were independently checked at 100663296 bytes and against their exact
+  manifest SHA-256 values. The rollback staged alongside the candidate was
+  the exact image below.
+- The candidate was written once to `/dev/sda16` (RECOVERY, 259:0). The
+  existing deployment helper flushed the write and verified a full-partition
+  readback matching `42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5`.
+  No reboot was combined with the write.
+- Exactly one targeted candidate recovery reboot was requested. SSH
+  disconnected, so the request receipt was `UNKNOWN` and no retry was made.
+  A new BORE RECOVERY record and the candidate GNU build ID
+  `b2dda820b18d410d9bf12f1bd2584567d545991d` subsequently confirmed that the
+  intended candidate booted.
+- Candidate dmesg contained ten `blocked for more than 120 seconds` warnings
+  and ten call-trace markers for TrustZone worker/log threads. Across
+  saved candidate samples through approximately 433 seconds of candidate
+  uptime, the Pi process existed but its tmux server did not; the Pi assistant was therefore
+  not ready. These observations triggered the authorized conservative
+  rollback. Source review found that the TrustZone worker's uninterruptible
+  wait is intentional; these warnings alone do not establish a new kernel
+  defect or implicate the HCI change. The pinned source path is
+  `drivers/misc/tzdev/core/kthread_pool.c` (worker wait/schedule path) and
+  `drivers/misc/tzdev/core/iwlog.c` (log event wait). A paired full rollback
+  dmesg capture was not made. Pi tmux also remained absent after rollback, so that readiness
+  issue is not shown to be candidate-specific. HCI testing was not attempted:
+  zero raw-socket attempts, controller attachments, scans, or pairings.
+- The conditional exact rollback was staged, re-read, and checked. It was
+  written once to RECOVERY with the reverse profile; a complete readback
+  matched `758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b`.
+  Exactly one targeted rollback recovery reboot was requested. That SSH
+  request also returned `UNKNOWN`; it was not retried. The phone then exposed
+  a new BORE RECOVERY record, the exact rollback partition hash, and the
+  rollback kernel GNU build ID `b651f4a3df19b10a0ce633b166e01d2758de44de`.
+- A private, address-redacted, ten-minute rollback observation completed with
+  58/58 valid snapshots on the same RECOVERY boot and expected rollback build
+  ID. Full-partition hash reads at the observation start and final sample both
+  matched the exact rollback image. Native PID 1, persistent storage, health and
+  idle checks, Hyprland, WLAN, required modules/components, and power remained
+  ready; the bounded dmesg classifier reported no serious-fault patterns.
+  At the final sample (about 960 seconds uptime), `pi` and `ttyd` were present
+  but `tmux` remained absent. The native rollback is verified, but full
+  resident-assistant restoration is not.
+
+Host hardware-free regressions passed in normal and optimized Python modes;
+the three AVB-fixture tests were skipped because the pinned local avbtool
+fixture is unavailable in this review worktree. The rollback and candidate
+flash receipts are kept privately on the rig. Only the sanitized receipt
+summary in [`evidence/s22-hci-trial-20260924.json`](../evidence/s22-hci-trial-20260924.json)
+is published; no image, firmware, private trace, boot ID, or network identifier
+is included.
+
+Hardware acceptance remains **unproven**. Independent hardware rescue remains
+**not demonstrated**. The HCI candidate is not accepted for continued use.
+Before any later candidate trial, determine whether these TrustZone warnings
+represent a real liveness fault and restore a healthy resident Pi/tmux session.
