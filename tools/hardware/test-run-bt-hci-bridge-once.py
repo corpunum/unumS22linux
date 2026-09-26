@@ -140,7 +140,7 @@ class AdapterTests(unittest.TestCase):
         self.events.append("controllers")
         return {"boot_id": boot_id, "controllers": list(names)}
 
-    def invoke_board(self, board, name):
+    def invoke_board(self, board, name, *, kernel_delta=b""):
         self.events.append("board_main")
         self.assertEqual(name, adapter.TRIAL_ID)
         self.assertEqual(board.BINARY, adapter.ARTIFACT)
@@ -154,7 +154,7 @@ class AdapterTests(unittest.TestCase):
         trace_data = b"host-only syscall trace\n"
         (path / "strace.txt").write_bytes(trace_data)
         os.chmod(path / "strace.txt", 0o600)
-        (path / "kernel-delta.txt").write_text("", encoding="utf-8")
+        (path / "kernel-delta.txt").write_bytes(kernel_delta)
         os.chmod(path / "kernel-delta.txt", 0o600)
         receipt = {
             "same_boot": True, "returncode": 0, "kernel_capture_exit": 0,
@@ -261,6 +261,62 @@ class AdapterTests(unittest.TestCase):
         marker = json.loads((self.guard_root / f"{adapter.TRIAL_ID}.json").read_text())
         self.assertEqual(marker["status"], "unknown")
         self.assertNotIn("candidate_hash", self.events[7:])
+
+    def test_new_hung_task_in_kernel_delta_keeps_trial_unknown(self):
+        kernel_delta = (
+            b"[ 241.0] INFO: task bt_worker:42 blocked for more than 120 seconds.\n"
+        )
+        with self.assertRaisesRegex(adapter.GateError, "fatal or hung-task indicator"):
+            self.run_trial(board_invoker=lambda board, name: self.invoke_board(
+                board, name, kernel_delta=kernel_delta))
+        marker = json.loads((self.guard_root / f"{adapter.TRIAL_ID}.json").read_text())
+        self.assertEqual(marker["status"], "unknown")
+
+    def test_trace_only_delta_is_distinct_and_does_not_block_completion(self):
+        kernel_delta = (
+            b"[ 241.0] Call trace:\n"
+            b"[ 241.1] schedule+0x70/0x110\n"
+        )
+        classification = adapter.classify_kernel_delta(kernel_delta)
+        self.assertEqual(classification["assessment"], "trace_only")
+        self.assertEqual(classification["fatal_indicators"], [])
+        self.assertEqual(classification["hung_task_warning_count"], 0)
+        self.assertFalse(classification["liveness_unresolved"])
+
+        self.run_trial(board_invoker=lambda board, name: self.invoke_board(
+            board, name, kernel_delta=kernel_delta))
+        marker = json.loads((self.guard_root / f"{adapter.TRIAL_ID}.json").read_text())
+        self.assertEqual(marker["status"], "complete")
+
+    def test_new_postflight_hung_task_keeps_trial_unknown(self):
+        hung_snapshot = observer_fixtures.snapshot()
+        kernel = hung_snapshot["kernel_log_classification"]
+        kernel.update({
+            "assessment": "hung_task_warning",
+            "hung_task_warning_count": 1,
+            "hung_task_names": ["bt_worker"],
+            "call_trace_count": 1,
+            "liveness_unresolved": True,
+            "liveness_review_status": "pinned_wait_stacks_matched_progress_unmeasured",
+            "source_wait_stacks": {
+                "source_commit": observer.EXPECTED_TZ_SOURCE_COMMIT,
+                "warning_count": 1, "matched_count": 1, "unmatched_count": 0,
+                "progress_measured": False,
+                "matches": [{"task_name": "bt_worker", "wait_path": "fixture"}],
+                "unmatched_task_names": [],
+            },
+        })
+        snapshots = [observer_fixtures.snapshot(), hung_snapshot]
+
+        def read_snapshot():
+            self.events.append("snapshot")
+            return snapshots.pop(0)
+
+        with self.assertRaisesRegex(adapter.GateError,
+                                    "kernel log reports fatal/hung indicators"):
+            self.run_trial(snapshot_reader=read_snapshot)
+        marker = json.loads((self.guard_root / f"{adapter.TRIAL_ID}.json").read_text())
+        self.assertEqual(marker["status"], "unknown")
 
     def test_postflight_candidate_mismatch_keeps_operation_unknown(self):
         returned = iter((adapter.EXPECTED_RECOVERY_SHA256, "0" * 64))
