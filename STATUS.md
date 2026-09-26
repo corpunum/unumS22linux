@@ -1,10 +1,38 @@
 # S22 native Linux status
 
-Updated 2026-09-23 from a read-only live check. The detailed driver ledger is
-[`docs/DRIVER_STATUS_2026-09-23.md`](docs/DRIVER_STATUS_2026-09-23.md); the
-chronological experiment record remains in `EXPERIMENTS.md`.
+Updated 2026-09-26 from coordinator read-only USB SSH checks. The current work
+is tracked in [the September 26 task board](docs/S22_LUNA_TASK_BOARD_2026-09-26.md).
+Earlier checkpoints below are historical.
 
-## Current accepted state — BORE 767
+## Current checkpoint — 2026-09-26
+
+The SM-S901B/DS r0s remains on the HCI-only native RECOVERY candidate, running
+GNU build ID `b2dda820b18d410d9bf12f1bd2584567d545991d`. The completed
+[second trial](evidence/s22-hci-trial-second-20260924.json) verified the full
+RECOVERY hash, changed boot identity, and one successful raw-HCI socket
+create/close. The candidate was not rolled back. This is socket-lifecycle
+acceptance; controller registration, radio operation and pairing remain untested.
+
+At approximately 50 hours uptime, the native guardian, 325 loaded modules,
+Hyprland, desktop Pi, model API/idleness, browser service and networking were
+healthy. The dedicated browser tmux session remained absent on demand. The
+available kernel-log ring had no fatal indicators or hung-task warnings;
+full-boot log coverage and TrustZone progress are not established.
+
+Audio playback DMA and physical output/input remain unaccepted. NPU BOOTUP
+remains disabled pending ownership/liveness and hardware prerequisites.
+The modem is still in `INIT`; SIM/data/voice are not accepted. Camera nodes
+enumerate but no captured frame is accepted. Physical touch/sensors, suspend,
+desktop GPU acceleration and normal cold boot still need their separate tests.
+The existing GPU compute result is historical bounded headless evidence; the
+resident 4B remains CPU-configured.
+
+The root overlay has about 35 MB free; `/srv/s22` and Arch share a persistent
+filesystem with about 102 GB free. No cleanup, package install, flash, reboot,
+raw-HCI retry, controller attachment, audio stream or NPU operation occurred in
+the September 26 checks. Independent hardware rescue remains unproven.
+
+## Historical checkpoint — 2026-09-23, BORE 767 (superseded)
 
 - Live device tree identifies Samsung R0S / S5E9925 (SM-S901B/DS, Exynos
   2200). Native kernel `5.10.260-g4e5c5ad7d950`, guardian PID 1, RECOVERY
