@@ -2,6 +2,7 @@
 """Hardware-free receipt acceptance regression tests."""
 import copy
 import base64
+from contextlib import contextmanager
 import importlib.util
 import json
 from pathlib import Path
@@ -374,6 +375,60 @@ class Assessment(unittest.TestCase):
             finally:os.close(fd)
             with self.assertRaises(FileExistsError):
                 route.create_private_trial_dir(route.AUDIO_TRIAL_ID,root)
+
+    def test_partial_remote_stage_failure_remains_unknown_and_blocks_retry(self):
+        class FakeGuard:
+            def __init__(self):self.state={}
+            @contextmanager
+            def acquire_operation_lock(self,project_root,trial_id,operation_kind):
+                prior=self.state.get(trial_id)
+                if prior in ('pending','unknown'):
+                    raise RuntimeError('unresolved trial marker blocks retry')
+                operation=FakeOperation(self,trial_id,operation_kind)
+                try:yield operation
+                except BaseException:
+                    if operation.started and not operation.finished:self.state[trial_id]='unknown'
+                    raise
+                else:
+                    if operation.started and not operation.finished:self.state[trial_id]='unknown'
+
+        class FakeOperation:
+            def __init__(self,guard,trial_id,kind):
+                self.guard=guard;self.trial_id=trial_id;self.kind=kind
+                self.started=False;self.finished=False;self.complete_calls=[]
+            def begin(self,*,project_root):
+                self.started=True;self.guard.state[self.trial_id]='pending'
+            def complete(self,*args,**kwargs):
+                self.complete_calls.append((args,kwargs));self.finished=True
+                self.guard.state[self.trial_id]='complete'
+
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)/'worktree';root.mkdir(mode=0o700)
+            local,fd=route.create_private_trial_dir(route.AUDIO_TRIAL_ID,root)
+            remote_root=Path(temp)/'remote-srv-s22';remote_root.mkdir(mode=0o700)
+            def interrupted_stage(command):
+                partial=remote_root/'audio-trials-20260927'/'audio-zero-20260927'
+                partial.mkdir(parents=True,mode=0o700)
+                (partial/'trace.strace').write_text('partial reservation')
+                raise subprocess.TimeoutExpired(command,10)
+            trial=SimpleNamespace(remote=interrupted_stage)
+            guard=FakeGuard()
+            try:
+                with self.assertRaisesRegex(RuntimeError,'outcome is unknown'):
+                    with guard.acquire_operation_lock(root,route.AUDIO_TRIAL_ID,
+                                                       route.AUDIO_OPERATION_KIND) as operation:
+                        route.begin_and_stage_trace(trial,operation,fd)
+                self.assertEqual(guard.state[route.AUDIO_TRIAL_ID],'unknown')
+                self.assertEqual(operation.complete_calls,[])
+                self.assertTrue((remote_root/'audio-trials-20260927'/'audio-zero-20260927'/'trace.strace').exists())
+                note=json.loads((local/'unknown.txt').read_text())
+                self.assertTrue(note['remote_staging_may_be_partial'])
+                self.assertFalse(note['route_or_pcm_operation_invoked'])
+                with self.assertRaisesRegex(RuntimeError,'blocks retry'):
+                    with guard.acquire_operation_lock(root,route.AUDIO_TRIAL_ID,
+                                                       route.AUDIO_OPERATION_KIND):
+                        self.fail('unresolved operation must not be retried')
+            finally:os.close(fd)
 
     def test_clock_pm_skip_and_missing_nodes_are_distinguished(self):
         skipped=[source_sample(i,pm_active=False,clock_status='skipped_pm_gate') for i in range(2)]

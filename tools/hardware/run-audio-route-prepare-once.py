@@ -167,10 +167,16 @@ try:
          stat.S_IMODE(trace.st_mode)==0o600 and trace.st_dev==expected_dev and trace.st_ino==expected_ino,
          'trace_reservation_identity_changed')
     need(0<trace.st_size<=limit,'trace_size_out_of_bounds')
-    data=os.read(fd,limit+1);need(len(data)<=limit,'trace_read_exceeded_limit')
+    data=bytearray()
+    while len(data)<trace.st_size:
+     chunk=os.read(fd,min(65536,trace.st_size-len(data)))
+     if not chunk:break
+     data.extend(chunk)
+    need(len(data)==trace.st_size,'trace_short_read')
+    need(os.fstat(fd).st_size==len(data),'trace_size_changed_during_read')
     print(json.dumps({'path':root_path+'/audio-trials-20260927/audio-zero-20260927/trace.strace',
      'device':trace.st_dev,'inode':trace.st_ino,'size':len(data),
-     'data_base64':base64.b64encode(data).decode('ascii')},sort_keys=True))
+     'data_base64':base64.b64encode(bytes(data)).decode('ascii')},sort_keys=True))
    finally:os.close(fd)
   finally:os.close(trial)
  finally:os.close(namespace)
@@ -633,6 +639,21 @@ def remote_trace_read(trial,metadata):
     return data.decode('utf-8','replace'),record
 
 
+def begin_and_stage_trace(trial,operation,raw_fd):
+    """Keep a durable operation UNKNOWN if remote stage outcome is ambiguous."""
+    operation.begin(project_root=ROOT)
+    try:
+        return remote_trace_stage(trial)
+    except BaseException as error:
+        disposition={'remote_trace_stage_outcome':'unknown',
+         'remote_staging_may_be_partial':True,
+         'route_or_pcm_operation_invoked':False,
+         'reason_type':type(error).__name__,
+         'retry_permitted':False}
+        write_private_artifact(raw_fd,'unknown.txt',json.dumps(disposition,sort_keys=True)+'\n')
+        raise RuntimeError('remote trace stage outcome is unknown; route and PCM were not invoked; do not retry') from error
+
+
 def _remote_text(result):
     value=result.stdout
     return value.decode('utf-8','replace') if isinstance(value,bytes) else str(value)
@@ -673,16 +694,9 @@ def _run(args,operation=None):
     boundary=max(map(float,re.findall(r'^\[\s*([0-9.]+)\]',kernel_text,re.M)),default=0)
     if operation is None:
         os.close(raw_fd);raise RuntimeError('execute requires the shared durable operation guard')
-    operation.begin(project_root=ROOT)
-    try:trace_meta=remote_trace_stage(trial)
-    except BaseException as error:
-        disposition={'trial_id':args.name,'operation_kind':AUDIO_OPERATION_KIND,
-         'operation_marker_begun':True,'remote_trace_stage_failed':True,
-         'no_route_or_pcm_operation_invoked':True,'reason':type(error).__name__}
-        write_private_artifact(raw_fd,'receipt.json',json.dumps(disposition,indent=2)+'\n')
-        operation.complete(str(raw/'receipt.json'),outcome='preflight-rejected-no-mutation',cleanup_confirmed=True)
-        os.close(raw_fd)
-        raise RuntimeError('trace staging rejected before any route or PCM operation') from error
+    try:trace_meta=begin_and_stage_trace(trial,operation,raw_fd)
+    except BaseException:
+        os.close(raw_fd);raise
     write_private_artifact(raw_fd,'trace-stage.json',json.dumps(trace_meta,indent=2)+'\n')
     trace=trace_meta['path']
     command=shlex.join(['strace','-f','-qq','-tt','-T','-s','160','-o',trace,
