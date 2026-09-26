@@ -23,7 +23,7 @@ ATTRIBUTE_BYTES = 512
 DEVICE_TREE_BYTES = 4096
 MODULE_NAME = re.compile(r"^[A-Za-z0-9_.+-]{1,96}$")
 MODULE_PREFIXES = (
-    "exynos_is", "exynos-is", "is_", "is-", "fimc-is", "s5k", "imx",
+    "exynos_is", "exynos-is", "is_", "is-", "fimc_is", "fimc-is", "s5k", "imx",
     "exynos_mfc", "exynos-mfc", "exynos_jpeg", "exynos-jpeg",
     "exynos_scaler", "exynos-scaler", "exynos_gdc", "exynos-gdc",
 )
