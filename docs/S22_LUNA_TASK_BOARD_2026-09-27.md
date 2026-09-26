@@ -78,3 +78,55 @@ unproven. No new partition write or reboot was performed.
 Sanitized live facts are recorded in
 [`s22-hardware-continuation-20260927.json`](../evidence/s22-hardware-continuation-20260927.json).
 Private firmware, complete traces and network identifiers are not published.
+
+## Executed checkpoint — 23:45 UTC
+
+Independent reviewer `/root/driver_review_20260926` approved the BT capture-window
+corrections through `6a6bcda`, audio node repair `b77bce2` (integrated `983cbec`),
+and BT metadata-contract correction `0319385`. Actual normal/optimized adapter
+coverage increased to 30 tests; audio assessment coverage increased to 47 tests.
+The integrated fixed suite at `983cbec` passed 20 normal and 17 optimized scripts
+with three documented optimization skips. This is host-only evidence.
+
+The first BT invocation (`bt-hci-registration-20260926`) staged its pinned binary
+but refused before any controller operation: the board adapter expected printed
+metadata success whereas the included actual C main returns success silently.
+An extracted-C regression reproduced that contract; the corrected adapter
+selects it explicitly and rejects nonzero status or unexpected output. The old
+marker/artifacts are preserved and explicitly reconciled as staging-only failure,
+not no mutation. A fresh identity was used after review, not a blind retry.
+
+`audio-zero-node-20260927` created only the exact missing `116:3` node as
+root:root/0600. It now reaches PCM PREPARE and seven accepted write ioctls.
+Nineteen synchronized RUNNING samples show zero hw_ptr and RDMA position advance,
+despite UAIF1 DPCM start and nonzero clock-framework enable counts. The child
+hit its ten-second deadline and was reaped; both selectors restored to zero,
+amplifiers stayed off, PCM closed, and the same native boot remained healthy.
+The journal is terminal `failed-cleanup-confirmed`. No audible playback claim.
+
+`bt-hci-registration-20260927` then ran once, serialized after audio. Firmware
+transfer/reset/readback succeeded and `HCIUARTGETDEVICE` returned hci0. The
+kernel's first command (1003) was queued, but the IBS wake handshake received
+no acknowledgement; initialization failed. The single detach ioctl returned
+zero after 9.892650 seconds, UART settings were restored, power-off ioctl
+returned zero, and independent post-checks found no controller/device FDs with
+WLAN's vote preserved. Fresh full RECOVERY hash/build/boot/native/model/network
+checks passed; the retained kernel window has no new fatal/hung indicators.
+The failed operation was explicitly reconciled with private receipt and trace
+evidence; no automatic retry. Registration is verified, initialization/pairing/
+Bluetooth audio are not. No partition writes, reboots, or raw-HCI repeat.
+
+### Subsequent actual worker assignments
+
+| Worker (same explicit Luna/Max selection) | Isolated worktree | Deliverable/state |
+| --- | --- | --- |
+| `/root/bt_next_20260926` | `s22-workers/npu-ownership-20260927` | `59791b9` partial hardware-reference unwind and extracted-C failure injection; integrated `1c41f09`, independent review pending, no deployment |
+| `/root/bt_next_20260926` | `s22-workers/bt-ibs-20260927` | Diagnose actual private wake-handshake trace and implement a source-backed transport correction; host only |
+| `/root/audio_next_20260926` | `s22-workers/camera-trial-20260927` | Camera first-resource LDO error unwind and executable tests; no camera power/capture |
+| `/root/driver_review_20260926` | `s22-workers/camera-20260927` | Independent reviews plus analysis of the new audio receipt; host only |
+
+Camera source review found partial PHY-LDO enables are not reversed on failure,
+with resource counts still incremented; failed open leaves no fd to close.
+Unchecked sensor runtime-PM failure is a separate remaining issue. The next
+camera work is a targeted source repair/test, not an unsafe QUERYCAP claim.
+NPU BOOTUP remains refused; host ownership tests are not hardware evidence.
