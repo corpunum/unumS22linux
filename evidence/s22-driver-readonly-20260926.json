@@ -1,0 +1,88 @@
+{
+  "schema": "s22-driver-readonly-check-v1",
+  "date_utc": "2026-09-26",
+  "device": "SM-S901B/DS r0s",
+  "scope": "Coordinator read-only USB SSH checks; no new hardware trial",
+  "running_gnu_build_id": "b2dda820b18d410d9bf12f1bd2584567d545991d",
+  "full_recovery_sha256": "42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5",
+  "host_artifacts_rehashed": {
+    "candidate": "42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5",
+    "rollback": "758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b",
+    "each_image_bytes": 100663296
+  },
+  "latest_boot_mode": "RECOVERY",
+  "final_uptime_seconds": 188563.93,
+  "pid1": "native-guardian",
+  "loaded_module_count": 325,
+  "reviewed_observer_snapshot_validation": "passed",
+  "services": {
+    "native_ready": true,
+    "model_api_healthy_and_idle": true,
+    "desktop_pi": "ready",
+    "browser_terminal": "ready",
+    "dedicated_pi_tmux": "absent_on_demand",
+    "network_readiness": "passed_existing_snapshot_gate"
+  },
+  "final_power": {
+    "battery_percent": 100,
+    "battery_status": "Full",
+    "battery_temperature_celsius": 27.2,
+    "maximum_thermal_temperature_celsius": 41.0
+  },
+  "available_kernel_log": {
+    "bytes": 255806,
+    "capture_complete": true,
+    "full_boot_coverage": false,
+    "fatal_indicator_count": 0,
+    "hung_task_warning_count": 0,
+    "call_trace_count": 0,
+    "trustzone_progress_measured": false
+  },
+  "earlier_same_wave_inventory": {
+    "registered_hci_controllers": 0,
+    "modem_state": "INIT",
+    "pcm2_playback": "closed",
+    "abox_runtime": "suspended",
+    "abox_cache_only": "Y",
+    "abox_service": "1",
+    "abox_reset_count": "0",
+    "root_free_bytes": 34844672,
+    "root_free_inodes": 29780,
+    "srv_s22_free_bytes": 101778141184,
+    "srv_s22_free_inodes": 1652499,
+    "camera_nodes_enumerated": true,
+    "camera_capture_attempted": false
+  },
+  "corrected_audio_idle_path_check": {
+    "snapshot_read_status": false,
+    "clock_access_allowed": false,
+    "dapm_widget_count": 24,
+    "dapm_reads_ok": 24,
+    "dapm_widgets_off": 24,
+    "dpcm_read_status": "ok",
+    "dpcm_frontend_state": "new",
+    "dpcm_backends": "No active DSP links",
+    "alsa_status": "closed",
+    "abox_runtime": "suspended",
+    "abox_cache_only": "Y",
+    "abox_service": "1",
+    "registers_read": 0,
+    "clock_reads": 0,
+    "interpretation": "Corrected debugfs paths exist; idle state is not an audio-failure diagnosis or streaming proof."
+  },
+  "new_operations_this_wave": {
+    "partition_writes": 0,
+    "reboot_requests": 0,
+    "raw_hci_probes": 0,
+    "controller_attach_attempts": 0,
+    "audio_stream_attempts": 0,
+    "npu_bootup_attempts": 0
+  },
+  "independent_hardware_rescue_demonstrated": false,
+  "limits": [
+    "The successful raw-HCI socket trial is historical and was not repeated.",
+    "Cached clock bookkeeping and idle audio state do not establish streaming or physical clocks.",
+    "Camera node enumeration does not establish image capture.",
+    "No new driver hardware acceptance is claimed."
+  ]
+}
