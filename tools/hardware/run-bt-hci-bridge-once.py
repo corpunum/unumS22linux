@@ -18,6 +18,7 @@ import stat
 import struct
 import subprocess
 import sys
+import types
 
 ROOT = Path(__file__).resolve().parents[2]
 TRUSTED_ROOT = Path('/home/corpunum/s22-linux')
@@ -33,6 +34,8 @@ EXPECTED_ARTIFACT_BUILD_ID = 'eb47c232ddb7fc4b477bb145bbe9bf2832972276'
 EXPECTED_SSH_WRAPPER_SHA256 = '7e9d31035762de50ccc6c5614d8348532fd912bf59c41c9d410a4c7bfe49dd1d'
 EXPECTED_TRUSTED_RUN_TRIAL_SHA256 = '165a16566f2dedcb23506d427425ddb030acc53876710a61bb06a2f1b039a5fe'
 EXPECTED_TRUSTED_DEPLOYER_SHA256 = 'd0c54cc306e3a8a80cb79d79958fceedf6bb5945dabc7606e02b12d27dc00fd3'
+EXPECTED_TZ_SOURCE_COMMIT = '4e5c5ad7d950e4de0688b5663965f2075654b2ad'
+EXPECTED_TZ_CLASSIFIER_SHA256 = '8faa2cd46d16818ebdd61d7a577b046489083f5c96a6a398ddea769ebbb6619a'
 ARTIFACT = Path('/home/corpunum/s22-workers/bt-next-20260926/builds/bt-next-20260926/bt-qca6490-hci-bridge-probe')
 SOURCE = ROOT / 'tools/hardware/bt-qca6490-hci-bridge-probe.c'
 DEST = TRIAL_DIR + '/bt-qca6490-hci-bridge-probe'
@@ -73,6 +76,7 @@ REVIEWED_RUNNER_SHA256 = {
         'bf3de2008a9667fdd0de8993cc4035037be93d61701d68613ae89eec6db60b04',
     'tools/hardware/run-bt-version-once.py':
         '93a84da810bccb517694b6cbeb44aa85850289919caec71aa7638c90d49c4653',
+    'tools/hardware/trustzone_log_classifier.py': EXPECTED_TZ_CLASSIFIER_SHA256,
 }
 LIVE_TRIAL_GATE = (
     'Controller registration remains disabled unless the exact trial is invoked '
@@ -207,6 +211,57 @@ def _sha256(path):
         for block in iter(lambda: stream.read(1024 * 1024), b''):
             digest.update(block)
     return digest.hexdigest()
+
+
+def load_pinned_kernel_classifier(root=ROOT):
+    """Load the exact classifier source used by the recovery observer."""
+    path = root / 'tools/hardware/trustzone_log_classifier.py'
+    _regular_file(path, 'pinned TrustZone log classifier')
+    source = path.read_bytes()
+    require(hashlib.sha256(source).hexdigest() == EXPECTED_TZ_CLASSIFIER_SHA256,
+            'pinned TrustZone log classifier fingerprint changed')
+    name = '_s22_bt_pinned_trustzone_log_classifier'
+    module = types.ModuleType(name)
+    module.__file__ = str(path)
+    sys.modules[name] = module
+    try:
+        exec(compile(source, str(path), 'exec'), module.__dict__)
+    except Exception:
+        sys.modules.pop(name, None)
+        raise
+    require(getattr(module, 'PINNED_KERNEL_SOURCE_COMMIT', None) ==
+            EXPECTED_TZ_SOURCE_COMMIT,
+            'TrustZone classifier kernel source pin differs from the observer')
+    return module
+
+
+def classify_kernel_delta(data, *, classifier=None):
+    """Keep trace-only evidence distinct; reject fatal, hung, or incomplete logs."""
+    require(isinstance(data, bytes), 'post-trial kernel delta is not bytes')
+    if classifier is None:
+        classifier = load_pinned_kernel_classifier()
+    if not data.strip():
+        return {
+            'assessment': 'no_new_records', 'fatal_indicators': [],
+            'hung_task_warning_count': 0, 'call_trace_count': 0,
+            'liveness_unresolved': False, 'coverage_complete': True,
+        }
+    classified = classifier.classify_kernel_log(data, capture_complete=True)
+    require(classified.coverage_complete,
+            'post-trial kernel delta classification is incomplete')
+    fatal = [indicator.kind for indicator in classified.fatal_indicators]
+    hung_count = len(classified.hung_task_warnings)
+    require(not fatal and hung_count == 0 and
+            classified.material_liveness_unresolved is False,
+            'post-trial kernel delta contains a fatal or hung-task indicator')
+    return {
+        'assessment': classified.assessment,
+        'fatal_indicators': fatal,
+        'hung_task_warning_count': hung_count,
+        'call_trace_count': len(classified.call_trace_lines),
+        'liveness_unresolved': classified.material_liveness_unresolved,
+        'coverage_complete': classified.coverage_complete,
+    }
 
 
 def _elf_build_id(data):
@@ -518,11 +573,8 @@ def validate_completed_trial_receipt(workspace=ROOT, name=TRIAL_ID, *, require_l
             value.get('strace_capture_sha256') == hashlib.sha256(trace_bytes).hexdigest(),
             'private syscall trace is empty or differs from its receipt hash')
     delta_path = path.parent / 'kernel-delta.txt'
-    kernel_delta = read_durable_private_file(delta_path, 'post-trial kernel delta').decode(
-        'utf-8', errors='replace')
-    require(not re.search(r'(?i)(?:\b(?:panic|oops|hung task|fatal|call trace|warning)\b|BUG:)',
-                          kernel_delta),
-            'post-trial kernel delta contains an unresolved fatal/hung indicator')
+    delta_classification = classify_kernel_delta(
+        read_durable_private_file(delta_path, 'post-trial kernel delta'))
     if require_live:
         live = value.get('live_postflight')
         require(isinstance(live, dict) and live.get('boot_id') == after['boot_id'] and
@@ -531,7 +583,15 @@ def validate_completed_trial_receipt(workspace=ROOT, name=TRIAL_ID, *, require_l
                 live.get('controllers') == [] and live.get('network_ready') is True and
                 live.get('native_model_ready') is True and live.get('power_safe') is True and
                 live.get('serious_fault') is False and live.get('kernel_capture_complete') is True and
-                live.get('kernel_coverage_complete') is True,
+                live.get('kernel_coverage_complete') is True and
+                live.get('kernel_assessment') in ('no_indicators', 'trace_only') and
+                live.get('fatal_indicators') == [] and
+                type(live.get('hung_task_warning_count')) is int and
+                live.get('hung_task_warning_count') == 0 and
+                live.get('liveness_unresolved') is False and
+                delta_classification.get('fatal_indicators') == [] and
+                delta_classification.get('hung_task_warning_count') == 0 and
+                delta_classification.get('liveness_unresolved') is False,
                 'independent postflight does not prove exact candidate and healthy controller-free boot')
     return path
 
@@ -565,6 +625,16 @@ def validate_live_postflight(observer, before, *, snapshot_reader=None,
             state.get('controllers') == [],
             'post-trial controller is not detached on the same boot')
     kernel = current.get('kernel_log_classification')
+    require(isinstance(kernel, dict) and
+            isinstance(kernel.get('fatal_indicators'), list) and
+            type(kernel.get('hung_task_warning_count')) is int and
+            type(kernel.get('liveness_unresolved')) is bool,
+            'post-trial kernel diagnostic fields are unavailable')
+    require(kernel['fatal_indicators'] == [] and
+            kernel['hung_task_warning_count'] == 0 and
+            kernel['liveness_unresolved'] is False and
+            kernel.get('assessment') in ('no_indicators', 'trace_only'),
+            'post-trial kernel log reports fatal/hung indicators or unresolved liveness')
     readiness = current.get('readiness')
     return {
         'boot_id': current['boot_id'],
@@ -579,8 +649,10 @@ def validate_live_postflight(observer, before, *, snapshot_reader=None,
         'readiness': readiness,
         'kernel_capture_complete': kernel.get('capture_complete') is True,
         'kernel_coverage_complete': kernel.get('coverage_complete') is True,
+        'kernel_assessment': kernel.get('assessment'),
         'hung_task_warning_count': kernel.get('hung_task_warning_count'),
         'fatal_indicators': kernel.get('fatal_indicators'),
+        'liveness_unresolved': kernel.get('liveness_unresolved'),
     }
 
 
