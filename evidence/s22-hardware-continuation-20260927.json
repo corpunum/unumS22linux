@@ -1,0 +1,67 @@
+{
+  "schema": "s22-hardware-continuation/v1",
+  "device": "SM-S901B/DS r0s",
+  "running_candidate": {
+    "gnu_build_id": "b2dda820b18d410d9bf12f1bd2584567d545991d",
+    "recovery_sha256": "42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5",
+    "reverified_after_audio": true,
+    "new_partition_writes": 0,
+    "new_reboot_requests": 0,
+    "independent_hardware_rescue_demonstrated": false
+  },
+  "audio": {
+    "trial_id": "audio-zero-20260927",
+    "started_at": "2026-09-26T23:05:35.688270+00:00",
+    "reviewed_source": "3a59e6fe2364fda469a6ee4259f090f2fb280a70",
+    "host_supervised_attempts": 1,
+    "elapsed_seconds": 6.439,
+    "outcome": "failed-cleanup-confirmed",
+    "child_returncode": 1,
+    "cause_observed": "aplay open of /dev/snd/pcmC0D2p returned ENOENT",
+    "pcm_prepare_observed": false,
+    "dma_progress_verified": false,
+    "physical_playback_verified": false,
+    "samples": 2,
+    "sample_pcm_states": ["closed", "closed"],
+    "both_route_selectors_restored_to_zero": true,
+    "amplifiers_remained_off": true,
+    "pcm_closed_afterward": true,
+    "same_boot": true,
+    "model_health_afterward": "ok",
+    "battery_temperature_c": 27.3,
+    "durable_marker_terminal": true,
+    "missing_node_verified_in_shell_and_guardian_views": true,
+    "kernel_registered_node": {
+      "class": "/sys/class/sound/pcmC0D2p",
+      "device_number": "116:3",
+      "uevent_devname": "snd/pcmC0D2p",
+      "uevent_devtype": "pcm"
+    }
+  },
+  "camera": {
+    "evidence_level": "passive live metadata plus host-only asset recovery",
+    "video_nodes_inventoried": 56,
+    "media_nodes_inventoried": 0,
+    "sensor_leader_driver": "exynos-is-sensor",
+    "sensor_leader_module": "fimc_is",
+    "device_nodes_opened": false,
+    "camera_power_requested": false,
+    "capture_attempted": false,
+    "fixed_firmware_names_missing_in_all_four_checked_views": 7,
+    "private_firmware_files_recovered_on_host": 7,
+    "recovery_source_read_only": true,
+    "source_image_sha256": "6dfe677119792e95a37b016092c327ad62bc0dc7759851424ad05e6bcb31b206",
+    "firmware_staged_on_phone": false,
+    "guardian_firmware_destination_free_bytes": 2357919744,
+    "capture_functionality_verified": false
+  },
+  "host_control": {
+    "user_transient_service_verified": true,
+    "trials_independent_of_chat_ssh_session": true,
+    "temporary_sleep_inhibitor": "access_denied_not_bypassed",
+    "existing_ac_automatic_sleep_policy": "nothing",
+    "on_ac_power": true,
+    "host_power_policy_changed": false
+  },
+  "privacy": "Raw captures, network identifiers and recovered firmware remain private on the rig."
+}
