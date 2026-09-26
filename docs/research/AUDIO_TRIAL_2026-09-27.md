@@ -65,9 +65,11 @@ mode, and separation from `/srv`; checks free bytes/inodes; creates a private
 unique trial directory; and reserves the trace with O_EXCL/no-follow. The
 bounded readback reopens the fixed path without following links and requires
 the reserved device/inode, private regular-file mode, one link, and size at
-most 2,000,000 bytes. Existing/stale trial paths fail closed; the runner never
-truncates an unvalidated old trace. Host artifacts are O_EXCL owner-only
-files under `rootfs/audio-trials-20260927/audio-zero-20260927/`.
+most 2,000,000 bytes. It reads exactly the initially observed size and checks
+the size again after the read, so a short read cannot be reported as a complete
+trace. Existing/stale trial paths fail closed; the runner never truncates an
+unvalidated old trace. Host artifacts are O_EXCL owner-only files under
+`rootfs/audio-trials-20260927/audio-zero-20260927/`.
 
 With progress sampling enabled, the wrapper takes an immediate cold-start
 snapshot after spawning the PCM child, then polls at 200 ms intervals while
@@ -77,8 +79,13 @@ samples rather than only one endpoint sample. The hard child deadline remains
 The observer's sequence/time continuity, runtime-PM gate, and same-sample
 source pairing remain required; absent/gapped evidence stays unknown. Cleanup
 still occurs only after the child is reaped and PCM status is closed. Host
-timeout or unconfirmed cleanup leaves the durable operation pending/UNKNOWN;
-there is no automatic retry.
+timeout, unconfirmed cleanup, or an ambiguous remote trace-staging failure
+leaves the durable operation pending/UNKNOWN; there is no automatic retry.
+For a remote-stage exception, the private disposition records that staging may
+be partial and that this runner did not invoke route or PCM operations. It does
+not claim the remote filesystem was unchanged, and it does not terminalize the
+operation; a partial reservation must be inspected and explicitly reconciled
+before any different operation is authorized.
 
 ## Exact coordinator command (review and authorization still required)
 
