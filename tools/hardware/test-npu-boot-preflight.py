@@ -122,8 +122,11 @@ def main() -> None:
                   f"{mode} lifecycle source must not claim publication liveness")
             check(gates["normal_boot_error_unwind_resolved"] is False,
                   f"{mode} lifecycle source must not resolve boot unwind")
-            check(result["checks"]["known_lifecycle_gaps"]["publication_drain_wait_unbounded"] is None,
-                  f"{mode} lifecycle source must report drain shape as unknown")
+            gaps = result["checks"]["known_lifecycle_gaps"]
+            for gap in ("normal_boot_unwind_missing", "power_response_timeout_missing",
+                        "publication_drain_wait_unbounded"):
+                check(gaps[gap] is None,
+                      f"{mode} lifecycle source must report {gap} as unknown")
             check(not any(gates.values()), f"{mode} lifecycle source must leave all lifecycle gates false")
             check(result["bootup_authorized"] is False, f"{mode} lifecycle source must not authorize BOOTUP")
 
