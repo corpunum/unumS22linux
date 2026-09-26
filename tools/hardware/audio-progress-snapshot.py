@@ -375,6 +375,7 @@ def source_path_assessment(samples):
     clock_points = []
     rdma_points = []
     pointer_points = []
+    rdma_hw_ptr_points = []
     any_alsa_state = False
     dpcm_observation_status_counts = {}
     clock_observation_status_counts = {}
@@ -443,6 +444,7 @@ def source_path_assessment(samples):
             clock_points.append(clock_point)
 
         registers = sample.get('registers')
+        rdma_point = None
         status_skip_reason = sample.get('status_read_skip_reason')
         if isinstance(registers, dict):
             status = registers.get('1230')
@@ -450,12 +452,13 @@ def source_path_assessment(samples):
             if (pm_gate_ok and isinstance(status, int) and not isinstance(status, bool)
                     and isinstance(status_add, int) and not isinstance(status_add, bool)):
                 try:
-                    rdma_points.append({
+                    rdma_point = {
                         'sequence': sequence,
                         'timestamp_ns': timestamp_ns,
                         'status': decode_rdma2_status(status),
                         'status_add': decode_rdma2_status_add(status_add),
-                    })
+                    }
+                    rdma_points.append(rdma_point)
                 except ValueError:
                     pass
             else:
@@ -468,8 +471,19 @@ def source_path_assessment(samples):
                     rdma_missing_pair_count += 1
         pointer = counters.get('hw_ptr') if isinstance(counters, dict) else None
         if isinstance(pointer, int) and not isinstance(pointer, bool) and pointer >= 0:
-            pointer_points.append({'sequence': sequence, 'timestamp_ns': timestamp_ns,
-                                   'hw_ptr': pointer})
+            pointer_point = {'sequence': sequence, 'timestamp_ns': timestamp_ns,
+                             'hw_ptr': pointer}
+            pointer_points.append(pointer_point)
+            if rdma_point is not None:
+                rdma_hw_ptr_points.append({
+                    'sequence': sequence,
+                    'timestamp_ns': timestamp_ns,
+                    'rdma_position': (
+                        rdma_point['status']['rbuf_offset'],
+                        rdma_point['status']['rbuf_count'],
+                        rdma_point['status_add']['current_address']),
+                    'hw_ptr': pointer,
+                })
 
     dpcm_frontend_states = []
     backend_state_sets = {}
@@ -545,12 +559,22 @@ def source_path_assessment(samples):
     pointer_advanced = bool(pointer_contiguous and any(
         current['hw_ptr'] > previous['hw_ptr']
         for previous, current in zip(pointer_points, pointer_points[1:])))
-    if rdma_position_changed and not pointer_advanced and rdma_contiguous and pointer_contiguous:
+    rdma_hw_ptr_contiguous = _continuous_points(rdma_hw_ptr_points)
+    paired_pointer_monotonic = all(
+        current['hw_ptr'] >= previous['hw_ptr']
+        for previous, current in zip(rdma_hw_ptr_points, rdma_hw_ptr_points[1:]))
+    paired_rdma_position_changed = bool(rdma_hw_ptr_contiguous and any(
+        current['rdma_position'] != previous['rdma_position']
+        for previous, current in zip(rdma_hw_ptr_points, rdma_hw_ptr_points[1:])))
+    paired_hw_ptr_advanced = bool(rdma_hw_ptr_contiguous and paired_pointer_monotonic and any(
+        current['hw_ptr'] > previous['hw_ptr']
+        for previous, current in zip(rdma_hw_ptr_points, rdma_hw_ptr_points[1:])))
+    if (rdma_hw_ptr_contiguous and paired_pointer_monotonic
+            and paired_rdma_position_changed and not paired_hw_ptr_advanced):
         ipc_stage = 'rdma_position_changes_but_alsa_hw_ptr_does_not_advance'
-    elif rdma_position_changed and pointer_advanced:
+    elif (rdma_hw_ptr_contiguous and paired_pointer_monotonic
+          and paired_rdma_position_changed and paired_hw_ptr_advanced):
         ipc_stage = 'alsa_hw_ptr_advances_with_rdma_position'
-    elif rdma_contiguous and not rdma_position_changed:
-        ipc_stage = 'pointer_ipc_not_localized_while_rdma_position_is_static'
     else:
         ipc_stage = 'pointer_ipc_not_localized_insufficient_or_gapped_samples'
 
@@ -596,6 +620,10 @@ def source_path_assessment(samples):
         'alsa_hw_ptr_sample_count': len(pointer_points),
         'alsa_hw_ptr_samples_contiguous': pointer_contiguous,
         'alsa_hw_ptr_advanced': pointer_advanced,
+        'rdma_hw_ptr_pair_sample_count': len(rdma_hw_ptr_points),
+        'rdma_hw_ptr_pair_samples_contiguous': rdma_hw_ptr_contiguous,
+        'rdma_position_changed_in_paired_window': paired_rdma_position_changed,
+        'paired_alsa_hw_ptr_advanced': paired_hw_ptr_advanced,
         'pointer_ipc_stage': ipc_stage,
         'dapm_widget_states': {
             str(sample.get('sequence')): _dapm_widget_states(sample.get('observations'))

@@ -27,6 +27,11 @@ BASE={'wrapper_returncode':0,'after_audio_exit':0,'trace_capture_exit':0,'kernel
 TRACE='ioctl(4, SNDRV_PCM_IOCTL_PREPARE) = 0 <0.001>\nioctl(4, SNDRV_PCM_IOCTL_WRITEI_FRAMES) = 0 <0.001>\n'
 
 
+def dma_sample(sequence,monotonic,hw_ptr):
+    return {'sequence':sequence,'monotonic':monotonic,
+            'alsa_status':'state: RUNNING\nhw_ptr: %d\n'%hw_ptr}
+
+
 def source_sample(sequence, *, dpcm='uaif1-start', bclk='0', gate='0',
                   rdma_status=0, rdma_status_add=0, hw_ptr=0,
                   pm_active=True, clock_status='ok', clock_nodes_present=True):
@@ -143,8 +148,8 @@ class Assessment(unittest.TestCase):
     def test_hw_pointer_advance_verifies_dma_not_sound(self):
         r=copy.deepcopy(BASE)
         r['result']['progress_samples']=[
-            {'monotonic':1.0,'alsa_status':'state: RUNNING\nhw_ptr: 100\nappl_ptr: 200\n'},
-            {'monotonic':2.0,'alsa_status':'state: RUNNING\nhw_ptr: 356\nappl_ptr: 456\n'},
+            {'sequence':0,'monotonic':1.0,'alsa_status':'state: RUNNING\nhw_ptr: 100\nappl_ptr: 200\n'},
+            {'sequence':1,'monotonic':2.0,'alsa_status':'state: RUNNING\nhw_ptr: 356\nappl_ptr: 456\n'},
         ]
         a=route.classify(r,TRACE)
         self.assertTrue(a['dma_progress_verified'])
@@ -165,21 +170,44 @@ class Assessment(unittest.TestCase):
         self.assertEqual(correlation['maximum_snapshot_duration_ns'],60)
     def test_constant_pointer_does_not_verify_dma(self):
         samples=[
-            {'monotonic':1.0,'alsa_status':'state: RUNNING\nhw_ptr: 100\n'},
-            {'monotonic':2.0,'alsa_status':'state: RUNNING\nhw_ptr: 100\n'},
+            dma_sample(0,1.0,100),dma_sample(1,2.0,100),
         ]
         self.assertFalse(route.assess_dma_progress(samples)['verified'])
     def test_regression_or_bad_running_sample_fails_closed(self):
         regress=[
-            {'monotonic':1.0,'alsa_status':'state: RUNNING\nhw_ptr: 200\n'},
-            {'monotonic':2.0,'alsa_status':'state: RUNNING\nhw_ptr: 100\n'},
+            dma_sample(0,1.0,200),dma_sample(1,2.0,100),
         ]
         malformed=[
-            {'monotonic':1.0,'alsa_status':'state: RUNNING\nhw_ptr: ???\n'},
-            {'monotonic':2.0,'alsa_status':'state: RUNNING\nhw_ptr: 300\n'},
+            {'sequence':0,'monotonic':1.0,'alsa_status':'state: RUNNING\nhw_ptr: ???\n'},
+            dma_sample(1,2.0,300),
         ]
         self.assertFalse(route.assess_dma_progress(regress)['verified'])
+        self.assertEqual(route.assess_dma_progress(regress)['reason'],'hw_ptr regression')
         self.assertFalse(route.assess_dma_progress(malformed)['verified'])
+
+    def test_dma_advance_requires_adjacent_running_capture_sequences(self):
+        result=route.assess_dma_progress([
+            dma_sample(0,1.0,0),dma_sample(2,3.0,1024)])
+        self.assertFalse(result['verified'])
+        self.assertEqual(result['reason'],
+                         'capture sequence gap inside RUNNING observation window')
+
+    def test_dma_advance_rejects_error_or_nonrunning_sample_inside_window(self):
+        samples=(
+            [dma_sample(0,1.0,0),
+             {'sequence':1,'monotonic':2.0,'error_type':'OSError'},
+             dma_sample(2,3.0,1024)],
+            [dma_sample(0,1.0,0),None,dma_sample(2,3.0,1024)],
+            [dma_sample(0,1.0,0),
+             {'sequence':1,'monotonic':2.0,'alsa_status':'state: XRUN\nhw_ptr: 512\n'},
+             dma_sample(2,3.0,1024)],
+        )
+        for window in samples:
+            with self.subTest(window=window):
+                result=route.assess_dma_progress(window)
+                self.assertFalse(result['verified'])
+                self.assertEqual(result['reason'],
+                    'RUNNING observations separated by a missing or non-RUNNING sample')
 
     def test_source_stages_identify_running_frontend_without_backend(self):
         result=route.audio_snapshot.source_path_assessment([
@@ -223,6 +251,42 @@ class Assessment(unittest.TestCase):
                          'rdma_position_changes_but_alsa_hw_ptr_does_not_advance')
         self.assertEqual(result['localization'],
                          'rdma_status_moves_but_firmware_pointer_ipc_or_alsa_notification_path_lags')
+
+    def test_rdma_and_pointer_disjoint_windows_leave_ipc_stage_unknown(self):
+        samples=[
+            source_sample(0,bclk='1',gate='1',rdma_status=0,rdma_status_add=0,hw_ptr=0),
+            source_sample(1,bclk='1',gate='1',rdma_status=1,rdma_status_add=4,hw_ptr=0),
+            source_sample(2,bclk='1',gate='1',rdma_status=1,rdma_status_add=4,hw_ptr=0),
+            source_sample(3,bclk='1',gate='1',rdma_status=1,rdma_status_add=4,hw_ptr=0),
+        ]
+        for sample in samples[:2]:
+            sample['alsa_counters'].pop('hw_ptr')
+        for sample in samples[2:]:
+            sample['registers']={}
+        result=route.audio_snapshot.source_path_assessment(samples)
+        self.assertTrue(result['rdma2_position_changed'])
+        self.assertFalse(result['alsa_hw_ptr_advanced'])
+        self.assertEqual(result['rdma_hw_ptr_pair_sample_count'],0)
+        self.assertFalse(result['rdma_hw_ptr_pair_samples_contiguous'])
+        self.assertEqual(result['pointer_ipc_stage'],
+                         'pointer_ipc_not_localized_insufficient_or_gapped_samples')
+        self.assertEqual(result['localization'],'insufficient_source_distinguishing_evidence')
+
+    def test_stationary_rdma_pointer_pairs_do_not_explain_unpaired_prior_motion(self):
+        samples=[
+            source_sample(0,bclk='1',gate='1',rdma_status=0,rdma_status_add=0,hw_ptr=0),
+            source_sample(1,bclk='1',gate='1',rdma_status=1,rdma_status_add=4,hw_ptr=0),
+            source_sample(2,bclk='1',gate='1',rdma_status=1,rdma_status_add=4,hw_ptr=0),
+            source_sample(3,bclk='1',gate='1',rdma_status=1,rdma_status_add=4,hw_ptr=0),
+        ]
+        for sample in samples[:2]:
+            sample['alsa_counters'].pop('hw_ptr')
+        result=route.audio_snapshot.source_path_assessment(samples)
+        self.assertTrue(result['rdma2_position_changed'])
+        self.assertFalse(result['rdma_position_changed_in_paired_window'])
+        self.assertEqual(result['rdma_hw_ptr_pair_sample_count'],2)
+        self.assertEqual(result['pointer_ipc_stage'],
+                         'pointer_ipc_not_localized_insufficient_or_gapped_samples')
 
     def test_gapped_rdma_or_pointer_samples_do_not_claim_stall_or_progress(self):
         result=route.audio_snapshot.source_path_assessment([
