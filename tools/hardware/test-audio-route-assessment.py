@@ -16,6 +16,8 @@ from unittest import mock
 
 spec=importlib.util.spec_from_file_location('route',Path(__file__).with_name('run-audio-route-prepare-once.py'))
 route=importlib.util.module_from_spec(spec);spec.loader.exec_module(route)
+node_spec=importlib.util.spec_from_file_location('audio_node',Path(__file__).with_name('audio-rdma2-node-once.py'))
+node_helper=importlib.util.module_from_spec(node_spec);node_spec.loader.exec_module(node_helper)
 BASE={'wrapper_returncode':0,'after_audio_exit':0,'trace_capture_exit':0,'kernel_capture_exit':0,
       'same_boot':True,'candidate_identity_verified':True,
       'before':{'boot_id':'boot-private-dynamic'},
@@ -36,6 +38,32 @@ def isolated_python(script,*args):
     flags=['-O'] if sys.flags.optimize else []
     return subprocess.run([sys.executable,*flags,'-I','-c',script,*args],
                           capture_output=True,text=True,check=False)
+
+
+def node_fixture(root, *, card_id='RainbowPrince', pcm_status='closed',
+                 dev='116:3', uevent=None, wrong_class_link=False,
+                 wrong_devchar_link=False):
+    proc=root/'proc';sysroot=root/'sys';devroot=root/'dev'
+    (proc/'1').mkdir(parents=True);(proc/'sys/kernel').mkdir(parents=True)
+    (proc/'asound/card0/pcm2p/sub0').mkdir(parents=True)
+    (proc/'1/comm').write_text('native-guardian\n')
+    (proc/'sys/kernel/osrelease').write_text(node_helper.KERNEL_RELEASE+'\n')
+    (proc/'asound/card0/id').write_text(card_id+'\n')
+    (proc/'asound/card0/pcm2p/sub0/status').write_text(pcm_status+'\n')
+    target=sysroot/node_helper.EXPECTED_TARGET
+    target.mkdir(parents=True)
+    (target/'dev').write_text(dev+'\n')
+    if uevent is None:
+        uevent='MAJOR=116\nMINOR=3\nDEVNAME=snd/pcmC0D2p\nDEVTYPE=pcm\n'
+    (target/'uevent').write_text(uevent)
+    class_dir=sysroot/'class/sound';class_dir.mkdir(parents=True)
+    devchar_dir=sysroot/'dev/char';devchar_dir.mkdir(parents=True)
+    wrong=sysroot/'devices/platform/sound/sound/card0/other-pcm';wrong.mkdir(parents=True)
+    (class_dir/node_helper.NODE_NAME).symlink_to(wrong if wrong_class_link else target)
+    (devchar_dir/'116:3').symlink_to(wrong if wrong_devchar_link else target)
+    devroot.mkdir(mode=0o755);os.chmod(devroot,0o755)
+    snd=devroot/'snd';snd.mkdir(mode=0o755);os.chmod(snd,0o755)
+    return proc,sysroot,devroot
 
 
 def dma_sample(sequence,monotonic,hw_ptr):
@@ -86,6 +114,180 @@ class Assessment(unittest.TestCase):
         compile(route.AUDIO_PREFLIGHT,'audio-route-read-only-preflight','exec')
         self.assertNotIn('assert ',route.WRAPPER)
         self.assertNotIn('assert ',route.AUDIO_PREFLIGHT)
+        helper_source=Path(__file__).with_name('audio-rdma2-node-once.py').read_text()
+        self.assertEqual((node_helper.NODE_NAME,node_helper.MAJOR,node_helper.MINOR),
+                         ('pcmC0D2p',116,3))
+        self.assertNotIn('mdev -s',helper_source)
+        self.assertNotIn('os.listdir',helper_source)
+        self.assertEqual(helper_source.count('mknod_fn('),1)
+
+    def test_node_helper_receipt_is_exact_and_pinned_to_116_3(self):
+        record={'schema':'audio-rdma2-node/v1','path':'/dev/snd/pcmC0D2p',
+                'major':116,'minor':3,'uid':0,'gid':0,'mode':'0600',
+                'created':True,'state':'created','card_id':'RainbowPrince',
+                'pcm_status':'closed',
+                'sysfs_class_target':'/sys/devices/platform/sound/sound/card0/pcmC0D2p',
+                'sysfs_devchar_target':'/sys/devices/platform/sound/sound/card0/pcmC0D2p',
+                'dev':'116:3','devname':'snd/pcmC0D2p','devtype':'pcm'}
+        calls=[]
+        trial=SimpleNamespace(remote=lambda command:calls.append(command) or
+            SimpleNamespace(returncode=0,stdout=json.dumps(record),stderr=''))
+        parsed,digest=route.remote_pcm_node_provision(trial)
+        self.assertEqual(parsed,record)
+        self.assertEqual(len(digest),64)
+        self.assertIn('--apply',calls[0])
+        invalid={**record,'minor':4,'dev':'116:4'}
+        trial.remote=lambda command:SimpleNamespace(returncode=0,
+            stdout=json.dumps(invalid),stderr='')
+        with self.assertRaisesRegex(RuntimeError,'exact-identity'):
+            route.remote_pcm_node_provision(trial)
+
+    def test_operation_marker_precedes_node_then_trace_mutations(self):
+        calls=[]
+        class Operation:
+            def begin(self,*,project_root):calls.append('begin')
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)/'worktree';root.mkdir(mode=0o700)
+            local,fd=route.create_private_trial_dir(route.AUDIO_TRIAL_ID,root)
+            try:
+                with mock.patch.object(route,'remote_pcm_node_provision',
+                                       side_effect=lambda trial:(calls.append('node') or
+                                           ({'schema':'audio-rdma2-node/v1'},'f'*64))), \
+                     mock.patch.object(route,'remote_trace_stage',
+                                       side_effect=lambda trial:calls.append('trace') or {'path':'trace'}):
+                    result=route.begin_and_stage_trace(SimpleNamespace(),Operation(),fd)
+                self.assertEqual(calls,['begin','node','trace'])
+                self.assertEqual(result[1],'f'*64)
+                self.assertTrue((local/'pcm-node-provision.json').is_file())
+            finally:os.close(fd)
+
+    def test_exact_pcm_node_fixture_creates_only_root_0600_116_3(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            proc,sysroot,devroot=node_fixture(Path(temporary))
+            uid=os.getuid();gid=os.getgid();created={}
+            calls=[]
+            def fake_stat(name,*,dir_fd,follow_symlinks):
+                if name!=node_helper.NODE_NAME or not created:
+                    raise FileNotFoundError(name)
+                return created['info']
+            def fake_mknod(name,mode,device,*,dir_fd):
+                calls.append((name,mode,device,dir_fd))
+                if created:raise FileExistsError(name)
+                created['info']=SimpleNamespace(st_mode=mode,st_rdev=device,
+                                                st_uid=uid,st_gid=gid)
+            chowns=[];chmods=[]
+            def fake_chown(name,owner,group,*,dir_fd,follow_symlinks):
+                chowns.append((name,owner,group,dir_fd,follow_symlinks))
+            def fake_chmod(name,mode,*,dir_fd):chmods.append((name,mode,dir_fd))
+            result=node_helper.provision_node(
+                sys_root=sysroot,proc_root=proc,dev_root=devroot,apply=True,
+                expected_uid=uid,expected_gid=gid,mknod_fn=fake_mknod,
+                chown_fn=fake_chown,chmod_fn=fake_chmod,stat_fn=fake_stat)
+            self.assertEqual(result['state'],'created')
+            self.assertTrue(result['created'])
+            self.assertEqual((result['major'],result['minor']),(116,3))
+            self.assertEqual((result['uid'],result['gid'],result['mode']),
+                             (uid,gid,'0600'))
+            self.assertEqual(len(calls),1)
+            self.assertEqual(calls[0][:3],(node_helper.NODE_NAME,
+                node_helper.stat.S_IFCHR|0o600,os.makedev(116,3)))
+            self.assertEqual(len(chowns),1);self.assertEqual(len(chmods),1)
+
+    def test_pcm_node_plan_and_exact_existing_are_no_write(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            proc,sysroot,devroot=node_fixture(Path(temporary))
+            uid=os.getuid();gid=os.getgid();calls=[]
+            def missing_stat(name,*,dir_fd,follow_symlinks):raise FileNotFoundError(name)
+            planned=node_helper.provision_node(
+                sys_root=sysroot,proc_root=proc,dev_root=devroot,apply=False,
+                expected_uid=uid,expected_gid=gid,
+                mknod_fn=lambda *a,**k:calls.append((a,k)),stat_fn=missing_stat)
+            self.assertEqual(planned['state'],'missing');self.assertEqual(calls,[])
+            exact=SimpleNamespace(st_mode=node_helper.stat.S_IFCHR|0o600,
+                                  st_rdev=os.makedev(116,3),st_uid=uid,st_gid=gid)
+            present=node_helper.provision_node(
+                sys_root=sysroot,proc_root=proc,dev_root=devroot,apply=True,
+                expected_uid=uid,expected_gid=gid,stat_fn=lambda *a,**k:exact,
+                mknod_fn=lambda *a,**k:calls.append((a,k)))
+            self.assertEqual(present['state'],'already_present_exact')
+            self.assertFalse(present['created']);self.assertEqual(calls,[])
+
+    def test_pcm_node_rejects_wrong_sysfs_and_existing_targets_before_mknod(self):
+        fixture_cases=(
+            {'dev':'116:4'},
+            {'uevent':'MAJOR=116\nMINOR=4\nDEVNAME=snd/pcmC0D2p\nDEVTYPE=pcm\n'},
+            {'wrong_class_link':True},
+            {'wrong_devchar_link':True},
+            {'card_id':'WrongCard'},
+            {'pcm_status':'state: RUNNING'},
+        )
+        for overrides in fixture_cases:
+            with self.subTest(overrides=overrides),tempfile.TemporaryDirectory() as temporary:
+                proc,sysroot,devroot=node_fixture(Path(temporary),**overrides)
+                calls=[]
+                with self.assertRaises(RuntimeError):
+                    node_helper.provision_node(
+                        sys_root=sysroot,proc_root=proc,dev_root=devroot,apply=True,
+                        expected_uid=os.getuid(),expected_gid=os.getgid(),
+                        mknod_fn=lambda *a,**k:calls.append((a,k)))
+                self.assertEqual(calls,[])
+        with tempfile.TemporaryDirectory() as temporary:
+            proc,sysroot,devroot=node_fixture(Path(temporary))
+            wrong=SimpleNamespace(st_mode=node_helper.stat.S_IFCHR|0o600,
+                                  st_rdev=os.makedev(116,4),st_uid=os.getuid(),st_gid=os.getgid())
+            calls=[]
+            with self.assertRaisesRegex(RuntimeError,'wrong identity'):
+                node_helper.provision_node(
+                    sys_root=sysroot,proc_root=proc,dev_root=devroot,apply=True,
+                    expected_uid=os.getuid(),expected_gid=os.getgid(),
+                    stat_fn=lambda *a,**k:wrong,
+                    mknod_fn=lambda *a,**k:calls.append((a,k)))
+            self.assertEqual(calls,[])
+
+    def test_pcm_node_mknod_race_returns_eexist_without_replacement(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            proc,sysroot,devroot=node_fixture(Path(temporary))
+            calls=[];chowns=[]
+            def missing_stat(name,*,dir_fd,follow_symlinks):raise FileNotFoundError(name)
+            def raced_mknod(name,mode,device,*,dir_fd):
+                calls.append((name,mode,device));raise FileExistsError(name)
+            with self.assertRaises(FileExistsError):
+                node_helper.provision_node(
+                    sys_root=sysroot,proc_root=proc,dev_root=devroot,apply=True,
+                    expected_uid=os.getuid(),expected_gid=os.getgid(),
+                    stat_fn=missing_stat,mknod_fn=raced_mknod,
+                    chown_fn=lambda *a,**k:chowns.append((a,k)))
+            self.assertEqual(len(calls),1);self.assertEqual(chowns,[])
+
+    def test_pcm_node_rejects_existing_symlink_or_regular_file_without_replacement(self):
+        for target_kind in ('symlink','regular'):
+            with self.subTest(target_kind=target_kind),tempfile.TemporaryDirectory() as temporary:
+                proc,sysroot,devroot=node_fixture(Path(temporary))
+                target=devroot/'snd'/node_helper.NODE_NAME
+                if target_kind=='symlink':
+                    target.symlink_to('/dev/null')
+                else:
+                    target.write_text('not a device node')
+                calls=[]
+                with self.assertRaises(RuntimeError):
+                    node_helper.provision_node(
+                        sys_root=sysroot,proc_root=proc,dev_root=devroot,apply=True,
+                        expected_uid=os.getuid(),expected_gid=os.getgid(),
+                        mknod_fn=lambda *a,**k:calls.append((a,k)))
+                self.assertEqual(calls,[])
+
+    def test_pcm_node_rejects_symlinked_sound_directory_before_mknod(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            proc,sysroot,devroot=node_fixture(Path(temporary))
+            snd=devroot/'snd';snd.rmdir();snd.symlink_to('/tmp')
+            calls=[]
+            with self.assertRaises(OSError):
+                node_helper.provision_node(
+                    sys_root=sysroot,proc_root=proc,dev_root=devroot,apply=True,
+                    expected_uid=os.getuid(),expected_gid=os.getgid(),
+                    mknod_fn=lambda *a,**k:calls.append((a,k)))
+            self.assertEqual(calls,[])
+
     def test_completed_diagnostic_does_not_claim_physical_sound(self):
         a=route.classify(BASE,TRACE)
         self.assertTrue(a['diagnostic_completed']);self.assertFalse(a['physical_playback_verified'])
@@ -335,9 +537,9 @@ class Assessment(unittest.TestCase):
             stage=isolated_python(route.REMOTE_TRACE_STAGE,*stage_args)
             self.assertEqual(stage.returncode,0,stage.stderr)
             metadata=json.loads(stage.stdout)
-            self.assertEqual(metadata['path'],str(fake_root)+'/audio-trials-20260927/audio-zero-20260927/trace.strace')
+            self.assertEqual(metadata['path'],str(fake_root)+'/audio-trials-20260927/audio-zero-node-20260927/trace.strace')
             self.assertEqual(metadata['trace_size'],0)
-            trace=fake_root/'audio-trials-20260927'/'audio-zero-20260927'/'trace.strace'
+            trace=fake_root/'audio-trials-20260927'/'audio-zero-node-20260927'/'trace.strace'
             payload=b'ioctl(4, SNDRV_PCM_IOCTL_PREPARE) = 0\n'
             trace.write_bytes(payload)
             second=isolated_python(route.REMOTE_TRACE_STAGE,*stage_args)
@@ -407,7 +609,7 @@ class Assessment(unittest.TestCase):
             local,fd=route.create_private_trial_dir(route.AUDIO_TRIAL_ID,root)
             remote_root=Path(temp)/'remote-srv-s22';remote_root.mkdir(mode=0o700)
             def interrupted_stage(command):
-                partial=remote_root/'audio-trials-20260927'/'audio-zero-20260927'
+                partial=remote_root/'audio-trials-20260927'/'audio-zero-node-20260927'
                 partial.mkdir(parents=True,mode=0o700)
                 (partial/'trace.strace').write_text('partial reservation')
                 raise subprocess.TimeoutExpired(command,10)
@@ -416,13 +618,16 @@ class Assessment(unittest.TestCase):
             try:
                 with self.assertRaisesRegex(RuntimeError,'outcome is unknown'):
                     with guard.acquire_operation_lock(root,route.AUDIO_TRIAL_ID,
-                                                       route.AUDIO_OPERATION_KIND) as operation:
+                                                       route.AUDIO_OPERATION_KIND) as operation, \
+                         mock.patch.object(route,'remote_pcm_node_provision',
+                                           return_value=({'schema':'fixture'},'fixture-sha')):
                         route.begin_and_stage_trace(trial,operation,fd)
                 self.assertEqual(guard.state[route.AUDIO_TRIAL_ID],'unknown')
                 self.assertEqual(operation.complete_calls,[])
-                self.assertTrue((remote_root/'audio-trials-20260927'/'audio-zero-20260927'/'trace.strace').exists())
+                self.assertTrue((remote_root/'audio-trials-20260927'/'audio-zero-node-20260927'/'trace.strace').exists())
                 note=json.loads((local/'unknown.txt').read_text())
-                self.assertTrue(note['remote_staging_may_be_partial'])
+                self.assertTrue(note['pcm_node_may_have_been_created'])
+                self.assertTrue(note['remote_trace_stage_may_be_partial'])
                 self.assertFalse(note['route_or_pcm_operation_invoked'])
                 with self.assertRaisesRegex(RuntimeError,'blocks retry'):
                     with guard.acquire_operation_lock(root,route.AUDIO_TRIAL_ID,
@@ -483,7 +688,7 @@ class Assessment(unittest.TestCase):
 
     def test_execute_rejects_trial_alias_before_loading_operation_guard(self):
         with mock.patch.object(route,'load_trial_guard',side_effect=RuntimeError('guard accessed')), \
-             mock.patch.object(sys,'argv',['runner','audio-zero-20260927-retry','--execute',
+             mock.patch.object(sys,'argv',['runner','audio-zero-node-20260927-retry','--execute',
                                            '--zero-second','--sample-progress']):
             with self.assertRaises(SystemExit):route.main()
 

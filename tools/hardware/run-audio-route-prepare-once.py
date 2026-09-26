@@ -25,14 +25,14 @@ ROOT=Path(__file__).resolve().parents[2]
 HCI_TRIAL_ID='hci-candidate-20260924-second'
 HCI_CANDIDATE_GNU_BUILD_ID='b2dda820b18d410d9bf12f1bd2584567d545991d'
 HCI_CANDIDATE_RECOVERY_SHA256='42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5'
-AUDIO_TRIAL_ID='audio-zero-20260927'
+AUDIO_TRIAL_ID='audio-zero-node-20260927'
 AUDIO_OPERATION_KIND='audio-zero'
 AUDIO_TRACE_ROOT='/srv/s22'
 AUDIO_TRACE_REL=('audio-trials-20260927',AUDIO_TRIAL_ID,'trace.strace')
 TRACE_MAX_BYTES=2_000_000
 TRACE_MIN_FREE_BYTES=16*1024*1024
 TRACE_MIN_FREE_INODES=32
-AUDIO_PREFLIGHT=r'''import json,pathlib,re,shutil,subprocess
+AUDIO_PREFLIGHT=r'''import json,os,pathlib,re,shutil,stat,subprocess
 p=pathlib.Path
 def need(condition,reason):
  if not condition:raise RuntimeError(reason)
@@ -47,6 +47,19 @@ need(p('/proc/asound/card0/id').read_text().strip()=='RainbowPrince','wrong_card
 node=p('/sys/class/sound/pcmC0D2p').resolve(strict=True)
 need(node==p('/sys/devices/platform/sound/sound/card0/pcmC0D2p'),'wrong_pcm_node')
 need((node/'dev').read_text().strip()=='116:3','wrong_pcm_device_number')
+dev_info=os.lstat('/dev');snd_info=os.lstat('/dev/snd')
+need(stat.S_ISDIR(dev_info.st_mode) and dev_info.st_uid==0 and not (stat.S_IMODE(dev_info.st_mode)&0o022),'unsafe_dev_root')
+need(stat.S_ISDIR(snd_info.st_mode) and snd_info.st_uid==0 and snd_info.st_gid==0 and
+     stat.S_IMODE(snd_info.st_mode)==0o755 and snd_info.st_dev==dev_info.st_dev,'unsafe_sound_directory')
+pcm_node_path='/dev/snd/pcmC0D2p'
+try:
+ pcm_node=os.lstat(pcm_node_path)
+ need(stat.S_ISCHR(pcm_node.st_mode) and os.major(pcm_node.st_rdev)==116 and
+      os.minor(pcm_node.st_rdev)==3 and pcm_node.st_uid==0 and pcm_node.st_gid==0 and
+      stat.S_IMODE(pcm_node.st_mode)==0o600,'unsafe_pcm_device_node')
+ pcm_node_state='present_exact'
+except FileNotFoundError:
+ pcm_node_state='missing'
 need(p('/sys/class/net/ecm0/carrier').read_text().strip()=='1','ecm_carrier_down')
 amps={}
 for name in ('Left AMP Enable Switch','Right AMP Enable Switch'):
@@ -63,7 +76,8 @@ abox=p('/sys/bus/platform/devices/18c50000.abox')
 service=(abox/'service').read_text().strip();reset=(abox/'reset_count').read_text().strip()
 need(service=='1','abox_service_unavailable');need(reset=='0','abox_reset_count_nonzero')
 cache_only=p('/sys/kernel/debug/regmap/18c50000.abox/cache_only').read_text().strip()
-print(json.dumps({'card':'RainbowPrince','pcm':'116:3','status':status,'amps':amps,
+print(json.dumps({'card':'RainbowPrince','pcm':'116:3','pcm_node_state':pcm_node_state,
+ 'status':status,'amps':amps,
  'routes':routes,'service':service,'reset_count':reset,
  'runtime_status':(abox/'power/runtime_status').read_text().strip(),
  'cache_only':cache_only},sort_keys=True))
@@ -115,8 +129,8 @@ try:
  need(free_inodes>=minimum_inodes,'persistent_trace_inodes_below_floor')
  namespace=child_dir(rootfd,'audio-trials-20260927',expected_uid,0o700,root.st_dev,True)
  try:
-  os.mkdir('audio-zero-20260927',0o700,dir_fd=namespace);os.fsync(namespace)
-  trial=child_dir(namespace,'audio-zero-20260927',expected_uid,0o700,root.st_dev)
+  os.mkdir('audio-zero-node-20260927',0o700,dir_fd=namespace);os.fsync(namespace)
+  trial=child_dir(namespace,'audio-zero-node-20260927',expected_uid,0o700,root.st_dev)
   try:
    tfd=os.open('trace.strace',os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_CLOEXEC|
                getattr(os,'O_NOFOLLOW',0),0o600,dir_fd=trial)
@@ -126,7 +140,7 @@ try:
     need(trace.st_uid==expected_uid and stat.S_IMODE(trace.st_mode)==0o600,'trace_reservation_owner_or_mode_changed')
     need(trace.st_dev==root.st_dev and trace.st_size==0,'trace_reservation_filesystem_or_size_changed')
     os.fsync(tfd);os.fsync(trial);os.fsync(namespace)
-    print(json.dumps({'path':root_path+'/audio-trials-20260927/audio-zero-20260927/trace.strace',
+    print(json.dumps({'path':root_path+'/audio-trials-20260927/audio-zero-node-20260927/trace.strace',
      'root_dev':root.st_dev,'namespace_dev':os.fstat(namespace).st_dev,
      'trial_dev':os.fstat(trial).st_dev,'trace_dev':trace.st_dev,'trace_ino':trace.st_ino,
      'trace_size':trace.st_size,'free_bytes':free_bytes,'free_inodes':free_inodes},sort_keys=True))
@@ -158,7 +172,7 @@ try:
  info=os.fstat(root);need(stat.S_ISDIR(info.st_mode) and info.st_uid==expected_uid and stat.S_IMODE(info.st_mode)==0o700 and info.st_dev==expected_dev,'trace_root_changed')
  namespace=child(root,'audio-trials-20260927',expected_uid,0o700,expected_dev)
  try:
-  trial=child(namespace,'audio-zero-20260927',expected_uid,0o700,expected_dev)
+  trial=child(namespace,'audio-zero-node-20260927',expected_uid,0o700,expected_dev)
   try:
    fd=os.open('trace.strace',os.O_RDONLY|os.O_NONBLOCK|os.O_CLOEXEC|getattr(os,'O_NOFOLLOW',0),dir_fd=trial)
    try:
@@ -174,7 +188,7 @@ try:
      data.extend(chunk)
     need(len(data)==trace.st_size,'trace_short_read')
     need(os.fstat(fd).st_size==len(data),'trace_size_changed_during_read')
-    print(json.dumps({'path':root_path+'/audio-trials-20260927/audio-zero-20260927/trace.strace',
+    print(json.dumps({'path':root_path+'/audio-trials-20260927/audio-zero-node-20260927/trace.strace',
      'device':trace.st_dev,'inode':trace.st_ino,'size':len(data),
      'data_base64':base64.b64encode(bytes(data)).decode('ascii')},sort_keys=True))
    finally:os.close(fd)
@@ -639,19 +653,62 @@ def remote_trace_read(trial,metadata):
     return data.decode('utf-8','replace'),record
 
 
-def begin_and_stage_trace(trial,operation,raw_fd):
-    """Keep a durable operation UNKNOWN if remote stage outcome is ambiguous."""
-    operation.begin(project_root=ROOT)
+def remote_pcm_node_provision(trial):
+    helper=(ROOT/'tools/hardware/audio-rdma2-node-once.py').read_bytes()
+    command=shlex.join(['python3','-c',helper.decode('utf-8'),'--apply'])
+    result=trial.remote(command)
+    if result.returncode:
+        detail=result.stderr.decode('utf-8','replace') if isinstance(result.stderr,bytes) else str(result.stderr)
+        raise RuntimeError('exact RDMA2 playback node provision failed: '+detail[:400])
     try:
-        return remote_trace_stage(trial)
+        record=json.loads(result.stdout)
+    except (TypeError,ValueError) as error:
+        raise RuntimeError('PCM node helper returned malformed receipt') from error
+    expected_target='/sys/devices/platform/sound/sound/card0/pcmC0D2p'
+    expected_fields={'schema','path','major','minor','uid','gid','mode','created','state',
+                     'card_id','pcm_status','sysfs_class_target','sysfs_devchar_target',
+                     'dev','devname','devtype'}
+    if (not isinstance(record,dict) or set(record)!=expected_fields
+            or record.get('schema')!='audio-rdma2-node/v1'
+            or record.get('path')!='/dev/snd/pcmC0D2p'
+            or record.get('major')!=116 or record.get('minor')!=3
+            or record.get('uid')!=0 or record.get('gid')!=0
+            or record.get('mode')!='0600'
+            or not isinstance(record.get('created'),bool)
+            or record.get('state') not in ('created','already_present_exact')
+            or record.get('created') != (record.get('state')=='created')
+            or record.get('card_id')!='RainbowPrince'
+            or record.get('pcm_status')!='closed'
+            or record.get('sysfs_class_target')!=expected_target
+            or record.get('sysfs_devchar_target')!=expected_target
+            or record.get('dev')!='116:3'
+            or record.get('devname')!='snd/pcmC0D2p'
+            or record.get('devtype')!='pcm'):
+        raise RuntimeError('PCM node helper receipt failed exact-identity validation')
+    return record,hashlib.sha256(helper).hexdigest()
+
+
+def begin_and_stage_trace(trial,operation,raw_fd):
+    """Provision one exact node and stage trace under one durable operation."""
+    operation.begin(project_root=ROOT)
+    node_attempted=False
+    trace_attempted=False
+    try:
+        node_attempted=True
+        node_metadata,node_sha256=remote_pcm_node_provision(trial)
+        write_private_artifact(raw_fd,'pcm-node-provision.json',
+                               json.dumps(node_metadata,sort_keys=True)+'\n')
+        trace_attempted=True
+        trace_metadata=remote_trace_stage(trial)
+        return node_metadata,node_sha256,trace_metadata
     except BaseException as error:
-        disposition={'remote_trace_stage_outcome':'unknown',
-         'remote_staging_may_be_partial':True,
+        disposition={'outcome':'unknown','pcm_node_may_have_been_created':node_attempted,
+         'remote_trace_stage_may_be_partial':trace_attempted,
          'route_or_pcm_operation_invoked':False,
          'reason_type':type(error).__name__,
          'retry_permitted':False}
         write_private_artifact(raw_fd,'unknown.txt',json.dumps(disposition,sort_keys=True)+'\n')
-        raise RuntimeError('remote trace stage outcome is unknown; route and PCM were not invoked; do not retry') from error
+        raise RuntimeError('audio node/trace staging outcome is unknown; route and PCM were not invoked; do not retry') from error
 
 
 def _remote_text(result):
@@ -694,7 +751,7 @@ def _run(args,operation=None):
     boundary=max(map(float,re.findall(r'^\[\s*([0-9.]+)\]',kernel_text,re.M)),default=0)
     if operation is None:
         os.close(raw_fd);raise RuntimeError('execute requires the shared durable operation guard')
-    try:trace_meta=begin_and_stage_trace(trial,operation,raw_fd)
+    try:node_meta,node_helper_sha256,trace_meta=begin_and_stage_trace(trial,operation,raw_fd)
     except BaseException:
         os.close(raw_fd);raise
     write_private_artifact(raw_fd,'trace-stage.json',json.dumps(trace_meta,indent=2)+'\n')
@@ -734,6 +791,7 @@ def _run(args,operation=None):
     receipt={'started_at':start,'elapsed_seconds':round(elapsed,3),'wrapper_returncode':r.returncode,
              'before':before,'after':after,'same_boot':before['boot_id']==after['boot_id'],
              'candidate_identity':candidate,'candidate_identity_verified':True,
+             'pcm_node_provision':node_meta,'pcm_node_helper_sha256':node_helper_sha256,
              'after_audio_exit':post.returncode,'trace_capture_exit':trace_capture_exit,
              'kernel_capture_exit':kernel.returncode,'helper_sha256':hashlib.sha256(helper).hexdigest(),
              'observer_sha256':hashlib.sha256(observer).hexdigest() if observer else None,
@@ -763,7 +821,7 @@ def main():
     if args.sample_progress and not args.zero_second:ap.error('progress sampling requires --zero-second')
     if not re.fullmatch('[a-z0-9-]+',args.name):ap.error('unique lowercase trial name required')
     if args.execute and (args.name!=AUDIO_TRIAL_ID or not args.zero_second or not args.sample_progress):
-        ap.error('execute is restricted to audio-zero-20260927 --zero-second --sample-progress')
+        ap.error('execute is restricted to audio-zero-node-20260927 --zero-second --sample-progress')
     if args.execute:
         guard=load_trial_guard()
         with guard.acquire_operation_lock(ROOT,args.name,AUDIO_OPERATION_KIND) as operation:
