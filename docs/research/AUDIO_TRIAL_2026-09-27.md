@@ -1,5 +1,31 @@
 # S22 bounded audio stage probe — 2026-09-27
 
+## Actual node-repaired trial and independent interpretation
+
+The coordinator ran `audio-zero-node-20260927` once after independent review.
+The exact missing PCM node was created; PREPARE and seven write ioctls succeeded.
+The child reached its ten-second deadline (62 EAGAINs), was reaped, and the
+selectors, amplifier mute, PCM closure and same-boot health were verified.
+The diagnostic failed; the guard records `failed-cleanup-confirmed`.
+
+Independent host review by `/root/driver_review_20260926` confirmed 19 contiguous
+RUNNING samples with `appl_ptr=8192`, `hw_ptr=0`, RDMA2 CTRL enable=0, and zero
+STATUS progress/position. RDMA2 FE and UAIF1 BE report start; BCLK divider/gate
+enable counts are one. These are software observations, not measured clock pins.
+The SIFS0 and SPUS OUT2-SIFS0 DAPM widgets remain Off, a separate power-graph
+observation. No audible-output or proven physical-DMA-failure claim follows.
+
+Pinned `abox_rdma_trigger()` sends `PCM_PLTDAI_TRIGGER` asynchronously
+(`atomic=1,sync=0`); successful queueing is not DSP completion. Firmware's later
+`PCM_PLTDAI_POINTER` callback updates the pointer. There is no exposed per-stream
+ack counter. The evidence localizes the missing progress at/after firmware
+task-trigger to RDMA activation/pointer return, but does not distinguish the
+exact cause. The retained kernel delta contains normal firmware-ready, params,
+trigger/start/stop and shutdown messages, without an ABOX fault. Postflight
+shows service=1/reset=0, suspended runtime/cache-only and routes RESERVED.
+The exact root:root/0600 node intentionally remains for this boot; this is not
+a persistent bootstrap repair. No further audio trial was automatically run.
+
 ## Purpose and evidence boundary
 
 This change prepares one coordinator-reviewed, one-second digital-zero playback
