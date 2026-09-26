@@ -11,8 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
-#include <sys/socket.h>
-#include <sys/select.h>
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
@@ -208,25 +206,6 @@ static int run_bridge(struct bridge *x, int duration_ms) {
     return running ? 0 : -ECANCELED;
 }
 
-/* Pinned Linux hci_sock.h UAPI layout. No Bluetooth library dependency.
- * The address is deliberately never logged. This is a read-only ioctl.
- */
-struct s22_hci_info {
-    uint16_t dev_id; char name[8]; uint8_t address[6]; uint32_t flags;
-    uint8_t type, features[8]; uint32_t pkt_type, link_policy, link_mode;
-    uint16_t acl_mtu, acl_pkts, sco_mtu, sco_pkts; uint32_t stats[10];
-};
-static int report_hci(struct bridge *x) {
-    struct s22_hci_info info={.dev_id=(uint16_t)x->hci_index};
-    _Static_assert(sizeof(info)==92,"hci_dev_info UAPI size");
-    int fd=socket(AF_BLUETOOTH,SOCK_RAW|SOCK_CLOEXEC,1);
-    if(fd<0)return -1;
-    int rc=ioctl(fd,_IOR('H',211,int),&info);close(fd);
-    if(rc)return -1;
-    printf("bridge_hci_info index=%u flags=%08x acl_mtu=%u cmd_tx=%u evt_rx=%u err_rx=%u err_tx=%u\n",
-        info.dev_id,info.flags,info.acl_mtu,info.stats[2],info.stats[3],info.stats[0],info.stats[1]);
-    return 0;
-}
 int s22_bridge_run(int uart, int duration_ms) {
     if(duration_ms<1 || duration_ms>60000)return -EINVAL;
     running = 1;
@@ -244,7 +223,6 @@ int s22_bridge_run(int uart, int duration_ms) {
     if (attach_h4(&x) < 0) { perror("H4 attach");goto out; }
     rc = run_bridge(&x, duration_ms);
     report_queue_overflow(&x);
-    if (report_hci(&x) && !rc)rc=-1;
     printf("bridge_result=%d commands=%u events=%u ibs_wake_rx=%u ibs_ack_rx=%u queued=%zu\n",
            rc,x.commands,x.events,x.ibs_wake_rx,x.ibs_ack_rx,x.pending_count);fflush(stdout);
 out:

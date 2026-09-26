@@ -5,6 +5,7 @@ import pty
 import select
 import signal
 import subprocess
+import sys
 import termios
 import tempfile
 import time
@@ -192,6 +193,111 @@ int main(int argc, char **argv) {
 }
 '''
 
+LIFECYCLE_SOURCE = r'''#define S22_BT_BRIDGE_EMBED 1
+#define ioctl s22_bt_test_ioctl
+#define socket s22_bt_test_socket
+#include "tools/hardware/bt-h4-ibs-bridge.c"
+#include <fcntl.h>
+#include <pthread.h>
+#include <stdarg.h>
+#include <sys/socket.h>
+
+static unsigned attach_calls, proto_calls, device_calls, detach_calls;
+static unsigned raw_socket_calls, info_ioctl_calls;
+static int inject_overflow, fail_device_lookup, injection_failed;
+
+int s22_bt_test_ioctl(int fd, unsigned long request, ...)
+{
+    va_list args;
+    int result = 0;
+    va_start(args, request);
+    if (request == TIOCSETD) {
+        int *line = va_arg(args, int *);
+        if (*line == N_HCI) {
+            static const uint8_t command[] = {1, 3, 0x0c, 0};
+            attach_calls++;
+            for (unsigned i = 0; inject_overflow && i < 9; ++i)
+                if (write(fd, command, sizeof(command)) != (ssize_t)sizeof(command))
+                    injection_failed = 1;
+        } else if (*line == 0) {
+            detach_calls++;
+        }
+    } else if (request == HCIUARTSETPROTO) {
+        (void)va_arg(args, unsigned long);
+        proto_calls++;
+    } else if (request == HCIUARTGETDEVICE) {
+        (void)va_arg(args, unsigned long);
+        device_calls++;
+        if (fail_device_lookup) {
+            errno = ENODEV;
+            result = -1;
+        } else {
+            result = 7;
+        }
+    } else if (request == _IOR('H', 211, int)) {
+        void *info = va_arg(args, void *);
+        (void)info;
+        info_ioctl_calls++;
+    }
+    va_end(args);
+    return result;
+}
+
+int s22_bt_test_socket(int domain, int type, int protocol)
+{
+    (void)type;
+    (void)protocol;
+    raw_socket_calls++;
+    if (domain != AF_BLUETOOTH) {
+        errno = EAFNOSUPPORT;
+        return -1;
+    }
+    return open("/dev/null", O_RDONLY | O_CLOEXEC);
+}
+
+static void *send_term(void *unused)
+{
+    struct timespec delay = {.tv_sec = 0, .tv_nsec = 30000000};
+    (void)unused;
+    nanosleep(&delay, NULL);
+    kill(getpid(), SIGTERM);
+    return NULL;
+}
+
+int main(int argc, char **argv)
+{
+    int pair[2], rc, expected_abort;
+    pthread_t stopper;
+    int have_stopper = 0;
+    if (argc != 2) return 2;
+    if (!strcmp(argv[1], "overflow")) inject_overflow = 1;
+    if (!strcmp(argv[1], "attach-fail")) fail_device_lookup = 1;
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, pair)) return 2;
+    if (!strcmp(argv[1], "malformed") && write(pair[1], "\x06", 1) != 1) return 2;
+    if (!strcmp(argv[1], "term")) {
+        if (pthread_create(&stopper, NULL, send_term, NULL)) return 2;
+        have_stopper = 1;
+    }
+    if (strcmp(argv[1], "clean") && strcmp(argv[1], "malformed") &&
+        strcmp(argv[1], "overflow") && strcmp(argv[1], "term") &&
+        strcmp(argv[1], "attach-fail")) return 2;
+    rc = s22_bridge_run(pair[0], !strcmp(argv[1], "clean") ? 20 : 1000);
+    if (have_stopper && pthread_join(stopper, NULL)) return 2;
+    close(pair[0]);
+    close(pair[1]);
+    expected_abort = strcmp(argv[1], "clean") != 0;
+    printf("lifecycle socket_calls=%u info_ioctl_calls=%u attach_calls=%u "
+           "proto_calls=%u device_calls=%u detach_calls=%u rc=%d\n",
+           raw_socket_calls, info_ioctl_calls, attach_calls, proto_calls,
+           device_calls, detach_calls, rc);
+    if (injection_failed || raw_socket_calls || info_ioctl_calls ||
+        attach_calls != 1 || detach_calls != 1 ||
+        proto_calls != 1 ||
+        device_calls != 1 || (expected_abort ? rc >= 0 : rc != 0)) return 1;
+    return 0;
+}
+'''
+
 
 class BridgeTests(unittest.TestCase):
     @classmethod
@@ -199,12 +305,16 @@ class BridgeTests(unittest.TestCase):
         cls._build_tmp = tempfile.TemporaryDirectory(prefix="s22-bt-bridge-tests-")
         cls.BINARY = os.path.join(cls._build_tmp.name, "bt-h4-ibs-bridge")
         cls.UNIT_BINARY = os.path.join(cls._build_tmp.name, "bt-h4-ibs-bridge-unit")
+        cls.LIFECYCLE_BINARY = os.path.join(cls._build_tmp.name, "bt-h4-ibs-bridge-lifecycle")
         source = os.path.join(ROOT, "tools/hardware/bt-h4-ibs-bridge.c")
         subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-O2",
                         source, "-o", cls.BINARY, "-lutil"], check=True)
         subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-O2",
                         "-pthread", "-I", ROOT, "-x", "c", "-", "-o", cls.UNIT_BINARY,
                         "-lutil", "-pthread"], input=UNIT_SOURCE, text=True, check=True)
+        subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-O2",
+                        "-pthread", "-I", ROOT, "-x", "c", "-", "-o", cls.LIFECYCLE_BINARY,
+                        "-lutil", "-pthread"], input=LIFECYCLE_SOURCE, text=True, check=True)
 
     @classmethod
     def tearDownClass(cls):
@@ -327,6 +437,65 @@ class BridgeTests(unittest.TestCase):
 
     def test_nonblocking_short_write_recovery(self):
         subprocess.run([self.UNIT_BINARY, "short-write"], check=True)
+
+    def run_lifecycle_case(self, case):
+        return subprocess.run([self.LIFECYCLE_BINARY, case], check=False,
+                              capture_output=True, text=True, timeout=3)
+
+    def assert_lifecycle_detached_without_raw_socket(self, result, *, registered, ran_bridge):
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("lifecycle socket_calls=0 info_ioctl_calls=0", result.stdout)
+        self.assertIn("attach_calls=1", result.stdout)
+        self.assertIn("device_calls=1", result.stdout)
+        self.assertIn("detach_calls=1", result.stdout)
+        self.assertEqual(result.stdout.count("pty_cleanup_ioctl_result="), 1)
+        self.assertNotIn("bridge_hci_info", result.stdout)
+        self.assertEqual("bridge_result=" in result.stdout, ran_bridge)
+        if registered:
+            self.assertIn("bridge_registered_hci=7", result.stdout)
+        else:
+            self.assertNotIn("bridge_registered_hci=7", result.stdout)
+
+    def test_embedded_clean_registration_uses_uart_device_index_only(self):
+        result = self.run_lifecycle_case("clean")
+        self.assert_lifecycle_detached_without_raw_socket(
+            result, registered=True, ran_bridge=True
+        )
+        self.assertIn("rc=0", result.stdout)
+
+    def test_embedded_attach_failure_detaches_once_without_socket(self):
+        result = self.run_lifecycle_case("attach-fail")
+        self.assert_lifecycle_detached_without_raw_socket(
+            result, registered=False, ran_bridge=False
+        )
+        self.assertIn("proto_calls=1 device_calls=1", result.stdout)
+
+    def test_embedded_uart_error_and_queue_overflow_unwind_without_socket(self):
+        for case in ("malformed", "overflow"):
+            with self.subTest(case=case):
+                result = self.run_lifecycle_case(case)
+                self.assert_lifecycle_detached_without_raw_socket(
+                    result, registered=True, ran_bridge=True
+                )
+                if case == "overflow":
+                    self.assertIn("bridge_queue_overflow=1 queued=8", result.stdout)
+
+    def test_embedded_signal_unwind_detaches_once_without_socket(self):
+        result = self.run_lifecycle_case("term")
+        self.assert_lifecycle_detached_without_raw_socket(
+            result, registered=True, ran_bridge=True
+        )
+
+    def test_runner_blocks_attachment_until_exact_readback_review_and_authorization(self):
+        runner = os.path.join(ROOT, "tools/hardware/run-bt-hci-bridge-once.py")
+        result = subprocess.run([sys.executable, runner, "--execute"], check=False,
+                                capture_output=True, text=True, timeout=3)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("one raw-HCI socket create/close check only", result.stderr)
+        self.assertIn("exact RECOVERY candidate boot/build identity and full readback", result.stderr)
+        self.assertIn("independently review", result.stderr)
+        self.assertIn("separate explicit authorization", result.stderr)
+        self.assertNotIn("restore and validate the kernel HCI socket", result.stderr)
 
 
 if __name__ == "__main__":
