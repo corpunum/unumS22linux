@@ -239,8 +239,14 @@ def main() -> int:
         "lifecycle_sources_available": lifecycle_source_available,
     }
     checks["known_lifecycle_gaps"] = {
-        "normal_boot_unwind_missing": checks["source"]["normal_boot_unwind_missing"],
-        "power_response_timeout_missing": not checks["source"]["power_response_timeout_bounded"],
+        "normal_boot_unwind_missing": (
+            checks["source"]["normal_boot_unwind_missing"]
+            if lifecycle_source_available else None
+        ),
+        "power_response_timeout_missing": (
+            not checks["source"]["power_response_timeout_bounded"]
+            if lifecycle_source_available else None
+        ),
         "publication_drain_wait_unbounded": (
             checks["source"]["publication_drain_wait_unbounded"]
             if lifecycle_source_available else None
