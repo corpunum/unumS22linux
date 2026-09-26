@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Host-only gates for the one-shot Bluetooth registration adapter."""
 import contextlib
+import hashlib
 import importlib.util
 import io
 import json
 import os
 from pathlib import Path
 import shlex
+import struct
 import subprocess
 import sys
 import tempfile
@@ -33,6 +35,35 @@ adapter = load("bt_hci_registration_adapter",
 observer_fixtures = load("bt_hci_observer_fixtures",
                          ROOT / "tools/hardware/test-audio-recovery-observer.py")
 observer = observer_fixtures.observer
+
+
+def synthetic_aarch64_elf():
+    data = bytearray(512)
+    data[:6] = b"\x7fELF\x02\x01"
+    struct.pack_into("<H", data, 18, 183)
+    struct.pack_into("<Q", data, 40, 64)
+    struct.pack_into("<HH", data, 58, 64, 1)
+    struct.pack_into("<I", data, 68, 7)  # SHT_NOTE
+    struct.pack_into("<QQ", data, 88, 128, 36)
+    build_id = bytes.fromhex("0123456789abcdef0123456789abcdef01234567")
+    struct.pack_into("<III", data, 128, 4, len(build_id), 3)
+    data[140:144] = b"GNU\0"
+    data[144:164] = build_id
+    return bytes(data), build_id.hex()
+
+
+FIXTURE_ARTIFACT, FIXTURE_BUILD_ID = synthetic_aarch64_elf()
+FIXTURE_ARTIFACT_SHA256 = hashlib.sha256(FIXTURE_ARTIFACT).hexdigest()
+
+
+@contextlib.contextmanager
+def fixture_artifact_pins():
+    with mock.patch.multiple(
+            adapter,
+            EXPECTED_ARTIFACT_SHA256=FIXTURE_ARTIFACT_SHA256,
+            EXPECTED_ARTIFACT_SIZE=len(FIXTURE_ARTIFACT),
+            EXPECTED_ARTIFACT_BUILD_ID=FIXTURE_BUILD_ID):
+        yield
 
 
 class FakeBoard:
@@ -203,13 +234,14 @@ class AdapterTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory(prefix="bt-artifact-mismatch-") as temporary:
             artifact = Path(temporary) / "probe"
-            changed = bytearray(adapter.ARTIFACT.read_bytes())
+            changed = bytearray(FIXTURE_ARTIFACT)
             changed[0] ^= 0xff
             artifact.write_bytes(changed)
             os.chmod(artifact, 0o700)
-            with self.assertRaisesRegex(adapter.GateError, "artifact SHA-256 mismatch"):
-                adapter.validate_local_provenance(
-                    root=ROOT, artifact_path=artifact, private_headers=())
+            with fixture_artifact_pins():
+                with self.assertRaisesRegex(adapter.GateError, "artifact SHA-256 mismatch"):
+                    adapter.validate_local_provenance(
+                        root=ROOT, artifact_path=artifact, private_headers=())
 
     def test_replaced_temp_artifact_after_preflight_never_reaches_remote_stage(self):
         with tempfile.TemporaryDirectory(prefix="bt-artifact-toctou-") as temporary:
@@ -245,7 +277,7 @@ class AdapterTests(unittest.TestCase):
                 encoding="utf-8")
 
             artifact = Path(temporary) / "probe"
-            artifact.write_bytes(adapter.ARTIFACT.read_bytes())
+            artifact.write_bytes(FIXTURE_ARTIFACT)
             os.chmod(artifact, 0o700)
             stage_calls = []
             class RemoteCounter:
@@ -266,13 +298,16 @@ class AdapterTests(unittest.TestCase):
             fake_observer = SimpleNamespace(_trusted_deployer=lambda: RemoteCounter())
 
             def validate_then_use_later():
-                return adapter.validate_local_provenance(artifact_path=artifact)
+                return adapter.validate_local_provenance(
+                    artifact_path=artifact, private_headers=())
 
             def board_invoker(board, name):
                 self.assertEqual(name, adapter.TRIAL_ID)
                 # Replace only after adapter preflight; actual board.main then
                 # rereads BINARY and builds its dynamic staging digest.
-                artifact.write_bytes(b"replacement after preflight")
+                replacement = bytearray(FIXTURE_ARTIFACT)
+                replacement[-1] ^= 0xff
+                artifact.write_bytes(replacement)
                 self.events.append("replacement")
                 board.ROOT = workspace
                 board.SOURCE = source
@@ -291,9 +326,10 @@ class AdapterTests(unittest.TestCase):
                 local_validator=validate_then_use_later,
                 board_invoker=board_invoker,
             )
-            with self.assertRaisesRegex(adapter.GateError,
-                                        "staged bridge artifact size mismatch"):
-                adapter.run_trial(adapter.TRIAL_ID, **dependencies)
+            with fixture_artifact_pins():
+                with self.assertRaisesRegex(adapter.GateError,
+                                            "staged bridge artifact SHA-256 mismatch"):
+                    adapter.run_trial(adapter.TRIAL_ID, **dependencies)
 
             self.assertEqual(self.events, ["transport", "snapshot", "candidate_hash",
                                            "controllers", "replacement", "board_main"])
@@ -409,7 +445,7 @@ class AdapterTests(unittest.TestCase):
 
             binary = workspace / "builds/probe"
             binary.parent.mkdir()
-            binary.write_bytes(adapter.ARTIFACT.read_bytes())
+            binary.write_bytes(FIXTURE_ARTIFACT)
             destination = workspace / "staging/probe"
             board = adapter.load_board()
             board.__file__ = str(board_copy)
@@ -438,9 +474,10 @@ class AdapterTests(unittest.TestCase):
 
             deployer = LocalStageDeployer()
             fake_observer = SimpleNamespace(_trusted_deployer=lambda: deployer)
-            with self.assertRaises(RuntimeError) as failure:
-                adapter.run_board_main(board, adapter.TRIAL_ID, fake_observer,
-                                       trusted_root=trusted_root)
+            with fixture_artifact_pins():
+                with self.assertRaises(RuntimeError) as failure:
+                    adapter.run_board_main(board, adapter.TRIAL_ID, fake_observer,
+                                           trusted_root=trusted_root)
 
             self.assertEqual(shlex.split(deployer.command)[:2], ["python3", "-I"])
             self.assertNotEqual(deployer.process.returncode, 0)
