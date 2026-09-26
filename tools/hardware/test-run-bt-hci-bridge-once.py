@@ -213,57 +213,81 @@ class AdapterTests(unittest.TestCase):
 
     def test_replaced_temp_artifact_after_preflight_never_reaches_remote_stage(self):
         with tempfile.TemporaryDirectory(prefix="bt-artifact-toctou-") as temporary:
+            workspace = Path(temporary) / "workspace"
+            trusted_root = Path(temporary) / "trusted"
+            hardware = workspace / "tools/hardware"
+            gpu = workspace / "tools/gpu-compat"
+            hardware.mkdir(parents=True)
+            gpu.mkdir(parents=True)
+            (trusted_root / "tools/gpu-compat").mkdir(parents=True)
+            board_source = ROOT / "tools/hardware/run-bt-board-once.py"
+            board_copy = hardware / board_source.name
+            board_copy.write_bytes(board_source.read_bytes())
+            source = hardware / "source.c"
+            accepted_source = hardware / "accepted.c"
+            source.write_text("int source;\n", encoding="utf-8")
+            accepted_source.write_text("int accepted;\n", encoding="utf-8")
+            (workspace / "tools/hardware/run-bt-version-once.py").write_text(
+                "# test fixture\n", encoding="utf-8")
+            (gpu / "run-trial.py").write_text("# workflow hash fixture\n",
+                                             encoding="utf-8")
+            remote_log = Path(temporary) / "remote.log"
+            (trusted_root / "tools/gpu-compat/run-trial.py").write_text(
+                "import json,pathlib,subprocess\n"
+                f"log=pathlib.Path({str(remote_log)!r})\n"
+                "def phone_health(): return {'boot_id': 'host-only-fake'}\n"
+                "def remote(command,timeout=25):\n"
+                "    with log.open('a',encoding='utf-8') as stream: stream.write(command+'\\n')\n"
+                "    if command == 'dmesg': return subprocess.CompletedProcess([],0,'','')\n"
+                "    if command.startswith('python3 -c '):\n"
+                "        return subprocess.CompletedProcess([],0,json.dumps({'device_fds':[],'independent_usb':{}}),'')\n"
+                "    return subprocess.CompletedProcess([],0,'','')\n",
+                encoding="utf-8")
+
             artifact = Path(temporary) / "probe"
             artifact.write_bytes(adapter.ARTIFACT.read_bytes())
             os.chmod(artifact, 0o700)
             stage_calls = []
-            case = self
-
-            class StageOnlyBoard:
-                __file__ = str(ROOT / "tools/hardware/run-bt-board-once.py")
-                ROOT = ROOT
-                subprocess = subprocess
-                BINARY = None
-                execute_calls = 0
-
-                def main(board):
-                    case.events.append("board_main")
-                    payload = board.BINARY.read_bytes()
-                    digest = __import__("hashlib").sha256(payload).hexdigest()
-                    stage = ("import hashlib,sys; data=sys.stdin.buffer.read(); "
-                             f"assert hashlib.sha256(data).hexdigest()=={digest!r}")
-                    result = board.subprocess.run(
-                        [str(board.ROOT / "tools/s22-ssh"),
-                         "python3 -c " + shlex.quote(stage)],
-                        input=payload, capture_output=True, timeout=5)
-                    board.execute_calls += 1
-                    return result
-
             class RemoteCounter:
                 def run_approved_ssh_wrapper(self, *args, **kwargs):
                     stage_calls.append((args, kwargs))
                     return subprocess.CompletedProcess([], 0, b"", b"")
 
-            fake_observer = SimpleNamespace(
-                _trusted_deployer=lambda: RemoteCounter())
+            board = adapter.load_board()
+            board.__file__ = str(board_copy)
+            board.ROOT = workspace
+            board.SOURCE = source
+            board.ACCEPTED_SOURCE = accepted_source
+            board.BINARY = artifact
+            board.DEST = str(Path(temporary) / "staging/probe")
+            board.EXTRA_SOURCES = []
+            board.HOST_TIMEOUT = 3
+            board.accepted_runner = lambda: SimpleNamespace(METADATA="{}")
+            fake_observer = SimpleNamespace(_trusted_deployer=lambda: RemoteCounter())
 
             def validate_then_use_later():
                 return adapter.validate_local_provenance(artifact_path=artifact)
 
             def board_invoker(board, name):
                 self.assertEqual(name, adapter.TRIAL_ID)
-                # This models replacement after the entire exact live preflight,
-                # immediately before board.main rereads BINARY for staging.
+                # Replace only after adapter preflight; actual board.main then
+                # rereads BINARY and builds its dynamic staging digest.
                 artifact.write_bytes(b"replacement after preflight")
                 self.events.append("replacement")
+                board.ROOT = workspace
+                board.SOURCE = source
+                board.ACCEPTED_SOURCE = accepted_source
                 board.BINARY = artifact
+                board.DEST = str(Path(temporary) / "staging/probe")
+                board.EXTRA_SOURCES = []
+                self.events.append("board_main")
                 return adapter.run_board_main(
-                    board, name, fake_observer, trusted_root=self.root)
+                    board, name, fake_observer, trusted_root=trusted_root)
 
             dependencies = self.dependencies(
-                board=StageOnlyBoard(),
+                board=board,
                 workspace=self.root,
-                trusted_root=self.root,
+                trusted_root=trusted_root,
                 local_validator=validate_then_use_later,
                 board_invoker=board_invoker,
             )
@@ -274,7 +298,13 @@ class AdapterTests(unittest.TestCase):
             self.assertEqual(self.events, ["transport", "snapshot", "candidate_hash",
                                            "controllers", "replacement", "board_main"])
             self.assertEqual(stage_calls, [])
-            self.assertEqual(StageOnlyBoard.execute_calls, 0)
+            remote_commands = remote_log.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(remote_commands), 2)
+            self.assertTrue(remote_commands[0].startswith("python3 -c "))
+            self.assertEqual(remote_commands[1], "dmesg")
+            self.assertFalse(any(command.startswith("timeout ")
+                                 for command in remote_commands))
+            self.assertFalse(Path(board.DEST).exists())
 
     def test_execute_without_separate_owner_ack_refuses_before_imports(self):
         error = io.StringIO()
