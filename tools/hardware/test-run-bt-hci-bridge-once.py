@@ -74,7 +74,7 @@ class AdapterTests(unittest.TestCase):
             "board": self.board,
             "workspace": self.root,
             "trusted_root": self.root,
-            "local_validator": lambda: self.events.append("local"),
+            "local_validator": lambda: self._local_ok(),
             "transport_validator": lambda: self.events.append("transport"),
             "snapshot_reader": lambda: self.snapshot(),
             "candidate_hasher": lambda: self.hash_candidate(),
@@ -83,6 +83,10 @@ class AdapterTests(unittest.TestCase):
         }
         values.update(overrides)
         return values
+
+    def _local_ok(self):
+        self.events.append("local")
+        return adapter.EXPECTED_ARTIFACT_SHA256
 
     def snapshot(self, **changes):
         self.events.append("snapshot")
@@ -199,11 +203,78 @@ class AdapterTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory(prefix="bt-artifact-mismatch-") as temporary:
             artifact = Path(temporary) / "probe"
-            artifact.write_bytes(b"not the reviewed artifact")
+            changed = bytearray(adapter.ARTIFACT.read_bytes())
+            changed[0] ^= 0xff
+            artifact.write_bytes(changed)
             os.chmod(artifact, 0o700)
             with self.assertRaisesRegex(adapter.GateError, "artifact SHA-256 mismatch"):
                 adapter.validate_local_provenance(
                     root=ROOT, artifact_path=artifact, private_headers=())
+
+    def test_replaced_temp_artifact_after_preflight_never_reaches_remote_stage(self):
+        with tempfile.TemporaryDirectory(prefix="bt-artifact-toctou-") as temporary:
+            artifact = Path(temporary) / "probe"
+            artifact.write_bytes(adapter.ARTIFACT.read_bytes())
+            os.chmod(artifact, 0o700)
+            stage_calls = []
+            case = self
+
+            class StageOnlyBoard:
+                __file__ = str(ROOT / "tools/hardware/run-bt-board-once.py")
+                ROOT = ROOT
+                subprocess = subprocess
+                BINARY = None
+                execute_calls = 0
+
+                def main(board):
+                    case.events.append("board_main")
+                    payload = board.BINARY.read_bytes()
+                    digest = __import__("hashlib").sha256(payload).hexdigest()
+                    stage = ("import hashlib,sys; data=sys.stdin.buffer.read(); "
+                             f"assert hashlib.sha256(data).hexdigest()=={digest!r}")
+                    result = board.subprocess.run(
+                        [str(board.ROOT / "tools/s22-ssh"),
+                         "python3 -c " + shlex.quote(stage)],
+                        input=payload, capture_output=True, timeout=5)
+                    board.execute_calls += 1
+                    return result
+
+            class RemoteCounter:
+                def run_approved_ssh_wrapper(self, *args, **kwargs):
+                    stage_calls.append((args, kwargs))
+                    return subprocess.CompletedProcess([], 0, b"", b"")
+
+            fake_observer = SimpleNamespace(
+                _trusted_deployer=lambda: RemoteCounter())
+
+            def validate_then_use_later():
+                return adapter.validate_local_provenance(artifact_path=artifact)
+
+            def board_invoker(board, name):
+                self.assertEqual(name, adapter.TRIAL_ID)
+                # This models replacement after the entire exact live preflight,
+                # immediately before board.main rereads BINARY for staging.
+                artifact.write_bytes(b"replacement after preflight")
+                self.events.append("replacement")
+                board.BINARY = artifact
+                return adapter.run_board_main(
+                    board, name, fake_observer, trusted_root=self.root)
+
+            dependencies = self.dependencies(
+                board=StageOnlyBoard(),
+                workspace=self.root,
+                trusted_root=self.root,
+                local_validator=validate_then_use_later,
+                board_invoker=board_invoker,
+            )
+            with self.assertRaisesRegex(adapter.GateError,
+                                        "staged bridge artifact size mismatch"):
+                adapter.run_trial(adapter.TRIAL_ID, **dependencies)
+
+            self.assertEqual(self.events, ["transport", "snapshot", "candidate_hash",
+                                           "controllers", "replacement", "board_main"])
+            self.assertEqual(stage_calls, [])
+            self.assertEqual(StageOnlyBoard.execute_calls, 0)
 
     def test_execute_without_separate_owner_ack_refuses_before_imports(self):
         error = io.StringIO()
@@ -308,7 +379,7 @@ class AdapterTests(unittest.TestCase):
 
             binary = workspace / "builds/probe"
             binary.parent.mkdir()
-            binary.write_bytes(b"local host-only probe bytes")
+            binary.write_bytes(adapter.ARTIFACT.read_bytes())
             destination = workspace / "staging/probe"
             board = adapter.load_board()
             board.__file__ = str(board_copy)
