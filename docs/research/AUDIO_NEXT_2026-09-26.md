@@ -63,18 +63,23 @@ The pinned source is
   DAPM mutex. The observer reads only the 24 source-named widget paths and
   does not enumerate debugfs or infer sound from `On` states.
 
-The card DAI list is retained as inventory only. The idle read reported the
-known PCM closed and ABOX suspended/cache-only, `reset_count=0`, `service=1`,
-and both SPEAKER/RECEIVER off. Idle DAPM paths are not evidence of the active
-stream route; the new source-correct paths are most useful during the bounded
-stream. Do not treat an absent old wrong-level DPCM/DAPM path as a hardware
-fault.
+The coordinator's latest bounded idle read found the PCM closed and ABOX
+suspended/cache-only, `reset_count=0`, `service=1`, all 24 source-mapped DAPM
+paths readable and `Off`, plus DPCM `RDMA2/Playback` state `new` with “No
+active DSP links.” RDMA registers were explicitly skipped at idle. This proves
+idle-path availability only, not an active route or DMA state. The card DAI
+list is inventory only. Do not treat an absent old wrong-level DPCM/DAPM path
+as a hardware fault.
 
 ## Proposed next operation (coordinator review required)
 
-This is a bounded state-changing experiment, **not authorized by this host
-patch**. If the coordinator separately approves after reviewing the current
-candidate and safety state, run from the audio worker checkout:
+This is a proposed bounded state-changing experiment, **not authorized or
+cleared to run by this host patch**. The legacy runner's global serialization
+and staging behavior have not received a complete independent review; that
+review must clear them before any live execution. Candidate identity and
+preflight gates do not substitute for that runner review or separate approval.
+If the coordinator separately approves after those reviews, the proposed
+command from the audio worker checkout is:
 
 ```sh
 cd /home/corpunum/s22-workers/audio-next-20260926

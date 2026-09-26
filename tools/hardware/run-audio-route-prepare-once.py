@@ -189,24 +189,34 @@ def load(name,path):
 audio_snapshot=load('audio_progress_snapshot',ROOT/'tools/hardware/audio-progress-snapshot.py')
 
 def assess_dma_progress(samples):
-    """Accept only advancing ALSA hardware pointers from timed RUNNING samples.
+    """Accept only advancing pointers across a contiguous captured RUNNING window.
 
     Pointer movement proves DMA progress for this bounded stream, not audible
-    output. Missing/malformed pointers, time reversal, or pointer regression
-    fail closed. Physical playback is never inferred here.
+    output. Missing/error/non-RUNNING observations inside the window, sequence
+    gaps, malformed pointers, time reversal, or pointer regression fail
+    closed. Physical playback is never inferred here.
     """
     if not isinstance(samples, list) or len(samples) > 256:
         return {'verified':False,'running_samples':0,'reason':'invalid sample collection'}
     points=[]
+    interrupted_window=False
     for sample in samples:
         if not isinstance(sample, dict):
+            if points:
+                interrupted_window=True
             continue
         status=sample.get('alsa_status')
-        if not isinstance(status,str) or 'state: RUNNING' not in status:
+        if (not isinstance(status,str)
+                or not re.search(r'^state\s*:\s*RUNNING\s*$',status,re.M)):
+            if points:
+                interrupted_window=True
             continue
         matches=re.findall(r'^hw_ptr\s*:\s*(\d+)$',status,re.M)
         timestamp=sample.get('monotonic')
-        if len(matches)!=1 or isinstance(timestamp,bool) or not isinstance(timestamp,(int,float)):
+        sequence=sample.get('sequence')
+        if (len(matches)!=1 or isinstance(sequence,bool) or not isinstance(sequence,int)
+                or sequence<0 or isinstance(timestamp,bool)
+                or not isinstance(timestamp,(int,float))):
             return {'verified':False,'running_samples':len(points),'reason':'invalid RUNNING sample'}
         try:
             timestamp=float(timestamp)
@@ -214,16 +224,25 @@ def assess_dma_progress(samples):
             return {'verified':False,'running_samples':len(points),'reason':'invalid RUNNING sample'}
         if not math.isfinite(timestamp):
             return {'verified':False,'running_samples':len(points),'reason':'invalid RUNNING sample'}
-        point=(timestamp,int(matches[0]))
-        if points and (point[0] <= points[-1][0] or point[1] < points[-1][1]):
+        if points and interrupted_window:
+            return {'verified':False,'running_samples':len(points),
+                    'reason':'RUNNING observations separated by a missing or non-RUNNING sample'}
+        point=(sequence,timestamp,int(matches[0]))
+        if points and point[0] != points[-1][0]+1:
+            return {'verified':False,'running_samples':len(points),
+                    'reason':'capture sequence gap inside RUNNING observation window'}
+        if points and point[1] <= points[-1][1]:
             return {'verified':False,'running_samples':len(points),'reason':'non-monotonic observation'}
+        if points and point[2] < points[-1][2]:
+            return {'verified':False,'running_samples':len(points),'reason':'hw_ptr regression'}
         points.append(point)
-    advance=points[-1][1]-points[0][1] if len(points)>=2 else 0
+        interrupted_window=False
+    advance=points[-1][2]-points[0][2] if len(points)>=2 else 0
     return {
         'verified':len(points)>=2 and advance>0,
         'running_samples':len(points),
-        'first_hw_ptr':points[0][1] if points else None,
-        'last_hw_ptr':points[-1][1] if points else None,
+        'first_hw_ptr':points[0][2] if points else None,
+        'last_hw_ptr':points[-1][2] if points else None,
         'hw_ptr_advance':advance,
         'reason':'hw_ptr advanced while RUNNING' if advance>0 else 'no observed hw_ptr advance',
     }
