@@ -130,3 +130,11 @@ with resource counts still incremented; failed open leaves no fd to close.
 Unchecked sensor runtime-PM failure is a separate remaining issue. The next
 camera work is a targeted source repair/test, not an unsafe QUERYCAP claim.
 NPU BOOTUP remains refused; host ownership tests are not hardware evidence.
+
+Full integrated regressions at `697e165` passed: 20 normal scripts, 17 optimized
+scripts, three explicit optimized skips, zero failures. This includes the new
+NPU C harness but is not independent approval of that patch. The preceding run
+at `a89b16b` exposed one stale BT fixture still naming the consumed old trial;
+worker `80522dc` (integrated `697e165`) fixed the fixture without relaxing the
+separate consumed-identity rejection. The WIP branch remains unmerged; NPU and
+camera kernel candidates are not deployed and retain their review/runtime gates.
