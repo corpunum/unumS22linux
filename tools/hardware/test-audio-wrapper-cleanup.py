@@ -19,37 +19,51 @@ ROUTES = ('ABOX SPUS OUT2', 'ABOX UAIF1 SPK')
 
 
 class FakeChild:
-    def __init__(self, command, timeout=False):
+    def __init__(self, command, timeout=False, poll_timeouts=0, unreaped=False):
         self.command = command
         self.timeout = timeout
+        self.poll_timeouts = poll_timeouts
+        self.unreaped = unreaped
         self.returncode = None
+        self.wait_timeouts=[]
 
     def communicate(self, timeout=None):
+        self.wait_timeouts.append(timeout)
+        if self.unreaped:
+            raise subprocess.TimeoutExpired(self.command, timeout)
         if self.timeout and self.returncode is None:
+            raise subprocess.TimeoutExpired(self.command, timeout)
+        if self.poll_timeouts and self.returncode is None:
+            self.poll_timeouts -= 1
             raise subprocess.TimeoutExpired(self.command, timeout)
         if self.returncode is None:
             self.returncode = 0
         return ('', '')
 
     def terminate(self):
-        self.returncode = -signal.SIGTERM
+        if not self.unreaped:self.returncode = -signal.SIGTERM
 
     def kill(self):
-        self.returncode = -signal.SIGKILL
+        if not self.unreaped:self.returncode = -signal.SIGKILL
 
     def poll(self):
         return self.returncode
 
 
 class FakeRuntime:
-    def __init__(self, fail_restore=None, child_timeout=False, interrupt_on_second_route=False):
+    def __init__(self, fail_restore=None, child_timeout=False, interrupt_on_second_route=False,
+                 observer='', child_poll_timeouts=0, child_unreaped=False):
         self.values = {name: '0' for name in ROUTES}
         self.fail_restore = fail_restore
         self.child_timeout = child_timeout
         self.interrupt_on_second_route = interrupt_on_second_route
+        self.observer = observer
+        self.child_poll_timeouts = child_poll_timeouts
+        self.child_unreaped = child_unreaped
         self.signal_handlers = {}
         self.restore_failed = False
         self.child = None
+        self.output = ''
 
     def run(self, command, capture_output=True, text=True, timeout=5):
         if command[0] != 'amixer':
@@ -77,7 +91,7 @@ class FakeRuntime:
         raise AssertionError('unexpected amixer operation')
 
     def popen(self, command, stdout=None, stderr=None, text=True):
-        self.child = FakeChild(command, self.child_timeout)
+        self.child = FakeChild(command,self.child_timeout,self.child_poll_timeouts,self.child_unreaped)
         return self.child
 
     def read_text(self, path, *args, **kwargs):
@@ -93,27 +107,30 @@ class FakeRuntime:
         return signal.SIG_DFL
 
     def execute(self):
-        request = {'helper': 'pass', 'observer': '', 'trial_id': 'host-test'}
+        request = {'helper': 'pass', 'observer': self.observer, 'trial_id': 'host-test'}
         stdin = io.StringIO(json.dumps(request))
         stdout = io.StringIO()
         namespace = {'__name__': '__main__'}
         def read_text(path, *args, **kwargs):
             return self.read_text(path, *args, **kwargs)
-        with patch('sys.stdin', stdin), patch('sys.stdout', stdout), \
-            patch('pathlib.Path.read_text', read_text), \
-             patch('subprocess.run', self.run), patch('subprocess.Popen', self.popen), \
-             patch('signal.signal', self.signal):
-            if self.child_timeout:
-                # Expire the fixed ten-second stream deadline after its start.
-                calls = [0]
-                def monotonic():
-                    calls[0] += 1
-                    return 0.0 if calls[0] == 1 else 11.0
-                with patch('time.monotonic', side_effect=monotonic):
+        try:
+            with patch('sys.stdin', stdin), patch('sys.stdout', stdout), \
+                patch('pathlib.Path.read_text', read_text), \
+                patch('subprocess.run', self.run), patch('subprocess.Popen', self.popen), \
+                patch('signal.signal', self.signal):
+                if self.child_timeout or self.child_unreaped:
+                    # Expire the fixed ten-second stream deadline after its start.
+                    calls = [0]
+                    def monotonic():
+                        calls[0] += 1
+                        return 0.0 if calls[0] == 1 else 11.0
+                    with patch('time.monotonic', side_effect=monotonic):
+                        exec(route.WRAPPER, namespace)
+                else:
                     exec(route.WRAPPER, namespace)
-            else:
-                exec(route.WRAPPER, namespace)
-        return json.loads(stdout.getvalue())
+        finally:
+            self.output=stdout.getvalue()
+        return json.loads(self.output)
 
 
 class WrapperCleanup(unittest.TestCase):
@@ -151,6 +168,30 @@ class WrapperCleanup(unittest.TestCase):
         self.assertEqual(result['pcm_status_before_restore'], 'closed')
         self.assertTrue(result['cleanup_verified'])
         self.assertTrue(all(fake.values[name] == '0' for name in ROUTES))
+
+    def test_progress_observer_samples_cold_start_and_200ms_active_windows(self):
+        observer=("def snapshot(read_status,sequence=None,trial_id=None):\n"
+                  " return {'sequence':sequence,'trial_id':trial_id,"
+                  "'alsa_status':'state: RUNNING\\nhw_ptr: %d\\n'%(sequence*256),"
+                  "'monotonic':float(sequence+1)}\n")
+        fake=FakeRuntime(observer=observer,child_poll_timeouts=4)
+        result=fake.execute()
+        samples=result['progress_samples']
+        self.assertEqual(len(samples),5)
+        self.assertEqual([item['sequence'] for item in samples],list(range(5)))
+        self.assertTrue(all(item['alsa_status'].startswith('state: RUNNING') for item in samples))
+        self.assertEqual(fake.child.wait_timeouts[:4],[0.2]*4)
+        self.assertTrue(result['cleanup_verified'])
+
+    def test_unreaped_child_leaves_selectors_untouched_and_reports_unknown_cleanup(self):
+        fake=FakeRuntime(child_unreaped=True)
+        with self.assertRaisesRegex(RuntimeError,'child not reaped'):
+            fake.execute()
+        result=json.loads(fake.output)
+        self.assertFalse(result['child_exited'])
+        self.assertFalse(result['cleanup_verified'])
+        self.assertIn('child_not_reaped_routes_not_restored',result['cleanup_errors'])
+        self.assertTrue(all(fake.values[name]=='1' for name in ROUTES))
 
 
 if __name__ == '__main__':
