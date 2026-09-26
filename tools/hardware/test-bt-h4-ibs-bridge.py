@@ -551,14 +551,21 @@ class BridgeTests(unittest.TestCase):
 
     def test_runner_blocks_attachment_until_exact_readback_review_and_authorization(self):
         runner = os.path.join(ROOT, "tools/hardware/run-bt-hci-bridge-once.py")
-        result = subprocess.run([sys.executable, runner, "--execute"], check=False,
+        command = [sys.executable]
+        if not __debug__:
+            command.append("-O")
+        command.extend([runner, "bt-hci-registration-20260926", "--execute"])
+        result = subprocess.run(command, check=False,
                                 capture_output=True, text=True, timeout=3)
-        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("one raw-HCI socket create/close check only", result.stderr)
-        self.assertIn("exact RECOVERY candidate boot/build identity and full readback", result.stderr)
-        self.assertIn("independently review", result.stderr)
-        self.assertIn("separate explicit authorization", result.stderr)
-        self.assertNotIn("restore and validate the kernel HCI socket", result.stderr)
+        if __debug__:
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("prior raw-HCI socket authorization did not cover", result.stderr)
+            self.assertIn("automatic controller initialization/power-on", result.stderr)
+            self.assertIn("separate owner authorization", result.stderr)
+            self.assertIn("does not bound kernel detach", result.stderr)
+        else:
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertIn("optimized Python is refused", result.stderr)
 
 
 if __name__ == "__main__":
