@@ -138,3 +138,11 @@ at `a89b16b` exposed one stale BT fixture still naming the consumed old trial;
 worker `80522dc` (integrated `697e165`) fixed the fixture without relaxing the
 separate consumed-identity rejection. The WIP branch remains unmerged; NPU and
 camera kernel candidates are not deployed and retain their review/runtime gates.
+
+Independent review then **rejected** the new NPU unwind as currently written:
+failed first init can invoke a generic final callback that disables STM before
+this acquisition enabled it. The reference-only harness missed that callback
+side effect. `1c41f09` is preserved as rejected WIP, not accepted code. Worker
+`/root/driver_review_20260926` is preparing a narrow correction/removal of the
+unsafe candidate hunk in an isolated worktree, with independent review to follow.
+No NPU deployment or BOOTUP occurred. Passing host tests did not override review.

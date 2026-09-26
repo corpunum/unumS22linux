@@ -1,5 +1,19 @@
 # NPU hwdev reference-unwind follow-up — 2026-09-27
 
+## Independent review: BLOCKED, not accepted for application or deployment
+
+Review of `59791b9` / integrated `1c41f09` found that balancing a failed first
+get by calling the generic final callback is unsafe. DSP init can fail before
+STM enable; the final path nevertheless calls `npu_stm_disable()`, which can
+decrement the global STM count and write disable registers. The reference-only
+host harness did not model those real callback side effects. Its passing result
+does not prove correct failed-initialization ownership or rollback.
+
+Do not apply/build/deploy the newly added `npu_hwdev_bootup` unwind hunk as an
+accepted fix. It is preserved as rejected WIP history while a corrective change
+is prepared. The original response/publication/lifetime gates remain unresolved,
+and NPU BOOTUP stays refused. No NPU code from this wave ran on the phone.
+
 ## Finding and narrow fix
 
 The pinned kernel tree at
