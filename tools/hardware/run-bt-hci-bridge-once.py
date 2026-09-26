@@ -612,8 +612,18 @@ def validate_kernel_capture_window(before, after, delta):
         require(isinstance(data, bytes) and 0 < len(data) <= 4194304 and
                 data.endswith(b'\n'), 'kernel capture is empty, oversized or truncated')
     def records(data):
-        return [(float(match[1]), line) for line in data.splitlines()
-                if (match := re.match(rb'^\[\s*([0-9.]+)\]', line))]
+        result = []
+        for line in data.splitlines():
+            if not line.strip():
+                continue
+            match = re.match(rb'^\[\s*([0-9.]+)\]', line)
+            require(match is not None,
+                    'kernel capture contains an unordered or malformed record')
+            stamp = float(match[1])
+            require(0 <= stamp < 1e12,
+                    'kernel capture timestamp is not finite or plausible')
+            result.append((stamp, line))
+        return result
     try:
         before_records, after_records = records(before), records(after)
     except ValueError as error:
