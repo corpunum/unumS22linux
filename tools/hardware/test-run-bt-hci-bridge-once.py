@@ -32,6 +32,8 @@ def load(name, path):
 
 adapter = load("bt_hci_registration_adapter",
                ROOT / "tools/hardware/run-bt-hci-bridge-once.py")
+device_guard = load("s22_device_trial_guard",
+                    ROOT / "tools/hardware/device-trial-guard.py")
 observer_fixtures = load("bt_hci_observer_fixtures",
                          ROOT / "tools/hardware/test-audio-recovery-observer.py")
 observer = observer_fixtures.observer
@@ -71,6 +73,7 @@ class FakeBoard:
     SOURCE = None
     BINARY = None
     DEST = None
+    TRACE_DIR = None
     EXTRA_SOURCES = []
     NOTE = None
 
@@ -79,6 +82,7 @@ class AdapterTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="bt-registration-adapter-")
         self.root = Path(self.temp.name)
+        self.guard_root = self.root / "host-state"
         self.receipt_root = self.root / "observer"
         self.out_patch = mock.patch.object(observer, "OUT", self.receipt_root)
         self.out_patch.start()
@@ -111,6 +115,11 @@ class AdapterTests(unittest.TestCase):
             "candidate_hasher": lambda: self.hash_candidate(),
             "controller_reader": lambda: self.controllers(),
             "board_invoker": lambda board, name: self.invoke_board(board, name),
+            "target_fs_checker": lambda: self.target_fs(),
+            "remote_reserver": lambda: self.reserve_remote(),
+            "operation_lock_factory": lambda project, trial, kind:
+                device_guard.acquire_operation_lock(
+                    project, trial, kind, state_root=self.guard_root),
         }
         values.update(overrides)
         return values
@@ -136,7 +145,50 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(name, adapter.TRIAL_ID)
         self.assertEqual(board.BINARY, adapter.ARTIFACT)
         self.assertEqual(board.DEST, adapter.DEST)
+        self.assertEqual(board.TRACE_DIR, adapter.TRIAL_TRACE_DIR)
+        path = adapter.trial_receipt_directory(self.root, name)
+        path.mkdir(parents=True, mode=0o700)
+        os.chmod(path, 0o700)
+        health = {"boot_id": "candidate-boot-id", "pid1": "native-guardian",
+                  "profile": "qwen4b", "model": "ok", "temperature": 36.0}
+        trace_data = b"host-only syscall trace\n"
+        (path / "strace.txt").write_bytes(trace_data)
+        os.chmod(path / "strace.txt", 0o600)
+        (path / "kernel-delta.txt").write_text("", encoding="utf-8")
+        os.chmod(path / "kernel-delta.txt", 0o600)
+        receipt = {
+            "same_boot": True, "returncode": 0, "kernel_capture_exit": 0,
+            "after_metadata_exit": 0, "after_vote_check": 0,
+            "strace_capture_exit": 0,
+            "before": health, "after": health,
+            "after_metadata": json.dumps({"boot_id": "candidate-boot-id",
+                                           "device_fds": [], "independent_usb": True}),
+            "after_vote_check_stdout": "live_wlan_metadata_only=0\n",
+            "uart_output": "bridge_registered_hci=0\nbridge_result=0 commands=0\n"
+                           "pty_cleanup_ioctl_result=0\n",
+            "uart_stderr": "stage=power_off_and_vote_restored\n",
+            "strace_capture_path": adapter.TRIAL_DIR + "/" + adapter.TRACE_NAME,
+            "strace_capture_bytes": len(trace_data),
+            "strace_capture_sha256": hashlib.sha256(trace_data).hexdigest(),
+        }
+        receipt_path = path / "receipt.json"
+        receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+        os.chmod(receipt_path, 0o600)
         return "host fake only"
+
+    def target_fs(self):
+        self.events.append("target_fs")
+        return {"device_id": adapter.EXPECTED_S22_DEVICE_ID,
+                "free_bytes": adapter.MIN_S22_FREE_BYTES,
+                "free_inodes": adapter.MIN_S22_FREE_INODES,
+                "trial_absent": True}
+
+    def reserve_remote(self):
+        marker = self.guard_root / f"{adapter.TRIAL_ID}.json"
+        self.assertEqual(json.loads(marker.read_text())['status'], "pending")
+        self.events.append("reserve")
+        return {"reserved": True, "device_id": adapter.EXPECTED_S22_DEVICE_ID,
+                "mode": 0o700}
 
     def run_trial(self, **overrides):
         return adapter.run_trial(adapter.TRIAL_ID,
@@ -147,7 +199,15 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(result["trial_identity"], adapter.TRIAL_ID)
         self.assertEqual(result["recovery_sha256"], adapter.EXPECTED_RECOVERY_SHA256)
         self.assertEqual(self.events, ["local", "transport", "snapshot",
-                                       "candidate_hash", "controllers", "board_main"])
+                                       "candidate_hash", "controllers", "target_fs",
+                                       "reserve", "board_main", "snapshot",
+                                       "candidate_hash", "controllers"])
+        marker = json.loads((self.guard_root / f"{adapter.TRIAL_ID}.json").read_text())
+        self.assertEqual(marker["status"], "complete")
+        self.assertEqual(marker["outcome"], "success")
+        self.assertEqual(marker["receipt_sha256"], hashlib.sha256(
+            adapter.trial_receipt_directory(self.root) .joinpath("receipt.json").read_bytes()
+        ).hexdigest())
 
     def test_bad_completed_observer_receipt_stops_before_live_reads_and_board(self):
         receipt = observer_fixtures.completed_observer(status="incomplete")
@@ -175,6 +235,44 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(adapter.GateError, "full RECOVERY hash"):
             self.run_trial(candidate_hasher=lambda: self.hash_candidate("0" * 64))
         self.assertEqual(self.events, ["local", "transport", "snapshot", "candidate_hash"])
+
+    def test_bad_persistent_filesystem_result_stops_before_reservation_or_board(self):
+        with self.assertRaisesRegex(adapter.GateError, "persistent trial storage"):
+            self.run_trial(target_fs_checker=lambda: {
+                "device_id": -1, "free_bytes": 0, "free_inodes": 0,
+                "trial_absent": True})
+        self.assertNotIn("reserve", self.events)
+        self.assertNotIn("board_main", self.events)
+        marker = self.guard_root / f"{adapter.TRIAL_ID}.json"
+        self.assertFalse(marker.exists())
+
+    def test_false_cleanup_or_trace_evidence_never_terminalizes_marker(self):
+        def bad_receipt(board, name):
+            self.invoke_board(board, name)
+            path = adapter.trial_receipt_directory(self.root, name) / "receipt.json"
+            receipt = json.loads(path.read_text(encoding="utf-8"))
+            receipt["uart_stderr"] = "stage=power_off_failed\n"
+            path.write_text(json.dumps(receipt), encoding="utf-8")
+            os.chmod(path, 0o600)
+            return "host fake with false cleanup"
+
+        with self.assertRaisesRegex(adapter.GateError, "WLAN vote restoration"):
+            self.run_trial(board_invoker=bad_receipt)
+        marker = json.loads((self.guard_root / f"{adapter.TRIAL_ID}.json").read_text())
+        self.assertEqual(marker["status"], "unknown")
+        self.assertNotIn("candidate_hash", self.events[7:])
+
+    def test_postflight_candidate_mismatch_keeps_operation_unknown(self):
+        returned = iter((adapter.EXPECTED_RECOVERY_SHA256, "0" * 64))
+
+        def candidate_reader():
+            return self.hash_candidate(next(returned))
+
+        with self.assertRaisesRegex(adapter.GateError, "post-trial full RECOVERY hash"):
+            self.run_trial(candidate_hasher=candidate_reader)
+        marker = json.loads((self.guard_root / f"{adapter.TRIAL_ID}.json").read_text())
+        self.assertEqual(marker["status"], "unknown")
+        self.assertIn("board_main", self.events)
 
     def test_live_boot_must_match_the_completed_observer_receipt(self):
         self.write_receipt(observer_fixtures.completed_observer(boot_id="different-boot"))
@@ -265,14 +363,14 @@ class AdapterTests(unittest.TestCase):
                                              encoding="utf-8")
             remote_log = Path(temporary) / "remote.log"
             (trusted_root / "tools/gpu-compat/run-trial.py").write_text(
-                "import json,pathlib,subprocess\n"
+                "import json,pathlib,subprocess,shlex,os\n"
                 f"log=pathlib.Path({str(remote_log)!r})\n"
                 "def phone_health(): return {'boot_id': 'host-only-fake'}\n"
                 "def remote(command,timeout=25):\n"
                 "    with log.open('a',encoding='utf-8') as stream: stream.write(command+'\\n')\n"
                 "    if command == 'dmesg': return subprocess.CompletedProcess([],0,'','')\n"
-                "    if command.startswith('python3 -c '):\n"
-                "        return subprocess.CompletedProcess([],0,json.dumps({'device_fds':[],'independent_usb':{}}),'')\n"
+                "    if command.startswith('python3 -I -c '):\n"
+                "        return subprocess.run(shlex.split(command),capture_output=True,text=True,timeout=timeout,env={**os.environ,'PYTHONOPTIMIZE':'1'})\n"
                 "    return subprocess.CompletedProcess([],0,'','')\n",
                 encoding="utf-8")
 
@@ -294,7 +392,9 @@ class AdapterTests(unittest.TestCase):
             board.DEST = str(Path(temporary) / "staging/probe")
             board.EXTRA_SOURCES = []
             board.HOST_TIMEOUT = 3
-            board.accepted_runner = lambda: SimpleNamespace(METADATA="{}")
+            board.accepted_runner = lambda: SimpleNamespace(
+                METADATA="import json,sys; assert sys.flags.optimize == 0; "
+                         "print(json.dumps({'device_fds': [], 'independent_usb': {}}))")
             fake_observer = SimpleNamespace(_trusted_deployer=lambda: RemoteCounter())
 
             def validate_then_use_later():
@@ -332,11 +432,12 @@ class AdapterTests(unittest.TestCase):
                     adapter.run_trial(adapter.TRIAL_ID, **dependencies)
 
             self.assertEqual(self.events, ["transport", "snapshot", "candidate_hash",
-                                           "controllers", "replacement", "board_main"])
+                                           "controllers", "target_fs", "reserve",
+                                           "replacement", "board_main"])
             self.assertEqual(stage_calls, [])
             remote_commands = remote_log.read_text(encoding="utf-8").splitlines()
             self.assertEqual(len(remote_commands), 2)
-            self.assertTrue(remote_commands[0].startswith("python3 -c "))
+            self.assertTrue(remote_commands[0].startswith("python3 -I -c "))
             self.assertEqual(remote_commands[1], "dmesg")
             self.assertFalse(any(command.startswith("timeout ")
                                  for command in remote_commands))
@@ -432,14 +533,13 @@ class AdapterTests(unittest.TestCase):
                 "# test fixture\n", encoding="utf-8")
             (gpu / "run-trial.py").write_text("# workflow hash fixture\n", encoding="utf-8")
             (trusted_root / "tools/gpu-compat/run-trial.py").write_text(
-                "import json\n"
-                "import subprocess\n"
+                "import json, subprocess, shlex, os\n"
                 "def phone_health(): return {'boot_id': 'host-only-fake'}\n"
                 "def remote(command, timeout=25):\n"
                 "    if command == 'dmesg':\n"
                 "        return subprocess.CompletedProcess([], 0, '', '')\n"
-                "    if command.startswith('python3 -c '):\n"
-                "        return subprocess.CompletedProcess([], 0, json.dumps({'device_fds': [], 'independent_usb': {}}), '')\n"
+                "    if command.startswith('python3 -I -c '):\n"
+                "        return subprocess.run(shlex.split(command),capture_output=True,text=True,timeout=timeout,env={**os.environ,'PYTHONOPTIMIZE':'1'})\n"
                 "    return subprocess.CompletedProcess([], 0, '', '')\n",
                 encoding="utf-8")
 
@@ -456,7 +556,9 @@ class AdapterTests(unittest.TestCase):
             board.DEST = str(destination)
             board.EXTRA_SOURCES = []
             board.HOST_TIMEOUT = 3
-            board.accepted_runner = lambda: SimpleNamespace(METADATA="{}")
+            board.accepted_runner = lambda: SimpleNamespace(
+                METADATA="import json,sys; assert sys.flags.optimize == 0; "
+                         "print(json.dumps({'device_fds': [], 'independent_usb': {}}))")
 
             class LocalStageDeployer:
                 command = None
@@ -484,6 +586,199 @@ class AdapterTests(unittest.TestCase):
             self.assertIn(b"AssertionError", deployer.process.stderr)
             self.assertIn("AssertionError", str(failure.exception))
             self.assertFalse(destination.exists())
+
+    def test_persistent_storage_scripts_reserve_exclusively_and_never_truncate_trace(self):
+        with tempfile.TemporaryDirectory(prefix="bt-remote-storage-") as temporary:
+            root = Path(temporary) / "srv/s22"
+            root.mkdir(parents=True, mode=0o700)
+            os.chmod(root, 0o700)
+            params = {
+                "root": str(root), "expected_device": root.stat().st_dev,
+                "expected_uid": os.geteuid(), "min_free_bytes": 0,
+                "min_free_inodes": 0, "namespace": "trial-space",
+                "trial_name": "exact-trial",
+            }
+
+            def isolated_run(script):
+                return subprocess.run(
+                    [sys.executable, "-I", "-c", script], capture_output=True,
+                    text=True, timeout=5,
+                    env={**os.environ, "PYTHONOPTIMIZE": "1"})
+
+            preflight = isolated_run(adapter.render_target_fs_preflight_script(**params))
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+            state = json.loads(preflight.stdout)
+            self.assertEqual(state["device_id"], root.stat().st_dev)
+            self.assertGreater(state["free_bytes"], 0)
+            self.assertGreater(state["free_inodes"], 0)
+            trial_dir = root / "trial-space/exact-trial"
+            trace = trial_dir / "exact-trial.strace"
+            stage = trial_dir / "bt-qca6490-hci-bridge-probe"
+
+            reserve_params = {**params, "trace_name": "exact-trial.strace"}
+            reserve = isolated_run(adapter.render_reserve_target_dir_script(**reserve_params))
+            self.assertEqual(reserve.returncode, 0, reserve.stderr)
+            self.assertEqual(json.loads(reserve.stdout), {
+                "reserved": True, "device_id": root.stat().st_dev, "mode": 0o700})
+            self.assertTrue(trial_dir.is_dir())
+            self.assertFalse(stage.exists())
+            self.assertFalse(trace.exists())
+
+            # A later invocation must fail at exclusive mkdir; it cannot reuse
+            # the stale directory or truncate an existing trace path.
+            trace.write_text("preserve-this-trace\n", encoding="utf-8")
+            os.chmod(trace, 0o600)
+            before = trace.read_bytes()
+            repeated = isolated_run(adapter.render_reserve_target_dir_script(**reserve_params))
+            self.assertNotEqual(repeated.returncode, 0)
+            self.assertEqual(trace.read_bytes(), before)
+            stale_preflight = isolated_run(adapter.render_target_fs_preflight_script(**params))
+            self.assertNotEqual(stale_preflight.returncode, 0)
+
+            low_space = isolated_run(adapter.render_target_fs_preflight_script(
+                **{**params, "min_free_bytes": 1 << 80}))
+            self.assertNotEqual(low_space.returncode, 0)
+
+            link_root = Path(temporary) / "srv/link-root"
+            link_root.mkdir(parents=True, mode=0o700)
+            os.chmod(link_root, 0o700)
+            link_namespace = link_root / "link-space"
+            link_namespace.mkdir(mode=0o700)
+            os.chmod(link_namespace, 0o700)
+            outside = Path(temporary) / "outside"
+            outside.mkdir(mode=0o700)
+            os.chmod(outside, 0o700)
+            (link_namespace / "linked-trial").symlink_to(outside, target_is_directory=True)
+            link_params = {
+                "root": str(link_root), "expected_device": link_root.stat().st_dev,
+                "expected_uid": os.geteuid(), "min_free_bytes": 0,
+                "min_free_inodes": 0, "namespace": "link-space",
+                "trial_name": "linked-trial",
+            }
+            link_reserve_params = {**link_params, "trace_name": "linked-trial.strace"}
+            linked_preflight = isolated_run(
+                adapter.render_target_fs_preflight_script(**link_params))
+            self.assertNotEqual(linked_preflight.returncode, 0)
+            linked_reservation = isolated_run(
+                adapter.render_reserve_target_dir_script(**link_reserve_params))
+            self.assertNotEqual(linked_reservation.returncode, 0)
+
+    def test_board_main_routes_trace_to_unique_dir_and_remote_metadata_ignores_optimize(self):
+        with tempfile.TemporaryDirectory(prefix="bt-board-trace-") as temporary:
+            base = Path(temporary)
+            workspace = base / "workspace"
+            trusted_root = base / "trusted"
+            hardware = workspace / "tools/hardware"
+            gpu = workspace / "tools/gpu-compat"
+            hardware.mkdir(parents=True)
+            gpu.mkdir(parents=True)
+            (trusted_root / "tools/gpu-compat").mkdir(parents=True)
+            board_source = ROOT / "tools/hardware/run-bt-board-once.py"
+            board_copy = hardware / board_source.name
+            board_copy.write_bytes(board_source.read_bytes())
+            source = hardware / "probe.c"
+            accepted_source = hardware / "accepted.c"
+            source.write_text("int probe;\n", encoding="utf-8")
+            accepted_source.write_text("int accepted;\n", encoding="utf-8")
+            (workspace / "tools/hardware/run-bt-version-once.py").write_text(
+                "# fixture\n", encoding="utf-8")
+            (gpu / "run-trial.py").write_text("# workflow fixture\n", encoding="utf-8")
+
+            trace_dir = base / "reserved-private-trial"
+            trace_dir.mkdir(mode=0o700)
+            os.chmod(trace_dir, 0o700)
+            trace_path = trace_dir / f"{adapter.TRIAL_ID}.strace"
+            remote_log = base / "remote-commands.log"
+            fake_trial = trusted_root / "tools/gpu-compat/run-trial.py"
+            fake_trial.write_text(
+                "import json,pathlib,shlex,subprocess,os\n"
+                f"log=pathlib.Path({str(remote_log)!r})\n"
+                "def phone_health(): return {'boot_id':'host-boot','pid1':'native-guardian','profile':'qwen4b','model':'ok','temperature':36.0}\n"
+                "def remote(command,timeout=25):\n"
+                "    with log.open('a',encoding='utf-8') as stream: stream.write(command+'\\n')\n"
+                "    if command.startswith('python3 -I -c '):\n"
+                "        return subprocess.run(shlex.split(command),capture_output=True,text=True,timeout=timeout,env={**os.environ,'PYTHONOPTIMIZE':'1'})\n"
+                "    if command == 'dmesg': return subprocess.CompletedProcess([],0,'[ 1.0] baseline\\n','')\n"
+                "    if command.endswith('--check-live-wlan'): return subprocess.CompletedProcess([],0,'live_wlan_metadata_only=0\\n','')\n"
+                "    if command.startswith('timeout '):\n"
+                "        words=shlex.split(command); trace=pathlib.Path(words[words.index('-o')+1])\n"
+                "        fd=os.open(trace,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)\n"
+                "        os.write(fd,b'host-only-strace\\n'); os.fsync(fd); os.close(fd)\n"
+                "        return subprocess.CompletedProcess([],0,'bridge_registered_hci=0\\nbridge_result=0 commands=0\\npty_cleanup_ioctl_result=0\\n','stage=power_off_and_vote_restored\\n')\n"
+                "    if command.startswith('head -c '):\n"
+                "        path=pathlib.Path(shlex.split(command)[-1]); return subprocess.CompletedProcess([],0,path.read_text(),'')\n"
+                "    return subprocess.CompletedProcess([],0,'','')\n",
+                encoding="utf-8")
+
+            binary = workspace / "builds/probe"
+            binary.parent.mkdir()
+            binary.write_bytes(FIXTURE_ARTIFACT)
+            os.chmod(binary, 0o700)
+            stage_destination = base / "remote-stage/probe"
+            board = adapter.load_board()
+            board.__file__ = str(board_copy)
+            board.ROOT = workspace
+            board.SOURCE = source
+            board.ACCEPTED_SOURCE = accepted_source
+            board.BINARY = binary
+            board.DEST = str(stage_destination)
+            board.TRACE_DIR = trace_dir
+            board.EXTRA_SOURCES = []
+            board.HOST_TIMEOUT = 5
+            board.accepted_runner = lambda: SimpleNamespace(
+                METADATA="import json,sys; assert sys.flags.optimize == 0; "
+                         "print(json.dumps({'device_fds': [], 'independent_usb': {}}))")
+
+            class HostStageDeployer:
+                def __init__(self):
+                    self.commands = []
+
+                def run_approved_ssh_wrapper(self, path, command, *, input_data,
+                                             timeout, project_root):
+                    self.commands.append(command)
+                    words = shlex.split(command)
+                    prefix = (
+                        "import os,pathlib,types; _orig=pathlib.Path.stat; "
+                        "pathlib.Path.stat=lambda self,*a,**k: types.SimpleNamespace("
+                        "st_uid=0,st_mode=_orig(self,*a,**k).st_mode);\n")
+                    process = subprocess.run(
+                        [sys.executable, "-I", "-c", prefix + words[3]],
+                        input=input_data, capture_output=True, timeout=timeout,
+                        env={**os.environ, "PYTHONOPTIMIZE": "1"})
+                    return subprocess.CompletedProcess(
+                        [], process.returncode, process.stdout, process.stderr)
+
+            deployer = HostStageDeployer()
+            fake_observer = SimpleNamespace(_trusted_deployer=lambda: deployer)
+            with fixture_artifact_pins():
+                # If the runner falls back to python3 -c, remote optimization
+                # strips this assertion and falsely accepts the metadata.
+                board.accepted_runner = lambda: SimpleNamespace(
+                    METADATA="import json,sys; assert sys.flags.optimize == 1; "
+                             "print(json.dumps({'boot_id':'host-boot','device_fds': [], 'independent_usb': True}))")
+                with self.assertRaisesRegex(RuntimeError, "Read-only metadata preflight failed"):
+                    adapter.run_board_main(board, adapter.TRIAL_ID, fake_observer,
+                                           trusted_root=trusted_root)
+                self.assertFalse(stage_destination.exists())
+
+                board.accepted_runner = lambda: SimpleNamespace(
+                    METADATA="import json,sys; assert sys.flags.optimize == 0; "
+                             "print(json.dumps({'boot_id':'host-boot','device_fds': [], 'independent_usb': True}))")
+                adapter.run_board_main(board, adapter.TRIAL_ID, fake_observer,
+                                       trusted_root=trusted_root)
+
+            self.assertTrue(trace_path.is_file())
+            self.assertEqual(trace_path.read_text(encoding="utf-8"), "host-only-strace\n")
+            commands = remote_log.read_text(encoding="utf-8").splitlines()
+            metadata = [command for command in commands
+                        if command.startswith("python3 -I -c ")]
+            self.assertEqual(len(metadata), 3)
+            execution = next(command for command in commands
+                             if command.startswith("timeout "))
+            words = shlex.split(execution)
+            self.assertEqual(words[words.index("-o") + 1], str(trace_path))
+            self.assertEqual(len(deployer.commands), 1)
+            self.assertTrue(shlex.split(deployer.commands[0])[0:2] == ["python3", "-I"])
 
 
 if __name__ == "__main__":
