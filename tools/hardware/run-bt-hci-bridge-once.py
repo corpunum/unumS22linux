@@ -12,6 +12,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import stat
 import struct
@@ -20,6 +21,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 TRUSTED_ROOT = Path('/home/corpunum/s22-linux')
+TRIAL_DIR = '/srv/s22/bt-trial-20260927/bt-hci-registration-20260926'
+TRIAL_TRACE_DIR = Path(TRIAL_DIR)
 TRIAL_ID = 'bt-hci-registration-20260926'
 OBSERVER_TRIAL_ID = 'hci-candidate-20260924-second'
 EXPECTED_RECOVERY_SHA256 = '42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5'
@@ -30,9 +33,15 @@ EXPECTED_ARTIFACT_BUILD_ID = 'eb47c232ddb7fc4b477bb145bbe9bf2832972276'
 EXPECTED_SSH_WRAPPER_SHA256 = '7e9d31035762de50ccc6c5614d8348532fd912bf59c41c9d410a4c7bfe49dd1d'
 EXPECTED_TRUSTED_RUN_TRIAL_SHA256 = '165a16566f2dedcb23506d427425ddb030acc53876710a61bb06a2f1b039a5fe'
 EXPECTED_TRUSTED_DEPLOYER_SHA256 = 'd0c54cc306e3a8a80cb79d79958fceedf6bb5945dabc7606e02b12d27dc00fd3'
-ARTIFACT = ROOT / 'builds/bt-next-20260926/bt-qca6490-hci-bridge-probe'
+ARTIFACT = Path('/home/corpunum/s22-workers/bt-next-20260926/builds/bt-next-20260926/bt-qca6490-hci-bridge-probe')
 SOURCE = ROOT / 'tools/hardware/bt-qca6490-hci-bridge-probe.c'
-DEST = '/srv/s22/bt-next-20260926/bt-qca6490-hci-bridge-probe'
+DEST = TRIAL_DIR + '/bt-qca6490-hci-bridge-probe'
+TRACE_NAME = TRIAL_ID + '.strace'
+EXPECTED_S22_DEVICE_ID = 66324
+MIN_S22_FREE_BYTES = 1024 * 1024 * 1024
+MIN_S22_FREE_INODES = 10000
+S22_PERSISTENT_ROOT = '/srv/s22'
+S22_NAMESPACE_NAME = 'bt-trial-20260927'
 PRIVATE_BUILD_HEADERS = (
     Path('/home/corpunum/s22-linux/builds/bt-patch-20260922/qca-patch-private.h'),
     Path('/home/corpunum/s22-linux/builds/bt-runtime-nvm-20260922/s22_nvm_payload.h'),
@@ -61,7 +70,7 @@ REVIEWED_RUNNER_SHA256 = {
     'tools/hardware/deploy-audio-recovery.py':
         EXPECTED_TRUSTED_DEPLOYER_SHA256,
     'tools/hardware/run-bt-board-once.py':
-        'f399575a3fa96bc8881b71391bc7e7ab91c931e89ce8cb5785ddea695e0ec537',
+        'bf3de2008a9667fdd0de8993cc4035037be93d61701d68613ae89eec6db60b04',
     'tools/hardware/run-bt-version-once.py':
         '93a84da810bccb517694b6cbeb44aa85850289919caec71aa7638c90d49c4653',
 }
@@ -81,6 +90,97 @@ if not root.is_dir(): raise SystemExit('Bluetooth class directory unavailable')
 print(json.dumps({'boot_id':p('/proc/sys/kernel/random/boot_id').read_text().strip(),
                   'controllers':sorted(x.name for x in root.glob('hci*'))}))
 '''
+
+def render_target_fs_preflight_script(*, root=S22_PERSISTENT_ROOT,
+                                      expected_device=EXPECTED_S22_DEVICE_ID,
+                                      expected_uid=0, min_free_bytes=MIN_S22_FREE_BYTES,
+                                      min_free_inodes=MIN_S22_FREE_INODES,
+                                      namespace=S22_NAMESPACE_NAME,
+                                      trial_name=TRIAL_ID):
+    root_path = Path(root)
+    return f'''import json,os,pathlib,stat
+root=pathlib.Path({str(root_path)!r})
+parent=root.parent
+parent_info=parent.lstat()
+if not stat.S_ISDIR(parent_info.st_mode) or parent_info.st_uid!={expected_uid!r} or stat.S_IMODE(parent_info.st_mode)&0o022:
+ raise SystemExit('persistent root parent is symlinked, writable, or not owner-controlled')
+info=root.lstat()
+need_bytes={min_free_bytes!r}
+need_inodes={min_free_inodes!r}
+expected_dev={expected_device!r}
+expected_uid={expected_uid!r}
+if not stat.S_ISDIR(info.st_mode) or info.st_uid!=expected_uid or stat.S_IMODE(info.st_mode)!=0o700:
+ raise SystemExit('persistent trial root ownership/mode/type mismatch')
+if info.st_dev!=expected_dev: raise SystemExit('persistent trial root device identity mismatch')
+space=os.statvfs(root)
+free_bytes=space.f_bavail*space.f_frsize
+free_inodes=space.f_favail
+if free_bytes<need_bytes or free_inodes<need_inodes:
+ raise SystemExit('persistent trial root lacks reserved bytes/inodes')
+base=root/{namespace!r}
+trial=base/{trial_name!r}
+try: base_info=base.lstat()
+except FileNotFoundError: base_info=None
+if base_info is not None and (not stat.S_ISDIR(base_info.st_mode) or base_info.st_uid!=expected_uid or stat.S_IMODE(base_info.st_mode)!=0o700 or base_info.st_dev!=expected_dev):
+ raise SystemExit('trial namespace parent is not a private directory on the persistent filesystem')
+if trial.exists() or trial.is_symlink(): raise SystemExit('unique trial directory already exists; never reuse')
+print(json.dumps({{'device_id':info.st_dev,'free_bytes':free_bytes,'free_inodes':free_inodes,'trial_absent':True}}))
+'''
+
+
+def render_reserve_target_dir_script(*, root=S22_PERSISTENT_ROOT,
+                                     expected_device=EXPECTED_S22_DEVICE_ID,
+                                     expected_uid=0, min_free_bytes=MIN_S22_FREE_BYTES,
+                                     min_free_inodes=MIN_S22_FREE_INODES,
+                                     namespace=S22_NAMESPACE_NAME,
+                                     trial_name=TRIAL_ID,
+                                     staged_name='bt-qca6490-hci-bridge-probe',
+                                     trace_name=TRACE_NAME):
+    root_path = Path(root)
+    return f'''import json,os,pathlib,stat
+root=pathlib.Path({str(root_path)!r})
+expected_dev={expected_device!r}
+expected_uid={expected_uid!r}
+need_bytes={min_free_bytes!r}
+need_inodes={min_free_inodes!r}
+def check_root():
+ parent_info=root.parent.lstat()
+ if not stat.S_ISDIR(parent_info.st_mode) or parent_info.st_uid!=expected_uid or stat.S_IMODE(parent_info.st_mode)&0o022:
+  raise SystemExit('persistent root parent is unsafe')
+ info=root.lstat()
+ if not stat.S_ISDIR(info.st_mode) or info.st_uid!=expected_uid or stat.S_IMODE(info.st_mode)!=0o700 or info.st_dev!=expected_dev:
+  raise SystemExit('persistent trial root identity changed')
+ space=os.statvfs(root)
+ if space.f_bavail*space.f_frsize<need_bytes or space.f_favail<need_inodes:
+  raise SystemExit('persistent trial root no longer has reserved space')
+ return info
+root_info=check_root()
+base=root/{namespace!r}
+trial=base/{trial_name!r}
+try: base.mkdir(mode=0o700)
+except FileExistsError:
+ pass
+base_info=base.lstat()
+if not stat.S_ISDIR(base_info.st_mode) or base_info.st_uid!=expected_uid or stat.S_IMODE(base_info.st_mode)!=0o700 or base_info.st_dev!=expected_dev:
+ raise SystemExit('trial namespace parent is unsafe')
+trial.mkdir(mode=0o700)
+fd=os.open(base,os.O_RDONLY|getattr(os,'O_DIRECTORY',0))
+try: os.fsync(fd)
+finally: os.close(fd)
+root_after=root.lstat()
+if (root_after.st_dev,root_after.st_ino)!=(root_info.st_dev,root_info.st_ino):
+ raise SystemExit('persistent trial root identity changed during reservation')
+trial_info=trial.lstat()
+if not stat.S_ISDIR(trial_info.st_mode) or trial_info.st_uid!=expected_uid or stat.S_IMODE(trial_info.st_mode)!=0o700 or trial_info.st_dev!=expected_dev:
+ raise SystemExit('exclusive trial reservation failed validation')
+if (trial/{staged_name!r}).exists() or (trial/{staged_name!r}).is_symlink() or (trial/{trace_name!r}).exists() or (trial/{trace_name!r}).is_symlink():
+ raise SystemExit('staging or trace target unexpectedly exists in fresh reservation')
+print(json.dumps({{'reserved':True,'device_id':trial_info.st_dev,'mode':stat.S_IMODE(trial_info.st_mode)}}))
+'''
+
+
+TARGET_FS_PREFLIGHT_SCRIPT = render_target_fs_preflight_script()
+RESERVE_TARGET_DIR_SCRIPT = render_reserve_target_dir_script()
 
 
 class GateError(RuntimeError):
@@ -157,7 +257,7 @@ def validate_local_provenance(root=ROOT, artifact_path=None,
                 f'reviewed trial runner fingerprint changed: {relative}')
     for header in private_headers:
         _regular_file(header, 'private build dependency')
-    artifact = artifact_path or (root / ARTIFACT.relative_to(ROOT))
+    artifact = artifact_path or ARTIFACT
     info = _regular_file(artifact, 'prebuilt bridge artifact')
     require(info.st_uid == os.geteuid() and (info.st_mode & 0o777) == 0o700,
             'prebuilt bridge artifact must be owner-owned mode 0700')
@@ -220,6 +320,16 @@ def load_board():
     board = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(board)
     return board
+
+
+def load_device_trial_guard():
+    path = ROOT / 'tools/hardware/device-trial-guard.py'
+    spec = importlib.util.spec_from_file_location('s22_device_trial_guard', path)
+    if spec is None or spec.loader is None:
+        raise GateError('shared device-operation guard is unavailable')
+    guard = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(guard)
+    return guard
 
 
 def validate_trusted_transport(observer, trusted_root=TRUSTED_ROOT):
@@ -303,10 +413,259 @@ def validate_live_preflight(observer, *, receipt=None, snapshot_reader=None,
             'recovery_sha256': recovery_hash, 'trial_identity': TRIAL_ID}
 
 
+def _trusted_remote_command(observer, trusted_root, script, *, timeout):
+    command = shlex.join(('python3', '-I', '-c', script))
+    result = observer.run_trusted_remote('usb', None, command,
+                                         timeout=timeout, project_root=trusted_root)
+    if result.returncode:
+        detail = result.stderr.decode(errors='replace') if isinstance(result.stderr, bytes) else result.stderr
+        raise GateError('persistent trial storage check failed: ' + str(detail).strip()[:512])
+    return result
+
+
+def validate_remote_target_fs(observer, *, trusted_root=TRUSTED_ROOT):
+    """Read-only check for the exact persistent filesystem and fresh target."""
+    result = _trusted_remote_command(observer, trusted_root,
+                                     TARGET_FS_PREFLIGHT_SCRIPT, timeout=15)
+    output = result.stdout.decode(errors='replace') if isinstance(result.stdout, bytes) else result.stdout
+    try:
+        value = json.loads(output)
+    except (json.JSONDecodeError, TypeError) as error:
+        raise GateError('persistent trial storage preflight returned invalid JSON') from error
+    return validate_target_storage_summary(value)
+
+
+def validate_target_storage_summary(value):
+    require(isinstance(value, dict) and value.get('device_id') == EXPECTED_S22_DEVICE_ID and
+            value.get('trial_absent') is True and
+            isinstance(value.get('free_bytes'), int) and
+            value['free_bytes'] >= MIN_S22_FREE_BYTES and
+            isinstance(value.get('free_inodes'), int) and
+            value['free_inodes'] >= MIN_S22_FREE_INODES,
+            'persistent trial storage is not the reviewed private target')
+    return value
+
+
+def reserve_remote_trial_dir(observer, *, trusted_root=TRUSTED_ROOT):
+    """Atomically reserve a new private stage/trace directory after begin()."""
+    deployer = observer._trusted_deployer()
+    wrapper = trusted_root / 'tools/s22-ssh'
+    command = shlex.join(('python3', '-I', '-c', RESERVE_TARGET_DIR_SCRIPT))
+    result = deployer.run_approved_ssh_wrapper(
+        wrapper, command, input_data=b'', timeout=20, project_root=trusted_root)
+    if result.returncode:
+        detail = result.stderr.decode(errors='replace') if isinstance(result.stderr, bytes) else result.stderr
+        raise GateError('exclusive persistent trial directory reservation failed: ' + str(detail).strip()[:512])
+    output = result.stdout.decode(errors='replace') if isinstance(result.stdout, bytes) else result.stdout
+    try:
+        value = json.loads(output)
+    except (json.JSONDecodeError, TypeError) as error:
+        raise GateError('exclusive trial directory reservation returned invalid JSON') from error
+    require(value == {'reserved': True, 'device_id': EXPECTED_S22_DEVICE_ID, 'mode': 0o700},
+            'exclusive trial directory reservation returned unexpected identity')
+    return value
+
+
+def validate_completed_trial_receipt(workspace=ROOT, name=TRIAL_ID, *, require_live=True):
+    """Require independently verified postflight and durable cleanup evidence."""
+    path = trial_receipt_directory(workspace, name) / 'receipt.json'
+    info = _regular_file(path, 'completed controller-trial receipt')
+    require(info.st_uid == os.geteuid() and not (info.st_mode & 0o077) and
+            info.st_nlink == 1,
+            'controller-trial receipt is not owner-private')
+    try:
+        value = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError) as error:
+        raise GateError('controller-trial receipt is unreadable') from error
+    require(isinstance(value, dict) and value.get('same_boot') is True and
+            value.get('returncode') == 0 and value.get('kernel_capture_exit') == 0 and
+            value.get('after_metadata_exit') == 0 and value.get('after_vote_check') == 0 and
+            value.get('strace_capture_exit') == 0,
+            'controller-trial receipt lacks successful same-boot postflight')
+    before = value.get('before')
+    after = value.get('after')
+    require(isinstance(before, dict) and isinstance(after, dict) and
+            before.get('boot_id') == after.get('boot_id') and
+            after.get('pid1') == 'native-guardian' and
+            after.get('profile') == 'qwen4b' and after.get('model') == 'ok' and
+            type(after.get('temperature')) in (int, float) and after['temperature'] < 42,
+            'controller-trial health receipt is not the same healthy boot')
+    try:
+        metadata = json.loads(value.get('after_metadata', ''))
+    except (TypeError, json.JSONDecodeError) as error:
+        raise GateError('post-trial metadata receipt is invalid') from error
+    require(isinstance(metadata, dict) and metadata.get('boot_id') == after['boot_id'] and
+            metadata.get('device_fds') == [] and metadata.get('independent_usb') is True,
+            'post-trial metadata does not confirm same-boot idle USB/no device FDs')
+    require(value.get('after_vote_check_stdout', '').strip() ==
+            'live_wlan_metadata_only=0',
+            'post-trial C check did not confirm the independent WLAN vote')
+    output = value.get('uart_output')
+    require(isinstance(output, str) and
+            re.search(r'(?m)^bridge_registered_hci=\d+\s*$', output) and
+            re.search(r'(?m)^bridge_result=0\b', output) and
+            re.search(r'(?m)^pty_cleanup_ioctl_result=0\s*$', output),
+            'controller-trial receipt does not confirm HCI registration and TTY detach')
+    uart_stderr = value.get('uart_stderr')
+    require(isinstance(uart_stderr, str) and
+            re.search(r'(?m)^stage=power_off_and_vote_restored\s*$', uart_stderr),
+            'controller-trial receipt does not confirm BT power-off and WLAN vote restoration')
+    require(value.get('strace_capture_path') == TRIAL_DIR + '/' + TRACE_NAME,
+            'controller-trial trace path differs from the exclusive reservation')
+    trace_path = path.parent / 'strace.txt'
+    trace_bytes = read_durable_private_file(trace_path, 'private syscall trace receipt')
+    require(bool(trace_bytes) and value.get('strace_capture_bytes') == len(trace_bytes) and
+            value.get('strace_capture_sha256') == hashlib.sha256(trace_bytes).hexdigest(),
+            'private syscall trace is empty or differs from its receipt hash')
+    delta_path = path.parent / 'kernel-delta.txt'
+    kernel_delta = read_durable_private_file(delta_path, 'post-trial kernel delta').decode(
+        'utf-8', errors='replace')
+    require(not re.search(r'(?i)(?:\b(?:panic|oops|hung task|fatal|call trace|warning)\b|BUG:)',
+                          kernel_delta),
+            'post-trial kernel delta contains an unresolved fatal/hung indicator')
+    if require_live:
+        live = value.get('live_postflight')
+        require(isinstance(live, dict) and live.get('boot_id') == after['boot_id'] and
+                live.get('gnu_build_id') == EXPECTED_GNU_BUILD_ID and
+                live.get('recovery_sha256') == EXPECTED_RECOVERY_SHA256 and
+                live.get('controllers') == [] and live.get('network_ready') is True and
+                live.get('native_model_ready') is True and live.get('power_safe') is True and
+                live.get('serious_fault') is False and live.get('kernel_capture_complete') is True and
+                live.get('kernel_coverage_complete') is True,
+                'independent postflight does not prove exact candidate and healthy controller-free boot')
+    return path
+
+
+def validate_live_postflight(observer, before, *, snapshot_reader=None,
+                             candidate_hasher=None, controller_reader=None,
+                             trusted_root=TRUSTED_ROOT):
+    """Re-read the pinned running candidate and health after confirmed detach."""
+    if snapshot_reader is None:
+        snapshot_reader = lambda: observer.snapshot_over(
+            'usb', None, project_root=trusted_root)
+    current = snapshot_reader()
+    observer.validate_snapshot(current, post_reboot=True)
+    require(current.get('boot_id') == before.get('boot_id'),
+            'post-trial snapshot is not from the original candidate boot')
+    require(current.get('gnu_build_id') == EXPECTED_GNU_BUILD_ID,
+            'post-trial GNU build ID differs from the reviewed candidate')
+    require(observer.network_state_valid(current.get('network_state')),
+            'post-trial WLAN baseline is not healthy')
+    if candidate_hasher is None:
+        candidate_hasher = lambda: observer.candidate_hash(
+            'usb', None, project_root=trusted_root)
+    recovery_hash = candidate_hasher()
+    require(recovery_hash == EXPECTED_RECOVERY_SHA256,
+            'post-trial full RECOVERY hash differs from the reviewed candidate')
+    if controller_reader is None:
+        controller_reader = lambda: read_live_controller_state(
+            observer, trusted_root=trusted_root)
+    state = controller_reader()
+    require(state.get('boot_id') == current.get('boot_id') and
+            state.get('controllers') == [],
+            'post-trial controller is not detached on the same boot')
+    kernel = current.get('kernel_log_classification')
+    readiness = current.get('readiness')
+    return {
+        'boot_id': current['boot_id'],
+        'gnu_build_id': current['gnu_build_id'],
+        'recovery_sha256': recovery_hash,
+        'controllers': [],
+        'network_ready': True,
+        'native_model_ready': True,
+        'power_safe': True,
+        'serious_fault': current.get('serious_fault'),
+        'assistant_idle': current.get('assistant_idle'),
+        'readiness': readiness,
+        'kernel_capture_complete': kernel.get('capture_complete') is True,
+        'kernel_coverage_complete': kernel.get('coverage_complete') is True,
+        'hung_task_warning_count': kernel.get('hung_task_warning_count'),
+        'fatal_indicators': kernel.get('fatal_indicators'),
+    }
+
+
+def persist_live_postflight(receipt_path, live_postflight):
+    """Durably add independently checked postflight to the private receipt."""
+    path = Path(receipt_path)
+    parent_info = path.parent.lstat()
+    require(stat.S_ISDIR(parent_info.st_mode) and
+            parent_info.st_uid == os.geteuid() and stat.S_IMODE(parent_info.st_mode) == 0o700,
+            'controller-trial receipt directory is not private')
+    info = _regular_file(path, 'controller-trial receipt')
+    require(info.st_uid == os.geteuid() and not (info.st_mode & 0o077) and info.st_nlink == 1,
+            'controller-trial receipt is not owner-private')
+    fd = os.open(path, os.O_RDWR | os.O_CLOEXEC | getattr(os, 'O_NOFOLLOW', 0))
+    try:
+        current = os.fstat(fd)
+        named = path.lstat()
+        require((current.st_dev, current.st_ino) == (named.st_dev, named.st_ino),
+                'controller-trial receipt identity changed')
+        with os.fdopen(os.dup(fd), 'r', encoding='utf-8') as stream:
+            value = json.load(stream)
+        require(isinstance(value, dict), 'controller-trial receipt is not an object')
+        value['live_postflight'] = live_postflight
+        data = (json.dumps(value, indent=2) + '\n').encode()
+        os.lseek(fd, 0, os.SEEK_SET)
+        offset = 0
+        while offset < len(data):
+            offset += os.write(fd, data[offset:])
+        os.ftruncate(fd, len(data))
+        os.fsync(fd)
+        adapter_parent = path.parent.lstat()
+        require((parent_info.st_dev, parent_info.st_ino) ==
+                (adapter_parent.st_dev, adapter_parent.st_ino),
+                'controller-trial receipt directory identity changed')
+        directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0) |
+                               getattr(os, 'O_NOFOLLOW', 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        os.close(fd)
+    return path
+
+
+def read_durable_private_file(path, label):
+    """Read and fsync an owner-only evidence file before terminalization."""
+    path = Path(path)
+    info = _regular_file(path, label)
+    require(info.st_uid == os.geteuid() and not (info.st_mode & 0o077) and
+            info.st_nlink == 1,
+            f'{label} is not an owner-private regular file')
+    parent_info = path.parent.lstat()
+    require(stat.S_ISDIR(parent_info.st_mode) and parent_info.st_uid == os.geteuid() and
+            stat.S_IMODE(parent_info.st_mode) == 0o700,
+            f'{label} parent directory is not private')
+    fd = os.open(path, os.O_RDWR | os.O_CLOEXEC | getattr(os, 'O_NOFOLLOW', 0))
+    try:
+        current = os.fstat(fd)
+        named = path.lstat()
+        require((current.st_dev, current.st_ino) == (named.st_dev, named.st_ino),
+                f'{label} identity changed')
+        data = bytearray()
+        while True:
+            block = os.read(fd, 1024 * 1024)
+            if not block:
+                break
+            data.extend(block)
+        os.fsync(fd)
+        directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0) |
+                               getattr(os, 'O_NOFOLLOW', 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+        return bytes(data)
+    finally:
+        os.close(fd)
+
+
 def configure_board(board):
     board.SOURCE = SOURCE
     board.BINARY = ARTIFACT
     board.DEST = DEST
+    board.TRACE_DIR = TRIAL_TRACE_DIR
     board.PHONE_TIMEOUT = 35
     board.HOST_TIMEOUT = 45
     board.EXTRA_SOURCES = [
@@ -394,28 +753,58 @@ def run_board_main(board, name, observer, *, trusted_root=TRUSTED_ROOT):
 def run_trial(name, *, observer, board, local_validator=None,
               transport_validator=None, snapshot_reader=None, candidate_hasher=None,
               controller_reader=None, board_invoker=None, workspace=ROOT,
-              trusted_root=TRUSTED_ROOT, receipt=None):
+              trusted_root=TRUSTED_ROOT, receipt=None,
+              target_fs_checker=None, remote_reserver=None,
+              operation_lock_factory=None):
     require(name == TRIAL_ID, 'only the exact controller-registration trial identity is allowed')
-    path = trial_receipt_directory(workspace, name)
-    require_unused_receipt_path(path)
-    if local_validator is None:
-        local_validator = lambda: validate_local_provenance(workspace)
-    artifact_digest = local_validator()
-    require(artifact_digest == EXPECTED_ARTIFACT_SHA256,
-            'local artifact preflight did not return the reviewed SHA-256')
-    if transport_validator is None:
-        transport_validator = lambda: validate_trusted_transport(observer, trusted_root)
-    transport_validator()
-    result = validate_live_preflight(
-        observer, receipt=receipt, snapshot_reader=snapshot_reader,
-        candidate_hasher=candidate_hasher, controller_reader=controller_reader,
-        trusted_root=trusted_root)
-    configure_board(board)
-    if board_invoker is None:
-        board_invoker = lambda module, trial_name: run_board_main(
-            module, trial_name, observer, trusted_root=trusted_root)
-    result['board_runner_result'] = board_invoker(board, name)
-    return result
+    if operation_lock_factory is None:
+        guard = load_device_trial_guard()
+        operation_lock_factory = guard.acquire_operation_lock
+    with operation_lock_factory(workspace, name, 'bluetooth-controller-registration') as operation:
+        path = trial_receipt_directory(workspace, name)
+        require_unused_receipt_path(path)
+        if local_validator is None:
+            local_validator = lambda: validate_local_provenance(workspace)
+        artifact_digest = local_validator()
+        require(artifact_digest == EXPECTED_ARTIFACT_SHA256,
+                'local artifact preflight did not return the reviewed SHA-256')
+        if transport_validator is None:
+            transport_validator = lambda: validate_trusted_transport(observer, trusted_root)
+        transport_validator()
+        result = validate_live_preflight(
+            observer, receipt=receipt, snapshot_reader=snapshot_reader,
+            candidate_hasher=candidate_hasher, controller_reader=controller_reader,
+            trusted_root=trusted_root)
+        if target_fs_checker is None:
+            target_fs_checker = lambda: validate_remote_target_fs(
+                observer, trusted_root=trusted_root)
+        target_storage = target_fs_checker()
+        validate_target_storage_summary(target_storage)
+        configure_board(board)
+        if remote_reserver is None:
+            remote_reserver = lambda: reserve_remote_trial_dir(
+                observer, trusted_root=trusted_root)
+        if board_invoker is None:
+            board_invoker = lambda module, trial_name: run_board_main(
+                module, trial_name, observer, trusted_root=trusted_root)
+
+        # This durable marker must precede the first remote write (the private
+        # staging/trace-directory reservation). Any later timeout stays UNKNOWN.
+        operation.begin(project_root=workspace)
+        result['remote_trial_reservation'] = remote_reserver()
+        result['target_storage'] = target_storage
+        result['board_runner_result'] = board_invoker(board, name)
+        receipt_path = validate_completed_trial_receipt(workspace, name, require_live=False)
+        live_postflight = validate_live_postflight(
+            observer, result, snapshot_reader=snapshot_reader,
+            candidate_hasher=candidate_hasher, controller_reader=controller_reader,
+            trusted_root=trusted_root)
+        persist_live_postflight(receipt_path, live_postflight)
+        validate_completed_trial_receipt(workspace, name)
+        result['live_postflight'] = live_postflight
+        operation.complete(receipt_path, outcome='success', cleanup_confirmed=True)
+        result['cleanup_confirmed'] = True
+        return result
 
 
 def main(argv=None, *, dependencies=None):

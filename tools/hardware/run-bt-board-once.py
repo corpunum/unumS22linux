@@ -21,6 +21,7 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 BINARY = ROOT / 'builds/bt-board-20260922/bt-qca6490-board-probe'
 DEST = '/srv/s22/bt-board-20260922/bt-qca6490-board-probe'
+TRACE_DIR = Path('/srv/s22/bt-board-20260922')
 SOURCE = ROOT / 'tools/hardware/bt-qca6490-board-probe.c'
 ACCEPTED_SOURCE = ROOT / 'tools/hardware/bt-version-transport-probe.c'
 NOTE = 'Raw version+board transport only; no baud, firmware, HCI, pairing or data acceptance.'
@@ -64,7 +65,10 @@ def main():
     trial = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(trial)
     before = trial.phone_health()
-    state = trial.remote('python3 -c ' + shlex.quote(accepted.METADATA))
+    # METADATA relies on assert-based fail-closed checks. Keep them active even
+    # if the invoking host/remote environment inherited PYTHONOPTIMIZE.
+    metadata_command = shlex.join(('python3', '-I', '-c', accepted.METADATA))
+    state = trial.remote(metadata_command)
     if state.returncode:
         raise RuntimeError('Read-only metadata preflight failed: '+state.stderr)
     metadata = json.loads(state.stdout)
@@ -108,9 +112,9 @@ print('binary_hash_verified')
         raise RuntimeError(staged.stderr.decode())
     check = trial.remote(DEST + ' --check-live-wlan')
     (raw / 'metadata-check.txt').write_text(check.stdout + check.stderr)
-    if check.returncode:
+    if check.returncode or check.stdout.strip() != 'live_wlan_metadata_only=0':
         raise RuntimeError('Live C preflight refused without opening devices')
-    trace = '/srv/s22/bt-board-20260922/' + args.name + '.strace'
+    trace = str(TRACE_DIR / (args.name + '.strace'))
     command = shlex.join(['timeout', '-s', 'TERM', '-k', '5', str(PHONE_TIMEOUT), 'strace', '-f', '-qq', '-tt', '-T',
                           '-s', '256', '-o', trace, '-e', 'trace=openat,close,ioctl,read,write', DEST,
                           '--execute', '--allow-shared-wlan-rail', '--live-wlan-vote', '--uart', '/dev/ttySAC1',
@@ -131,24 +135,33 @@ print('binary_hash_verified')
     (raw / 'stderr.txt').write_text(result.stderr)
     captured = trial.remote('head -c 8388608 ' + shlex.quote(trace))
     (raw / 'strace.txt').write_text(captured.stdout)
+    if captured.returncode or not captured.stdout:
+        raise RuntimeError('Private syscall trace is unavailable; outcome remains unknown')
     kernel = trial.remote('dmesg')
     (raw / 'after-kernel.txt').write_text(kernel.stdout)
     delta = [line for line in kernel.stdout.splitlines()
              if (m := re.match(r'^\[\s*([0-9.]+)\]', line)) and float(m[1]) > boundary]
     (raw / 'kernel-delta.txt').write_text('\n'.join(delta) + '\n')
     after = trial.phone_health()
-    state = trial.remote('python3 -c ' + shlex.quote(accepted.METADATA))
+    state = trial.remote(metadata_command)
     (raw / 'after-metadata.txt').write_text(state.stdout + state.stderr)
     check_after = trial.remote(DEST + ' --check-live-wlan')
     (raw / 'after-check.txt').write_text(check_after.stdout + check_after.stderr)
     receipt = dict(started_at=start, returncode=result.returncode, elapsed=round(elapsed, 3),
                    source_sha256=source_hash, accepted_source_sha256=accepted_hash,
                    binary_sha256=digest, before=before, after=after,
+                   after_metadata=state.stdout, after_metadata_stderr=state.stderr,
+                   after_vote_check_stdout=check_after.stdout,
+                   after_vote_check_stderr=check_after.stderr,
                    included_source_sha256=included_hashes,
                    supervisor_source_sha256=workflow_hashes,
                    same_boot=before['boot_id'] == after['boot_id'], kernel_capture_exit=kernel.returncode,
                    after_metadata_exit=state.returncode, after_vote_check=check_after.returncode,
-                   strace_capture_exit=captured.returncode, uart_output=result.stdout,
+                   strace_capture_exit=captured.returncode,
+                   strace_capture_path=trace,
+                   strace_capture_bytes=len(captured.stdout.encode()),
+                   strace_capture_sha256=hashlib.sha256(captured.stdout.encode()).hexdigest(),
+                   uart_output=result.stdout, uart_stderr=result.stderr,
                    note=NOTE)
     (raw / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
     print(json.dumps({k: v for k, v in receipt.items() if k not in ('before', 'after', 'uart_output')}, indent=2))
