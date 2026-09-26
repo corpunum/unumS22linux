@@ -59,7 +59,8 @@ class CameraReadinessInventoryTests(unittest.TestCase):
         media.touch()
         self.put(self.sys_root, "class/media/media0/model", "Exynos IS\n")
         self.put(self.sys_root, "class/media/media0/dev", "241:0\n")
-        self.put(self.proc_root, "modules", "exynos_is 123 0 - Live 0x1234\n"
+        self.put(self.proc_root, "modules", "fimc_is 222 0 - Live 0x9876\n"
+                 "exynos_is 123 0 - Live 0x1234\n"
                  "s5k_gn3 321 0 - Live 0x5678\nordinary 1 0 - Live 0x9abc\n")
         self.put(self.dt_root, "model", b"Samsung r0s\x00")
         self.put(self.dt_root, "compatible", b"samsung,r0s\x00samsung,s5e9925\x00")
@@ -106,7 +107,7 @@ class CameraReadinessInventoryTests(unittest.TestCase):
         self.assertFalse(result["device_nodes_opened"])
         self.assertFalse(result["ioctl_attempted"])
         self.assertFalse(result["camera_power_requested"])
-        self.assertEqual(result["kernel_modules"]["names"], ["exynos_is", "s5k_gn3"])
+        self.assertEqual(result["kernel_modules"]["names"], ["exynos_is", "fimc_is", "s5k_gn3"])
         self.assertEqual(result["device_tree"]["model"],
                          {"status": "ok", "values": ["Samsung r0s"]})
         self.assertEqual(result["video4linux"][0]["sysfs"]["name"]["value"], "Exynos ISP")
