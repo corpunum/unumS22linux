@@ -81,6 +81,17 @@ def main() -> None:
               "synthetic unbounded POWER response wait must fail that gate")
         check(result["readiness_gates"]["publication_drain_liveness_resolved"] is False,
               "host source checks must not claim publication-drain liveness")
+        for gate in (
+            "publication_caller_return_bounded",
+            "publisher_progress_bounded",
+            "detached_waiter_resource_cleanup_kernel_validated",
+            "detached_waiter_outstanding_cap_validated",
+            "publication_storage_lifetime_kernel_validated",
+            "late_power_transition_safe_after_close",
+            "device_teardown_resources_pinned_through_publication",
+        ):
+            check(result["readiness_gates"][gate] is False,
+                  f"host source checks must leave {gate} unresolved")
         check(result["readiness_gates"]["callback_lifetime_kernel_validated"] is False,
               "host source checks must not claim kernel callback lifetime validation")
 
@@ -106,8 +117,13 @@ def main() -> None:
                   f"{mode} lifecycle source must not prove a bounded response wait")
             check(gates["publication_drain_liveness_resolved"] is False,
                   f"{mode} lifecycle source must not resolve publication-drain liveness")
+            check(gates["publication_caller_return_bounded"] is False and
+                  gates["publisher_progress_bounded"] is False,
+                  f"{mode} lifecycle source must not claim publication liveness")
             check(gates["normal_boot_error_unwind_resolved"] is False,
                   f"{mode} lifecycle source must not resolve boot unwind")
+            check(result["checks"]["known_lifecycle_gaps"]["publication_drain_wait_unbounded"] is None,
+                  f"{mode} lifecycle source must report drain shape as unknown")
             check(not any(gates.values()), f"{mode} lifecycle source must leave all lifecycle gates false")
             check(result["bootup_authorized"] is False, f"{mode} lifecycle source must not authorize BOOTUP")
 
@@ -130,6 +146,14 @@ def main() -> None:
           "bounded response timeout should be reported independently")
     check(readiness["readiness_gates"]["publication_drain_liveness_resolved"] is False,
           "bounded response timeout must not imply publication-drain liveness")
+    check(readiness["readiness_gates"]["publication_caller_return_bounded"] is False,
+          "bounded response timeout must not imply bounded return under a stalled publisher")
+    check(readiness["readiness_gates"]["publisher_progress_bounded"] is False,
+          "source audit must not claim the publisher itself is bounded")
+    check(readiness["readiness_gates"]["late_power_transition_safe_after_close"] is False,
+          "source audit must not claim late physical POWER transition safety")
+    check(readiness["readiness_gates"]["device_teardown_resources_pinned_through_publication"] is False,
+          "source audit must not claim detached device resources are pinned")
     check(readiness["bootup_ready"] is False, "unproven gates must block readiness")
     check(readiness["bootup_authorized"] is False, "host checker must never authorize")
     check(readiness["exit_code"] == 2, "unproven gates must return status 2")
