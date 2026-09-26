@@ -25,6 +25,7 @@ OBSERVER_TRIAL_ID = 'hci-candidate-20260924-second'
 EXPECTED_RECOVERY_SHA256 = '42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5'
 EXPECTED_GNU_BUILD_ID = 'b2dda820b18d410d9bf12f1bd2584567d545991d'
 EXPECTED_ARTIFACT_SHA256 = 'c28307985bdad6404f0fecc82860eaa92a2c150a5d870d9297ce0301f44bac0a'
+EXPECTED_ARTIFACT_SIZE = 1042008
 EXPECTED_ARTIFACT_BUILD_ID = 'eb47c232ddb7fc4b477bb145bbe9bf2832972276'
 EXPECTED_SSH_WRAPPER_SHA256 = '7e9d31035762de50ccc6c5614d8348532fd912bf59c41c9d410a4c7bfe49dd1d'
 EXPECTED_TRUSTED_RUN_TRIAL_SHA256 = '165a16566f2dedcb23506d427425ddb030acc53876710a61bb06a2f1b039a5fe'
@@ -161,6 +162,8 @@ def validate_local_provenance(root=ROOT, artifact_path=None,
     require(info.st_uid == os.geteuid() and (info.st_mode & 0o777) == 0o700,
             'prebuilt bridge artifact must be owner-owned mode 0700')
     data = artifact.read_bytes()
+    require(len(data) == EXPECTED_ARTIFACT_SIZE,
+            'prebuilt bridge artifact size mismatch')
     require(hashlib.sha256(data).hexdigest() == EXPECTED_ARTIFACT_SHA256,
             'prebuilt bridge artifact SHA-256 mismatch')
     require(_elf_build_id(data) == EXPECTED_ARTIFACT_BUILD_ID,
@@ -340,6 +343,14 @@ def isolated_stage_command(command):
     return shlex.join(('python3', '-I', '-c', words[2]))
 
 
+def validate_stage_input(data):
+    """Pin the bytes just read by board.main before they cross SSH."""
+    require(isinstance(data, bytes) and len(data) == EXPECTED_ARTIFACT_SIZE,
+            'staged bridge artifact size mismatch; refusing remote stage')
+    require(hashlib.sha256(data).hexdigest() == EXPECTED_ARTIFACT_SHA256,
+            'staged bridge artifact SHA-256 mismatch; refusing remote stage')
+
+
 def run_board_main(board, name, observer, *, trusted_root=TRUSTED_ROOT):
     """Reuse board.main while pinning its transport to the original SSH root."""
     deployer = observer._trusted_deployer()
@@ -355,6 +366,7 @@ def run_board_main(board, name, observer, *, trusted_root=TRUSTED_ROOT):
             require(not kwargs and capture_output and input is not None and
                     timeout is not None,
                     'board runner requested an unexpected subprocess operation')
+            validate_stage_input(input)
             require(isinstance(argv, list) and len(argv) == 2 and
                     argv[0] == str(Path(board.ROOT) / 'tools/s22-ssh'),
                     'board staging did not use the expected wrapper command')
@@ -388,7 +400,9 @@ def run_trial(name, *, observer, board, local_validator=None,
     require_unused_receipt_path(path)
     if local_validator is None:
         local_validator = lambda: validate_local_provenance(workspace)
-    local_validator()
+    artifact_digest = local_validator()
+    require(artifact_digest == EXPECTED_ARTIFACT_SHA256,
+            'local artifact preflight did not return the reviewed SHA-256')
     if transport_validator is None:
         transport_validator = lambda: validate_trusted_transport(observer, trusted_root)
     transport_validator()
