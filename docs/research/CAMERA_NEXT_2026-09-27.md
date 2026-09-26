@@ -2,6 +2,11 @@
 
 ## Current conclusion
 
+The owner's September 27 continuation authorizes camera bring-up. The gates
+below are source, artifact, and operation-safety prerequisites, not a renewed
+request for broad camera permission. The worker performed host work only;
+the coordinator alone may execute a reviewed device operation.
+
 Camera readiness and capture remain **not assessed**. The only addition in this
 wave is [`camera-readiness-once.py`](../../tools/hardware/camera-readiness-once.py),
 a bounded, host-testable inventory intended for later use through the existing
@@ -85,9 +90,9 @@ The same file's `is_video_open()` calls `is_sensor_open()` for a sensor leader;
 `pm_runtime_get_sync()` for a sensor resource and can enable PHY LDO regulators
 on the first camera resource. Thus “open then query capabilities” is not a
 passive probe on this stack, even if the ioctl itself only reports metadata.
-No video-node open is authorized or attempted here.
+No video-node open is implemented or attempted by this inventory.
 
-The narrower next topology step, if separately authorized, is to identify a
+The narrower next topology step under the existing owner authorization is to identify a
 specific `/dev/mediaN` from its already-known `/sys/class/media/mediaN/model`
 and then review that exact driver open path. The generic media core's normal
 `media_device_open()` is empty; read-only device-info/entity/topology ioctls
@@ -128,10 +133,10 @@ functionality.
    candidate release locally, and confirm runtime paths/namespace. Do not
    publish proprietary payload bytes or use an old manifest as proof of current
    compatibility.
-3. If the owner authorizes it, query a precisely mapped media graph using the
+3. After the operation-specific source review passes, query a precisely mapped media graph using the
    reviewed read-only operations and retain private logs locally. This may
    establish graph registration only.
-4. Sensor response or capture requires a separate, explicitly authorized
+4. Sensor response or capture requires a separately reviewed
    powered operation with exact candidate identity, rollback/readback and
    cleanup plan. A single sensor read/stream can have physical power effects;
    no such operation is covered by this inventory or its synthetic tests.
