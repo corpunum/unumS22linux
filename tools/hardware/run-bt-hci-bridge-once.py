@@ -573,8 +573,13 @@ def validate_completed_trial_receipt(workspace=ROOT, name=TRIAL_ID, *, require_l
             value.get('strace_capture_sha256') == hashlib.sha256(trace_bytes).hexdigest(),
             'private syscall trace is empty or differs from its receipt hash')
     delta_path = path.parent / 'kernel-delta.txt'
+    delta = read_durable_private_file(delta_path, 'post-trial kernel delta')
+    validate_kernel_capture_window(
+        read_durable_private_file(path.parent / 'before-kernel.txt', 'pre-trial kernel capture'),
+        read_durable_private_file(path.parent / 'after-kernel.txt', 'post-trial kernel capture'),
+        delta)
     delta_classification = classify_kernel_delta(
-        read_durable_private_file(delta_path, 'post-trial kernel delta'))
+        delta)
     if require_live:
         live = value.get('live_postflight')
         require(isinstance(live, dict) and live.get('boot_id') == after['boot_id'] and
@@ -594,6 +599,34 @@ def validate_completed_trial_receipt(workspace=ROOT, name=TRIAL_ID, *, require_l
                 delta_classification.get('liveness_unresolved') is False,
                 'independent postflight does not prove exact candidate and healthy controller-free boot')
     return path
+
+
+def validate_kernel_capture_window(before, after, delta):
+    """Require the actual pre-trial boundary to survive in the post-trial ring.
+
+    A successful dmesg command alone cannot distinguish ring overwrite from
+    an uneventful interval. Bind the filtered delta to both retained captures;
+    lost/cleared/truncated evidence leaves the operation unresolved.
+    """
+    for data in (before, after):
+        require(isinstance(data, bytes) and 0 < len(data) <= 4194304 and
+                data.endswith(b'\n'), 'kernel capture is empty, oversized or truncated')
+    def records(data):
+        return [(float(match[1]), line) for line in data.splitlines()
+                if (match := re.match(rb'^\[\s*([0-9.]+)\]', line))]
+    try:
+        before_records, after_records = records(before), records(after)
+    except ValueError as error:
+        raise GateError('kernel capture has a malformed timestamp') from error
+    require(before_records and after_records, 'kernel capture has no timestamped boundary')
+    boundary = max(stamp for stamp, _ in before_records)
+    require(0 <= boundary < 1e12, 'kernel capture boundary is not finite or plausible')
+    anchor = next(line for stamp, line in reversed(before_records) if stamp == boundary)
+    require(anchor in after.splitlines(),
+            'pre-trial kernel boundary lost: ring overwrite or cleared capture is unresolved')
+    expected = b'\n'.join(line for stamp, line in after_records if stamp > boundary) + b'\n'
+    require(delta == expected, 'kernel delta does not match the retained before/after captures')
+    return {'pre_trial_boundary_retained': True, 'delta_matches_full_capture': True}
 
 
 def validate_live_postflight(observer, before, *, snapshot_reader=None,
