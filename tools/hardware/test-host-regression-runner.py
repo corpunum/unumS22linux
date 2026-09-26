@@ -30,6 +30,7 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-audio-recovery-observer.py",
     "tools/hardware/test-input-power-readiness.py",
     "tools/hardware/test-camera-readiness-once.py",
+    "tools/hardware/test-camera-resource-unwind.py",
     "tools/hardware/test-recovery-deployment-hardening.py",
     "tools/hardware/test-hci-recovery-profile.py",
     "tools/hardware/test-s22-hci-candidate-preflight-20260924.py",
