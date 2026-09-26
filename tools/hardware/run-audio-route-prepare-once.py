@@ -6,6 +6,7 @@ No gains, amplifier-enable or pin-switch writes.
 The two selectors return to their captured zero values after the child exits.
 """
 import argparse
+import base64
 from datetime import datetime,timezone
 import hashlib
 import importlib.util
@@ -15,17 +16,27 @@ import os
 from pathlib import Path
 import re
 import shlex
+import stat
 import subprocess
+import sys
 import time
 
 ROOT=Path(__file__).resolve().parents[2]
 HCI_TRIAL_ID='hci-candidate-20260924-second'
 HCI_CANDIDATE_GNU_BUILD_ID='b2dda820b18d410d9bf12f1bd2584567d545991d'
 HCI_CANDIDATE_RECOVERY_SHA256='42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5'
-AUDIO_PREFLIGHT=r'''import json,pathlib,re,subprocess
+AUDIO_TRIAL_ID='audio-zero-20260927'
+AUDIO_OPERATION_KIND='audio-zero'
+AUDIO_TRACE_ROOT='/srv/s22'
+AUDIO_TRACE_REL=('audio-trials-20260927',AUDIO_TRIAL_ID,'trace.strace')
+TRACE_MAX_BYTES=2_000_000
+TRACE_MIN_FREE_BYTES=16*1024*1024
+TRACE_MIN_FREE_INODES=32
+AUDIO_PREFLIGHT=r'''import json,pathlib,re,shutil,subprocess
 p=pathlib.Path
 def need(condition,reason):
  if not condition:raise RuntimeError(reason)
+need(all(shutil.which(name) for name in ('python3','aplay','strace')),'diagnostic_tool_unavailable')
 def control(name):
  r=subprocess.run(['amixer','-c','0','cget','name='+name],capture_output=True,text=True,timeout=5)
  values=re.findall(r'^  : values=(.*)$',r.stdout,re.M)
@@ -56,6 +67,114 @@ print(json.dumps({'card':'RainbowPrince','pcm':'116:3','status':status,'amps':am
  'routes':routes,'service':service,'reset_count':reset,
  'runtime_status':(abox/'power/runtime_status').read_text().strip(),
  'cache_only':cache_only},sort_keys=True))
+'''
+# Both remote snippets open every ancestor with O_NOFOLLOW, then use dirfds for
+# the fixed relative names.  The stage uses O_EXCL for both the trial directory
+# and the trace reservation; strace is allowed to truncate only that reserved
+# inode.  The readback rechecks device/inode and has a hard byte cap.
+REMOTE_TRACE_STAGE=r'''import json,os,stat,sys
+root_path=sys.argv[1];expected_uid=int(sys.argv[2]);require_separate_fs=sys.argv[3]=='1'
+minimum_bytes=int(sys.argv[4]);minimum_inodes=int(sys.argv[5])
+flags=os.O_RDONLY|os.O_DIRECTORY|os.O_CLOEXEC|getattr(os,'O_NOFOLLOW',0)
+def need(ok,code):
+ if not ok:raise RuntimeError(code)
+def open_dir(path):
+ need(path.startswith('/') and '..' not in path.split('/'),'bad_absolute_path')
+ fd=os.open('/',flags)
+ try:
+  for part in (x for x in path.split('/') if x):
+   nextfd=os.open(part,flags,dir_fd=fd);os.close(fd);fd=nextfd
+  return fd
+ except BaseException:
+  os.close(fd);raise
+def check_dir(fd,uid,mode,dev=None):
+ info=os.fstat(fd)
+ need(stat.S_ISDIR(info.st_mode),'not_directory')
+ need(info.st_uid==uid,'unexpected_directory_owner')
+ need(stat.S_IMODE(info.st_mode)==mode,'unexpected_directory_mode')
+ if dev is not None:need(info.st_dev==dev,'filesystem_boundary_changed')
+ return info
+def child_dir(parent,name,uid,mode,dev,create=False):
+ if create:
+  try:os.mkdir(name,mode,dir_fd=parent);os.fsync(parent)
+  except FileExistsError:pass
+ fd=os.open(name,flags,dir_fd=parent)
+ check_dir(fd,uid,mode,dev);return fd
+rootfd=open_dir(root_path)
+try:
+ root=check_dir(rootfd,expected_uid,0o700)
+ if require_separate_fs:
+  srvfd=open_dir('/srv')
+  try:
+   srv=os.fstat(srvfd);need(stat.S_ISDIR(srv.st_mode),'srv_not_directory')
+   need(root.st_dev!=srv.st_dev,'persistent_trace_root_not_separate_from_srv_overlay')
+  finally:os.close(srvfd)
+ fs=os.fstatvfs(rootfd)
+ free_bytes=fs.f_bavail*fs.f_frsize;free_inodes=getattr(fs,'f_favail',fs.f_ffree)
+ need(free_bytes>=minimum_bytes,'persistent_trace_space_below_floor')
+ need(free_inodes>=minimum_inodes,'persistent_trace_inodes_below_floor')
+ namespace=child_dir(rootfd,'audio-trials-20260927',expected_uid,0o700,root.st_dev,True)
+ try:
+  os.mkdir('audio-zero-20260927',0o700,dir_fd=namespace);os.fsync(namespace)
+  trial=child_dir(namespace,'audio-zero-20260927',expected_uid,0o700,root.st_dev)
+  try:
+   tfd=os.open('trace.strace',os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_CLOEXEC|
+               getattr(os,'O_NOFOLLOW',0),0o600,dir_fd=trial)
+   try:
+    trace=os.fstat(tfd)
+    need(stat.S_ISREG(trace.st_mode) and trace.st_nlink==1,'trace_reservation_not_private_regular_file')
+    need(trace.st_uid==expected_uid and stat.S_IMODE(trace.st_mode)==0o600,'trace_reservation_owner_or_mode_changed')
+    need(trace.st_dev==root.st_dev and trace.st_size==0,'trace_reservation_filesystem_or_size_changed')
+    os.fsync(tfd);os.fsync(trial);os.fsync(namespace)
+    print(json.dumps({'path':root_path+'/audio-trials-20260927/audio-zero-20260927/trace.strace',
+     'root_dev':root.st_dev,'namespace_dev':os.fstat(namespace).st_dev,
+     'trial_dev':os.fstat(trial).st_dev,'trace_dev':trace.st_dev,'trace_ino':trace.st_ino,
+     'trace_size':trace.st_size,'free_bytes':free_bytes,'free_inodes':free_inodes},sort_keys=True))
+   finally:os.close(tfd)
+  finally:os.close(trial)
+ finally:os.close(namespace)
+finally:os.close(rootfd)
+'''
+REMOTE_TRACE_READ=r'''import base64,json,os,stat,sys
+root_path=sys.argv[1];expected_uid=int(sys.argv[2]);expected_dev=int(sys.argv[3]);expected_ino=int(sys.argv[4]);limit=int(sys.argv[5])
+flags=os.O_RDONLY|os.O_DIRECTORY|os.O_CLOEXEC|getattr(os,'O_NOFOLLOW',0)
+def need(ok,code):
+ if not ok:raise RuntimeError(code)
+def open_dir(path):
+ need(path.startswith('/') and '..' not in path.split('/'),'bad_absolute_path')
+ fd=os.open('/',flags)
+ try:
+  for part in (x for x in path.split('/') if x):
+   nextfd=os.open(part,flags,dir_fd=fd);os.close(fd);fd=nextfd
+  return fd
+ except BaseException:
+  os.close(fd);raise
+def child(parent,name,uid,mode,dev):
+ fd=os.open(name,flags,dir_fd=parent);info=os.fstat(fd)
+ need(stat.S_ISDIR(info.st_mode) and info.st_uid==uid and stat.S_IMODE(info.st_mode)==mode and info.st_dev==dev,'trace_directory_changed')
+ return fd
+root=open_dir(root_path)
+try:
+ info=os.fstat(root);need(stat.S_ISDIR(info.st_mode) and info.st_uid==expected_uid and stat.S_IMODE(info.st_mode)==0o700 and info.st_dev==expected_dev,'trace_root_changed')
+ namespace=child(root,'audio-trials-20260927',expected_uid,0o700,expected_dev)
+ try:
+  trial=child(namespace,'audio-zero-20260927',expected_uid,0o700,expected_dev)
+  try:
+   fd=os.open('trace.strace',os.O_RDONLY|os.O_NONBLOCK|os.O_CLOEXEC|getattr(os,'O_NOFOLLOW',0),dir_fd=trial)
+   try:
+    trace=os.fstat(fd)
+    need(stat.S_ISREG(trace.st_mode) and trace.st_nlink==1 and trace.st_uid==expected_uid and
+         stat.S_IMODE(trace.st_mode)==0o600 and trace.st_dev==expected_dev and trace.st_ino==expected_ino,
+         'trace_reservation_identity_changed')
+    need(0<trace.st_size<=limit,'trace_size_out_of_bounds')
+    data=os.read(fd,limit+1);need(len(data)<=limit,'trace_read_exceeded_limit')
+    print(json.dumps({'path':root_path+'/audio-trials-20260927/audio-zero-20260927/trace.strace',
+     'device':trace.st_dev,'inode':trace.st_ino,'size':len(data),
+     'data_base64':base64.b64encode(data).decode('ascii')},sort_keys=True))
+   finally:os.close(fd)
+  finally:os.close(trial)
+ finally:os.close(namespace)
+finally:os.close(root)
 '''
 WRAPPER=r'''import json,pathlib,re,signal,subprocess,sys,time
 request=json.loads(sys.stdin.read());helper=request['helper'];samples=[]
@@ -109,6 +228,7 @@ try:
  if signal_seen is not None:raise InterruptedError('wrapper_interrupted_before_stream')
  child=subprocess.Popen(['python3','-c',helper],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
  result['child_started']=True
+ if observer:sample()
  child_dead=False;end=time.monotonic()+10;out='';err=''
  while True:
   if signal_seen is not None:
@@ -121,7 +241,7 @@ try:
     except subprocess.TimeoutExpired:break
    break
   try:
-   out,err=child.communicate(timeout=max(0.01,min(1 if observer else 10,end-time.monotonic())))
+   out,err=child.communicate(timeout=max(0.01,min(0.2 if observer else 10,end-time.monotonic())))
    break
   except subprocess.TimeoutExpired:
    if time.monotonic()<end:
@@ -396,12 +516,129 @@ def verify_live_hci_candidate(project_root=ROOT, transport_root=None):
     recovery_sha256 = hci.candidate_hash('usb', project_root=transport_root)
     return validate_candidate_evidence(hci, observer, current, recovery_sha256)
 
-def main():
-    ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('name');ap.add_argument('--execute',action='store_true')
-    ap.add_argument('--zero-second',action='store_true')
-    ap.add_argument('--sample-progress',action='store_true');args=ap.parse_args()
-    if args.sample_progress and not args.zero_second:ap.error('progress sampling requires --zero-second')
-    if not re.fullmatch('[a-z0-9-]+',args.name):ap.error('unique lowercase trial name required')
+def _directory_flags():
+    return os.O_RDONLY|os.O_DIRECTORY|os.O_CLOEXEC|getattr(os,'O_NOFOLLOW',0)
+
+
+def _ensure_private_child(parent_fd,name,*,create,exclusive=False):
+    if '/' in name or name in ('','.','..'):
+        raise RuntimeError('unsafe private artifact path component')
+    if create:
+        if exclusive:
+            os.mkdir(name,0o700,dir_fd=parent_fd);os.fsync(parent_fd)
+        else:
+            try:os.mkdir(name,0o700,dir_fd=parent_fd);os.fsync(parent_fd)
+            except FileExistsError:pass
+    fd=os.open(name,_directory_flags(),dir_fd=parent_fd)
+    info=os.fstat(fd)
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.getuid()
+            or stat.S_IMODE(info.st_mode)!=0o700):
+        os.close(fd);raise RuntimeError('private artifact directory ownership or mode mismatch')
+    return fd
+
+
+def create_private_trial_dir(name,root=ROOT):
+    """Create one owner-only output directory without following path links."""
+    root_fd=os.open(root,_directory_flags())
+    try:
+        root_info=os.fstat(root_fd)
+        if not stat.S_ISDIR(root_info.st_mode):raise RuntimeError('worktree root is not a directory')
+        current=root_fd
+        opened=[]
+        try:
+            for part in ('rootfs','audio-trials-20260927'):
+                child=_ensure_private_child(current,part,create=True)
+                opened.append(child);current=child
+            trial_fd=_ensure_private_child(current,name,create=True,exclusive=True)
+            opened.append(trial_fd)
+            path=root/'rootfs'/'audio-trials-20260927'/name
+            return path,trial_fd
+        except BaseException:
+            for fd in reversed(opened):os.close(fd)
+            raise
+    finally:os.close(root_fd)
+
+
+def write_private_artifact(directory_fd,name,data):
+    if '/' in name or name in ('','.','..'):
+        raise RuntimeError('unsafe artifact filename')
+    if isinstance(data,str):data=data.encode()
+    fd=os.open(name,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_CLOEXEC|
+               getattr(os,'O_NOFOLLOW',0),0o600,dir_fd=directory_fd)
+    try:
+        info=os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink!=1
+                or info.st_uid!=os.getuid() or stat.S_IMODE(info.st_mode)!=0o600):
+            raise RuntimeError('private artifact file ownership or mode mismatch')
+        view=memoryview(data)
+        while view:
+            written=os.write(fd,view)
+            if written<=0:raise OSError('short private artifact write')
+            view=view[written:]
+        os.fsync(fd)
+    finally:os.close(fd)
+    os.fsync(directory_fd)
+
+
+def load_trial_guard(project_root=ROOT):
+    path=project_root/'tools/hardware/device-trial-guard.py'
+    if not path.is_file():
+        raise RuntimeError('shared durable device-trial guard is unavailable; execute is disabled')
+    return load('s22_device_trial_guard',path)
+
+
+def remote_trace_stage(trial):
+    command=shlex.join(['python3','-c',REMOTE_TRACE_STAGE,AUDIO_TRACE_ROOT,'0','1',
+                        str(TRACE_MIN_FREE_BYTES),str(TRACE_MIN_FREE_INODES)])
+    result=trial.remote(command)
+    if result.returncode:
+        raise RuntimeError('exclusive persistent trace staging failed: '+
+                           (result.stderr.decode('utf-8','replace') if isinstance(result.stderr,bytes) else str(result.stderr))[:400])
+    try:metadata=json.loads(result.stdout)
+    except (TypeError,ValueError) as error:raise RuntimeError('trace stage returned malformed identity receipt') from error
+    expected=AUDIO_TRACE_ROOT+'/'+('/'.join(AUDIO_TRACE_REL))
+    if (not isinstance(metadata,dict) or metadata.get('path')!=expected
+            or metadata.get('root_dev')!=metadata.get('trace_dev')
+            or metadata.get('namespace_dev')!=metadata.get('root_dev')
+            or metadata.get('trial_dev')!=metadata.get('root_dev')
+            or not isinstance(metadata.get('trace_ino'),int)
+            or isinstance(metadata.get('trace_ino'),bool)
+            or metadata.get('trace_size')!=0
+            or metadata.get('free_bytes',0)<TRACE_MIN_FREE_BYTES
+            or metadata.get('free_inodes',0)<TRACE_MIN_FREE_INODES):
+        raise RuntimeError('trace stage identity/space receipt failed validation')
+    return metadata
+
+
+def remote_trace_read(trial,metadata):
+    command=shlex.join(['python3','-c',REMOTE_TRACE_READ,AUDIO_TRACE_ROOT,'0',
+                        str(metadata['root_dev']),str(metadata['trace_ino']),str(TRACE_MAX_BYTES)])
+    result=trial.remote(command)
+    if result.returncode:
+        raise RuntimeError('reserved trace readback failed: '+
+                           (result.stderr.decode('utf-8','replace') if isinstance(result.stderr,bytes) else str(result.stderr))[:400])
+    try:record=json.loads(result.stdout)
+    except (TypeError,ValueError) as error:raise RuntimeError('trace readback returned malformed receipt') from error
+    if (not isinstance(record,dict) or record.get('path')!=metadata['path']
+            or record.get('device')!=metadata['trace_dev']
+            or record.get('inode')!=metadata['trace_ino']
+            or isinstance(record.get('size'),bool)
+            or not isinstance(record.get('size'),int)
+            or not 0<record['size']<=TRACE_MAX_BYTES):
+        raise RuntimeError('trace readback identity or size failed validation')
+    try:data=base64.b64decode(record['data_base64'],validate=True)
+    except (KeyError,ValueError) as error:raise RuntimeError('trace readback payload is invalid') from error
+    if len(data)!=record['size'] or len(data)>TRACE_MAX_BYTES:
+        raise RuntimeError('trace readback byte count mismatch')
+    return data.decode('utf-8','replace'),record
+
+
+def _remote_text(result):
+    value=result.stdout
+    return value.decode('utf-8','replace') if isinstance(value,bytes) else str(value)
+
+
+def _run(args,operation=None):
     transport_root=transport_project_root()
     # Use the original reviewed checkout for the private wrapper/known_hosts;
     # keep this worktree as the source of the audio operation and artifacts.
@@ -411,7 +648,9 @@ def main():
     if candidate.get('boot_id') != before.get('boot_id'):
         raise RuntimeError('HCI candidate boot changed during preflight')
     pre=trial.remote('python3 -c '+shlex.quote(AUDIO_PREFLIGHT))
-    if pre.returncode:raise RuntimeError(pre.stderr)
+    if pre.returncode:
+        error=pre.stderr.decode('utf-8','replace') if isinstance(pre.stderr,bytes) else str(pre.stderr)
+        raise RuntimeError(error)
     if not args.execute:
         print(json.dumps({'preflight_passed':True,
                           'candidate_identity_verified':True,
@@ -420,13 +659,32 @@ def main():
                           'candidate_recovery_sha256':candidate['candidate_sha256'],
                           'controls':['ABOX SPUS OUT2','ABOX UAIF1 SPK'],
                           'new_value':1,'required_previous_value':0,'prepare_only':not args.zero_second}));return
-    os.umask(0o077);raw=ROOT/'rootfs/main-driver-loop-20260921'/args.name;raw.mkdir(exist_ok=False)
-    (raw/'before.json').write_text(json.dumps({'health':before,'audio':json.loads(pre.stdout)},indent=2)+'\n')
+    raw,raw_fd=create_private_trial_dir(args.name)
+    try:
+        audio_pre=json.loads(pre.stdout)
+        write_private_artifact(raw_fd,'before.json',json.dumps({'health':before,'audio':audio_pre},indent=2)+'\n')
+    except BaseException:
+        os.close(raw_fd);raise
     kernel=trial.remote('dmesg')
-    if kernel.returncode:raise RuntimeError('pre-operation kernel capture failed')
-    (raw/'before-kernel.txt').write_text(kernel.stdout)
-    boundary=max(map(float,re.findall(r'^\[\s*([0-9.]+)\]',kernel.stdout,re.M)),default=0)
-    trace='/srv/s22/audio-early-20260922/'+args.name+'.strace'
+    if kernel.returncode:
+        os.close(raw_fd);raise RuntimeError('pre-operation kernel capture failed')
+    kernel_text=_remote_text(kernel)
+    write_private_artifact(raw_fd,'before-kernel.txt',kernel_text)
+    boundary=max(map(float,re.findall(r'^\[\s*([0-9.]+)\]',kernel_text,re.M)),default=0)
+    if operation is None:
+        os.close(raw_fd);raise RuntimeError('execute requires the shared durable operation guard')
+    operation.begin(project_root=ROOT)
+    try:trace_meta=remote_trace_stage(trial)
+    except BaseException as error:
+        disposition={'trial_id':args.name,'operation_kind':AUDIO_OPERATION_KIND,
+         'operation_marker_begun':True,'remote_trace_stage_failed':True,
+         'no_route_or_pcm_operation_invoked':True,'reason':type(error).__name__}
+        write_private_artifact(raw_fd,'receipt.json',json.dumps(disposition,indent=2)+'\n')
+        operation.complete(str(raw/'receipt.json'),outcome='preflight-rejected-no-mutation',cleanup_confirmed=True)
+        os.close(raw_fd)
+        raise RuntimeError('trace staging rejected before any route or PCM operation') from error
+    write_private_artifact(raw_fd,'trace-stage.json',json.dumps(trace_meta,indent=2)+'\n')
+    trace=trace_meta['path']
     command=shlex.join(['strace','-f','-qq','-tt','-T','-s','160','-o',trace,
                        '-e','trace=openat,close,ioctl,read,pread64,write','python3','-c',WRAPPER])
     helper_name='audio-zero-one-second.py' if args.zero_second else 'audio-pcm-prepare-only.py'
@@ -437,28 +695,65 @@ def main():
     start=datetime.now(timezone.utc).isoformat();t=time.monotonic()
     try:r=subprocess.run([str(transport_root/'tools/s22-ssh'),command],input=payload,capture_output=True,timeout=45)
     except subprocess.TimeoutExpired:
-        (raw/'unknown.txt').write_text('Host timeout; no automatic retry/reboot. Check child and route cleanup.\n');raise
+        write_private_artifact(raw_fd,'unknown.txt','Host timeout; no retry. Durable operation remains pending/UNKNOWN; inspect child, PCM and route cleanup before reconciliation.\n')
+        os.close(raw_fd);raise
     elapsed=time.monotonic()-t
-    (raw/'stdout.txt').write_bytes(r.stdout);(raw/'stderr.txt').write_bytes(r.stderr)
-    captured=trial.remote('head -c 2000000 '+shlex.quote(trace));(raw/'strace.txt').write_text(captured.stdout)
-    kernel=trial.remote('dmesg');(raw/'after-kernel.txt').write_text(kernel.stdout)
-    delta=[s for s in kernel.stdout.splitlines() if (m:=re.match(r'^\[\s*([0-9.]+)\]',s)) and float(m[1])>boundary]
-    (raw/'kernel-delta.txt').write_text('\n'.join(delta)+'\n')
-    post=trial.remote('python3 -c '+shlex.quote(AUDIO_PREFLIGHT));(raw/'after-audio.txt').write_text(post.stdout+post.stderr)
+    write_private_artifact(raw_fd,'stdout.txt',r.stdout)
+    write_private_artifact(raw_fd,'stderr.txt',r.stderr)
+    captured_text='';captured_record=None;trace_capture_exit=1
+    try:
+        captured_text,readback=remote_trace_read(trial,trace_meta);trace_capture_exit=0
+        write_private_artifact(raw_fd,'strace.txt',captured_text)
+        captured_record={key:readback[key] for key in ('path','device','inode','size')}
+        write_private_artifact(raw_fd,'trace-readback.json',json.dumps(captured_record,indent=2)+'\n')
+    except BaseException as error:
+        write_private_artifact(raw_fd,'trace-readback-error.txt',type(error).__name__+'\n')
+    kernel=trial.remote('dmesg')
+    kernel_text=_remote_text(kernel)
+    write_private_artifact(raw_fd,'after-kernel.txt',kernel_text)
+    delta=[s for s in kernel_text.splitlines() if (m:=re.match(r'^\[\s*([0-9.]+)\]',s)) and float(m[1])>boundary]
+    write_private_artifact(raw_fd,'kernel-delta.txt','\n'.join(delta)+'\n')
+    post=trial.remote('python3 -c '+shlex.quote(AUDIO_PREFLIGHT))
+    post_stdout=_remote_text(post);post_stderr=post.stderr.decode('utf-8','replace') if isinstance(post.stderr,bytes) else str(post.stderr)
+    write_private_artifact(raw_fd,'after-audio.txt',post_stdout+post_stderr)
     after=trial.phone_health()
     receipt={'started_at':start,'elapsed_seconds':round(elapsed,3),'wrapper_returncode':r.returncode,
              'before':before,'after':after,'same_boot':before['boot_id']==after['boot_id'],
              'candidate_identity':candidate,'candidate_identity_verified':True,
-             'after_audio_exit':post.returncode,'trace_capture_exit':captured.returncode,
+             'after_audio_exit':post.returncode,'trace_capture_exit':trace_capture_exit,
              'kernel_capture_exit':kernel.returncode,'helper_sha256':hashlib.sha256(helper).hexdigest(),
              'observer_sha256':hashlib.sha256(observer).hexdigest() if observer else None,
              'supervisor_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+             'trace_stage':{k:v for k,v in trace_meta.items() if k not in ('path',)},
+             'trace_readback':captured_record,
              'diagnostic_kind':'one-second-digital-zero' if args.zero_second else 'prepare-only',
              'result':json.loads(r.stdout) if r.returncode==0 else None}
-    receipt['assessment']=classify(receipt,captured.stdout)
-    (raw/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
+    receipt['assessment']=classify(receipt,captured_text)
+    write_private_artifact(raw_fd,'receipt.json',json.dumps(receipt,indent=2)+'\n')
     print(json.dumps({k:v for k,v in receipt.items()
                       if k not in ('before','after','candidate_identity')},indent=2))
+    cleanup_confirmed=(isinstance(receipt.get('result'),dict)
+                       and receipt['result'].get('cleanup_verified') is True
+                       and post.returncode==0 and receipt['same_boot'] is True)
+    if cleanup_confirmed:
+        outcome='success' if receipt['assessment']['diagnostic_completed'] else 'failed-cleanup-confirmed'
+        operation.complete(str(raw/'receipt.json'),outcome=outcome,cleanup_confirmed=True)
+    os.close(raw_fd)
     if not receipt['assessment']['diagnostic_completed']:raise SystemExit(1)
+
+
+def main():
+    ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('name');ap.add_argument('--execute',action='store_true')
+    ap.add_argument('--zero-second',action='store_true')
+    ap.add_argument('--sample-progress',action='store_true');args=ap.parse_args()
+    if args.sample_progress and not args.zero_second:ap.error('progress sampling requires --zero-second')
+    if not re.fullmatch('[a-z0-9-]+',args.name):ap.error('unique lowercase trial name required')
+    if args.execute and (args.name!=AUDIO_TRIAL_ID or not args.zero_second or not args.sample_progress):
+        ap.error('execute is restricted to audio-zero-20260927 --zero-second --sample-progress')
+    if args.execute:
+        guard=load_trial_guard()
+        with guard.acquire_operation_lock(ROOT,args.name,AUDIO_OPERATION_KIND) as operation:
+            return _run(args,operation)
+    return _run(args)
 
 if __name__=='__main__':main()

@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """Hardware-free receipt acceptance regression tests."""
 import copy
+import base64
 import importlib.util
+import json
 from pathlib import Path
+import os
+import subprocess
 import sys
+import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -25,6 +30,11 @@ BASE={'wrapper_returncode':0,'after_audio_exit':0,'trace_capture_exit':0,'kernel
                 'amps_still_off':True,'cleanup_verified':True,'cleanup_errors':[],
                 'restored':{n:{'returncode':0,'value':'0'} for n in ('ABOX SPUS OUT2','ABOX UAIF1 SPK')}}}
 TRACE='ioctl(4, SNDRV_PCM_IOCTL_PREPARE) = 0 <0.001>\nioctl(4, SNDRV_PCM_IOCTL_WRITEI_FRAMES) = 0 <0.001>\n'
+
+def isolated_python(script,*args):
+    flags=['-O'] if sys.flags.optimize else []
+    return subprocess.run([sys.executable,*flags,'-I','-c',script,*args],
+                          capture_output=True,text=True,check=False)
 
 
 def dma_sample(sequence,monotonic,hw_ptr):
@@ -298,6 +308,73 @@ class Assessment(unittest.TestCase):
         self.assertFalse(result['alsa_hw_ptr_samples_contiguous'])
         self.assertFalse(result['alsa_hw_ptr_advanced'])
 
+    def test_disjoint_rdma_and_pointer_windows_leave_ipc_localization_unknown(self):
+        samples=[
+            source_sample(0,bclk='1',gate='1',rdma_status=0,rdma_status_add=0,hw_ptr=0),
+            source_sample(1,bclk='1',gate='1',rdma_status=1,rdma_status_add=4,hw_ptr=0),
+            source_sample(2,bclk='1',gate='1',rdma_status=1,rdma_status_add=4,hw_ptr=0),
+            source_sample(3,bclk='1',gate='1',rdma_status=1,rdma_status_add=4,hw_ptr=0),
+        ]
+        for sample in samples[:2]:sample['alsa_counters'].pop('hw_ptr')
+        for sample in samples[2:]:sample['registers']={}
+        result=route.audio_snapshot.source_path_assessment(samples)
+        self.assertTrue(result['rdma2_position_changed'])
+        self.assertFalse(result['alsa_hw_ptr_advanced'])
+        self.assertEqual(result['rdma_hw_ptr_pair_sample_count'],0)
+        self.assertEqual(result['pointer_ipc_stage'],
+                         'pointer_ipc_not_localized_insufficient_or_gapped_samples')
+        self.assertEqual(result['localization'],'insufficient_source_distinguishing_evidence')
+
+    def test_fake_filesystem_trace_stage_is_exclusive_and_readback_is_inode_pinned(self):
+        with tempfile.TemporaryDirectory() as temp:
+            fake_root=Path(temp)/'s22';fake_root.mkdir(mode=0o700)
+            uid=os.getuid()
+            stage_args=[str(fake_root),str(uid),'0',str(route.TRACE_MIN_FREE_BYTES),
+                        str(route.TRACE_MIN_FREE_INODES)]
+            stage=isolated_python(route.REMOTE_TRACE_STAGE,*stage_args)
+            self.assertEqual(stage.returncode,0,stage.stderr)
+            metadata=json.loads(stage.stdout)
+            self.assertEqual(metadata['path'],str(fake_root)+'/audio-trials-20260927/audio-zero-20260927/trace.strace')
+            self.assertEqual(metadata['trace_size'],0)
+            trace=fake_root/'audio-trials-20260927'/'audio-zero-20260927'/'trace.strace'
+            payload=b'ioctl(4, SNDRV_PCM_IOCTL_PREPARE) = 0\n'
+            trace.write_bytes(payload)
+            second=isolated_python(route.REMOTE_TRACE_STAGE,*stage_args)
+            self.assertNotEqual(second.returncode,0)
+            self.assertEqual(trace.read_bytes(),payload)
+            read_args=[str(fake_root),str(uid),str(metadata['trace_dev']),
+                       str(metadata['trace_ino']),str(route.TRACE_MAX_BYTES)]
+            readback=isolated_python(route.REMOTE_TRACE_READ,*read_args)
+            self.assertEqual(readback.returncode,0,readback.stderr)
+            record=json.loads(readback.stdout)
+            self.assertEqual(base64.b64decode(record['data_base64']),payload)
+            trace.unlink();trace.write_bytes(b'replacement')
+            replaced=isolated_python(route.REMOTE_TRACE_READ,*read_args)
+            self.assertNotEqual(replaced.returncode,0)
+
+    def test_fake_filesystem_trace_stage_rejects_symlink_ancestry(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base=Path(temp);real=base/'real';real.mkdir(mode=0o700)
+            link=base/'link';link.symlink_to(real,target_is_directory=True)
+            result=isolated_python(route.REMOTE_TRACE_STAGE,str(link),str(os.getuid()),
+                '0',str(route.TRACE_MIN_FREE_BYTES),str(route.TRACE_MIN_FREE_INODES))
+            self.assertNotEqual(result.returncode,0)
+
+    def test_host_receipt_staging_is_private_and_create_exclusive(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)/'worktree';root.mkdir(mode=0o700)
+            directory,fd=route.create_private_trial_dir(route.AUDIO_TRIAL_ID,root)
+            try:
+                route.write_private_artifact(fd,'receipt.json','{"private":true}\n')
+                self.assertEqual((directory/'receipt.json').read_text(),'{"private":true}\n')
+                self.assertEqual((directory.stat().st_mode&0o777),0o700)
+                self.assertEqual(((directory/'receipt.json').stat().st_mode&0o777),0o600)
+                with self.assertRaises(FileExistsError):
+                    route.write_private_artifact(fd,'receipt.json','replacement')
+            finally:os.close(fd)
+            with self.assertRaises(FileExistsError):
+                route.create_private_trial_dir(route.AUDIO_TRIAL_ID,root)
+
     def test_clock_pm_skip_and_missing_nodes_are_distinguished(self):
         skipped=[source_sample(i,pm_active=False,clock_status='skipped_pm_gate') for i in range(2)]
         skipped_result=route.audio_snapshot.source_path_assessment(skipped)
@@ -313,29 +390,47 @@ class Assessment(unittest.TestCase):
         remote_calls=[]
         trial=SimpleNamespace(phone_health=lambda:{'boot_id':'current-boot'},
                               remote=lambda command:remote_calls.append(command))
-        with mock.patch.object(route,'transport_project_root',return_value=Path('/transport')), \
+        operation=SimpleNamespace(begin=mock.Mock(),complete=mock.Mock())
+        from contextlib import nullcontext
+        guard=SimpleNamespace(acquire_operation_lock=lambda *args:nullcontext(operation))
+        with mock.patch.object(route,'load_trial_guard',return_value=guard), \
+             mock.patch.object(route,'transport_project_root',return_value=Path('/transport')), \
              mock.patch.object(route,'load',return_value=trial), \
              mock.patch.object(route,'verify_live_hci_candidate',
                                return_value={'boot_id':'different-boot'}), \
              mock.patch.object(sys,'argv',[
-                 'run-audio-route-prepare-once.py','audio-negative-gate-test','--execute']):
+                 'run-audio-route-prepare-once.py',route.AUDIO_TRIAL_ID,'--execute',
+                 '--zero-second','--sample-progress']):
             with self.assertRaisesRegex(RuntimeError,'boot changed during preflight'):
                 route.main()
         self.assertEqual(remote_calls,[])
+        operation.begin.assert_not_called()
 
     def test_candidate_identity_error_rejects_before_audio_preflight(self):
         remote_calls=[]
         trial=SimpleNamespace(phone_health=lambda:{'boot_id':'candidate-boot'},
                               remote=lambda command:remote_calls.append(command))
-        with mock.patch.object(route,'transport_project_root',return_value=Path('/transport')), \
+        from contextlib import nullcontext
+        operation=SimpleNamespace(begin=mock.Mock(),complete=mock.Mock())
+        guard=SimpleNamespace(acquire_operation_lock=lambda *args:nullcontext(operation))
+        with mock.patch.object(route,'load_trial_guard',return_value=guard), \
+             mock.patch.object(route,'transport_project_root',return_value=Path('/transport')), \
              mock.patch.object(route,'load',return_value=trial), \
              mock.patch.object(route,'verify_live_hci_candidate',
                                side_effect=RuntimeError('RECOVERY hash mismatch')), \
              mock.patch.object(sys,'argv',[
-                 'run-audio-route-prepare-once.py','audio-hash-gate-test','--execute']):
+                 'run-audio-route-prepare-once.py',route.AUDIO_TRIAL_ID,'--execute',
+                 '--zero-second','--sample-progress']):
             with self.assertRaisesRegex(RuntimeError,'RECOVERY hash mismatch'):
                 route.main()
         self.assertEqual(remote_calls,[])
+        operation.begin.assert_not_called()
+
+    def test_execute_rejects_trial_alias_before_loading_operation_guard(self):
+        with mock.patch.object(route,'load_trial_guard',side_effect=RuntimeError('guard accessed')), \
+             mock.patch.object(sys,'argv',['runner','audio-zero-20260927-retry','--execute',
+                                           '--zero-second','--sample-progress']):
+            with self.assertRaises(SystemExit):route.main()
 
     def test_candidate_evidence_requires_observer_buildid_boot_and_partition_hash(self):
         expected_hash='a'*64
