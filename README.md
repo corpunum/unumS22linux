@@ -3,9 +3,20 @@
 Native Linux experiments on the **Samsung Galaxy S22 SM-S901B/DS**,
 Exynos 2200, codename `r0s`, unlocked bootloader. This is the S22, not S22+.
 
-## Current result — 2026-09-23
+## Current result — 2026-09-26
 
-**Latest measured checkpoint:** BORE767 is still running native Linux with
+The HCI-only native RECOVERY candidate is installed and passed one raw
+Bluetooth socket create/close test. A September 26 read-only check found the
+same candidate running after about 50 hours, with desktop/Pi/model services,
+networking and 325 modules healthy. Controller registration/pairing, audio DMA,
+NPU inference, cellular and camera operation remain unfinished; GPU compute
+and desktop acceleration have separate acceptance requirements. See
+[current status](STATUS.md), the [HCI trial receipt](evidence/s22-hci-trial-second-20260924.json),
+and the [active driver work](docs/S22_LUNA_TASK_BOARD_2026-09-26.md).
+
+## Earlier results — 2026-09-23 and before
+
+**September 23 checkpoint (superseded):** BORE767 was running native Linux with
 Hyprland, the 1080×2340 DSI panel, touchscreen input nodes, Wi-Fi/HTTPS,
 Tailscale and a healthy local 4B server. The resident 4B remains CPU-only. A
 Bluetooth HCI socket repair passed source checks and a full ThinLTO kernel
