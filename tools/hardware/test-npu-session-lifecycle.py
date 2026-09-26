@@ -20,8 +20,10 @@ KERNEL_FILES = (
     "drivers/vision/npu/core/npu-session.c",
     "drivers/vision/npu/core/npu-protodrv.c",
     "drivers/vision/npu/core/npu-vertex.c",
+    "drivers/vision/npu/core/npu-hw-device.c",
 )
 HOST_C_HARNESS = ROOT / "tools/hardware/npu-power-wait-harness.c"
+HOST_HWDEV_HARNESS = ROOT / "tools/hardware/npu-ownership-harness.c"
 
 
 def check(condition: bool, message: str) -> None:
@@ -69,6 +71,69 @@ def extract_production_wait_helpers() -> str:
     ):
         check(marker in helpers, f"actual-C helper extraction omits {marker}")
     return helpers
+
+
+def extract_production_hwdev_bootup() -> str:
+    """Extract the exact added npu_hwdev_bootup() function from the patch."""
+    text = PATCH.read_text()
+    start = text.find("+int npu_hwdev_bootup(")
+    check(start >= 0, "candidate patch omits the checked hwdev bootup function")
+    lines = []
+    for line in text[start:].splitlines():
+        if not line.startswith("+") or line.startswith("+++"):
+            break
+        lines.append(line[1:])
+    body = function_body("\n".join(lines), "int npu_hwdev_bootup(")
+    check(body, "candidate hwdev bootup extraction is incomplete")
+    for marker in (
+        "ret = npu_hw_ref_get(device, &hdev->boot_cnt)",
+        "boot_hids |= hdev->id",
+        "ret = npu_hw_ref_get(device, &hdev->init_cnt)",
+        "init_hids |= hdev->id",
+        "npu_hw_ref_put(device, &hdev->init_cnt)",
+        "npu_hw_ref_put(device, &hdev->boot_cnt)",
+        "npu_device_set_emergency_err(device)",
+    ):
+        check(marker in body, f"candidate hwdev bootup omits {marker}")
+    return body
+
+
+def test_actual_c_hwdev_bootup_unwind() -> None:
+    """Execute exact patched C with refcount callback failures injected."""
+    check(HOST_HWDEV_HARNESS.is_file(), "actual-C hwdev ownership harness is missing")
+    compiler = shutil.which("cc") or shutil.which("gcc")
+    check(compiler is not None, "host C compiler (cc/gcc) is required for hwdev regression")
+    with tempfile.TemporaryDirectory(prefix="npu-hwdev-c-") as temp:
+        include = Path(temp) / "npu-hwdev-bootup-extracted.inc"
+        binary = Path(temp) / "npu-hwdev-ownership-harness"
+        include.write_text(extract_production_hwdev_bootup())
+        try:
+            compiled = subprocess.run(
+                [compiler, "-std=gnu11", "-Wall", "-Wextra", "-Werror",
+                 "-I", temp, str(HOST_HWDEV_HARNESS), "-o", str(binary)],
+                capture_output=True, text=True, check=False, timeout=10,
+            )
+        except subprocess.TimeoutExpired:
+            check(False, "actual-C hwdev harness compilation exceeded 10 seconds")
+        check(compiled.returncode == 0,
+              "actual-C hwdev harness did not compile:\n" + compiled.stderr)
+        try:
+            executed = subprocess.run(
+                [str(binary)], capture_output=True, text=True, check=False, timeout=5,
+            )
+        except subprocess.TimeoutExpired:
+            check(False, "actual-C hwdev harness stalled beyond its 5-second bound")
+        check(executed.returncode == 0,
+              "actual-C hwdev harness failed:\n" + executed.stdout + executed.stderr)
+        for marker in (
+            "PASS actual C bootup: failed first callback balances just this call's refs",
+            "PASS actual C bootup: partial-init rollback is reverse ordered and preserves primary error",
+            "PASS actual C bootup: success acquires only exact requested hids",
+            "LIMIT:",
+        ):
+            check(marker in executed.stdout,
+                  f"actual-C hwdev harness did not report {marker!r}")
+        print(executed.stdout, end="")
 
 
 def test_actual_c_waiter_helpers() -> None:
@@ -296,6 +361,8 @@ def test_source_contract() -> None:
         session = (KERNEL_ROOT / KERNEL_FILES[0]).read_text()
         proto = (KERNEL_ROOT / KERNEL_FILES[1]).read_text()
         vertex = (KERNEL_ROOT / KERNEL_FILES[2]).read_text()
+        hwdev = (KERNEL_ROOT / KERNEL_FILES[3]).read_text()
+        hwdev_header = (KERNEL_ROOT / "drivers/vision/npu/core/npu-hw-device.h").read_text()
         msgid_source = (KERNEL_ROOT / "drivers/vision/npu/core/npu-util-msgidgen.c").read_text()
         interface_source = (KERNEL_ROOT / "drivers/vision/npu/core/interface/hardware/npu-interface.c").read_text()
         wait_body = function_body(session, "static int npu_session_wait_power_request(")
@@ -303,6 +370,7 @@ def test_source_contract() -> None:
         notify_body = function_body(session, "int npu_session_NW_CMD_POWER_NOTIFY(")
         close_body = function_body(session, "int npu_session_close(")
         boot_body = function_body(vertex, "int npu_hwdev_normal_bootup(")
+        hwdev_boot_body = function_body(hwdev, "int npu_hwdev_bootup(")
         close_start = vertex.find("static int npu_vertex_close(")
         close_end = vertex.find("static unsigned int npu_vertex_poll(", close_start)
         close_vertex = vertex[close_start:close_end] if close_start >= 0 and close_end > close_start else ""
@@ -369,6 +437,22 @@ def test_source_contract() -> None:
               "normal boot lacks reverse unwind")
         check("npu_stm_enable(&device->system, session->hids)" in boot_body,
               "normal boot does not check STM enable")
+        check("boot_hids |= hdev->id" in hwdev_boot_body and
+              "init_hids |= hdev->id" in hwdev_boot_body and
+              "if (ret)" in hwdev_boot_body and
+              "npu_device_set_emergency_err(device)" in hwdev_boot_body,
+              "patched hwdev bootup does not propagate and unwind ref acquisition failures")
+        check("atomic_inc_return(&hw_ref->refcount) == 1" in hwdev_header and
+              "hw_ref->first(device, hw_ref->hdev)" in hwdev_header,
+              "pinned ref helper no longer increments before the first callback")
+        patched_hwdev_boot = extract_production_hwdev_bootup()
+        check(patched_hwdev_boot.find("boot_hids |= hdev->id") <
+              patched_hwdev_boot.find("if (ret)"),
+              "boot reference must be recorded before handling first-callback failure")
+        check(patched_hwdev_boot.find("init_hids |= hdev->id") <
+              patched_hwdev_boot.find("if (ret)",
+                                      patched_hwdev_boot.find("init_hids |= hdev->id")),
+              "init reference must be recorded before handling first-callback failure")
         check("kzalloc" not in wait_body and "kmalloc" not in wait_body,
               "stack waiter must have no allocation-failure path")
         unwind_markers = (
@@ -663,6 +747,7 @@ def test_reverse_boot_unwind() -> None:
 def main() -> None:
     test_source_contract()
     test_actual_c_waiter_helpers()
+    test_actual_c_hwdev_bootup_unwind()
     test_queue_and_callback_edges()
     test_timeout_callback_race()
     test_timeout_publication_handshake()

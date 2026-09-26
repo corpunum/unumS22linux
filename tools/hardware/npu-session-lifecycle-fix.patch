@@ -1016,3 +1016,119 @@ index 06ed7226c..51c9273b4 100755
  	return ret;
  }
  int npu_hwdev_normal_bootdown(struct npu_device *device, struct npu_vertex_ctx *vctx, struct vs4l_ctrl *ctrl)
+
+diff --git a/drivers/vision/npu/core/npu-hw-device.c b/drivers/vision/npu/core/npu-hw-device.c
+--- a/drivers/vision/npu/core/npu-hw-device.c
++++ b/drivers/vision/npu/core/npu-hw-device.c
+@@ -380,37 +380,78 @@
+ }
+ 
+-int npu_hwdev_bootup(struct npu_device *device, __u32 hids)
+-{
+-	int ret = 0;
+-	int hi;
+-	struct npu_hw_device *hdev;
+-
+-	BUG_ON(!device);
+-
+-	/* hw-device-wide bootup : for each network */
+-	for (hi = 0; hi < g_hwdev_num; hi++) {
+-		hdev = g_hwdev_list[hi];
+-		if (hdev && (hids & hdev->id)) {
+-			npu_hw_ref_get(device, &hdev->boot_cnt);
+-			npu_info("boot %s (%d)\n", hdev->name, hdev->id);
+-		}
+-	}
+-
+-#ifdef CONFIG_NPU_SECURE_MODE
+-	if (!device->is_secure)
+-#endif
+-	{
+-		for (hi = 0; hi < g_hwdev_num; hi++) {
+-			hdev = g_hwdev_list[hi];
+-			if (hdev && (hids & hdev->id)) {
+-				npu_hw_ref_get(device, &hdev->init_cnt);
+-				npu_info("init %s (%d)\n", hdev->name, hdev->id);
+-			}
+-		}
+-	}
+-
+-	npu_info("%s (%d)\n", __func__, ret);
+-	return ret;
+-}
++int npu_hwdev_bootup(struct npu_device *device, __u32 hids)
++{
++	int ret = 0, hi, unwind_ret;
++	__u32 boot_hids = 0, init_hids = 0;
++	struct npu_hw_device *hdev;
++
++	BUG_ON(!device);
++
++	/* hw-device-wide bootup : for each network */
++	for (hi = 0; hi < g_hwdev_num; hi++) {
++		hdev = g_hwdev_list[hi];
++		if (hdev && (hids & hdev->id)) {
++			ret = npu_hw_ref_get(device, &hdev->boot_cnt);
++			/* get increments before the first callback; include the failed
++			 * callback's reference in the rollback mask too.
++			 */
++			boot_hids |= hdev->id;
++			if (ret)
++				goto p_err;
++			npu_info("boot %s (%d)\n", hdev->name, hdev->id);
++		}
++	}
++
++#ifdef CONFIG_NPU_SECURE_MODE
++	if (!device->is_secure)
++#endif
++	{
++		for (hi = 0; hi < g_hwdev_num; hi++) {
++			hdev = g_hwdev_list[hi];
++			if (hdev && (hids & hdev->id)) {
++				ret = npu_hw_ref_get(device, &hdev->init_cnt);
++				/* Include a failed first callback, whose ref was already
++				 * incremented, so the reverse unwind balances it.
++				 */
++				init_hids |= hdev->id;
++				if (ret)
++					goto p_err;
++				npu_info("init %s (%d)\n", hdev->name, hdev->id);
++			}
++		}
++	}
++
++	npu_info("%s (%d)\n", __func__, ret);
++	return ret;
++
++p_err:
++	/* Release partial init references before the boot references, each in
++	 * reverse acquisition order.  Preserve the original callback error.
++	 */
++	for (hi = (int)g_hwdev_num - 1; hi >= 0; hi--) {
++		hdev = g_hwdev_list[hi];
++		if (hdev && (init_hids & hdev->id)) {
++			unwind_ret = npu_hw_ref_put(device, &hdev->init_cnt);
++			if (unwind_ret) {
++				npu_err("init reference unwind failed (%d) for %s\n",
++					unwind_ret, hdev->name);
++				npu_device_set_emergency_err(device);
++			}
++		}
++	}
++	for (hi = (int)g_hwdev_num - 1; hi >= 0; hi--) {
++		hdev = g_hwdev_list[hi];
++		if (hdev && (boot_hids & hdev->id)) {
++			unwind_ret = npu_hw_ref_put(device, &hdev->boot_cnt);
++			if (unwind_ret) {
++				npu_err("boot reference unwind failed (%d) for %s\n",
++					unwind_ret, hdev->name);
++				npu_device_set_emergency_err(device);
++			}
++		}
++	}
++	npu_info("%s failed (%d) after reference unwind\n", __func__, ret);
++	return ret;
++}
+ 
+ int npu_hwdev_shutdown(struct npu_device *device, __u32 hids)
