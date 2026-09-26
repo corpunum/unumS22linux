@@ -154,6 +154,12 @@ class AdapterTests(unittest.TestCase):
         trace_data = b"host-only syscall trace\n"
         (path / "strace.txt").write_bytes(trace_data)
         os.chmod(path / "strace.txt", 0o600)
+        before_kernel = b"[0.500000] retained pre-trial boundary\n"
+        kernel_delta = kernel_delta or b"\n"
+        (path / "before-kernel.txt").write_bytes(before_kernel)
+        (path / "after-kernel.txt").write_bytes(before_kernel + kernel_delta)
+        os.chmod(path / "before-kernel.txt", 0o600)
+        os.chmod(path / "after-kernel.txt", 0o600)
         (path / "kernel-delta.txt").write_bytes(kernel_delta)
         os.chmod(path / "kernel-delta.txt", 0o600)
         receipt = {
@@ -208,6 +214,30 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(marker["receipt_sha256"], hashlib.sha256(
             adapter.trial_receipt_directory(self.root) .joinpath("receipt.json").read_bytes()
         ).hexdigest())
+
+    def test_lost_pretrial_kernel_boundary_keeps_real_guard_unknown(self):
+        def overwritten(board, name):
+            result = self.invoke_board(board, name)
+            path = adapter.trial_receipt_directory(self.root, name)
+            (path / "after-kernel.txt").write_bytes(b"[2.000000] later record only\n")
+            (path / "kernel-delta.txt").write_bytes(b"[2.000000] later record only\n")
+            return result
+        with self.assertRaisesRegex(adapter.GateError, "boundary lost"):
+            self.run_trial(board_invoker=overwritten)
+        marker = json.loads((self.guard_root / f"{adapter.TRIAL_ID}.json").read_text())
+        self.assertEqual(marker["status"], "unknown")
+
+    def test_kernel_capture_window_rejects_incomplete_or_filtered_away_evidence(self):
+        before = b"[1.000000] boundary\n"
+        after = before + b"[2.000000] later record\n"
+        self.assertTrue(adapter.validate_kernel_capture_window(
+            before, after, b"[2.000000] later record\n")["pre_trial_boundary_retained"])
+        for truncated in (b"", after[:-1], b"x" * 4194304 + b"\n"):
+            with self.subTest(size=len(truncated)):
+                with self.assertRaises(adapter.GateError):
+                    adapter.validate_kernel_capture_window(before, truncated, b"\n")
+        with self.assertRaisesRegex(adapter.GateError, "does not match"):
+            adapter.validate_kernel_capture_window(before, after, b"\n")
 
     def test_bad_completed_observer_receipt_stops_before_live_reads_and_board(self):
         receipt = observer_fixtures.completed_observer(status="incomplete")
