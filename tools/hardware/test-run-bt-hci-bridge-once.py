@@ -79,6 +79,46 @@ class FakeBoard:
 
 
 class AdapterTests(unittest.TestCase):
+    def test_actual_patch_probe_main_metadata_contract(self):
+        # Execute the actual pinned included C main, with hardware primitives
+        # replaced by host stubs. No private payload/header or phone required.
+        source = (ROOT / 'tools/hardware/bt-qca6490-patch-version-probe.c').read_text()
+        main = source[source.index('int main(int argc, char **argv)'):]
+        stubs = '''#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+static int patch_self_test(void) { return 0; }
+static int validate_live_wlan_baseline(void) { return atoi(getenv("CHECK_RESULT")); }
+static int parse_rdev(const char *s,unsigned *a,unsigned *b) { return 1; }
+static int run_probe(const char *a,const char *b,unsigned c,unsigned d,bool e)
+{ puts("UNEXPECTED_HARDWARE_OPERATION"); return 99; }
+'''
+        board = adapter.load_board()
+        with tempfile.TemporaryDirectory(prefix='bt-check-contract-') as temporary:
+            path = Path(temporary)
+            (path / 'main.c').write_text(stubs + main)
+            subprocess.run(['cc','-std=c11','-Wall','-Werror',str(path/'main.c'),
+                            '-o',str(path/'probe')], check=True, capture_output=True)
+            for status in (0, -16, -100):
+                result = subprocess.run([str(path/'probe'),'--check-live-wlan'],
+                    env={**os.environ,'CHECK_RESULT':str(status)},capture_output=True,text=True)
+                self.assertEqual(result.returncode, int(status != 0))
+                self.assertEqual(result.stdout, '')
+                self.assertEqual(result.stderr, '')
+                board.LIVE_WLAN_CHECK_STDOUT = 'live_wlan_metadata_only=0\n'
+                self.assertFalse(board.live_wlan_check_valid(result))
+                board.LIVE_WLAN_CHECK_STDOUT = ''
+                self.assertEqual(board.live_wlan_check_valid(result), status == 0)
+            for result in (subprocess.CompletedProcess([],0,'unexpected',''),
+                           subprocess.CompletedProcess([],0,'','warning'),
+                           subprocess.CompletedProcess([],255,'','')):
+                self.assertFalse(board.live_wlan_check_valid(result))
+
+    def test_consumed_preflight_identity_is_not_accepted(self):
+        with self.assertRaisesRegex(adapter.GateError, 'exact controller-registration'):
+            adapter.run_trial('bt-hci-registration-20260926', observer=None, board=None)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="bt-registration-adapter-")
         self.root = Path(self.temp.name)
@@ -169,7 +209,8 @@ class AdapterTests(unittest.TestCase):
             "before": health, "after": health,
             "after_metadata": json.dumps({"boot_id": "candidate-boot-id",
                                            "device_fds": [], "independent_usb": True}),
-            "after_vote_check_stdout": "live_wlan_metadata_only=0\n",
+            "after_vote_check_stdout": "",
+            "after_vote_check_stderr": "",
             "uart_output": "bridge_registered_hci=0\nbridge_result=0 commands=0\n"
                            "pty_cleanup_ioctl_result=0\n",
             "uart_stderr": "stage=power_off_and_vote_restored\n",
@@ -798,7 +839,7 @@ class AdapterTests(unittest.TestCase):
                 "    if command.startswith('python3 -I -c '):\n"
                 "        return subprocess.run(shlex.split(command),capture_output=True,text=True,timeout=timeout,env={**os.environ,'PYTHONOPTIMIZE':'1'})\n"
                 "    if command == 'dmesg': return subprocess.CompletedProcess([],0,'[ 1.0] baseline\\n','')\n"
-                "    if command.endswith('--check-live-wlan'): return subprocess.CompletedProcess([],0,'live_wlan_metadata_only=0\\n','')\n"
+                "    if command.endswith('--check-live-wlan'): return subprocess.CompletedProcess([],0,'','')\n"
                 "    if command.startswith('timeout '):\n"
                 "        words=shlex.split(command); trace=pathlib.Path(words[words.index('-o')+1])\n"
                 "        fd=os.open(trace,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)\n"
@@ -822,6 +863,7 @@ class AdapterTests(unittest.TestCase):
             board.BINARY = binary
             board.DEST = str(stage_destination)
             board.TRACE_DIR = trace_dir
+            board.LIVE_WLAN_CHECK_STDOUT = ''
             board.EXTRA_SOURCES = []
             board.HOST_TIMEOUT = 5
             board.accepted_runner = lambda: SimpleNamespace(

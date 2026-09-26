@@ -22,9 +22,9 @@ import types
 
 ROOT = Path(__file__).resolve().parents[2]
 TRUSTED_ROOT = Path('/home/corpunum/s22-linux')
-TRIAL_DIR = '/srv/s22/bt-trial-20260927/bt-hci-registration-20260926'
+TRIAL_DIR = '/srv/s22/bt-trial-20260927/bt-hci-registration-20260927'
 TRIAL_TRACE_DIR = Path(TRIAL_DIR)
-TRIAL_ID = 'bt-hci-registration-20260926'
+TRIAL_ID = 'bt-hci-registration-20260927'
 OBSERVER_TRIAL_ID = 'hci-candidate-20260924-second'
 EXPECTED_RECOVERY_SHA256 = '42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5'
 EXPECTED_GNU_BUILD_ID = 'b2dda820b18d410d9bf12f1bd2584567d545991d'
@@ -73,7 +73,7 @@ REVIEWED_RUNNER_SHA256 = {
     'tools/hardware/deploy-audio-recovery.py':
         EXPECTED_TRUSTED_DEPLOYER_SHA256,
     'tools/hardware/run-bt-board-once.py':
-        'bf3de2008a9667fdd0de8993cc4035037be93d61701d68613ae89eec6db60b04',
+        'c3fae17098b51362fc7a24ecb82fff05f06d1a9a67cf31a578ed33db39e77bd7',
     'tools/hardware/run-bt-version-once.py':
         '93a84da810bccb517694b6cbeb44aa85850289919caec71aa7638c90d49c4653',
     'tools/hardware/trustzone_log_classifier.py': EXPECTED_TZ_CLASSIFIER_SHA256,
@@ -552,8 +552,8 @@ def validate_completed_trial_receipt(workspace=ROOT, name=TRIAL_ID, *, require_l
     require(isinstance(metadata, dict) and metadata.get('boot_id') == after['boot_id'] and
             metadata.get('device_fds') == [] and metadata.get('independent_usb') is True,
             'post-trial metadata does not confirm same-boot idle USB/no device FDs')
-    require(value.get('after_vote_check_stdout', '').strip() ==
-            'live_wlan_metadata_only=0',
+    require(value.get('after_vote_check_stdout') == '' and
+            value.get('after_vote_check_stderr') == '',
             'post-trial C check did not confirm the independent WLAN vote')
     output = value.get('uart_output')
     require(isinstance(output, str) and
@@ -783,6 +783,8 @@ def configure_board(board):
     board.TRACE_DIR = TRIAL_TRACE_DIR
     board.PHONE_TIMEOUT = 35
     board.HOST_TIMEOUT = 45
+    # Exact pinned patch-version main returns the validation result silently.
+    board.LIVE_WLAN_CHECK_STDOUT = ''
     board.EXTRA_SOURCES = [
         ROOT / 'tools/hardware/bt-h4-ibs-bridge.c',
         ROOT / 'tools/hardware/bt-qca6490-runtime-reset.c',
