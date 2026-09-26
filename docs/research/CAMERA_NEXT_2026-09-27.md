@@ -79,27 +79,54 @@ missing result from one as a driver or firmware failure. A `stat` result cannot
 authenticate content, confirm a compatible build, or prove what the driver
 actually requested.
 
-## Why this wave does not use `VIDIOC_QUERYCAP`
+## First-resource PHY-LDO failure and query-cap boundary
 
-In the pinned `drivers/media/platform/exynos/camera/is-video.c`,
-`VIDIOC_QUERYCAP` is implemented by `is_vidioc_querycap()`, which fills static
-capability strings. Reaching it still requires opening the video node first.
-The same file's `is_video_open()` calls `is_sensor_open()` for a sensor leader;
-`is-device-sensor_v2.c:is_sensor_open()` reaches
-`is-resourcemgr.c:is_resource_get()`. That resource path calls
-`pm_runtime_get_sync()` for a sensor resource and can enable PHY LDO regulators
-on the first camera resource. Thus “open then query capabilities” is not a
-passive probe on this stack, even if the ioctl itself only reports metadata.
-No video-node open is implemented or attempted by this inventory.
+The proposed host patch [`camera-resource-unwind.patch`](../../tools/hardware/camera-resource-unwind.patch)
+targets the exact pinned kernel source above; it has not been applied to a
+running kernel. In `drivers/media/platform/exynos/camera/is-resourcemgr.c`,
+`is_resource_get()` takes a wake reference and initializes DVFS before enabling
+PHY LDOs sequentially. In the pinned source, an LDO enable error jumps to
+`p_err`; that label increments both the resource and global counts
+(`is-resourcemgr.c:1853-1860, 1969-1975`) without disabling earlier LDOs. For a
+sensor leader, `is_sensor_open()` then closes the device manager and CSI on
+`is_resource_get()` failure but does not call `is_resource_put()`
+(`is-device-sensor_v2.c:1965-1998`). The video-open error unwind likewise
+closes the V4L2 context, not the sensor resource (`is-video.c:2728-2733,
+2757-2764`). This is a source-confirmed failed-open unwind gap.
 
-The narrower next topology step under the existing owner authorization is to identify a
-specific `/dev/mediaN` from its already-known `/sys/class/media/mediaN/model`
-and then review that exact driver open path. The generic media core's normal
-`media_device_open()` is empty; read-only device-info/entity/topology ioctls
-can describe graph registration without starting a stream. This is still a
-source-based proposal, not an executed or universally side-effect-free action:
-do not use `MEDIA_IOC_SETUP_LINK`, open `/dev/videoN`, or infer sensor operation
-from a media graph. Even a successful graph query proves topology only.
+The patch adds a small helper which rolls back only earlier successful LDO
+votes, in reverse order, when a later enable fails. It preserves the original
+`regulator_enable()` error even if rollback fails, while logging the rollback
+error and hardware-state uncertainty. A separate first-acquire error label
+attempts dynamic-memory deinit when configured, `is_resource_clear()`, and
+`pm_relax()`, and reaches `rsc_err` without incrementing resource/core counts.
+The normal success path still goes through `p_err` as before. Extracted-C
+failure injection checks the helper and the exact proposed cleanup label; the
+Python test also verifies the pinned source revision and that the patch applies
+without modifying the vendor checkout.
+
+These checks do not prove regulator hardware state. A provider can return an
+enable error after physical state has changed; a rollback disable can itself
+fail. The patch therefore makes a best-effort vote unwind, not a physical
+power-off guarantee. It also intentionally does not address the separate
+source issue that `pm_runtime_get_sync()`'s return is ignored in
+`is_resource_get()` (`is-resourcemgr.c:1863-1877`); runtime resume can return an
+error from the pre-hook or clock-on sequence
+(`is-device-sensor_v2.c:4026-4041`). That remains a separate blocker to claiming
+sensor-open cleanup.
+
+`VIDIOC_QUERYCAP` itself only fills static capability fields in
+`is_vidioc_querycap()` (`is-video.c:2914-2934`), but reaching it requires an
+open. The source maps the first sensor leader to video id 1
+(`include/v10_1_0/is-video-config.h:20-22`, `is-video-sensor.c:573-581`), then
+registers minor `100 + video_id` (`is-video.c:2899-2901`,
+`include/is-video.h:113`). Its open calls `is_sensor_open()`
+(`is-video.c:2728-2733`). Thus opening `/dev/video101` for
+`open -> VIDIOC_QUERYCAP -> close` is a physical power operation, not a passive
+inventory query. This worker performed no open/ioctl/device operation.
+Do not treat this host patch or its synthetic tests as a running-kernel fix;
+any later device trial requires a separately reviewed candidate containing the
+patch and a source-backed cleanup/identity gate.
 
 ## Inventory limits and tests
 
@@ -112,17 +139,22 @@ names; fixed DT root `model`/`compatible`; sysfs video `name`/`dev` and media
 basenames and `stat` only. Per-field missing, malformed, unreadable, and
 truncated states are kept explicit. Kernel logs are marked `not_collected`.
 
-Host tests use temporary trees only; they do not require device nodes, private
-firmware, or phone access. Run:
+Host tests use temporary fixtures and an extracted C harness only; they do not
+require device nodes, private firmware, or phone access. The prior inventory
+tests and this patch's additional tests are:
 
 ```sh
 python3 -I -B tools/hardware/test-camera-readiness-once.py
 python3 -O -I -B tools/hardware/test-camera-readiness-once.py
+python3 -I -B tools/hardware/test-camera-resource-unwind.py
+python3 -I -B -O tools/hardware/test-camera-resource-unwind.py
 ```
 
-These tests establish only that the local inventory implementation respects
-its bounds and avoids opening device nodes. They do not establish camera
-functionality.
+These tests establish only that the inventory implementation respects its
+bounds and avoids opening device nodes, and that the proposed LDO helper/cleanup
+branch passes host-side injected failures. They do not compile the full kernel,
+prove the patch was applied to the phone, or establish camera functionality or
+physical regulator state.
 
 ## Evidence required before stronger claims
 
@@ -133,13 +165,15 @@ functionality.
    candidate release locally, and confirm runtime paths/namespace. Do not
    publish proprietary payload bytes or use an old manifest as proof of current
    compatibility.
-3. After the operation-specific source review passes, query a precisely mapped media graph using the
-   reviewed read-only operations and retain private logs locally. This may
-   establish graph registration only.
-4. Sensor response or capture requires a separately reviewed
-   powered operation with exact candidate identity, rollback/readback and
-   cleanup plan. A single sensor read/stream can have physical power effects;
-   no such operation is covered by this inventory or its synthetic tests.
+3. Review/build the narrow resource-unwind patch against the exact candidate
+   kernel, then separately resolve the ignored runtime-PM return and failure
+   cleanup. Host patch application is not deployment evidence.
+4. Only after those gates, a separately reviewed, exact-candidate
+   `/dev/video101` open/`VIDIOC_QUERYCAP`/close trial may establish static
+   capabilities plus that operation's open/close path; it would still not
+   prove sensor response, firmware validity, or capture. Do not add input,
+   format, buffer, stream, control, OTP, EEPROM, or calibration operations to
+   that narrow trial without separate review.
 
 Until those steps, the accurate state is “camera nodes/prerequisite metadata
 may be inventoried; sensor response and capture remain unproven.”
