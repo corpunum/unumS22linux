@@ -239,6 +239,19 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(adapter.GateError, "does not match"):
             adapter.validate_kernel_capture_window(before, after, b"\n")
 
+    def test_kernel_window_rejects_unordered_severity_records(self):
+        before = b"[1.0] baseline\n"
+        delta = b"[2.0] benign\n"
+        for record in (b"Kernel panic - not syncing\n",
+                       b"INFO: task tz:42 blocked for more than 120 seconds\n",
+                       b"[bad] malformed\n", b"[1..2] invalid\n",
+                       b"[999999999999999] implausible\n"):
+            for pre, post in ((before, before + delta + record),
+                              (before + record, before + record + delta)):
+                with self.subTest(record=record, pre=pre):
+                    with self.assertRaises(adapter.GateError):
+                        adapter.validate_kernel_capture_window(pre, post, delta)
+
     def test_bad_completed_observer_receipt_stops_before_live_reads_and_board(self):
         receipt = observer_fixtures.completed_observer(status="incomplete")
         self.write_receipt(receipt)
