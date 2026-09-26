@@ -17,6 +17,16 @@ class Planner(unittest.TestCase):
     def test_decode_enable_only(self):
         self.assertEqual(module.decode_rdma2_ctrl(0),{'raw':0,'enable':False})
         self.assertEqual(module.decode_rdma2_ctrl(0x80000001),{'raw':0x80000001,'enable':True})
+    def test_decode_soc4_rdma2_status_pair(self):
+        status=module.decode_rdma2_status(0x80000000 | (0x5a << 20) | 0x12345)
+        self.assertTrue(status['progress'])
+        self.assertEqual(status['rbuf_offset'],0x5a)
+        self.assertEqual(status['rbuf_count'],0x12345)
+        self.assertEqual(module.decode_rdma2_status_add(0xc1234567)['current_address'],
+                         0x41234567)
+        for invalid in (True,-1,0x100000000,'1'):
+            with self.subTest(invalid=invalid),self.assertRaises(ValueError):
+                module.decode_rdma2_status(invalid)
     def test_ctrl_must_be_volatile_and_nonprecious(self):
         with self.assertRaises(ValueError):
             module.plans(self.ranges,self.access.replace('1200: y y y n','1200: y y n n'))
@@ -140,15 +150,52 @@ class Planner(unittest.TestCase):
     def test_clock_capture_only_reads_named_observation_points(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
-            for name,rate in (('dout_audif', '12288000'),('abox_sclk','24576000'),('gpu_core','123')):
+            names=[name for name,_ in module.UAIF1_CLOCKS]
+            for name,rate in ((name,'12288000') for name in names):
                 clock=root/name;clock.mkdir()
                 for key,value in (('clk_rate',rate),('clk_enable_count','1'),('clk_prepare_count','1')):
                     (clock/key).write_text(value+'\n')
-            result=module._capture_clock_observations(root)
+            (root/'unrelated-clk').mkdir()
+            read_paths=[]
+            def reader(path,limit):
+                read_paths.append(Path(path))
+                return module.timed_text(path,limit)
+            result=module._capture_clock_observations(root,allow_reads=True,reader=reader)
             self.assertEqual(result['status'],'ok')
             by_name={item['name']:item for item in result['clocks']}
-            self.assertEqual(set(by_name),{'dout_audif','abox_sclk'})
-            self.assertEqual(by_name['dout_audif']['clk_rate']['value'],'12288000')
+            self.assertEqual(set(by_name),set(names))
+            self.assertEqual(by_name['DOUT_DIV_CLK_AUD_UAIF1']['clk_rate']['value'],'12288000')
+            self.assertEqual({path.parent.name for path in read_paths},set(names))
             self.assertLessEqual(result['start_monotonic_ns'],result['end_monotonic_ns'])
+    def test_clock_reads_are_skipped_without_runtime_pm_gate(self):
+        calls=[]
+        result=module._capture_clock_observations('/unused',reader=lambda *args:calls.append(args),
+                                                  allow_reads=False)
+        self.assertEqual(result['status'],'skipped_pm_gate')
+        self.assertEqual(result['clocks'],[])
+        self.assertEqual(calls,[])
+    def test_dapm_capture_uses_exact_component_widget_paths(self):
+        calls=[]
+        def reader(path,limit):
+            calls.append((Path(path),limit))
+            return {'status':'not_present'}
+        result=module._capture_dapm_observations('/fake/asoc',reader=reader)
+        expected={Path('/fake/asoc')/owner/'dapm'/widget
+                  for owner,widgets in module.DAPM_WIDGET_PATHS.items()
+                  for widget in widgets}
+        self.assertEqual({path for path,_ in calls},expected)
+        self.assertEqual(len(calls),24)
+        self.assertTrue(all(limit==module.MAX_DAPM_READ_BYTES for _,limit in calls))
+        self.assertNotIn(Path('/fake/asoc/Rainbow-Prince/dpcm/RDMA2/state'),
+                         {path for path,_ in calls})
+
+    def test_parse_source_asoc_dpcm_state_and_no_backend_case(self):
+        started='[RDMA2 - Playback]\nState: start\nBackends:\n- UAIF1\n   State: start\n'
+        parsed=module.parse_dpcm_state(started)
+        self.assertEqual(parsed['streams'][0]['state'],'start')
+        self.assertEqual(parsed['streams'][0]['backends'],[{'name':'UAIF1','state':'start'}])
+        no_backend=module.parse_dpcm_state(
+            '[RDMA2 - Playback]\nState: start\nBackends:\n No active DSP links\n')
+        self.assertTrue(no_backend['streams'][0]['no_active_backends'])
 
 if __name__=='__main__':unittest.main()

@@ -19,6 +19,44 @@ import subprocess
 import time
 
 ROOT=Path(__file__).resolve().parents[2]
+HCI_TRIAL_ID='hci-candidate-20260924-second'
+HCI_CANDIDATE_GNU_BUILD_ID='b2dda820b18d410d9bf12f1bd2584567d545991d'
+HCI_CANDIDATE_RECOVERY_SHA256='42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5'
+AUDIO_PREFLIGHT=r'''import json,pathlib,re,subprocess
+p=pathlib.Path
+def need(condition,reason):
+ if not condition:raise RuntimeError(reason)
+def control(name):
+ r=subprocess.run(['amixer','-c','0','cget','name='+name],capture_output=True,text=True,timeout=5)
+ values=re.findall(r'^  : values=(.*)$',r.stdout,re.M)
+ need(r.returncode==0 and len(values)==1,'control_read_failed:'+name)
+ return values[0],r.stdout
+need(p('/proc/1/comm').read_text().strip()=='native-guardian','wrong_native_session')
+need(p('/proc/asound/card0/id').read_text().strip()=='RainbowPrince','wrong_card')
+node=p('/sys/class/sound/pcmC0D2p').resolve(strict=True)
+need(node==p('/sys/devices/platform/sound/sound/card0/pcmC0D2p'),'wrong_pcm_node')
+need((node/'dev').read_text().strip()=='116:3','wrong_pcm_device_number')
+need(p('/sys/class/net/ecm0/carrier').read_text().strip()=='1','ecm_carrier_down')
+amps={}
+for name in ('Left AMP Enable Switch','Right AMP Enable Switch'):
+ value,raw=control(name);need(value=='off','amplifier_enable_not_off:'+name);amps[name]=value
+routes={}
+for name in ('ABOX SPUS OUT2','ABOX UAIF1 SPK'):
+ value,raw=control(name)
+ need(value=='0' and "Item #0 'RESERVED'" in raw and "Item #1 'SIFS0'" in raw,
+      'route_precondition_failed:'+name)
+ routes[name]={'value':value,'items':['RESERVED','SIFS0']}
+status=p('/proc/asound/card0/pcm2p/sub0/status').read_text().strip()
+need(status=='closed','pcm_not_initially_closed')
+abox=p('/sys/bus/platform/devices/18c50000.abox')
+service=(abox/'service').read_text().strip();reset=(abox/'reset_count').read_text().strip()
+need(service=='1','abox_service_unavailable');need(reset=='0','abox_reset_count_nonzero')
+cache_only=p('/sys/kernel/debug/regmap/18c50000.abox/cache_only').read_text().strip()
+print(json.dumps({'card':'RainbowPrince','pcm':'116:3','status':status,'amps':amps,
+ 'routes':routes,'service':service,'reset_count':reset,
+ 'runtime_status':(abox/'power/runtime_status').read_text().strip(),
+ 'cache_only':cache_only},sort_keys=True))
+'''
 WRAPPER=r'''import json,pathlib,re,signal,subprocess,sys,time
 request=json.loads(sys.stdin.read());helper=request['helper'];samples=[]
 observer=None;signal_seen=None;routes=('ABOX SPUS OUT2','ABOX UAIF1 SPK')
@@ -46,18 +84,20 @@ def amps_muted():
  return all(get(name)[0]=='off' for name in ('Left AMP Enable Switch','Right AMP Enable Switch'))
 def status_text():
  return pathlib.Path('/proc/asound/card0/pcm2p/sub0/status').read_text().strip()
+def require(condition,code):
+ if not condition:raise RuntimeError(code)
 changed=[];events=[];child=None;child_dead=True;deadline_exceeded=False
 result={'progress_samples':samples,'events':events,'before':{},'restored':{},
         'child_deadline_exceeded':False,'wrapper_interrupted':False,
         'child_started':False,'preconditions_verified':False,
         'cleanup_attempted':False,'cleanup_errors':[]}
 try:
- assert pathlib.Path('/proc/1/comm').read_text().strip()=='native-guardian','wrong_native_session'
- assert status_text()=='closed','pcm_not_initially_closed'
- assert amps_muted(),'amplifier_enable_not_off'
+ require(pathlib.Path('/proc/1/comm').read_text().strip()=='native-guardian','wrong_native_session')
+ require(status_text()=='closed','pcm_not_initially_closed')
+ require(amps_muted(),'amplifier_enable_not_off')
  before={n:get(n) for n in routes};result['before']=before
  for value,raw in before.values():
-  assert value=='0' and "Item #0 'RESERVED'" in raw and "Item #1 'SIFS0'" in raw,'route_precondition_failed'
+  require(value=='0' and "Item #0 'RESERVED'" in raw and "Item #1 'SIFS0'" in raw,'route_precondition_failed')
  result['preconditions_verified']=True
  for name in routes:
   if signal_seen is not None:raise InterruptedError('wrapper_interrupted_before_stream')
@@ -222,6 +262,18 @@ def classify(receipt, trace):
              and cleanup_errors_empty
              and result.get('preconditions_verified',True) is True
              and result.get('cleanup_verified',True) is True)
+    candidate=receipt.get('candidate_identity')
+    before=receipt.get('before')
+    candidate_identity_ok=(receipt.get('candidate_identity_verified') is True
+        and isinstance(candidate,dict)
+        and candidate.get('trial_identity')==HCI_TRIAL_ID
+        and candidate.get('candidate_sha256')==HCI_CANDIDATE_RECOVERY_SHA256
+        and candidate.get('gnu_build_id')==HCI_CANDIDATE_GNU_BUILD_ID
+        and candidate.get('actual_mode')=='RECOVERY'
+        and candidate.get('observer_receipt_verified') is True
+        and candidate.get('live_recovery_hash_verified') is True
+        and isinstance(candidate.get('boot_id'),str) and bool(candidate.get('boot_id'))
+        and isinstance(before,dict) and candidate.get('boot_id')==before.get('boot_id'))
     interrupted=(result.get('child_deadline_exceeded') is True
                  or result.get('wrapper_interrupted') is True
                  or result.get('child_interrupted') is True
@@ -234,9 +286,12 @@ def classify(receipt, trace):
     writes=len(re.findall(r'SNDRV_PCM_IOCTL_WRITEI_FRAMES[^\n]+= 0 ',trace))
     prepare_only=receipt.get('diagnostic_kind','prepare-only')=='prepare-only'
     evidence_ok=prepared and (writes==0 if prepare_only else writes>0)
-    accepted=bool(cleanup and capture_ok and receipt.get('same_boot') is True and child_ok and evidence_ok)
+    accepted=bool(cleanup and capture_ok and receipt.get('same_boot') is True
+                  and candidate_identity_ok
+                  and child_ok and evidence_ok)
     dma=assess_dma_progress(progress_samples)
     period=audio_snapshot.period_progress(progress_samples)
+    source_path=audio_snapshot.source_path_assessment(progress_samples)
     timed=[]
     for sample in progress_samples:
         if not isinstance(sample,dict):continue
@@ -259,9 +314,68 @@ def classify(receipt, trace):
             'write_eagain_count':len(re.findall(r'SNDRV_PCM_IOCTL_WRITEI_FRAMES[^\n]+= -1 EAGAIN',trace)),
             'dma_progress_verified':dma['verified'],'dma_progress':dma,
             'period_progress_verified':period['verified'],'period_progress':period,
+            'source_path_assessment':source_path,
             'capture_correlation':correlation,
+            'candidate_identity_verified':candidate_identity_ok,
             'physical_playback_verified':False,
             'outcome':'interrupted' if interrupted else ('completed' if accepted else 'failed-or-unproven')}
+
+
+def validate_candidate_evidence(hci, observer, current, recovery_sha256):
+    """Require the exact reviewed HCI candidate boot before audio mutation."""
+    hci.require(hci.observer_receipt_valid(observer),
+                'completed HCI candidate observer receipt is unavailable or stale')
+    hci.validate_snapshot(current, post_reboot=True)
+    hci.require(current.get('boot_id') == observer.get('boot_id'),
+                'current boot does not match the completed HCI candidate observer')
+    hci.require(recovery_sha256 == hci.EXPECTED_FLASH_SHA256,
+                'live RECOVERY hash does not match the reviewed HCI candidate')
+    return {
+        'trial_identity': hci.TRIAL_ID,
+        'candidate_sha256': recovery_sha256,
+        'gnu_build_id': current.get('gnu_build_id'),
+        'boot_id': current.get('boot_id'),
+        'actual_mode': 'RECOVERY',
+        'observer_receipt_verified': True,
+        'live_recovery_hash_verified': True,
+    }
+
+
+def transport_project_root(project_root=ROOT):
+    """Resolve this worktree's common checkout for private pinned SSH state."""
+    result=subprocess.run(['git','-C',str(project_root),'rev-parse',
+                           '--path-format=absolute','--git-common-dir'],
+                          capture_output=True,text=True,timeout=5,check=False)
+    if result.returncode != 0:
+        raise RuntimeError('cannot resolve trusted transport project root')
+    common=Path(result.stdout.strip()).resolve()
+    source_root=common.parent if common.name=='.git' else common
+    known_hosts=source_root/'evidence/native-linux-20260919/native-v2-known-hosts'
+    if not (source_root/'tools/s22-ssh').is_file() or not known_hosts.is_file():
+        raise RuntimeError('pinned USB transport wrapper/known_hosts are unavailable')
+    return source_root
+
+
+def verify_live_hci_candidate(project_root=ROOT, transport_root=None):
+    """Read the existing HCI observer, live boot identity and full RECOVERY hash.
+
+    This intentionally does not inspect, remove, or reuse the consumed HCI
+    one-shot marker. The audio trial has its own unique, create-exclusive
+    receipt directory.
+    """
+    hci = load('audio_recovery_observer',
+               project_root/'tools/hardware/audio-recovery-reboot-once.py')
+    observer_path = hci.observer_receipt_path(hci.OUT, hci.TRIAL_ID)
+    observer = hci.read_json(observer_path)
+    hci.require(hci.observer_receipt_valid(observer),
+                'completed HCI candidate observer receipt is unavailable or stale')
+    transport_root=transport_root or transport_project_root(project_root)
+    current = hci.snapshot_over('usb', project_root=transport_root)
+    hci.validate_snapshot(current, post_reboot=True)
+    hci.require(current.get('boot_id') == observer.get('boot_id'),
+                'current boot does not match the completed HCI candidate observer')
+    recovery_sha256 = hci.candidate_hash('usb', project_root=transport_root)
+    return validate_candidate_evidence(hci, observer, current, recovery_sha256)
 
 def main():
     ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('name');ap.add_argument('--execute',action='store_true')
@@ -269,16 +383,28 @@ def main():
     ap.add_argument('--sample-progress',action='store_true');args=ap.parse_args()
     if args.sample_progress and not args.zero_second:ap.error('progress sampling requires --zero-second')
     if not re.fullmatch('[a-z0-9-]+',args.name):ap.error('unique lowercase trial name required')
-    trial=load('hardware_trial',ROOT/'tools/gpu-compat/run-trial.py')
-    silence=load('silence_probe',ROOT/'tools/hardware/run-audio-silence-once.py')
-    before=trial.phone_health(); pre=trial.remote('python3 -c '+shlex.quote(silence.PREFLIGHT))
+    transport_root=transport_project_root()
+    # Use the original reviewed checkout for the private wrapper/known_hosts;
+    # keep this worktree as the source of the audio operation and artifacts.
+    trial=load('hardware_trial',transport_root/'tools/gpu-compat/run-trial.py')
+    before=trial.phone_health()
+    candidate=verify_live_hci_candidate(project_root=ROOT,transport_root=transport_root)
+    if candidate.get('boot_id') != before.get('boot_id'):
+        raise RuntimeError('HCI candidate boot changed during preflight')
+    pre=trial.remote('python3 -c '+shlex.quote(AUDIO_PREFLIGHT))
     if pre.returncode:raise RuntimeError(pre.stderr)
     if not args.execute:
-        print(json.dumps({'preflight_passed':True,'controls':['ABOX SPUS OUT2','ABOX UAIF1 SPK'],
+        print(json.dumps({'preflight_passed':True,
+                          'candidate_identity_verified':True,
+                          'candidate_trial_identity':candidate['trial_identity'],
+                          'candidate_gnu_build_id':candidate['gnu_build_id'],
+                          'candidate_recovery_sha256':candidate['candidate_sha256'],
+                          'controls':['ABOX SPUS OUT2','ABOX UAIF1 SPK'],
                           'new_value':1,'required_previous_value':0,'prepare_only':not args.zero_second}));return
     os.umask(0o077);raw=ROOT/'rootfs/main-driver-loop-20260921'/args.name;raw.mkdir(exist_ok=False)
     (raw/'before.json').write_text(json.dumps({'health':before,'audio':json.loads(pre.stdout)},indent=2)+'\n')
-    kernel=trial.remote('dmesg');assert kernel.returncode==0
+    kernel=trial.remote('dmesg')
+    if kernel.returncode:raise RuntimeError('pre-operation kernel capture failed')
     (raw/'before-kernel.txt').write_text(kernel.stdout)
     boundary=max(map(float,re.findall(r'^\[\s*([0-9.]+)\]',kernel.stdout,re.M)),default=0)
     trace='/srv/s22/audio-early-20260922/'+args.name+'.strace'
@@ -290,7 +416,7 @@ def main():
     payload=json.dumps({'helper':helper.decode(),'observer':observer.decode(),
                         'trial_id':args.name}).encode()
     start=datetime.now(timezone.utc).isoformat();t=time.monotonic()
-    try:r=subprocess.run([str(ROOT/'tools/s22-ssh'),command],input=payload,capture_output=True,timeout=45)
+    try:r=subprocess.run([str(transport_root/'tools/s22-ssh'),command],input=payload,capture_output=True,timeout=45)
     except subprocess.TimeoutExpired:
         (raw/'unknown.txt').write_text('Host timeout; no automatic retry/reboot. Check child and route cleanup.\n');raise
     elapsed=time.monotonic()-t
@@ -299,10 +425,11 @@ def main():
     kernel=trial.remote('dmesg');(raw/'after-kernel.txt').write_text(kernel.stdout)
     delta=[s for s in kernel.stdout.splitlines() if (m:=re.match(r'^\[\s*([0-9.]+)\]',s)) and float(m[1])>boundary]
     (raw/'kernel-delta.txt').write_text('\n'.join(delta)+'\n')
-    post=trial.remote('python3 -c '+shlex.quote(silence.PREFLIGHT));(raw/'after-audio.txt').write_text(post.stdout+post.stderr)
+    post=trial.remote('python3 -c '+shlex.quote(AUDIO_PREFLIGHT));(raw/'after-audio.txt').write_text(post.stdout+post.stderr)
     after=trial.phone_health()
     receipt={'started_at':start,'elapsed_seconds':round(elapsed,3),'wrapper_returncode':r.returncode,
              'before':before,'after':after,'same_boot':before['boot_id']==after['boot_id'],
+             'candidate_identity':candidate,'candidate_identity_verified':True,
              'after_audio_exit':post.returncode,'trace_capture_exit':captured.returncode,
              'kernel_capture_exit':kernel.returncode,'helper_sha256':hashlib.sha256(helper).hexdigest(),
              'observer_sha256':hashlib.sha256(observer).hexdigest() if observer else None,
@@ -311,7 +438,8 @@ def main():
              'result':json.loads(r.stdout) if r.returncode==0 else None}
     receipt['assessment']=classify(receipt,captured.stdout)
     (raw/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
-    print(json.dumps({k:v for k,v in receipt.items() if k not in ('before','after')},indent=2))
+    print(json.dumps({k:v for k,v in receipt.items()
+                      if k not in ('before','after','candidate_identity')},indent=2))
     if not receipt['assessment']['diagnostic_completed']:raise SystemExit(1)
 
 if __name__=='__main__':main()
