@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Host-only PTY and unit regressions for the QCA H4/IBS bridge."""
 import os
+import errno
 import pty
 import select
 import signal
@@ -204,7 +205,8 @@ LIFECYCLE_SOURCE = r'''#define S22_BT_BRIDGE_EMBED 1
 
 static unsigned attach_calls, proto_calls, device_calls, detach_calls;
 static unsigned raw_socket_calls, info_ioctl_calls;
-static int inject_overflow, fail_device_lookup, injection_failed;
+static int inject_overflow, fail_initial_attach, fail_setproto;
+static int fail_device_lookup, fail_detach, injection_failed;
 
 int s22_bt_test_ioctl(int fd, unsigned long request, ...)
 {
@@ -216,15 +218,28 @@ int s22_bt_test_ioctl(int fd, unsigned long request, ...)
         if (*line == N_HCI) {
             static const uint8_t command[] = {1, 3, 0x0c, 0};
             attach_calls++;
-            for (unsigned i = 0; inject_overflow && i < 9; ++i)
-                if (write(fd, command, sizeof(command)) != (ssize_t)sizeof(command))
-                    injection_failed = 1;
+            if (fail_initial_attach) {
+                errno = ENODEV;
+                result = -1;
+            } else {
+                for (unsigned i = 0; inject_overflow && i < 9; ++i)
+                    if (write(fd, command, sizeof(command)) != (ssize_t)sizeof(command))
+                        injection_failed = 1;
+            }
         } else if (*line == 0) {
             detach_calls++;
+            if (fail_detach) {
+                errno = EIO;
+                result = -1;
+            }
         }
     } else if (request == HCIUARTSETPROTO) {
         (void)va_arg(args, unsigned long);
         proto_calls++;
+        if (fail_setproto) {
+            errno = EPROTO;
+            result = -1;
+        }
     } else if (request == HCIUARTGETDEVICE) {
         (void)va_arg(args, unsigned long);
         device_calls++;
@@ -271,7 +286,12 @@ int main(int argc, char **argv)
     int have_stopper = 0;
     if (argc != 2) return 2;
     if (!strcmp(argv[1], "overflow")) inject_overflow = 1;
+    if (!strcmp(argv[1], "initial-attach-fail")) fail_initial_attach = 1;
+    if (!strcmp(argv[1], "setproto-fail") ||
+        !strcmp(argv[1], "setproto-fail-detach-fail")) fail_setproto = 1;
     if (!strcmp(argv[1], "attach-fail")) fail_device_lookup = 1;
+    if (!strcmp(argv[1], "detach-fail") ||
+        !strcmp(argv[1], "setproto-fail-detach-fail")) fail_detach = 1;
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, pair)) return 2;
     if (!strcmp(argv[1], "malformed") && write(pair[1], "\x06", 1) != 1) return 2;
     if (!strcmp(argv[1], "term")) {
@@ -280,20 +300,28 @@ int main(int argc, char **argv)
     }
     if (strcmp(argv[1], "clean") && strcmp(argv[1], "malformed") &&
         strcmp(argv[1], "overflow") && strcmp(argv[1], "term") &&
-        strcmp(argv[1], "attach-fail")) return 2;
-    rc = s22_bridge_run(pair[0], !strcmp(argv[1], "clean") ? 20 : 1000);
+        strcmp(argv[1], "attach-fail") && strcmp(argv[1], "initial-attach-fail") &&
+        strcmp(argv[1], "setproto-fail") && strcmp(argv[1], "detach-fail") &&
+        strcmp(argv[1], "setproto-fail-detach-fail")) return 2;
+    rc = s22_bridge_run(pair[0],
+                        (!strcmp(argv[1], "clean") || !strcmp(argv[1], "detach-fail"))
+                        ? 20 : 1000);
+    int errno_after = errno;
     if (have_stopper && pthread_join(stopper, NULL)) return 2;
     close(pair[0]);
     close(pair[1]);
     expected_abort = strcmp(argv[1], "clean") != 0;
+    unsigned expected_detach = fail_initial_attach ? 0 : 1;
+    unsigned expected_proto = fail_initial_attach ? 0 : 1;
+    unsigned expected_device = fail_initial_attach || fail_setproto ? 0 : 1;
     printf("lifecycle socket_calls=%u info_ioctl_calls=%u attach_calls=%u "
-           "proto_calls=%u device_calls=%u detach_calls=%u rc=%d\n",
+           "proto_calls=%u device_calls=%u detach_calls=%u rc=%d errno_after=%d\n",
            raw_socket_calls, info_ioctl_calls, attach_calls, proto_calls,
-           device_calls, detach_calls, rc);
+           device_calls, detach_calls, rc, errno_after);
     if (injection_failed || raw_socket_calls || info_ioctl_calls ||
-        attach_calls != 1 || detach_calls != 1 ||
-        proto_calls != 1 ||
-        device_calls != 1 || (expected_abort ? rc >= 0 : rc != 0)) return 1;
+        attach_calls != 1 || detach_calls != expected_detach ||
+        proto_calls != expected_proto || device_calls != expected_device ||
+        (expected_abort ? rc >= 0 : rc != 0)) return 1;
     return 0;
 }
 '''
@@ -358,7 +386,7 @@ class BridgeTests(unittest.TestCase):
             "expected eight accepted commands before the ninth overflowed the queue",
         )
         self.assertIn("bridge_queue_overflow=1 queued=8", stdout)
-        self.assertIn("pty_cleanup_ioctl_result=0", stdout)
+        self.assertIn("pty_restore_ioctl_result=0", stdout)
 
     def test_invalid_packet_type_fails_closed(self):
         proc, virtual, physical_master, physical_slave = start_bridge(self)
@@ -396,7 +424,7 @@ class BridgeTests(unittest.TestCase):
             self.assertEqual(read_exact(physical_master, 3, timeout=1.0), b"\xfd" * 3)
             self.assertNotEqual(proc.wait(timeout=2), 0)
             rest, _ = proc.communicate(timeout=2)
-            self.assertIn("pty_cleanup_ioctl_result=0", rest)
+            self.assertIn("pty_restore_ioctl_result=0", rest)
         finally:
             # communicate() above already reaped the child; helper is idempotent.
             if proc.poll() is None:
@@ -423,7 +451,7 @@ class BridgeTests(unittest.TestCase):
             proc.send_signal(signal.SIGTERM)
             rest, _ = proc.communicate(timeout=2)
             self.assertNotEqual(proc.returncode, 0)  # orderly signal cancellation
-            self.assertIn("pty_cleanup_ioctl_result=0", rest)
+            self.assertIn("pty_restore_ioctl_result=0", rest)
             os.close(virtual); os.close(physical_master); os.close(physical_slave)
 
     def test_parser_fragmentation_and_malformed_lengths(self):
@@ -469,6 +497,41 @@ class BridgeTests(unittest.TestCase):
             result, registered=False, ran_bridge=False
         )
         self.assertIn("proto_calls=1 device_calls=1", result.stdout)
+
+    def test_embedded_initial_line_discipline_failure_does_not_detach(self):
+        result = self.run_lifecycle_case("initial-attach-fail")
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("attach_calls=1 proto_calls=0 device_calls=0 detach_calls=0 rc=-1", result.stdout)
+        self.assertIn("pty_cleanup_attempted=0", result.stdout)
+        self.assertNotIn("pty_cleanup_ioctl_result=", result.stdout)
+        self.assertIn(f"errno_after={errno.ENODEV}", result.stdout)
+        self.assertNotIn("bridge_result=", result.stdout)
+
+    def test_embedded_setproto_failure_detaches_once_and_preserves_errno(self):
+        result = self.run_lifecycle_case("setproto-fail")
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("attach_calls=1 proto_calls=1 device_calls=0 detach_calls=1 rc=-1", result.stdout)
+        self.assertIn("pty_cleanup_ioctl_result=0", result.stdout)
+        self.assertIn(f"errno_after={errno.EPROTO}", result.stdout)
+        self.assertNotIn("bridge_result=", result.stdout)
+
+    def test_embedded_detach_failure_is_reported_and_changes_clean_status(self):
+        result = self.run_lifecycle_case("detach-fail")
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("attach_calls=1 proto_calls=1 device_calls=1 detach_calls=1 rc=-1", result.stdout)
+        self.assertIn("pty_cleanup_ioctl_result=-1", result.stdout)
+        self.assertIn(f"pty_detach_failed errno={errno.EIO}", result.stderr)
+        self.assertIn(f"errno_after={errno.EIO}", result.stdout)
+        self.assertIn("bridge_result=0", result.stdout)
+
+    def test_embedded_detach_failure_does_not_replace_primary_errno(self):
+        result = self.run_lifecycle_case("setproto-fail-detach-fail")
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("attach_calls=1 proto_calls=1 device_calls=0 detach_calls=1 rc=-1", result.stdout)
+        self.assertIn("pty_cleanup_ioctl_result=-1", result.stdout)
+        self.assertIn(f"pty_detach_failed errno={errno.EIO}", result.stderr)
+        self.assertIn(f"errno_after={errno.EPROTO}", result.stdout)
+        self.assertNotIn("bridge_result=", result.stdout)
 
     def test_embedded_uart_error_and_queue_overflow_unwind_without_socket(self):
         for case in ("malformed", "overflow"):

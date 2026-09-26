@@ -45,6 +45,7 @@ struct bridge {
     size_t pending_head, pending_count;
     int tx_awake, rx_awake, waiting_ack, retries;
     int queue_overflow;
+    int hci_attached;
     int hci_index;
     unsigned commands, events, ibs_ack_rx, ibs_wake_rx;
     uint64_t wake_at;
@@ -160,9 +161,15 @@ static int speed_value(unsigned long n, speed_t *out) {
     return 0;
 }
 #endif
-static int cleanup_pty(struct bridge *x) {
+static int restore_tty_line(struct bridge *x) {
     int line = 0;
     return ioctl(x->pty_slave, TIOCSETD, &line);
+}
+static int detach_h4(struct bridge *x) {
+    if (!x->hci_attached) return 0;
+    /* Consume ownership before ioctl: a failed detach must not be retried. */
+    x->hci_attached = 0;
+    return restore_tty_line(x);
 }
 static void report_queue_overflow(const struct bridge *x) {
     if (x->queue_overflow)
@@ -171,8 +178,9 @@ static void report_queue_overflow(const struct bridge *x) {
 static int attach_h4(struct bridge *x) {
     int line = N_HCI, index = -1;
     if (ioctl(x->pty_slave, TIOCSETD, &line) < 0) return -1;
+    x->hci_attached = 1;
     /* These ioctls use arg as a VALUE / return the index, not pointers. */
-    if (ioctl(x->pty_slave, HCIUARTSETPROTO, 0UL) < 0) { line = 0; (void)ioctl(x->pty_slave, TIOCSETD, &line); return -1; }
+    if (ioctl(x->pty_slave, HCIUARTSETPROTO, 0UL) < 0) return -1;
     index = ioctl(x->pty_slave, HCIUARTGETDEVICE, 0UL);
     if (index < 0) return -1;
     x->hci_index=index;
@@ -214,27 +222,49 @@ int s22_bridge_run(int uart, int duration_ms) {
     if(sigaction(SIGINT,&action,&old_int))return -1;
     if(sigaction(SIGTERM,&action,&old_term)) { sigaction(SIGINT,&old_int,NULL);return -1; }
     struct bridge x; memset(&x, 0, sizeof(x)); x.uart = uart; x.pty_master = x.pty_slave = -1;
-    int rc=-1;
+    int rc=-1, primary_errno=0;
     if (openpty(&x.pty_master, &x.pty_slave, x.slave_name, NULL, NULL) < 0) goto out;
     int fl = fcntl(x.pty_master, F_GETFL, 0); if (fl < 0 || fcntl(x.pty_master, F_SETFL, fl | O_NONBLOCK)<0) goto out;
     fl = fcntl(x.pty_slave, F_GETFL, 0); if (fl < 0 || fcntl(x.pty_slave, F_SETFL, fl | O_NONBLOCK)<0) goto out;
     struct termios t; if (tcgetattr(x.pty_slave, &t) < 0) goto out;
     cfmakeraw(&t); t.c_cflag |= CLOCAL | CREAD; if (tcsetattr(x.pty_slave, TCSANOW, &t) < 0) goto out;
-    if (attach_h4(&x) < 0) { perror("H4 attach");goto out; }
+    if (attach_h4(&x) < 0) {
+        primary_errno = errno;
+        perror("H4 attach");
+        errno = primary_errno;
+        goto out;
+    }
     rc = run_bridge(&x, duration_ms);
+    if (rc < 0) primary_errno = errno;
     report_queue_overflow(&x);
     printf("bridge_result=%d commands=%u events=%u ibs_wake_rx=%u ibs_ack_rx=%u queued=%zu\n",
            rc,x.commands,x.events,x.ibs_wake_rx,x.ibs_ack_rx,x.pending_count);fflush(stdout);
 out:
+    {
+    int saved_errno = primary_errno ? primary_errno : errno;
     if(x.pty_slave>=0) {
-        int pty_cleanup_result=cleanup_pty(&x);
-        printf("pty_cleanup_ioctl_result=%d\n",pty_cleanup_result);fflush(stdout);
-        if(pty_cleanup_result && !rc)rc=-1;
+        int cleanup_attempted = x.hci_attached;
+        int pty_cleanup_result = detach_h4(&x);
+        if (cleanup_attempted) {
+            int cleanup_errno = errno;
+            printf("pty_cleanup_ioctl_result=%d\n", pty_cleanup_result);
+            fflush(stdout);
+            if (pty_cleanup_result < 0) {
+                fprintf(stderr, "pty_detach_failed errno=%d (%s)\n",
+                        cleanup_errno, strerror(cleanup_errno));
+                if (!rc) { rc = -1; saved_errno = cleanup_errno; }
+            }
+        } else {
+            puts("pty_cleanup_attempted=0");
+            fflush(stdout);
+        }
         close(x.pty_slave);
     }
     if(x.pty_master>=0)close(x.pty_master);
     sigaction(SIGINT,&old_int,NULL);sigaction(SIGTERM,&old_term,NULL);
+    errno = saved_errno;
     return rc;
+    }
 }
 #ifndef S22_BT_BRIDGE_EMBED
 int main(int argc, char **argv) {
@@ -267,12 +297,19 @@ int main(int argc, char **argv) {
     signal(SIGINT, stop_signal); signal(SIGTERM, stop_signal);
     fprintf(stdout, "%s\n", x.slave_name); fflush(stdout);
     int rc = run_bridge(&x, 0);
+    int saved_errno = errno;
     report_queue_overflow(&x);
-    int pty_cleanup_result = cleanup_pty(&x);
-    printf("pty_cleanup_ioctl_result=%d\n", pty_cleanup_result);
+    int pty_restore_result = restore_tty_line(&x);
+    int restore_errno = errno;
+    printf("pty_restore_ioctl_result=%d\n", pty_restore_result);
     fflush(stdout);
-    if (pty_cleanup_result < 0 && rc == 0) rc = -1;
+    if (pty_restore_result < 0) {
+        fprintf(stderr, "pty_restore_failed errno=%d (%s)\n",
+                restore_errno, strerror(restore_errno));
+        if (rc == 0) { rc = -1; saved_errno = restore_errno; }
+    }
     close(x.pty_master); close(x.pty_slave); close(x.uart);
+    errno = saved_errno;
     return rc == 0 ? 0 : 1;
 }
 #endif
