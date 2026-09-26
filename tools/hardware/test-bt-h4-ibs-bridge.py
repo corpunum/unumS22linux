@@ -554,7 +554,7 @@ class BridgeTests(unittest.TestCase):
         command = [sys.executable]
         if not __debug__:
             command.append("-O")
-        command.extend([runner, "bt-hci-registration-20260926", "--execute"])
+        command.extend([runner, "bt-hci-registration-20260927", "--execute"])
         result = subprocess.run(command, check=False,
                                 capture_output=True, text=True, timeout=3)
         if __debug__:
