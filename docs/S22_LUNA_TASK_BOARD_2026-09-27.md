@@ -31,3 +31,50 @@ Only the coordinator may access or mutate the phone. Live experiments and heavy 
 5. Continue independent NPU/cellular/GPU/input source work when device gates block; do not weaken unresolved ownership, protected-NV, or physical-acceptance constraints.
 
 Source checks, executable host tests, builds, live operations, physical acceptance and sustained reliability are separate evidence levels. Current new hardware trial count: zero.
+
+## Executed checkpoint — 23:05 UTC
+
+The initial count above is historical. Audio was ready first, so the coordinator
+ran it before Bluetooth, preserving serialization. Independent Luna review by
+`/root/driver_review_20260926` approved the shared guard (`0f366f3`, integrated
+as `6816417`) and the corrected audio runner (`11c5270` plus `bb6a298`, integrated
+through `3a59e6f`). Guard tests passed 10, audio route tests 39, cleanup tests 6,
+and snapshot tests 21 in both normal and optimized Python. An ambiguous remote
+trace-stage result now stays UNKNOWN; it is not mislabeled as no mutation.
+
+`audio-zero-20260927` ran once through an independent user systemd unit. It
+failed before PCM preparation: `aplay` could not open the missing
+`/dev/snd/pcmC0D2p` (`ENOENT`). Both route selectors returned to zero, amplifiers
+stayed off, PCM was closed, and the same native boot/model remained healthy.
+The durable marker records `failed-cleanup-confirmed`; its identity is consumed.
+This result does **not** show a DMA firmware failure or working playback.
+The kernel class and char-device sysfs links agree on `116:3`; the matching
+device node is absent in both shell and guardian views. The audio worker is
+implementing exact-node provisioning/preflight with tests, not a kernel rebuild.
+
+Camera implementation `0fd115e` (integrated `9408128`) and the live-name fix
+`5befae6` received independent Luna review from `/root/audio_next_20260926`.
+Camera tests passed 4/4 normally and optimized; CI now includes that suite.
+Coordinator-only passive collection found 56 V4L2 nodes, no media nodes, and
+sensor leaders bound to `exynos-is-sensor`/`fimc_is`. All seven fixed camera
+firmware/setfile names were absent in the four checked namespace views. The
+coordinator recovered those seven files privately from the existing verified,
+read-only vendor image using the existing F2FS recovery tool. No camera was
+opened/powered and no recovered file was staged on the phone. The native
+guardian firmware directory has about 2.36 GB available, distinct from the
+nearly-full shell overlay; persistent `/srv/s22` has about 102 GB available.
+
+Bluetooth adapter `4491ee8` is integrated as `2cee3e9` but remains awaiting the
+final independent review correction for kernel diagnostic classification.
+Its local provenance and live read-only candidate/storage prerequisites passed.
+No Bluetooth registration has been attempted in this wave yet.
+
+The rig's user transient service mechanism was tested successfully and then
+used for audio. A temporary sleep-inhibitor request was denied; it was not
+bypassed. Existing AC automatic sleep is disabled (`nothing`), the rig is on
+AC, and power policy was not changed. Independent hardware rescue is still
+unproven. No new partition write or reboot was performed.
+
+Sanitized live facts are recorded in
+[`s22-hardware-continuation-20260927.json`](../evidence/s22-hardware-continuation-20260927.json).
+Private firmware, complete traces and network identifiers are not published.
