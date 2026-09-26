@@ -71,15 +71,17 @@ def evaluate_readiness(
     config_matches: bool,
     required_artifacts_match: bool,
     source_route_pass: bool,
-    lifecycle_gaps: dict[str, bool],
+    lifecycle_gaps: dict[str, bool | None],
     lifecycle_source_available: bool = False,
 ) -> dict[str, object]:
     """Keep host artifact checks separate from permission to touch the NPU.
 
-    The response-timeout property is source-derived. Publication-drain
-    liveness, kernel callback lifetime, device validation, and authorization
-    remain false because this checker cannot prove them from host files, and
-    no CLI argument may override them. A passing artifact audit still exits 2.
+    The response-timeout property is source-derived. Caller return under a
+    stalled publisher, publisher progress, retained-resource cleanup after a
+    detached call, callback lifetime, late power-state safety, device teardown
+    ordering, and authorization remain false: this candidate preserves an
+    unbounded publication drain and does not implement a detached waiter. A
+    passing artifact audit still exits 2.
     """
     artifact_pass = bool(config_matches and required_artifacts_match and source_route_pass)
     lifecycle_source_available = bool(lifecycle_source_available)
@@ -92,11 +94,20 @@ def evaluate_readiness(
             lifecycle_source_available
             and not lifecycle_gaps.get("power_response_timeout_missing", True)
         ),
+        # The safe stack-waiter path deliberately waits for the publisher to
+        # return. No independently reviewed detach/resource-pin path exists.
+        "publication_caller_return_bounded": False,
         # The current drain waits indefinitely for a publisher lease. A host
         # checker cannot promise liveness if that publication stalls.
         "publication_drain_liveness_resolved": False,
+        "publisher_progress_bounded": False,
+        "detached_waiter_resource_cleanup_kernel_validated": False,
+        "detached_waiter_outstanding_cap_validated": False,
         "normal_boot_error_unwind_resolved": lifecycle_source_available and not lifecycle_gaps.get("normal_boot_unwind_missing", True),
+        "publication_storage_lifetime_kernel_validated": False,
         "callback_lifetime_kernel_validated": False,
+        "late_power_transition_safe_after_close": False,
+        "device_teardown_resources_pinned_through_publication": False,
         "firmware_boot_and_shutdown_device_tested": False,
         "live_probe_validated": False,
         "independent_recovery_path_verified": False,
@@ -189,6 +200,12 @@ def main() -> int:
             and "wait_for_completion(&waiter->publish_done)" in publish_drain
             and "wait_for_completion_timeout" not in publish_drain
         ),
+        "stack_waiter_drain_source_contract": (
+            "struct npu_power_waiter waiter;" in power_wait
+            and "npu_power_wait_cancel_and_drain(&waiter)" in power_wait
+            and "wait_for_completion(&waiter->publish_done)" in publish_drain
+            and "wait_for_completion_timeout" not in publish_drain
+        ),
         "callback_lookup_is_cookie_and_req_id_scoped": (
             "spin_lock_irqsave(&npu_power_waiters_lock, flags)" in callback
             and "npu_power_waiter_find(cookie)" in callback
@@ -224,7 +241,10 @@ def main() -> int:
     checks["known_lifecycle_gaps"] = {
         "normal_boot_unwind_missing": checks["source"]["normal_boot_unwind_missing"],
         "power_response_timeout_missing": not checks["source"]["power_response_timeout_bounded"],
-        "publication_drain_wait_unbounded": checks["source"]["publication_drain_wait_unbounded"],
+        "publication_drain_wait_unbounded": (
+            checks["source"]["publication_drain_wait_unbounded"]
+            if lifecycle_source_available else None
+        ),
     }
     result["config_matches"] = checks["config"]["matches"]
     result["artifact_closure_pass"] = checks["artifact_closure"]["required_matches"]
@@ -240,8 +260,10 @@ def main() -> int:
     result["live_probe_validated"] = readiness["readiness_gates"]["live_probe_validated"]
     result["reason"] = (
         "host artifact/source audit only; the POWER response timeout does not establish "
-        "publication-drain liveness or kernel callback lifetime; firmware runtime, live "
-        "probe, independent recovery, and BOOTUP authorization remain unestablished"
+        "bounded caller return under a stalled publisher, publisher progress, detached "
+        "resource cleanup, kernel callback lifetime, late power-state safety, device "
+        "teardown pinning, or firmware runtime; live probe, independent recovery, and "
+        "BOOTUP authorization remain unestablished"
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return int(result["exit_code"])

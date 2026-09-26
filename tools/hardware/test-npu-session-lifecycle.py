@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Executable host reference model and source-contract checks for NPU lifecycle.
+"""Host source checks, candidate-helper C regression, and Python model.
 
-The threaded model exercises ownership/race and unwind invariants. It is not a
-substitute for compiling or executing the kernel driver.
+The C harness executes helper text extracted from the candidate patch under
+host shims; neither it nor the threaded model executes the kernel driver.
 """
 from __future__ import annotations
 
 from pathlib import Path
 import os
+import shutil
+import subprocess
+import tempfile
 import threading
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,6 +21,7 @@ KERNEL_FILES = (
     "drivers/vision/npu/core/npu-protodrv.c",
     "drivers/vision/npu/core/npu-vertex.c",
 )
+HOST_C_HARNESS = ROOT / "tools/hardware/npu-power-wait-harness.c"
 
 
 def check(condition: bool, message: str) -> None:
@@ -41,6 +45,65 @@ def function_body(source: str, marker: str) -> str:
             if depth == 0:
                 return source[start:end + 1]
     return ""
+
+
+def extract_production_wait_helpers() -> str:
+    """Extract the exact added C waiter helpers from the candidate patch."""
+    text = PATCH.read_text()
+    start = text.find("+struct npu_power_waiter {")
+    end = text.find("+static int npu_power_result_to_errno(", start)
+    check(start >= 0 and end > start,
+          "candidate patch does not contain the expected production helper block")
+    added_lines = text[start:end].splitlines()
+    check(all(line.startswith("+") for line in added_lines),
+          "helper extraction crossed a patch context/deletion line")
+    helpers = "\n".join(line[1:] for line in added_lines)
+    for marker in (
+        "int npu_session_save_power_result(",
+        "int npu_session_power_wait_assign_req_id(",
+        "int npu_session_power_wait_begin_publish(",
+        "int npu_session_power_wait_authorize_publish(",
+        "void npu_session_power_wait_finish_publish(",
+        "static void npu_power_wait_cancel_and_drain(",
+        "wait_for_completion(&waiter->publish_done)",
+    ):
+        check(marker in helpers, f"actual-C helper extraction omits {marker}")
+    return helpers
+
+
+def test_actual_c_waiter_helpers() -> None:
+    """Compile/run patch-extracted C under bounded, explicitly limited shims."""
+    check(HOST_C_HARNESS.is_file(), "actual-C waiter harness is missing")
+    compiler = shutil.which("cc") or shutil.which("gcc")
+    check(compiler is not None, "host C compiler (cc/gcc) is required for waiter regression")
+    with tempfile.TemporaryDirectory(prefix="npu-wait-c-") as temp:
+        include = Path(temp) / "npu-power-wait-extracted.inc"
+        binary = Path(temp) / "npu-power-wait-harness"
+        include.write_text(extract_production_wait_helpers())
+        try:
+            compiled = subprocess.run(
+                [compiler, "-std=gnu11", "-Wall", "-Wextra", "-Werror", "-pthread",
+                 "-I", temp, str(HOST_C_HARNESS), "-o", str(binary)],
+                capture_output=True, text=True, check=False, timeout=10,
+            )
+        except subprocess.TimeoutExpired:
+            check(False, "actual-C waiter harness compilation exceeded 10 seconds")
+        check(compiled.returncode == 0,
+              "actual-C waiter harness did not compile:\n" + compiled.stderr)
+        try:
+            executed = subprocess.run(
+                [str(binary)], capture_output=True, text=True, check=False, timeout=5,
+            )
+        except subprocess.TimeoutExpired:
+            check(False, "actual-C waiter harness stalled beyond its 5-second bound")
+        check(executed.returncode == 0,
+              "actual-C waiter harness failed:\n" + executed.stdout + executed.stderr)
+        check("PASS actual C helper: stalled publication" in executed.stdout and
+              "PASS actual C helper: response-before-finish" in executed.stdout and
+              "PASS actual C helper: cancellation revokes uncommitted publish" in executed.stdout and
+              "LIMIT:" in executed.stdout,
+              "actual-C waiter harness did not report both races and its coverage limits")
+        print(executed.stdout, end="")
 
 
 class WaitRegistry:
@@ -217,6 +280,16 @@ def test_source_contract() -> None:
     check("(struct npu_session *)(unsigned long)waiter.cookie" not in added and
           "req.session = session" not in added,
           "POWER_CTL waiter must not retain a session pointer")
+    close_hunk_start = text.find("@@ -621,11 +885,18 @@ int npu_session_close(")
+    close_hunk_end = text.find("\n@@", close_hunk_start + 1)
+    check(close_hunk_start >= 0 and close_hunk_end > close_hunk_start,
+          "candidate patch close hunk is missing")
+    close_hunk = text[close_hunk_start:close_hunk_end]
+    close_lock = close_hunk.find("+\tmutex_lock(session->global_lock);")
+    close_mark = close_hunk.find("\tsession->ss_state |= BIT(NPU_SESSION_STATE_CLOSE);")
+    close_unlock = close_hunk.find("+\tmutex_unlock(session->global_lock);")
+    check(close_lock >= 0 and close_lock < close_mark < close_unlock,
+          "candidate close does not mark CLOSE inside the waiter serialization lock")
     check("kzalloc" not in added[added.find("npu_session_wait_power_request"):],
           "POWER waiter should use stack storage; allocation failure must not be hidden")
     if KERNEL_ROOT is not None:
@@ -589,6 +662,7 @@ def test_reverse_boot_unwind() -> None:
 
 def main() -> None:
     test_source_contract()
+    test_actual_c_waiter_helpers()
     test_queue_and_callback_edges()
     test_timeout_callback_race()
     test_timeout_publication_handshake()
