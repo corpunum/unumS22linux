@@ -28,6 +28,14 @@ NOTE = 'Raw version+board transport only; no baud, firmware, HCI, pairing or dat
 EXTRA_SOURCES = []
 PHONE_TIMEOUT = 12
 HOST_TIMEOUT = 25
+LIVE_WLAN_CHECK_STDOUT = 'live_wlan_metadata_only=0\n'
+
+
+def live_wlan_check_valid(result):
+    # The base probe prints a receipt; patch-derived probes use exit status
+    # only. A caller must select that exact reviewed contract explicitly.
+    return (result.returncode == 0 and result.stdout == LIVE_WLAN_CHECK_STDOUT
+            and result.stderr == '')
 
 
 def accepted_runner():
@@ -112,7 +120,10 @@ print('binary_hash_verified')
         raise RuntimeError(staged.stderr.decode())
     check = trial.remote(DEST + ' --check-live-wlan')
     (raw / 'metadata-check.txt').write_text(check.stdout + check.stderr)
-    if check.returncode or check.stdout.strip() != 'live_wlan_metadata_only=0':
+    (raw / 'metadata-check.json').write_text(json.dumps(dict(
+        returncode=check.returncode, stdout=check.stdout, stderr=check.stderr,
+        expected_stdout=LIVE_WLAN_CHECK_STDOUT)) + '\n')
+    if not live_wlan_check_valid(check):
         raise RuntimeError('Live C preflight refused without opening devices')
     trace = str(TRACE_DIR / (args.name + '.strace'))
     command = shlex.join(['timeout', '-s', 'TERM', '-k', '5', str(PHONE_TIMEOUT), 'strace', '-f', '-qq', '-tt', '-T',
@@ -165,7 +176,7 @@ print('binary_hash_verified')
                    note=NOTE)
     (raw / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
     print(json.dumps({k: v for k, v in receipt.items() if k not in ('before', 'after', 'uart_output')}, indent=2))
-    if not receipt['same_boot'] or state.returncode or check_after.returncode or kernel.returncode:
+    if not receipt['same_boot'] or state.returncode or not live_wlan_check_valid(check_after) or kernel.returncode:
         raise RuntimeError('Post-trial state changed; no retry')
     if result.returncode:
         raise SystemExit(result.returncode)
