@@ -22,6 +22,7 @@ SPEC.loader.exec_module(runner)
 EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-npu-session-lifecycle.py",
     "tools/hardware/test-npu-boot-preflight.py",
+    "tools/hardware/test-device-trial-guard.py",
     "tools/hardware/test-audio-progress-snapshot.py",
     "tools/hardware/test-audio-route-assessment.py",
     "tools/hardware/test-audio-wrapper-cleanup.py",

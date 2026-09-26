@@ -35,6 +35,7 @@ class HostTest:
 REVIEWED_HOST_TEST_PATHS = (
     "tools/hardware/test-npu-session-lifecycle.py",
     "tools/hardware/test-npu-boot-preflight.py",
+    "tools/hardware/test-device-trial-guard.py",
     "tools/hardware/test-audio-progress-snapshot.py",
     "tools/hardware/test-audio-route-assessment.py",
     "tools/hardware/test-audio-wrapper-cleanup.py",
@@ -57,6 +58,7 @@ REVIEWED_HOST_TEST_PATHS = (
 HOST_TESTS = (
     HostTest("tools/hardware/test-npu-session-lifecycle.py"),
     HostTest("tools/hardware/test-npu-boot-preflight.py"),
+    HostTest("tools/hardware/test-device-trial-guard.py"),
     HostTest("tools/hardware/test-audio-progress-snapshot.py"),
     HostTest("tools/hardware/test-audio-route-assessment.py"),
     HostTest("tools/hardware/test-audio-wrapper-cleanup.py"),
