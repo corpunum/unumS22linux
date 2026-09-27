@@ -22,21 +22,21 @@ import types
 
 ROOT = Path(__file__).resolve().parents[2]
 TRUSTED_ROOT = Path('/home/corpunum/s22-linux')
-TRIAL_DIR = '/srv/s22/bt-trial-20260927/bt-hci-registration-20260927'
+TRIAL_DIR = '/srv/s22/bt-trial-20260927/bt-hci-plain-h4-20260927'
 TRIAL_TRACE_DIR = Path(TRIAL_DIR)
-TRIAL_ID = 'bt-hci-registration-20260927'
+TRIAL_ID = 'bt-hci-plain-h4-20260927'
 OBSERVER_TRIAL_ID = 'hci-candidate-20260924-second'
 EXPECTED_RECOVERY_SHA256 = '42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5'
 EXPECTED_GNU_BUILD_ID = 'b2dda820b18d410d9bf12f1bd2584567d545991d'
-EXPECTED_ARTIFACT_SHA256 = 'c28307985bdad6404f0fecc82860eaa92a2c150a5d870d9297ce0301f44bac0a'
+EXPECTED_ARTIFACT_SHA256 = 'f4ba76613e1339314898ebbf067338d846ed9ee231907a44306b82f54f2f1684'
 EXPECTED_ARTIFACT_SIZE = 1042008
-EXPECTED_ARTIFACT_BUILD_ID = 'eb47c232ddb7fc4b477bb145bbe9bf2832972276'
+EXPECTED_ARTIFACT_BUILD_ID = 'a5be9451d95335ae2a5d292d721a766208f55a87'
 EXPECTED_SSH_WRAPPER_SHA256 = '7e9d31035762de50ccc6c5614d8348532fd912bf59c41c9d410a4c7bfe49dd1d'
 EXPECTED_TRUSTED_RUN_TRIAL_SHA256 = '165a16566f2dedcb23506d427425ddb030acc53876710a61bb06a2f1b039a5fe'
 EXPECTED_TRUSTED_DEPLOYER_SHA256 = 'd0c54cc306e3a8a80cb79d79958fceedf6bb5945dabc7606e02b12d27dc00fd3'
 EXPECTED_TZ_SOURCE_COMMIT = '4e5c5ad7d950e4de0688b5663965f2075654b2ad'
 EXPECTED_TZ_CLASSIFIER_SHA256 = '8faa2cd46d16818ebdd61d7a577b046489083f5c96a6a398ddea769ebbb6619a'
-ARTIFACT = Path('/home/corpunum/s22-workers/bt-next-20260926/builds/bt-next-20260926/bt-qca6490-hci-bridge-probe')
+ARTIFACT = ROOT / 'builds/bt-plain-h4-20260927/bt-qca6490-hci-bridge-probe'
 SOURCE = ROOT / 'tools/hardware/bt-qca6490-hci-bridge-probe.c'
 DEST = TRIAL_DIR + '/bt-qca6490-hci-bridge-probe'
 TRACE_NAME = TRIAL_ID + '.strace'
@@ -51,9 +51,9 @@ PRIVATE_BUILD_HEADERS = (
 )
 BUILD_INPUT_SHA256 = {
     'tools/hardware/bt-qca6490-hci-bridge-probe.c':
-        'ceabf4635b6512397cd473f67df7c313ccf12ca13379fbccf0786b94f13b8f3d',
+        '3324cba16c421254c6e0f64d1f26b422e72ba31189a25d8372957248672410b3',
     'tools/hardware/bt-h4-ibs-bridge.c':
-        '646cd02b84c8cd580b40a0266b63dd5399c95371f1e7d3e33d42d9fc1c85fbae',
+        '476f148246dfac8330f7ade2790627b64a38ee7b1cb4f713934b6d438864a7a4',
     'tools/hardware/bt-qca6490-runtime-reset.c':
         '337fb3b576a6dccce0a520daf9628a02a9842c5ffa97f16c1f2230351b516b5b',
     'tools/hardware/bt-qca6490-nvm-capture.c':
@@ -561,9 +561,17 @@ def validate_completed_trial_receipt(workspace=ROOT, name=TRIAL_ID, *, require_l
             re.search(r'(?m)^bridge_result=0\b', output) and
             re.search(r'(?m)^pty_cleanup_ioctl_result=0\s*$', output),
             'controller-trial receipt does not confirm HCI registration and TTY detach')
+    require(re.search(r'(?m)^bridge_transport_mode=h4-no-ibs\s*$', output),
+            'controller-trial receipt does not confirm the reviewed plain-H4 profile')
+    progress = re.search(r'(?m)^bridge_result=0 commands=(\d+) events=(\d+) '
+                         r'ibs_wake_rx=0 ibs_ack_rx=0 queued=0\s*$', output)
+    require(progress and int(progress[1]) > 0 and int(progress[2]) > 0,
+            'controller-trial receipt lacks bounded HCI command/event progress')
     uart_stderr = value.get('uart_stderr')
-    require(isinstance(uart_stderr, str) and
-            re.search(r'(?m)^stage=power_off_and_vote_restored\s*$', uart_stderr),
+    # This exact probe uses baud-probe cleanup, not the base version-probe
+    # stage receipt. With a zero primary result, restore/power/vote errors
+    # propagate to baud_probe_result; no extra stderr is accepted.
+    require(uart_stderr == 'baud_probe_result=0\n',
             'controller-trial receipt does not confirm BT power-off and WLAN vote restoration')
     require(value.get('strace_capture_path') == TRIAL_DIR + '/' + TRACE_NAME,
             'controller-trial trace path differs from the exclusive reservation')

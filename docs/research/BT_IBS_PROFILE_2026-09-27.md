@@ -39,3 +39,37 @@ initialization; plain H4 selection does not suppress that. No explicit
 line-discipline detach synchronously waits for teardown and has no overall
 deadline, so a userspace timeout remains UNKNOWN, not proof of power-off or
 recovery. No follow-up trial is authorized by this host change.
+
+## Coordinator host build and distinct trial profile
+
+The frozen C inputs from integrated `a5f1f65` were rebuilt on the host only,
+using the same compiler and unchanged private includes. Source review found no
+code defect; final review of the added exact-opcode regression and trial
+adapter is still required before device execution. This is not a kernel build.
+
+```
+artifact: builds/bt-plain-h4-20260927/bt-qca6490-hci-bridge-probe
+bytes: 1042008
+mode: 0700
+SHA256: f4ba76613e1339314898ebbf067338d846ed9ee231907a44306b82f54f2f1684
+GNU build ID: a5be9451d95335ae2a5d292d721a766208f55a87
+compiler: aarch64-linux-gnu-gcc 13.3.0
+compiler SHA256: cd90adc7801f4595267f61a5d25bd3a0c6beb2f9f1f107ab919a97a12972dc9a
+```
+
+The adapter selects only `bt-hci-plain-h4-20260927`, with a fresh exclusive
+staging/trace directory. Both previous identities and their consumed markers
+are rejected/preserved. The exact running RECOVERY image/build remains unchanged.
+The new ELF/source fingerprints are pinned; neither artifact nor private
+includes are published. Dependency paths are recorded beside the ignored ELF.
+
+Success receipt checks now match the actual baud-probe cleanup path:
+`baud_probe_result=0` (and no extra stderr), not the unrelated base version
+probe's `stage=` message. For this exact source, a zero primary result preserves
+any UART-restore/power-off/vote error as nonzero. Existing post-readback checks
+still require no controller/device FDs, WLAN vote, exact same boot/build/image,
+native/model/network/power health and a complete retained kernel window.
+The receipt also requires plain-H4 mode, nonzero command and event counts,
+and no pending queue. This proves bounded exchange, not arbitrary command
+success, pairing, RF performance or Bluetooth audio. Any failure remains
+UNKNOWN until explicitly inspected; no retry or reboot is automatic.
