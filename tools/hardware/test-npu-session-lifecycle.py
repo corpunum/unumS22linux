@@ -16,6 +16,10 @@ import threading
 ROOT = Path(__file__).resolve().parents[2]
 PATCH = ROOT / "tools/hardware/npu-session-lifecycle-fix.patch"
 KERNEL_ROOT = Path(os.environ["S22_NPU_KERNEL_TREE"]) if "S22_NPU_KERNEL_TREE" in os.environ else None
+CALLBACK_SOURCE_ROOT = (
+    Path(os.environ["S22_NPU_CALLBACK_SOURCE_TREE"])
+    if "S22_NPU_CALLBACK_SOURCE_TREE" in os.environ else None
+)
 KERNEL_FILES = (
     "drivers/vision/npu/core/npu-session.c",
     "drivers/vision/npu/core/npu-protodrv.c",
@@ -24,6 +28,24 @@ KERNEL_FILES = (
 HOST_C_HARNESS = ROOT / "tools/hardware/npu-power-wait-harness.c"
 HOST_HWDEV_HARNESS = ROOT / "tools/hardware/npu-ownership-harness.c"
 HOST_HWDEV_BASELINE = ROOT / "tools/hardware/npu-hwdev-bootup-baseline.inc"
+HOST_CALLBACK_HARNESS = ROOT / "tools/hardware/npu-hwdev-callback-failure-harness.c"
+HOST_CALLBACK_FIXTURE = ROOT / "tools/hardware/npu-hwdev-callbacks-baseline.inc"
+
+CALLBACK_FIXTURE_FUNCTIONS = (
+    ("drivers/vision/npu/core/npu-hw-device.h", "static inline int npu_hw_ref_get("),
+    ("drivers/vision/npu/core/npu-hw-device.h", "static inline int npu_hw_ref_put("),
+    ("drivers/vision/npu/core/npu-hw-device.h", "static inline int npu_hw_ref_init("),
+    ("drivers/vision/npu/core/npu-hw-device.h", "static inline int npu_hw_ref_deinit("),
+    ("drivers/vision/npu/core/npu-hw-device.c", "static int npu_hwdev_npu_init("),
+    ("drivers/vision/npu/core/npu-hw-device.c", "static int npu_hwdev_dnc_init("),
+    ("drivers/vision/npu/core/npu-hw-device.c", "static int npu_hwdev_dsp_init("),
+    ("drivers/vision/npu/core/npu-stm.c", "static int __enable_npu_stm_sfr("),
+    ("drivers/vision/npu/core/npu-stm.c", "static int __disable_npu_stm_sfr("),
+    ("drivers/vision/npu/core/npu-stm.c", "int npu_stm_enable("),
+    ("drivers/vision/npu/core/npu-stm.c", "int npu_stm_disable("),
+    ("drivers/vision/npu/core/dsp-kernel.c", "void dsp_kernel_manager_close("),
+    ("drivers/vision/npu/core/npu-hw-device.c", "int npu_hwdev_bootup("),
+)
 
 
 def check(condition: bool, message: str) -> None:
@@ -33,10 +55,15 @@ def check(condition: bool, message: str) -> None:
 
 def function_body(source: str, marker: str) -> str:
     start = source.find(marker)
+    while start >= 0:
+        brace = source.find("{", start)
+        semicolon = source.find(";", start)
+        if brace < 0:
+            return ""
+        if semicolon < 0 or brace < semicolon:
+            break
+        start = source.find(marker, start + len(marker))
     if start < 0:
-        return ""
-    brace = source.find("{", start)
-    if brace < 0:
         return ""
     depth = 0
     for end in range(brace, len(source)):
@@ -128,6 +155,58 @@ def test_actual_c_hwdev_failure_reproducer() -> None:
         ):
             check(marker in executed.stdout,
                   f"actual-C hwdev harness did not report {marker!r}")
+        print(executed.stdout, end="")
+
+
+def test_actual_c_callback_failure_path() -> None:
+    """Execute pinned callback/ref/STM bodies against explicit host shims."""
+    check(HOST_CALLBACK_HARNESS.is_file(), "actual-source callback harness is missing")
+    check(HOST_CALLBACK_FIXTURE.is_file(), "GPL callback source fixture is missing")
+    compiler = shutil.which("cc") or shutil.which("gcc")
+    check(compiler is not None, "host C compiler (cc/gcc) is required for callback regression")
+    fixture = HOST_CALLBACK_FIXTURE.read_text()
+    for _, marker in CALLBACK_FIXTURE_FUNCTIONS:
+        check(function_body(fixture, marker),
+              f"actual-source fixture omits {marker}")
+    if CALLBACK_SOURCE_ROOT is not None:
+        for rel, marker in CALLBACK_FIXTURE_FUNCTIONS:
+            try:
+                source = (CALLBACK_SOURCE_ROOT / rel).read_text()
+            except (OSError, UnicodeError) as error:
+                check(False, f"pinned callback source is unavailable: {rel}: {error}")
+            check(function_body(fixture, marker) == function_body(source, marker),
+                  f"callback source fixture diverges from pinned {rel}: {marker}")
+
+    with tempfile.TemporaryDirectory(prefix="npu-hwdev-callback-c-") as temp:
+        include = Path(temp) / "npu-hwdev-callbacks-extracted.inc"
+        binary = Path(temp) / "npu-hwdev-callback-failure-harness"
+        include.write_text(fixture)
+        try:
+            compiled = subprocess.run(
+                [compiler, "-std=gnu11", "-Wall", "-Wextra", "-Werror", "-pthread",
+                 "-I", temp, str(HOST_CALLBACK_HARNESS), "-o", str(binary)],
+                capture_output=True, text=True, check=False, timeout=10,
+            )
+        except subprocess.TimeoutExpired:
+            check(False, "actual-source callback harness compilation exceeded 10 seconds")
+        check(compiled.returncode == 0,
+              "actual-source callback harness did not compile:\n" + compiled.stderr)
+        try:
+            executed = subprocess.run(
+                [str(binary)], capture_output=True, text=True, check=False, timeout=5,
+            )
+        except subprocess.TimeoutExpired:
+            check(False, "actual-source callback harness stalled beyond its 5-second bound")
+        check(executed.returncode == 0,
+              "actual-source callback harness failed:\n" + executed.stdout + executed.stderr)
+        for marker in (
+            "REPRO actual C: failed DSP acquire is hidden",
+            "REPRO actual C: failed DSP inverse consumes active NPU STM ownership",
+            "REPRO actual C helper: concurrent get succeeds before first callback fails",
+            "LIMIT:",
+        ):
+            check(marker in executed.stdout,
+                  f"actual-source callback harness did not report {marker!r}")
         print(executed.stdout, end="")
 
 
@@ -736,6 +815,7 @@ def main() -> None:
     test_source_contract()
     test_actual_c_waiter_helpers()
     test_actual_c_hwdev_failure_reproducer()
+    test_actual_c_callback_failure_path()
     test_queue_and_callback_edges()
     test_timeout_callback_race()
     test_timeout_publication_handshake()
