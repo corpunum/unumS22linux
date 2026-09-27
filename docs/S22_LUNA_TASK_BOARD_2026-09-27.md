@@ -544,3 +544,41 @@ Camera worker continues the minimal boot-bound flash receipt and separate
 camera-only reboot observer; those forthcoming changes are not covered by
 the initial adapter approval or these counts. They must undergo independent
 review before any live use. No device mutation has occurred in this wave.
+
+Published review HEAD `9289dc66d0a54d3db1d15448de60e15319b53e75` was verified
+against `git ls-remote`. Hosted run `36310517049` succeeded at that exact SHA.
+Remote master stayed `20605dbe623e0909cf219c3cae9ef7bb597b15a6`.
+
+To overlap implementation and independent review, the completed audio worker
+`/root/audio_ipc_20260927` was resumed for a second narrow assignment in a
+new isolated worktree `s22-workers/camera-observer-20260927` at `9289dc6`.
+It owns only the new camera reboot observer, its tests and its separate note.
+`/root/camera_build_20260927` retains deployment adapter/test/doc ownership
+and is finishing actual boot-bound write receipts. The reviewer remains
+independent of both. Existing audio and all older worktrees remain intact.
+
+Boot-binding worker commit `b45a2dc96aeacd994f7e869f2de6f212a62900fe`
+passed independent review and 22/22 focused tests in all three Python modes,
+and was integrated as `0f69033`. Missing, truncated or malformed procfs
+evidence now fails closed. The actual boot-ID prelude is executed in tests;
+changed post-write boot IDs retain the raw successful readback receipt,
+omit a bound-success receipt and leave the operation unresolved.
+
+After separate read-only source review, the coordinator executed only that
+reader (not the stage/flash entrypoint) on the current phone. It validated
+the actual full `42da267f…` image on `/dev/sda16`, block 259:0, 100663296
+bytes/196608 sectors, PARTNAME=recovery and unmounted. Kernel GNU `b2dda820…`
+and the already-loaded old camera module GNU `82860715…` matched, with the
+same actual boot ID as the earlier private preparation journal. Full private
+identity was saved on the rig; the sanitized result is in the preparation
+receipt. This adds live validation of the diagnostic reader only, not
+candidate installation, camera operation, or independent rescue.
+
+The small follow-up `eb211f299d77a2a5f88bb6d40d98a085e0e1f42e` was
+independently reviewed and integrated as `b06bcf9`: only the read-only camera
+identity command gains Python `-I -B`, with an exact argv regression; shared
+stage/flash execution is unchanged. All 22 focused cases passed in normal,
+`-O`, and genuine `PYTHONOPTIMIZE=1` modes. Host `loginctl` also reported the
+existing user manager active with `Linger=yes`; no service setting changed.
+The new reboot observer is still under separate implementation/review and
+has not been executed or approved for live use.
