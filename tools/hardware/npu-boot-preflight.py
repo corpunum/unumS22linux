@@ -73,6 +73,7 @@ def evaluate_readiness(
     source_route_pass: bool,
     lifecycle_gaps: dict[str, bool | None],
     lifecycle_source_available: bool = False,
+    hwdev_source_available: bool = False,
 ) -> dict[str, object]:
     """Keep host artifact checks separate from permission to touch the NPU.
 
@@ -103,7 +104,14 @@ def evaluate_readiness(
         "publisher_progress_bounded": False,
         "detached_waiter_resource_cleanup_kernel_validated": False,
         "detached_waiter_outstanding_cap_validated": False,
-        "normal_boot_error_unwind_resolved": lifecycle_source_available and not lifecycle_gaps.get("normal_boot_unwind_missing", True),
+        "normal_boot_error_unwind_resolved": (
+            lifecycle_source_available and hwdev_source_available
+            and not lifecycle_gaps.get("normal_boot_unwind_missing", True)
+            and not lifecycle_gaps.get("hwdev_bootup_callback_errors_ignored", True)
+        ),
+        "hwdev_failed_first_acquire_ownership_kernel_validated": False,
+        "hwdev_first_callback_concurrency_serialized_kernel_validated": False,
+        "hwdev_shared_stm_callback_ownership_kernel_validated": False,
         "publication_storage_lifetime_kernel_validated": False,
         "callback_lifetime_kernel_validated": False,
         "late_power_transition_safe_after_close": False,
@@ -164,12 +172,19 @@ def main() -> int:
     vertex_c = source / "drivers/vision/npu/core/npu-vertex.c"
     system_c = source / "drivers/vision/npu/core/npu-system.c"
     protodrv_c = source / "drivers/vision/npu/core/npu-protodrv.c"
+    hwdev_c = source / "drivers/vision/npu/core/npu-hw-device.c"
+    hwdev_h = source / "drivers/vision/npu/core/npu-hw-device.h"
+    stm_c = source / "drivers/vision/npu/core/npu-stm.c"
     binary, binary_available = read_source(binary_h)
     session, session_available = read_source(session_c)
     vertex, vertex_available = read_source(vertex_c)
     system, system_available = read_source(system_c)
     proto, proto_available = read_source(protodrv_c)
+    hwdev, hwdev_available = read_source(hwdev_c)
+    hwdev_header, hwdev_header_available = read_source(hwdev_h)
+    stm, stm_available = read_source(stm_c)
     lifecycle_source_available = all((session_available, vertex_available, proto_available))
+    hwdev_source_available = all((hwdev_available, hwdev_header_available, stm_available))
     normal_boot = function_body(vertex, "int npu_hwdev_normal_bootup(")
     power_notify = function_body(session, "int npu_session_NW_CMD_POWER_NOTIFY(")
     power_wait = function_body(session, "static int npu_session_wait_power_request(")
@@ -187,6 +202,33 @@ def main() -> int:
         and int(timeout_ms.group(1)) > 0
     )
     callback = function_body(session, "int npu_session_save_power_result(")
+    hwdev_boot = function_body(hwdev, "int npu_hwdev_bootup(")
+    ref_get = function_body(hwdev_header, "static inline int npu_hw_ref_get(")
+    ref_init = function_body(hwdev_header, "static inline int npu_hw_ref_init(")
+    stm_disable = function_body(stm, "int npu_stm_disable(")
+    hwdev_bootup_callback_errors_ignored = (
+        bool(hwdev_boot)
+        and "npu_hw_ref_get(device, &hdev->boot_cnt);" in hwdev_boot
+        and "npu_hw_ref_get(device, &hdev->init_cnt);" in hwdev_boot
+        and "ret = npu_hw_ref_get" not in hwdev_boot
+        and "if (ret)" not in hwdev_boot
+    ) if hwdev_source_available else None
+    first_callback_error_keeps_increment = (
+        bool(ref_get)
+        and "atomic_inc_return(&hw_ref->refcount) == 1" in ref_get
+        and "hw_ref->first(device, hw_ref->hdev)" in ref_get
+        and "if (ret)" not in ref_get
+    ) if hwdev_source_available else None
+    parent_get_error_ignored = (
+        bool(ref_init)
+        and "npu_hw_ref_get(device, &phdev->init_cnt);" in ref_init
+        and "ret = npu_hw_ref_get" not in ref_init
+    ) if hwdev_source_available else None
+    shared_stm_disable_unmatched_decrement = (
+        bool(stm_disable)
+        and "npu_stm_data.enable_cnt--;" in stm_disable
+        and "if (!npu_stm_data.enable_cnt)" not in stm_disable
+    ) if hwdev_source_available else None
 
     checks["source"] = {
         "normal_fw_name_AIE": (
@@ -213,6 +255,11 @@ def main() -> int:
             and "!waiter->cancelled" in callback
         ),
         "normal_boot_unwind_missing": "npu_hwdev_shutdown(device, ctrl->value)" not in normal_boot,
+        "hwdev_bootup_callback_errors_ignored": hwdev_bootup_callback_errors_ignored,
+        "hwdev_first_callback_failure_keeps_increment": first_callback_error_keeps_increment,
+        "hwdev_parent_get_error_ignored": parent_get_error_ignored,
+        "shared_stm_disable_unmatched_decrement": shared_stm_disable_unmatched_decrement,
+        "hwdev_sources_available": hwdev_source_available,
         "system_calls_signature_loader": "npu_firmware_file_read_signature" in system,
         "lifecycle_sources_available": lifecycle_source_available,
         "binary_source_available": binary_available,
@@ -243,6 +290,22 @@ def main() -> int:
             checks["source"]["normal_boot_unwind_missing"]
             if lifecycle_source_available else None
         ),
+        "hwdev_bootup_callback_errors_ignored": (
+            checks["source"]["hwdev_bootup_callback_errors_ignored"]
+            if hwdev_source_available else None
+        ),
+        "hwdev_first_callback_failure_keeps_increment": (
+            checks["source"]["hwdev_first_callback_failure_keeps_increment"]
+            if hwdev_source_available else None
+        ),
+        "hwdev_parent_get_error_ignored": (
+            checks["source"]["hwdev_parent_get_error_ignored"]
+            if hwdev_source_available else None
+        ),
+        "shared_stm_disable_unmatched_decrement": (
+            checks["source"]["shared_stm_disable_unmatched_decrement"]
+            if hwdev_source_available else None
+        ),
         "power_response_timeout_missing": (
             not checks["source"]["power_response_timeout_bounded"]
             if lifecycle_source_available else None
@@ -261,13 +324,15 @@ def main() -> int:
         source_route_pass=bool(result["source_route_pass"]),
         lifecycle_gaps=checks["known_lifecycle_gaps"],
         lifecycle_source_available=lifecycle_source_available,
+        hwdev_source_available=hwdev_source_available,
     )
     result.update(readiness)
     result["live_probe_validated"] = readiness["readiness_gates"]["live_probe_validated"]
     result["reason"] = (
         "host artifact/source audit only; the POWER response timeout does not establish "
         "bounded caller return under a stalled publisher, publisher progress, detached "
-        "resource cleanup, kernel callback lifetime, late power-state safety, device "
+        "resource cleanup, failed-first-acquire ownership, callback serialization, shared "
+        "STM ownership, kernel callback lifetime, late power-state safety, device "
         "teardown pinning, or firmware runtime; live probe, independent recovery, and "
         "BOOTUP authorization remain unestablished"
     )

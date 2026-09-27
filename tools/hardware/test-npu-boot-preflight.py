@@ -31,6 +31,26 @@ SOURCE = {
     "drivers/vision/npu/core/npu-vertex.c": 'int npu_hwdev_normal_bootup(struct npu_device *device, struct npu_vertex_ctx *vctx, struct vs4l_ctrl *ctrl) { npu_session_NW_CMD_POWER_NOTIFY(session, true); return 0; }\n',
     "drivers/vision/npu/core/npu-system.c": 'npu_firmware_file_read_signature(&system->binary, 0, 0, 0);\n',
     "drivers/vision/npu/core/npu-protodrv.c": 'static int nw_mgmt_op_get_request(void) { return 1; }\n',
+    "drivers/vision/npu/core/npu-hw-device.c": '''int npu_hwdev_bootup(struct npu_device *device, __u32 hids) {
+ int ret = 0;
+ npu_hw_ref_get(device, &hdev->boot_cnt);
+ npu_hw_ref_get(device, &hdev->init_cnt);
+ return ret;
+}
+''',
+    "drivers/vision/npu/core/npu-hw-device.h": '''static inline int npu_hw_ref_get(struct npu_device *device, struct npu_hw_refcount *hw_ref) {
+ return (atomic_inc_return(&hw_ref->refcount) == 1) ? hw_ref->first(device, hw_ref->hdev) : 0;
+}
+static inline int npu_hw_ref_init(struct npu_device *device, struct npu_hw_device *hdev) {
+ npu_hw_ref_get(device, &phdev->init_cnt);
+ return ret;
+}
+''',
+    "drivers/vision/npu/core/npu-stm.c": '''int npu_stm_disable(struct npu_system *system, int hid) {
+ npu_stm_data.enable_cnt--;
+ return 0;
+}
+''',
 }
 
 
@@ -77,10 +97,27 @@ def main() -> None:
         check(result["exit_code"] == status, "JSON and process exit status must match")
         check(result["checks"]["known_lifecycle_gaps"]["normal_boot_unwind_missing"] is True,
               "synthetic source must expose missing unwind")
+        check(result["checks"]["source"]["hwdev_sources_available"] is True,
+              "synthetic source must provide hwdev callback/STM files")
+        for gap in (
+            "hwdev_bootup_callback_errors_ignored",
+            "hwdev_first_callback_failure_keeps_increment",
+            "hwdev_parent_get_error_ignored",
+            "shared_stm_disable_unmatched_decrement",
+        ):
+            check(result["checks"]["known_lifecycle_gaps"][gap] is True,
+                  f"synthetic source must expose {gap}")
         check(result["readiness_gates"]["power_response_timeout_bounded"] is False,
               "synthetic unbounded POWER response wait must fail that gate")
         check(result["readiness_gates"]["publication_drain_liveness_resolved"] is False,
               "host source checks must not claim publication-drain liveness")
+        for gate in (
+            "hwdev_failed_first_acquire_ownership_kernel_validated",
+            "hwdev_first_callback_concurrency_serialized_kernel_validated",
+            "hwdev_shared_stm_callback_ownership_kernel_validated",
+        ):
+            check(result["readiness_gates"][gate] is False,
+                  f"host source checks must not promote {gate}")
         for gate in (
             "publication_caller_return_bounded",
             "publisher_progress_bounded",
@@ -130,6 +167,25 @@ def main() -> None:
             check(not any(gates.values()), f"{mode} lifecycle source must leave all lifecycle gates false")
             check(result["bootup_authorized"] is False, f"{mode} lifecycle source must not authorize BOOTUP")
 
+        for unavailable in (
+            "drivers/vision/npu/core/npu-hw-device.c",
+            "drivers/vision/npu/core/npu-hw-device.h",
+            "drivers/vision/npu/core/npu-stm.c",
+        ):
+            status, result = run(CONFIG, root, missing=unavailable)
+            check(status == 2, f"missing {unavailable} must fail closed")
+            gaps = result["checks"]["known_lifecycle_gaps"]
+            for gap in (
+                "hwdev_bootup_callback_errors_ignored",
+                "hwdev_first_callback_failure_keeps_increment",
+                "hwdev_parent_get_error_ignored",
+                "shared_stm_disable_unmatched_decrement",
+            ):
+                check(gaps[gap] is None,
+                      f"missing {unavailable} must report {gap} unknown")
+            check(not any(result["readiness_gates"].values()),
+                  f"missing {unavailable} must not promote readiness")
+
     # Even a fully passing synthetic artifact/config/source audit cannot
     # mark BOOTUP ready while kernel lifecycle and device/authorization gates
     # remain unproven.
@@ -141,6 +197,7 @@ def main() -> None:
             "normal_boot_unwind_missing": False,
             "power_response_timeout_missing": False,
             "publication_drain_wait_unbounded": True,
+            "hwdev_bootup_callback_errors_ignored": True,
         },
         lifecycle_source_available=True,
     )

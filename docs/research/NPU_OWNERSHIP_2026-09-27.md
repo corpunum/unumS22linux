@@ -28,7 +28,7 @@ without checking for a matching enable when firmware is loaded
 (`npu-stm.c:698-711`). The failing bootup has not reached the later
 `npu_stm_enable()` call in `npu-vertex.c:1215-1217` (or `1427-1428`). Thus a
 generic final callback can decrement a shared count that belongs to another
-active hardware path, or take it below zero. The same issue applies to
+active hardware path, or underflow the unsigned count. The same issue applies to
 unwinding earlier successful init callbacks before this bootup reaches STM
 enable. The outer unwind cannot claim that such rollback is safe.
 
@@ -41,24 +41,50 @@ that broader lifecycle change.
 
 ## Host reproducer
 
-`tools/hardware/npu-hwdev-bootup-baseline.inc` is a verbatim fixture of the
-pinned baseline function. `test-npu-session-lifecycle.py` compiles it with
-`npu-ownership-harness.c`, whose reference helper mirrors the pinned
-increment/decrement-before-callback order. The regression reproduces a boot or
-init callback failure being ignored and the associated references remaining
-held. A separate helper case models the pinned STM decrement and demonstrates
-why blindly invoking the generic init final callback after a failed get can
-change shared state. When `S22_NPU_KERNEL_TREE` is set, the test also compares
-the fixture with the source function. These are host shims and a reproducer,
-not execution of Linux callbacks or proof of a physical unwind.
+`tools/hardware/npu-hwdev-bootup-baseline.inc` plus
+`npu-ownership-harness.c` retain the original narrow ignored-return reproducer.
+The added GPL-2.0 fixture `npu-hwdev-callbacks-baseline.inc` contains pinned
+source bodies for the ref helpers, DNC/NPU/DSP callbacks, `npu_stm_enable()` /
+`npu_stm_disable()`, STM SFR counter helper, DSP manager close, and
+`npu_hwdev_bootup()`. `npu-hwdev-callback-failure-harness.c` compiles those
+actual bodies with explicit host shims. It reproduces:
 
-That optional environment variable expects a tree with the existing candidate
-session/protodrv/vertex changes applied, not the pristine baseline checkout;
-the wider source-contract check deliberately rejects the latter. Independent
-review also compared the baseline fixture directly to the pristine pinned
-function without running the optional candidate-tree checks.
+- failed DSP manager-open acquisition: bootup returns success, the DSP and
+  DNC counts remain acquired, and a generic put invokes two STM disables even
+  though the failed DSP attempt did not enable STM; the unsigned count wraps
+  to `UINT_MAX - 1`;
+- with a prior NPU owner and a successful source-level STM enable, the generic
+  failed-DSP put consumes one of that owner's two count units; later normal
+  NPU/DNC teardown wraps the count to `UINT_MAX`;
+- a concurrent get returns success while the first callback is still pending,
+  then the first callback fails, leaving both increments present.
 
-The NPU lifecycle host suite has passed normal and optimized Python modes. The
-candidate patch still has no kernel build, runtime, or device validation. The
-mailbox publication drain remains unbounded if its synchronous publisher
-stalls. No result here supports BOOTUP or NPU readiness.
+The harness invokes the exact checked-in fixture function bodies. It is still
+a host reproduction only: Linux atomics, mutexes, firmware, command mapping,
+STM hardware/MMIO, and the kernel lifetime model are represented by shims. It
+does not prove device behavior or implement a fix. Hosted CI can run this
+fixture without a kernel checkout. For optional fixture provenance checking,
+`S22_NPU_CALLBACK_SOURCE_TREE` points to the pinned clean source tree; the test
+compares each included function body byte-for-byte with commit
+`4e5c5ad7d950e4de0688b5663965f2075654b2ad`.
+
+The separate existing `S22_NPU_KERNEL_TREE` option expects a tree with the
+candidate session/protodrv/vertex changes applied, not the pristine baseline
+checkout; its wider source-contract check deliberately rejects the latter.
+Independent review also compared the original baseline bootup fixture to the
+pristine pinned function without running those candidate-tree checks. Do not
+confuse that option with the clean-source callback-fixture check above.
+
+The host preflight now reports the callback-error, retained-increment, ignored
+parent-get-error, and unmatched shared-STM source facts (or `null` when those
+source inputs are missing). Its readiness output separately keeps failed
+first-acquire ownership, first-callback serialization, and shared STM
+ownership kernel validation false. This makes the unresolved gap explicit;
+the preflight still exits 2 and leaves BOOTUP refused.
+
+The NPU lifecycle and preflight host suites passed normal and optimized Python
+modes. The optional byte-for-byte callback-fixture check also passed against
+the pinned clean source tree. The candidate patch still has no kernel build,
+runtime, or device validation. The mailbox publication drain remains
+unbounded if its synchronous publisher stalls. No result here supports BOOTUP
+or NPU readiness.
