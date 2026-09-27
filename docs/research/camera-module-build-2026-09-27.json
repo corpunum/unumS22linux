@@ -34,6 +34,29 @@
     "direct_dependency_set_matches_baseline": true,
     "compatibility_validator": "tools/hardware/s22-hci-candidate-preflight-20260924.py"
   },
+  "stripped_candidate": {
+    "purpose": "separate debug-only-stripped copy for potential ramdisk packaging; original unstripped build output retained",
+    "source_artifact_sha256": "d3b6eda506023c1fea5a25e01a400ef9aa24fda6f3447dc4bb40b0780628f38e",
+    "path": "drivers/media/platform/exynos/camera/fimc-is.ko",
+    "bytes": 7164248,
+    "sha256": "256926d8a1499d9fd8fcef22fc9ad677998decb1317b2037045c8dcc44b35ecf",
+    "build_id_sha1": "59e54c032c545fff3ba52156f226fb6d69aadf64",
+    "strip_operation": "llvm-strip --strip-debug",
+    "strip_tool": {
+      "path": "/usr/lib/llvm-18/bin/llvm-strip",
+      "version": "Ubuntu LLVM 18.1.3",
+      "sha256": "f52b9997b3c5019b4b3043e12b1ae2e821df67996ca344921c234c89c4d23e34"
+    },
+    "debug_sections_present": false,
+    "signature_fields_present": false,
+    "versions_section_present": true,
+    "import_records": 378,
+    "sorted_import_set_sha256": "124a8dcda7bcc4412de8afda57b55676241c3747f26bd8c95d305516a12df6d5",
+    "exports_match_unstripped_candidate": true,
+    "aliases_match_baseline": true,
+    "direct_dependencies_match_baseline": true,
+    "packaged_or_deployed": false
+  },
   "baseline_ramdisk": {
     "base_image": "builds/audio-extra-v2-20260922/recovery.img",
     "compressed_ramdisk_sha256": "0dd9dda696c26ccf4c99d77f9d24f334f0c4baece5e19312bcc12f2963841e5d",
@@ -112,7 +135,7 @@
     "output_Module_symvers_note": "single-target O-tree Module.symvers contains vmlinux plus this module only; do not treat it as the full kernel module export set"
   },
   "limitations": [
-    "The candidate is an unstripped host build output; it is not a ramdisk-ready replacement.",
+    "The unstripped host build output and its separately validated debug-only-stripped copy are not themselves evidence of a packaged or bootable recovery candidate.",
     "No recovery image was rebuilt and no phone installation, module load, camera open, or runtime behavior was tested.",
     "The receipt establishes source/build/module metadata compatibility only, not camera hardware behavior or safe live replacement."
   ]

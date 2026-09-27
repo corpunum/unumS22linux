@@ -214,9 +214,9 @@ establish camera functionality or physical regulator/clock state.
    source and independently reviewed as host candidates. The module-only build
    and compatibility receipt is
    [`camera-module-build-2026-09-27.json`](camera-module-build-2026-09-27.json).
-   Its module is unstripped and is not packaged or deployed. The host tests and
-   build are not deployment evidence, and clock-provider side effects remain
-   unverified.
+   The unstripped module and a separately validated debug-only-stripped copy
+   are not packaged or deployed. The host tests and build are not deployment
+   evidence, and clock-provider side effects remain unverified.
 4. Only after those gates, a separately reviewed, exact-candidate
    `/dev/video101` open/`VIDIOC_QUERYCAP`/close trial may establish static
    capabilities plus that operation's open/close path; it would still not
@@ -239,12 +239,46 @@ corrected modpost input produced 378 validated imports, the expected
 module metadata compatibility evidence, not a live-load or camera-function
 claim.
 
+A separate copy was processed with the hash-pinned Ubuntu LLVM 18.1.3
+`llvm-strip --strip-debug` tool (`f52b9997…c4d23e34`). The original unstripped
+artifact remains intact. The stripped file is 7,164,248 bytes, SHA-256
+`256926d8…44b35ecf`, GNU build ID `59e54c03…6d69aadf64`; its 378 imported
+version records, import set, exports, aliases, and direct dependencies match
+the validated unstripped candidate/baseline. This is still a host module only.
+
+The retained HCI image is pinned separately as
+`42da267f…d9c49be5` (RECOVERY partition size 100,663,296 bytes). Its compressed
+ramdisk SHA-256 is `0dd9dda6…63841e5d`, matching the previously audited
+audio-extras ramdisk. Any packager must nevertheless unpack and verify this
+exact HCI image as its base. The original `lib/modules/fimc-is.ko` CPIO record
+is 8,239,848 bytes, SHA-256 `ba492fcc…1d085d3`, mode `0100644`, uid/gid `0:0`;
+`modules.dep`, `modules.alias`, and `modules.softdep` must remain byte-identical
+because the candidate's module name, aliases, and dependencies are unchanged.
+
+The host-only packager under review is
+[`build-camera-module-recovery.py`](../../tools/hardware/build-camera-module-recovery.py).
+It is designed to replace only `lib/modules/fimc-is.ko`, preserve every other
+raw CPIO record and all unmodified boot payloads/header fields, and emit a
+separate manifest. It has not been run on the real recovery image pending
+independent code review. Its synthetic test command is:
+
+```sh
+python3 -I -B tools/hardware/test-build-camera-module-recovery.py
+python3 -O -I -B tools/hardware/test-build-camera-module-recovery.py
+```
+
+The manifest's canonical set digests use these byte definitions: import set,
+`modprobe --dump-modversions` sorted under `LC_ALL=C sort -k2`; aliases,
+`modinfo -F alias` sorted under `LC_ALL=C sort`; direct dependencies,
+`modinfo -F depends` split on commas and sorted under `LC_ALL=C sort`. Each
+line is newline-terminated before hashing. No package from this work has been
+installed, booted, or tested on hardware.
+
 The existing recovery CPIO entry is `lib/modules/fimc-is.ko`, mode 0100644,
 root:root. Its 8,239,848-byte payload has no `.debug_*` sections but retains
 `.symtab`, `.strtab`, and `__versions`; it has no module signature metadata.
-The new 56,384,552-byte host output still has debug sections and is not suitable
-for direct CPIO replacement. A later host-only packager must preserve the
-original CPIO metadata, strip debug sections into a separate output, then
-revalidate the build ID, imported CRCs, exports, aliases, and dependency set
-before image assembly. None of this implies that a module can be safely
-replaced on a live system.
+The new 56,384,552-byte host output retains debug sections. A separate
+7,164,248-byte debug-only-stripped copy has the same build ID and validated
+imports/exports/aliases/direct dependencies, and has no module signature
+metadata. Neither module copy is packaged or deployed yet. None of this
+implies that a module can be safely replaced on a live system.
