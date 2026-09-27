@@ -354,7 +354,7 @@ def validate_cli_execution(profile_name: str, mode: str, trial_identity: str | N
 
 
 def camera_identity_command():
-    return 'python3 -c ' + shlex.quote(CAMERA_IDENTITY_SNAPSHOT)
+    return 'python3 -I -B -c ' + shlex.quote(CAMERA_IDENTITY_SNAPSHOT)
 
 
 def _run_transport(shared, artifact_root, command, *, input_data, timeout, transport):

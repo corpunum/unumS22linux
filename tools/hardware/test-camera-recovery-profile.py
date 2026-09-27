@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -218,6 +219,9 @@ class DirectionAndArtifactTests(CameraFixture):
 
     def test_readonly_capture_and_boot_bound_shared_flash_are_valid_python(self):
         compile(DEPLOY.CAMERA_IDENTITY_SNAPSHOT, 'camera-identity-capture', 'exec')
+        identity_argv = shlex.split(DEPLOY.camera_identity_command())
+        self.assertEqual(identity_argv[:4], ['python3', '-I', '-B', '-c'])
+        self.assertEqual(identity_argv[4], DEPLOY.CAMERA_IDENTITY_SNAPSHOT)
         shared_body = SHARED.render_remote(
             base_sha=self.baseline_sha, new_sha=self.camera_sha,
             staging_directory='/srv/s22/camera-test', rollback_filename='rollback.img')
