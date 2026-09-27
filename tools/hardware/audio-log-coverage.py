@@ -274,7 +274,7 @@ def _command_record(path: Path, expected_source: str) -> dict[str, Any]:
             pass
     return {
         "available": True,
-        "macro_flags_complete": macros is not None,
+        "direct_macro_flags_parseable": macros is not None,
         "defines_module": macros.get("MODULE", False) if macros is not None else None,
         "defines_debug": macros.get("DEBUG", False) if macros is not None else None,
         "defines_dynamic_debug_module": (
@@ -303,7 +303,7 @@ def _dev_dbg_class(config: dict[str, str], command: dict[str, Any],
                    source_matches: bool) -> str:
     if not command.get("available"):
         return "unknown_missing_compiled_command"
-    if not command.get("macro_flags_complete"):
+    if not command.get("direct_macro_flags_parseable"):
         return "unknown_malformed_command_line_define_flags"
     if not source_matches:
         return "unknown_compiled_source_differs_from_pinned_audit"

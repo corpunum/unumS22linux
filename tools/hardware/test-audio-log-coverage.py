@@ -98,7 +98,8 @@ class AudioLogCoverageTests(unittest.TestCase):
 
     def test_dynamic_debug_compile_flag_matrix(self) -> None:
         base = {"available": True, "defines_debug": False,
-                "defines_dynamic_debug_module": False, "macro_flags_complete": True}
+                "defines_dynamic_debug_module": False,
+                "direct_macro_flags_parseable": True}
         self.assertEqual(coverage._dev_dbg_class(
             {"CONFIG_DYNAMIC_DEBUG": "n", "CONFIG_DYNAMIC_DEBUG_CORE": "y"},
             base, True),
@@ -129,7 +130,7 @@ class AudioLogCoverageTests(unittest.TestCase):
     def test_malformed_macro_flags_make_dev_dbg_state_unknown(self) -> None:
         self.assertIsNone(coverage._parse_macro_flags(["-DMODULE", "-D"]))
         self.assertIsNone(coverage._parse_macro_flags(["-U", "-DDEBUG"]))
-        command = {"available": True, "macro_flags_complete": False}
+        command = {"available": True, "direct_macro_flags_parseable": False}
         self.assertEqual(coverage._dev_dbg_class(
             {"CONFIG_DYNAMIC_DEBUG": "n", "CONFIG_DYNAMIC_DEBUG_CORE": "y"},
             command, True), "unknown_malformed_command_line_define_flags")
@@ -182,7 +183,7 @@ class AudioLogCoverageTests(unittest.TestCase):
             self.assertTrue(command["defines_module"], obj)
             self.assertFalse(command["defines_debug"], obj)
             self.assertFalse(command["defines_dynamic_debug_module"], obj)
-            self.assertTrue(command["macro_flags_complete"], obj)
+            self.assertTrue(command["direct_macro_flags_parseable"], obj)
             self.assertTrue(command["forced_includes_present"], obj)
             self.assertEqual(
                 command["dev_dbg"],
