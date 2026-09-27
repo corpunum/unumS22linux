@@ -21,9 +21,14 @@ buffer writes now work, but 19 paired RUNNING samples show no DMA/pointer
 advance. The timed diagnostic restored selectors/mute and closed the PCM;
 usable sound and persistent node creation remain unfinished. Camera firmware
 was recovered privately on the host, and a reviewed LDO error-unwind patch has
-host C tests but no build/deployment/capture. The attempted NPU generic unwind
+host C tests but no build/deployment/capture. A second reviewed camera patch
+checks runtime-PM failures and preserves shared owners, with portable host C
+regressions. The attempted NPU generic unwind
 was rejected and removed after review found shared-STM side effects. NPU BOOTUP
-remains refused and its underlying ownership problem unfixed. Cellular and the
+remains refused and its underlying ownership problem unfixed; extracted vendor
+callbacks now reproduce its reference/STM/concurrency failures, and missing
+source functions cannot incorrectly satisfy the intermediate unwind gate.
+Cellular and the
 physical/sustained acceptance items below remain unaccepted.
 
 The root overlay remains nearly full; substantial staging stayed on `/srv/s22`,

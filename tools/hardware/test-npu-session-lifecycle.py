@@ -822,7 +822,7 @@ def main() -> None:
     test_stalled_publication_retains_waiter_until_drain()
     test_close_barrier()
     test_reverse_boot_unwind()
-    print("NPU lifecycle source contracts and Python reference model passed; kernel C was not executed")
+    print("NPU source contracts, extracted C with host shims, and Python models passed; no full kernel or hardware executed")
 
 
 if __name__ == "__main__":

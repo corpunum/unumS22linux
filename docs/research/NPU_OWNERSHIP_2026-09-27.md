@@ -84,7 +84,7 @@ the preflight still exits 2 and leaves BOOTUP refused.
 
 The NPU lifecycle and preflight host suites passed normal and optimized Python
 modes. The optional byte-for-byte callback-fixture check also passed against
-the pinned clean source tree. The candidate patch still has no kernel build,
+the pinned clean source tree. This follow-up supplies no new kernel build,
 runtime, or device validation. The mailbox publication drain remains
 unbounded if its synchronous publisher stalls. No result here supports BOOTUP
 or NPU readiness.
