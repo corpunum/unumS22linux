@@ -146,8 +146,11 @@ state still requires separate evidence.
 `is_vidioc_querycap()` (`is-video.c:2914-2934`), but reaching it requires an
 open. The source maps the first sensor leader to video id 1
 (`include/v10_1_0/is-video-config.h:20-22`, `is-video-sensor.c:573-581`), then
-registers minor `100 + video_id` (`is-video.c:2899-2901`,
-`include/is-video.h:113`). Its open calls `is_sensor_open()`
+requests video node number `100 + video_id` (`is-video.c:2899-2901`,
+`include/is-video.h:113`). Do not read that suffix as the live character-device
+minor: a separate passive coordinator inventory observed `/dev/video101` as
+character device `81:17`, with driver `exynos-is-sensor` and module `fimc_is`.
+Its open calls `is_sensor_open()`
 (`is-video.c:2728-2733`). Thus opening `/dev/video101` for
 `open -> VIDIOC_QUERYCAP -> close` is a physical power operation, not a passive
 inventory query. This worker performed no open/ioctl/device operation.
@@ -196,17 +199,24 @@ establish camera functionality or physical regulator/clock state.
 
 ## Evidence required before stronger claims
 
-1. Confirm active kernel build/config and map the running DT/DTBO selection to
-   the exact r0s source overlay; verify the relevant ISP, CSI, and sensor
-   drivers are bound rather than merely listed.
+1. The passive coordinator inventory identified the loaded camera module and
+   reported boot properties `androidboot.revision=28` and
+   `androidboot.dtbo_idx=7`. The pinned r0s Makefile has eight
+   `CONFIG_CAMERA_RSV_V01` overlays ending in r27, so zero-based list-order
+   inference points to r27; the selected recovery DTBO has not been
+   byte-verified against that source. Verify ISP/CSI/sensor bindings rather
+   than treating a source overlay or module listing as proof.
 2. Establish the firmware/setfile provenance and full hashes for the exact
    candidate release locally, and confirm runtime paths/namespace. Do not
    publish proprietary payload bytes or use an old manifest as proof of current
    compatibility.
-3. Independently review both ordered resource-unwind patches against the exact
-   candidate source, then build and validate a candidate containing them before
-   any device trial. The host patch application and extracted-C tests are not
-   deployment evidence, and clock-provider side effects remain unverified.
+3. Both ordered resource-unwind patches have been applied to the pinned kernel
+   source and independently reviewed as host candidates. The module-only build
+   and compatibility receipt is
+   [`camera-module-build-2026-09-27.json`](camera-module-build-2026-09-27.json).
+   Its module is unstripped and is not packaged or deployed. The host tests and
+   build are not deployment evidence, and clock-provider side effects remain
+   unverified.
 4. Only after those gates, a separately reviewed, exact-candidate
    `/dev/video101` open/`VIDIOC_QUERYCAP`/close trial may establish static
    capabilities plus that operation's open/close path; it would still not
@@ -216,3 +226,25 @@ establish camera functionality or physical regulator/clock state.
 
 Until those steps, the accurate state is “camera nodes/prerequisite metadata
 may be inventoried; sensor response and capture remain unproven.”
+
+## Host module build
+
+The target artifact is `fimc-is.ko` (internal name `fimc_is`). It was built as
+a single ARM64 module in an isolated, patch-pinned source/output pair using the
+unchanged HCI config and matching vmlinux/module symbol inputs. The build did
+not rebuild `Image`, modify the original source or O-tree, or access the phone.
+The first output had no `__versions` records and is explicitly rejected; the
+corrected modpost input produced 378 validated imports, the expected
+`module_layout` CRC, and the same 75 exports as the baseline module. This is
+module metadata compatibility evidence, not a live-load or camera-function
+claim.
+
+The existing recovery CPIO entry is `lib/modules/fimc-is.ko`, mode 0100644,
+root:root. Its 8,239,848-byte payload has no `.debug_*` sections but retains
+`.symtab`, `.strtab`, and `__versions`; it has no module signature metadata.
+The new 56,384,552-byte host output still has debug sections and is not suitable
+for direct CPIO replacement. A later host-only packager must preserve the
+original CPIO metadata, strip debug sections into a separate output, then
+revalidate the build ID, imported CRCs, exports, aliases, and dependency set
+before image assembly. None of this implies that a module can be safely
+replaced on a live system.
