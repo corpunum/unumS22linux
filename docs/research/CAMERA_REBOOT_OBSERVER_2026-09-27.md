@@ -47,9 +47,14 @@ consumes the matching terminal flash ID only; it does not stage or flash.
 
 `--request-recovery` proceeds directly into bounded observation in the same
 process even when the one request returns `UNKNOWN`. `--observe-only` resumes
-observation without any reboot/request path. The observer never resets or
-terminalizes the global marker; a private observation receipt is evidence for
-explicit coordinator review, not an automatic reconciliation.
+observation without any reboot/request path, but only while no complete
+observation receipt exists for that fixed one-shot reboot ID. A complete
+`not_accepted` result is final for that ID; a later fresh ring-buffer window
+cannot replace it with a greener result. An interrupted run with no final
+receipt remains resumable. A malformed, incomplete, unexpected, or unreadable
+prior receipt blocks a new window. The observer never resets or terminalizes
+the global marker; a private observation receipt is evidence for explicit
+coordinator review, not an automatic reconciliation.
 
 ## Observation and acceptance fields
 

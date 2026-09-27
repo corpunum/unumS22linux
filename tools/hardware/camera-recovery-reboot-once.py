@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -41,6 +42,7 @@ REQUEST_COMMAND_LABEL = "boot-id-guarded exec /usr/local/sbin/s22-reboot recover
 OBSERVATION_SECONDS = 600
 SAMPLE_INTERVAL_SECONDS = 5
 MIN_STABLE_SECONDS = 180
+_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 
 
 class CameraObserverError(RuntimeError):
@@ -501,6 +503,97 @@ def _read_request_context(profile_name: str, *, local_root: Path, guard=GUARD,
     return attempt, request_result
 
 
+def _refuse_prior_observation_receipt(profile_name: str, local_root: Path) -> None:
+    """Do not let a fresh ring-buffer window replace this one-shot result."""
+    trial_id = S22_REBOOT_TRIAL_IDS[profile_name]
+    root_dir = Path(local_root)
+    trial_dir = root_dir / trial_id
+    for directory in (root_dir, trial_dir):
+        try:
+            directory_info = directory.lstat()
+        except FileNotFoundError:
+            return
+        except OSError as error:
+            raise CameraObserverError("prior observation receipt path is unreadable") from error
+        _require(stat.S_ISDIR(directory_info.st_mode)
+                 and directory_info.st_uid == os.geteuid()
+                 and stat.S_IMODE(directory_info.st_mode) & 0o077 == 0,
+                 "prior observation receipt path is not owner-private")
+    observation_dir = trial_dir / "observations"
+    try:
+        info = observation_dir.lstat()
+    except FileNotFoundError:
+        return
+    except OSError as error:
+        raise CameraObserverError("prior observation receipt directory is unreadable") from error
+    _require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.geteuid() and
+             stat.S_IMODE(info.st_mode) == 0o700,
+             "prior observation receipt directory is not owner-private")
+    try:
+        entries = sorted(observation_dir.iterdir(), key=lambda path: path.name)
+    except OSError as error:
+        raise CameraObserverError("prior observation receipt directory cannot be listed") from error
+    _require(len(entries) <= 256,
+             "too many prior observation entries; refusing a fresh observation window")
+    if not entries:
+        return
+
+    expected_flash_id = DEPLOY.TRIAL_IDENTITIES[(profile_name, "flash")]
+    expected_hash = _profile(profile_name)["new_sha256"]
+    allowed_statuses = ({"accepted", "not_accepted"} if profile_name == "camera-forward"
+                        else {"restore_unverified", "image_restored_health_unaccepted",
+                              "image_restored_health_accepted"})
+    saw_complete = False
+    for path in entries:
+        _require(re.fullmatch(r"observe-[0-9]{1,32}\.json", path.name) is not None,
+                 "unexpected prior observation entry; refusing a fresh observation window")
+        value, _ = _private_json(path)
+        valid_identity = (
+            value.get("schema") == "camera-recovery-reboot-observer/v1"
+            and value.get("profile") == profile_name
+            and value.get("trial_identity") == trial_id
+            and value.get("flash_trial_identity") == expected_flash_id
+            and isinstance(value.get("flash_receipt_sha256"), str)
+            and _SHA256_HEX.fullmatch(value["flash_receipt_sha256"])
+            and value.get("expected_recovery_sha256") == expected_hash
+            and value.get("request_outcome") in ("ACKNOWLEDGED", "UNKNOWN")
+            and value.get("retry_allowed") is False
+            and value.get("transport_scope") == "usb_only"
+        )
+        _require(valid_identity,
+                 "prior observation receipt identity/schema is malformed; refusing a fresh window")
+        status = value.get("status")
+        sample_count = value.get("sample_count")
+        duration = value.get("observation_bound_seconds")
+        elapsed = value.get("observed_seconds")
+        _require(isinstance(status, str) and status in allowed_statuses
+                 and type(sample_count) is int and sample_count >= 0
+                 and type(duration) is int and 0 < duration <= OBSERVATION_SECONDS
+                 and type(elapsed) in (int, float) and math.isfinite(elapsed) and elapsed >= 0
+                 and type(value.get("observation_within_bound")) is bool
+                 and type(value.get("full_health_accepted")) is bool
+                 and type(value.get("recovery_image_restored")) is bool,
+                 "prior observation receipt is incomplete or malformed; refusing a fresh window")
+        if profile_name == "camera-forward":
+            _require((status == "accepted") == value["full_health_accepted"],
+                     "prior observation receipt has inconsistent acceptance fields")
+        else:
+            restored_full_health = value.get("restored_full_health")
+            _require(type(restored_full_health) is bool,
+                     "prior reverse observation receipt has invalid health field")
+            expected_restore, expected_health = {
+                "restore_unverified": (False, False),
+                "image_restored_health_unaccepted": (True, False),
+                "image_restored_health_accepted": (True, True),
+            }[status]
+            _require(value["recovery_image_restored"] is expected_restore and
+                     restored_full_health is expected_health,
+                     "prior reverse observation receipt has inconsistent health result")
+        saw_complete = True
+    _require(not saw_complete,
+             "a complete observation receipt already exists for this one-shot ID; refusing a fresh window")
+
+
 def _sample_camera_state(snapshotter, identity_reader, helper_reader):
     state = snapshotter()
     return state, identity_reader(), helper_reader()
@@ -518,6 +611,7 @@ def observe_only(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
              "observation bound must be between 1 and 600 seconds")
     _require(sample_interval > 0, "sample interval must be positive")
     profile = _profile(profile_name)
+    _refuse_prior_observation_receipt(profile_name, local_root)
     bundle = validate_flash_bundle(profile_name, receipts_root=receipts_root)
     attempt, request_result = _read_request_context(
         profile_name, local_root=local_root, guard=guard,

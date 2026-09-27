@@ -78,6 +78,7 @@ class CameraRebootFixture(unittest.TestCase):
         self.guard_root.mkdir(mode=0o700)
         self.local = self.root / "observer"
         self.local.mkdir(mode=0o700)
+        self.observation_scenario = 0
         self.bundle_paths = {}
         self.guard_markers = {}
         for name in ("camera-forward", "camera-reverse"):
@@ -231,10 +232,11 @@ class CameraRebootFixture(unittest.TestCase):
             "boot_reset_first_record": bore,
         }
 
-    def prepare_request_context(self, profile_name: str, outcome="UNKNOWN"):
+    def prepare_request_context(self, profile_name: str, outcome="UNKNOWN", *, local_root=None):
         info = self.bundle_paths[profile_name]
         trial = OBS.S22_REBOOT_TRIAL_IDS[profile_name]
-        request_dir = self.local / trial
+        root = self.local if local_root is None else Path(local_root)
+        request_dir = root / trial
         for name in ("request-started.json", "request-result.json"):
             path = request_dir / name
             if path.exists():
@@ -448,8 +450,16 @@ class ObservationTests(CameraRebootFixture):
                  initial_gap=False, delayed_module=False, final_bore=None,
                  desktop=True, serious_at=None, liveness_at=None,
                  wrong_module_at_start=False, final_snapshot_gap=False,
-                 late_identity_by=0):
-        baseline_bore, marker_path = self.prepare_request_context(profile)
+                 late_identity_by=0, local_root=None):
+        if local_root is None:
+            self.observation_scenario += 1
+            local_root = self.root / f"observer-scenario-{self.observation_scenario}"
+            local_root.mkdir(mode=0o700)
+        else:
+            local_root = Path(local_root)
+            local_root.mkdir(mode=0o700, exist_ok=True)
+        baseline_bore, marker_path = self.prepare_request_context(
+            profile, local_root=local_root)
         info = self.bundle_paths[profile]
         old_boot = info["pre_identity"]["boot_id"]
         new_boot = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
@@ -496,7 +506,7 @@ class ObservationTests(CameraRebootFixture):
         with mock.patch.object(DEPLOY, "validate_artifacts",
                                return_value=(info["profile"], b"before", b"write")):
             result = OBS.observe_only(
-                profile, receipts_root=self.receipts, local_root=self.local,
+                profile, receipts_root=self.receipts, local_root=local_root,
                 guard_state_root=self.guard_root, snapshotter=snapshotter,
                 remote=lambda command, timeout: remote_calls.append(command),
                 identity_reader=identity_reader, helper_reader=helper_reader,
@@ -517,6 +527,63 @@ class ObservationTests(CameraRebootFixture):
                          (Path(result["receipt_path"]).stat().st_mode & 0o777), 0o600)
         self.assertEqual(marker_after, (self.guard_root /
                          f"{OBS.S22_REBOOT_TRIAL_IDS['camera-forward']}.json").read_bytes())
+
+    def test_complete_negative_or_positive_receipt_blocks_a_fresh_window(self):
+        scenarios = (({"serious_at": 25}, "not_accepted"), ({}, "accepted"))
+        for options, expected_status in scenarios:
+            with self.subTest(expected_status=expected_status):
+                completed, _, _, _ = self._observe(**options)
+                self.assertEqual(completed["status"], expected_status)
+                local_root = Path(completed["receipt_path"]).parents[2]
+                calls = {"snapshot": 0, "remote": 0}
+
+                def snapshotter():
+                    calls["snapshot"] += 1
+                    return {}
+
+                def remote(command, timeout):
+                    calls["remote"] += 1
+
+                with self.assertRaisesRegex(
+                        OBS.CameraObserverError,
+                        "complete observation receipt already exists"):
+                    OBS.observe_only(
+                        "camera-forward", receipts_root=self.receipts,
+                        local_root=local_root, guard_state_root=self.guard_root,
+                        snapshotter=snapshotter, remote=remote,
+                        identity_reader=lambda: {}, helper_reader=lambda: {})
+                self.assertEqual(calls, {"snapshot": 0, "remote": 0})
+
+    def test_malformed_prior_observation_receipt_fails_closed_before_transport(self):
+        result, _, _, _ = self._observe(serious_at=25)
+        receipt_path = Path(result["receipt_path"])
+        replace_private_json(receipt_path, {"schema": "wrong-schema"})
+        local_root = receipt_path.parents[2]
+        calls = {"snapshot": 0, "remote": 0}
+
+        with self.assertRaisesRegex(OBS.CameraObserverError, "malformed"):
+            OBS.observe_only(
+                "camera-forward", receipts_root=self.receipts, local_root=local_root,
+                guard_state_root=self.guard_root,
+                snapshotter=lambda: calls.__setitem__("snapshot", calls["snapshot"] + 1),
+                remote=lambda command, timeout: calls.__setitem__("remote", calls["remote"] + 1),
+                identity_reader=lambda: {}, helper_reader=lambda: {})
+        self.assertEqual(calls, {"snapshot": 0, "remote": 0})
+
+    def test_empty_observation_directory_without_complete_receipt_can_resume(self):
+        local_root = self.root / "observer-empty-resume"
+        local_root.mkdir(mode=0o700)
+        self.prepare_request_context("camera-forward", local_root=local_root)
+        observation_dir = (local_root / OBS.S22_REBOOT_TRIAL_IDS["camera-forward"] /
+                           "observations")
+        observation_dir.mkdir(mode=0o700)
+        self.assertEqual(list(observation_dir.iterdir()), [])
+        result, calls, remote_calls, _ = self._observe(
+            local_root=local_root, profile="camera-forward", duration=20)
+        self.assertEqual(result["status"], "not_accepted")
+        self.assertGreater(calls["snapshots"], 0)
+        self.assertEqual(remote_calls, [])
+        self.assertTrue(Path(result["receipt_path"]).is_file())
 
     def test_delayed_camera_module_is_pending_then_stability_starts_after_exact_id(self):
         result, calls, _, _ = self._observe(delayed_module=True)
