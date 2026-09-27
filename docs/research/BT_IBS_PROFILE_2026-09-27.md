@@ -40,6 +40,13 @@ line-discipline detach synchronously waits for teardown and has no overall
 deadline, so a userspace timeout remains UNKNOWN, not proof of power-off or
 recovery. No follow-up trial is authorized by this host change.
 
+This supersedes the local September 22 `BT_HCI_ATTACH` note's conclusion that
+Tag17/27 must never justify plain H4. Its disassembly observation (new-format
+edits only change baud) still stands; the new finding checks the already-clear
+IBS bit in the exact embedded profile, not an inferred disable edit. Public
+[QCA field definitions](https://coral.googlesource.com/bluez-imx/+/07ac154449fe0c2d5b36164792d687ddfa0195b9/tools/hciattach_rome.c)
+corroborate byte 0 / bit 7. That older source alone is not QCA6490 acceptance.
+
 ## Coordinator host build and distinct trial profile
 
 The frozen C inputs from integrated `a5f1f65` were rebuilt on the host only,
@@ -73,3 +80,15 @@ The receipt also requires plain-H4 mode, nonzero command and event counts,
 and no pending queue. This proves bounded exchange, not arbitrary command
 success, pairing, RF performance or Bluetooth audio. Any failure remains
 UNKNOWN until explicitly inspected; no retry or reboot is automatic.
+
+## Actual bounded trial
+
+After independent source review by `/root/audio_next_20260926` and adapter
+review by `/root/driver_review_20260926`, the coordinator ran the exact trial
+once at 00:17 UTC. It returned zero after 25.121 seconds: hci0 registered,
+41 commands and 41 events, no IBS frames, no remaining queue, detach zero,
+and `baud_probe_result=0`. Same-boot/full-image/build/model/network/power and
+retained-kernel-window checks passed; the durable marker is complete/success.
+The independent reviewer also validated the persisted receipt host-side.
+The controller was intentionally detached afterward. This is bounded exchange,
+not a permanent service, pairing, Bluetooth audio or sustained acceptance.

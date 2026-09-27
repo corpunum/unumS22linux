@@ -1,10 +1,36 @@
 # S22 native Linux status
 
-Updated 2026-09-26 from coordinator read-only USB SSH checks. The current work
-is tracked in [the September 26 task board](docs/S22_LUNA_TASK_BOARD_2026-09-26.md).
+Updated 2026-09-27 from coordinator hardware trials and independent host review.
+The current work is tracked in [the September 27 task board](docs/S22_LUNA_TASK_BOARD_2026-09-27.md).
 Earlier checkpoints below are historical.
 
-## Current checkpoint — 2026-09-26
+## Current checkpoint — 2026-09-27
+
+The same HCI-only RECOVERY kernel remains running; no new flash, reboot or raw
+HCI socket-test repetition occurred. The new plain-H4 helper fixed the observed
+firmware-profile/IBS mismatch: real hci0 registration, 41 commands/41 events,
+empty queue, successful detach/power-off and preservation of WLAN were verified
+in one bounded trial. Native guardian, desktop/Pi/model, networking and the full
+RECOVERY image/build identity passed postflight. The controller was deliberately
+detached afterward; a permanent service, pairing and Bluetooth audio are not
+accepted. [Sanitized receipts](evidence/s22-hardware-continuation-20260927.json)
+preserve the earlier staging refusal and failed IBS-mode trial separately.
+
+Audio's missing exact native PCM node was repaired for this boot. PREPARE and
+buffer writes now work, but 19 paired RUNNING samples show no DMA/pointer
+advance. The timed diagnostic restored selectors/mute and closed the PCM;
+usable sound and persistent node creation remain unfinished. Camera firmware
+was recovered privately on the host, and a reviewed LDO error-unwind patch has
+host C tests but no build/deployment/capture. The attempted NPU generic unwind
+was rejected and removed after review found shared-STM side effects. NPU BOOTUP
+remains refused and its underlying ownership problem unfixed. Cellular and the
+physical/sustained acceptance items below remain unaccepted.
+
+The root overlay remains nearly full; substantial staging stayed on `/srv/s22`,
+and logs/firmware stayed private on the rig. Independent hardware rescue is
+still unproven. The dirty original checkout and master were preserved.
+
+## Historical checkpoint — 2026-09-26
 
 The SM-S901B/DS r0s remains on the HCI-only native RECOVERY candidate, running
 GNU build ID `b2dda820b18d410d9bf12f1bd2584567d545991d`. The completed

@@ -7,12 +7,12 @@ Exynos 2200, codename `r0s`, unlocked bootloader. This is the S22, not S22+.
 
 The HCI-only native RECOVERY candidate is installed and passed one raw
 Bluetooth socket create/close test. A new live trial registered controller
-`hci0`, then stopped at an unacknowledged transport wake handshake; detach,
-Bluetooth power-off and preservation of Wi-Fi were independently verified.
+`hci0`; after fixing a firmware-profile/IBS mismatch, it exchanged 41 commands
+and 41 events successfully, then detached and powered down with Wi-Fi preserved.
 An exact missing ALSA node was repaired for this boot: playback now accepts
 buffers, but synchronized samples still show no DMA progress. Desktop/Pi/model
-services and networking remain healthy on the same candidate. Controller
-initialization/pairing, usable audio, NPU inference, cellular and camera
+services and networking remain healthy on the same candidate. Persistent
+Bluetooth service/pairing, usable audio, NPU inference, cellular and camera
 operation remain unfinished; GPU compute
 and desktop acceleration have separate acceptance requirements. See
 [current status](STATUS.md), the [HCI trial receipt](evidence/s22-hci-trial-second-20260924.json),
@@ -146,7 +146,7 @@ and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 | Sensors | Accelerometer/gyro and now magnetometer/light frames sampled twice each. Compass accuracy is zero and light response untested; calibration, auto-rotation and autostart remain unaccepted |
 | Audio DSP | Card/controls work; missing native PCM node repaired for this boot. PREPARE/write accepted, but 19 RUNNING samples show no RDMA/pointer progress; cleanup verified, speaker/microphone unfinished |
 | Modem | Dependencies recovered; real Samsung RIL library loads in isolated phone runtime without a RIL call. CPIF remains INIT; SIM/data/calls not working |
-| Bluetooth | Firmware/reset and generated-address readback pass; real hci0 registration verified. Transport wake handshake stalls; detach/power-off/WLAN preservation verified. Initialization, pairing and Bluetooth audio unfinished |
+| Bluetooth | Real hci0 registration and 41-command/41-event plain-H4 exchange pass after IBS-profile fix; detach/power-off/WLAN preservation verified. Persistent service, pairing and Bluetooth audio unfinished |
 | Connectivity | Native USB SSH and Wi-Fi work; independent hardware rescue is not yet demonstrated. Association, DHCP, DNS and HTTPS previously passed after two automatic recovery startups |
 | Other everyday hardware | Usable audio, cellular, camera, GPS and suspend remain unaccepted |
 
