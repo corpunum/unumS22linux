@@ -29,6 +29,7 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-audio-snapshot-sync-20260924.py",
     "tools/hardware/test-audio-ipc-evidence.py",
     "tools/hardware/test-audio-log-coverage.py",
+    "tools/hardware/test-audio-dma-evidence.py",
     "tools/hardware/test-audio-recovery-observer.py",
     "tools/hardware/test-input-power-readiness.py",
     "tools/hardware/test-camera-readiness-once.py",
