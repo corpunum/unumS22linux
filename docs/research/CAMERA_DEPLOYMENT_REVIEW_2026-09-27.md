@@ -21,8 +21,9 @@ a camera node.
 This is source/host evidence only for the independent review. I did not
 personally access the phone, invoke SSH/ADB, or stage, flash, reboot, or package
 anything. Independent rescue and candidate-specific unattended acceptance
-remain unproven; this review does not authorize a live trial. The separate
-reboot/observation adapter remains outside this approval.
+remain unproven; this review does not authorize a live trial. The reboot/
+observation adapter was outside that earlier approval and is separately
+reviewed below.
 
 ## Boot-bound amendment
 
@@ -60,3 +61,36 @@ capture (unknown) and refuses consuming payload readers. All 12 tests passed in
 normal, `-O`, and `PYTHONOPTIMIZE=1` runs with the pinned source/O-tree set.
 This is source/metadata analysis only, not runtime capture evidence; no payload
 was read.
+
+## One-shot reboot observer review
+
+The exact observer freeze `931866f62176e1989774a80b0ca23e7ecbee69d9` is
+approved for host integration. Its default is host-only; the request path
+requires the exact completed flash marker and receipt chain, rechecks current
+image/boot/kernel/module/helper identities and direction-specific preflight,
+then attempts the absolute pinned reboot helper once. An ACK is not completion,
+transport uncertainty is not retried, and the global guard is left unresolved
+for explicit coordinator reconciliation. Request mode continues into bounded
+observation in the same process; observe-only has no reboot path. The document
+correctly limits transport claims to USB and does not claim independent rescue
+or unattended acceptance.
+
+Observation is capped at 600 seconds and records overruns without accepting or
+querying again. Forward stability requires the new recovery BORE, pinned
+kernel/image/helper identities, resolved readiness/liveness, and the exact
+camera module build ID before continuity starts; wrong loaded module identity
+is sticky, while an absent module is read-only pending. Reverse image/native
+restoration remains distinct from full health. Receipts stay private and
+stdout is summary-allowlisted. I found no blocking safety or evidence defect.
+
+Validation: 21 focused tests passed in normal, `-O`, and genuine
+`PYTHONOPTIMIZE=1` runs. Coverage includes exact flash-marker binding,
+boot-prelude refusal, no-retry unknown outcome, delayed/wrong module identity,
+new final BORE, nonzero-origin clock and both-direction short-window refusal,
+fresh final snapshot, bounded overrun, privacy filtering, and request-then-
+observe sequencing. The coordinator's pending host-runner diff adds the test
+path consistently to `REVIEWED_HOST_TEST_PATHS`, `HOST_TESTS`, and the
+independent expected-path tuple; taskboard context does not imply a live
+operation. No live reboot or observer was executed by this review. USB-only
+observation and unproven independent rescue remain limitations; approval is
+for host integration, not a deployment authorization.
