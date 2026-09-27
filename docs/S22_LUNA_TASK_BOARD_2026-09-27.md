@@ -582,3 +582,72 @@ stage/flash execution is unchanged. All 22 focused cases passed in normal,
 existing user manager active with `Linger=yes`; no service setting changed.
 The new reboot observer is still under separate implementation/review and
 has not been executed or approved for live use.
+
+Host-service reconciliation was read-only. Existing auto-ACK still checks the
+native guardian and writes its volatile readiness marker; it does not flash,
+reboot or reset USB. The existing Pi source-research controller is active but
+parked at round 18 in `needs_controller_review`, with no continuation file.
+Its inspected code stages source proposals for review, not kernel deployment.
+Neither service was stopped, restarted, reconfigured, or sent a model task.
+These services are not independent hardware rescue.
+
+At 10:19 UTC, the coordinator tested only the rig's installed persistent-launch
+mechanism: a distinct transient user unit with `Restart=no` ran
+`systemd-inhibit --what=sleep:idle --mode=block` around `/usr/bin/true`.
+It exited zero in 42 ms and was collected. The user manager reports
+`Linger=yes`. This proves present host launch/inhibitor permission, not
+sustained observation, a phone reboot, or independent rescue. No phone
+command was included and no existing service configuration changed.
+
+### Completed observer host integration — 10:46 UTC
+
+The earlier under-review status is superseded for **host integration only**.
+Luna/Max worker `/root/audio_ipc_20260927` delivered the three-file observer
+commit `931866f62176e1989774a80b0ca23e7ecbee69d9`, integrated as `1618038`.
+Independent Luna reviewer `/root/review_wave2_20260927` approved that exact
+freeze and recorded review in `57c3d43ca1317f4151e41711315b19c79316b094`,
+integrated as `efd6c40`. Both independently passed 21/21 focused tests in
+normal Python, `-O`, and genuine `PYTHONOPTIMIZE=1` without `-I`.
+The coordinator repeated 21 normal cases and replayed the earlier saved
+actual baseline through the integrated native/power/readiness checks.
+`/root/camera_build_20260927` independently checked procedure/target mapping;
+its corrections to receipt privacy and inside-unit inhibitor placement were
+incorporated. All three workers used their existing accepted explicit
+`gpt-6-luna`/`max` selection; no extra backend identity attestation is claimed.
+
+The observer binds the exact terminal flash receipt and current boot before
+one native RECOVERY request. An immediate same-boot/native/helper prelude
+executes only the existing absolute helper. ACK/disconnect never triggers a
+retry or clears the global marker. Observation is read-only and USB-only;
+it requires the candidate's loaded module GNU identity, a new final RECOVERY
+record, fresh final health and 180 seconds of qualifying sampled stability.
+Clock-origin errors, stale final checks, wrong loaded modules and timeout
+overruns have regressions. An overrun keeps its receipt but cannot pass.
+Reverse image restoration remains separate from full application health.
+The tool does not capture full raw dmesg, establish independent rescue, or
+authorize deployment merely because its tests pass.
+
+The CI allowlist now includes the observer test in all three explicit lists.
+The integrated suite passed **29 normal and 26 optimized scripts**, three
+documented optimized-script skips, zero failures; runner policy passed 7/7.
+Optional source/tool skips remain explicit and are not hardware acceptance.
+See [sanitized test and baseline receipt](../evidence/s22-camera-observer-host-20260927.json).
+
+A fresh coordinator read-only check at 10:38 UTC confirmed the same boot,
+242161.64 seconds uptime, full `42da267f…` RECOVERY, kernel GNU `b2dda820…`,
+325 loaded modules, and native/desktop Pi/browser/model/network readiness.
+Battery was full at 27 C; all nine readable thermal zones were at most 40 C.
+Available diagnostics showed no serious fault or unresolved liveness; full
+boot-log coverage is not claimed. The dedicated browser Pi session remains
+expected on-demand standby, not a failed desktop service.
+
+All five earlier global trial markers remain terminal/reconciled; no camera
+marker exists. This continuation performed zero camera staging operations,
+partition writes, reboot requests, camera activation or NPU BOOTUP. Current
+phone image is still the working HCI image, not the camera candidate.
+The exact remaining deployment condition is candidate-specific acceptance
+of one unattended `b1041271…` camera boot with one conditional `42da267f…`
+HCI restoration, or established independent rescue. The coordinator asked
+that narrow question while host work continued; no answer is recorded yet.
+Fresh operation-specific readiness must still be checked before execution.
+No previous HCI single-attempt authorization or marker may be reused.
