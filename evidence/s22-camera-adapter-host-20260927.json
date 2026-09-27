@@ -1,0 +1,39 @@
+{
+  "schema": "s22-camera-adapter-host-20260927/v1",
+  "evidence_level": "host implementation, fake-device regression and pinned-source analysis only",
+  "camera_adapter_worker_commits": [
+    "3cabe1546e5a920ddd9bad51bc190ea9af495d25",
+    "c73bf1b4b4bd3e3d350eecae9bc207f69ed7eb0a"
+  ],
+  "audio_worker_commits": [
+    "f8b756f364ccca4b1b75dc150f09073cd7bb1692",
+    "d3145406b7a3e978ef9220815fe45ab521716b8f",
+    "1348f05ad411e125e900aee4e45aeb1a1af0b31f"
+  ],
+  "independent_reviewer": "/root/review_wave2_20260927",
+  "camera_focused_tests": {"normal": 16, "python_O": 16, "PYTHONOPTIMIZE_1_without_I": 16},
+  "audio_focused_tests_with_retained_source_and_build": {"normal": 12, "python_O": 12, "PYTHONOPTIMIZE_1_without_I": 12},
+  "coordinator_rechecks": {
+    "camera_tests_normal_passed": 16,
+    "audio_source_build_tests_normal_passed": 12,
+    "runner_policy_tests_passed": 7,
+    "allowlisted_scripts_normal_passed": 28,
+    "allowlisted_scripts_optimized_passed": 25,
+    "documented_optimized_script_skips": 3,
+    "failed_scripts": 0,
+    "camera_forward_and_reverse_real_artifact_plans_passed": true,
+    "plan_modes_contacted_phone": false
+  },
+  "coverage_limits": [
+    "General runner clears source/build environment; optional source fixture checks skip there and were separately run with retained trees.",
+    "Three deployment AVB-tool-specific tests skip in the integration worktree when its trusted tool is unavailable; no private fixture was published.",
+    "Camera reboot observer and later boot-binding amendments are outside this initial adapter receipt.",
+    "Audio metadata filtering is not historical log coverage, effective preprocessing or hardware DMA evidence.",
+    "No host test establishes camera boot, load, open, capture or safe physical resource unwind."
+  ],
+  "camera_staging_operations": 0,
+  "partition_writes": 0,
+  "reboot_requests": 0,
+  "camera_open_or_capture_attempted": false,
+  "npu_bootup_attempted": false
+}
