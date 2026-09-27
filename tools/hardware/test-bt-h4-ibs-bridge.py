@@ -77,6 +77,20 @@ def stop_bridge(proc, virtual, physical_master, physical_slave, sig=signal.SIGTE
     return proc.returncode, stdout, stderr
 
 
+def extract_c_function(source, marker):
+    start = source.index(marker)
+    opening = source.index("{", start)
+    depth = 0
+    for pos in range(opening, len(source)):
+        if source[pos] == "{":
+            depth += 1
+        elif source[pos] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start:pos + 1]
+    raise AssertionError(f"unterminated C function after {marker!r}")
+
+
 UNIT_SOURCE = r'''#define S22_BT_BRIDGE_EMBED 1
 #include "tools/hardware/bt-h4-ibs-bridge.c"
 #include <pthread.h>
@@ -110,6 +124,8 @@ static void queue_test(void) {
     int sv[2];
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv)) die("socketpair for queue test");
     struct bridge x = {.uart = sv[0], .pty_master = -1, .pty_slave = -1};
+    if (x.transport_mode != S22_BT_TRANSPORT_H4_IBS)
+        die("generic bridge default is not IBS");
     const uint8_t command[] = {1, 3, 0x0c, 0};
     for (size_t i = 0; i < MAX_PENDING; ++i)
         if (queue_pty_frame(&x, command, sizeof(command))) die("queue rejected before bound");
@@ -141,6 +157,23 @@ static void ibs_state_test(void) {
     uint8_t received[sizeof(command)];
     if (read(sv[1], received, sizeof(received)) != (ssize_t)sizeof(received) ||
         memcmp(received, command, sizeof(command))) die("ACK flush payload");
+    close(sv[0]); close(sv[1]);
+}
+
+static void plain_h4_test(void) {
+    int sv[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv)) die("socketpair for plain H4 test");
+    struct bridge x = {.uart = sv[0], .pty_master = -1, .pty_slave = -1,
+                       .transport_mode = S22_BT_TRANSPORT_H4_NO_IBS,
+                       .tx_awake = 1};
+    const uint8_t command[] = {1, 3, 0x0c, 0};
+    uint8_t sent[sizeof(command)];
+    if (queue_pty_frame(&x, command, sizeof(command)) ||
+        read(sv[1], sent, sizeof(sent)) != (ssize_t)sizeof(sent) ||
+        memcmp(sent, command, sizeof(command)))
+        die("plain H4 did not forward command without IBS wake");
+    if (handle_uart_byte(&x, IBS_ACK) == 0)
+        die("plain H4 incorrectly consumed an IBS control byte");
     close(sv[0]); close(sv[1]);
 }
 
@@ -188,6 +221,7 @@ int main(int argc, char **argv) {
     if (!strcmp(argv[1], "parser")) parser_test();
     else if (!strcmp(argv[1], "queue")) queue_test();
     else if (!strcmp(argv[1], "ibs")) ibs_state_test();
+    else if (!strcmp(argv[1], "plain-h4")) plain_h4_test();
     else if (!strcmp(argv[1], "short-write")) nonblocking_short_write_test();
     else die("unknown unit case");
     return 0;
@@ -205,7 +239,7 @@ LIFECYCLE_SOURCE = r'''#define S22_BT_BRIDGE_EMBED 1
 
 static unsigned attach_calls, proto_calls, device_calls, detach_calls;
 static unsigned raw_socket_calls, info_ioctl_calls;
-static int inject_overflow, fail_initial_attach, fail_setproto;
+static int inject_overflow, inject_command, fail_initial_attach, fail_setproto;
 static int fail_device_lookup, fail_detach, injection_failed;
 
 int s22_bt_test_ioctl(int fd, unsigned long request, ...)
@@ -221,6 +255,9 @@ int s22_bt_test_ioctl(int fd, unsigned long request, ...)
             if (fail_initial_attach) {
                 errno = ENODEV;
                 result = -1;
+            } else if (inject_command) {
+                if (write(fd, command, sizeof(command)) != (ssize_t)sizeof(command))
+                    injection_failed = 1;
             } else {
                 for (unsigned i = 0; inject_overflow && i < 9; ++i)
                     if (write(fd, command, sizeof(command)) != (ssize_t)sizeof(command))
@@ -286,6 +323,8 @@ int main(int argc, char **argv)
     int have_stopper = 0;
     if (argc != 2) return 2;
     if (!strcmp(argv[1], "overflow")) inject_overflow = 1;
+    if (!strcmp(argv[1], "plain-h4") || !strcmp(argv[1], "wake-timeout"))
+        inject_command = 1;
     if (!strcmp(argv[1], "initial-attach-fail")) fail_initial_attach = 1;
     if (!strcmp(argv[1], "setproto-fail") ||
         !strcmp(argv[1], "setproto-fail-detach-fail")) fail_setproto = 1;
@@ -300,17 +339,33 @@ int main(int argc, char **argv)
     }
     if (strcmp(argv[1], "clean") && strcmp(argv[1], "malformed") &&
         strcmp(argv[1], "overflow") && strcmp(argv[1], "term") &&
+        strcmp(argv[1], "plain-h4") && strcmp(argv[1], "wake-timeout") &&
         strcmp(argv[1], "attach-fail") && strcmp(argv[1], "initial-attach-fail") &&
         strcmp(argv[1], "setproto-fail") && strcmp(argv[1], "detach-fail") &&
         strcmp(argv[1], "setproto-fail-detach-fail")) return 2;
+    enum s22_bt_transport_mode mode = !strcmp(argv[1], "plain-h4")
+        ? S22_BT_TRANSPORT_H4_NO_IBS : S22_BT_TRANSPORT_H4_IBS;
     rc = s22_bridge_run(pair[0],
-                        (!strcmp(argv[1], "clean") || !strcmp(argv[1], "detach-fail"))
-                        ? 20 : 1000);
+                        (!strcmp(argv[1], "clean") || !strcmp(argv[1], "detach-fail") ||
+                         !strcmp(argv[1], "plain-h4"))
+                        ? 20 : 1000, mode);
     int errno_after = errno;
+    if (!strcmp(argv[1], "plain-h4")) {
+        const uint8_t command[] = {1, 3, 0x0c, 0};
+        uint8_t received[sizeof(command)];
+        if (read(pair[1], received, sizeof(received)) != (ssize_t)sizeof(received) ||
+            memcmp(received, command, sizeof(command))) injection_failed = 1;
+    }
+    if (!strcmp(argv[1], "wake-timeout")) {
+        const uint8_t wakes[] = {IBS_WAKE, IBS_WAKE, IBS_WAKE};
+        uint8_t received[sizeof(wakes)];
+        if (read(pair[1], received, sizeof(received)) != (ssize_t)sizeof(received) ||
+            memcmp(received, wakes, sizeof(wakes))) injection_failed = 1;
+    }
     if (have_stopper && pthread_join(stopper, NULL)) return 2;
     close(pair[0]);
     close(pair[1]);
-    expected_abort = strcmp(argv[1], "clean") != 0;
+    expected_abort = strcmp(argv[1], "clean") != 0 && strcmp(argv[1], "plain-h4") != 0;
     unsigned expected_detach = fail_initial_attach ? 0 : 1;
     unsigned expected_proto = fail_initial_attach ? 0 : 1;
     unsigned expected_device = fail_initial_attach || fail_setproto ? 0 : 1;
@@ -327,6 +382,83 @@ int main(int argc, char **argv)
 '''
 
 
+PROFILE_TEST_TAIL = r'''
+static void add_record(uint8_t *data, size_t *at, uint16_t tag,
+                       uint16_t payload_length, uint8_t first_payload_byte)
+{
+    data[*at] = (uint8_t)tag;
+    data[*at + 1] = (uint8_t)(tag >> 8);
+    data[*at + 2] = (uint8_t)payload_length;
+    data[*at + 3] = (uint8_t)(payload_length >> 8);
+    memset(data + *at + 4, 0, 8);
+    if (payload_length)
+        data[*at + 12] = first_payload_byte;
+    memset(data + *at + 13, 0, payload_length ? payload_length - 1 : 0);
+    *at += 12 + payload_length;
+}
+
+static void seal_container(uint8_t *data, size_t length)
+{
+    data[0] = 2;
+    data[1] = (uint8_t)(length - 4);
+    data[2] = (uint8_t)((length - 4) >> 8);
+    data[3] = (uint8_t)((length - 4) >> 16);
+}
+
+static int check_transport(uint8_t *data, size_t length,
+                           int expected_result, enum s22_bt_transport_mode expected_mode)
+{
+    enum s22_bt_transport_mode mode = S22_BT_TRANSPORT_H4_IBS;
+    int result = qca6490_runtime_transport_mode(data, length, &mode);
+    return result == expected_result && (!result ? mode == expected_mode : 1);
+}
+
+int main(void)
+{
+    uint8_t data[96] = {0};
+    size_t at = 4;
+
+    add_record(data, &at, 17, 6, 0x00);
+    seal_container(data, at);
+    if (!check_transport(data, at, 0, S22_BT_TRANSPORT_H4_NO_IBS)) return 1;
+
+    at = 4;
+    add_record(data, &at, 17, 6, 0x80);
+    seal_container(data, at);
+    if (!check_transport(data, at, 0, S22_BT_TRANSPORT_H4_IBS)) return 2;
+
+    at = 4;
+    add_record(data, &at, 18, 6, 0x00);
+    seal_container(data, at);
+    if (!check_transport(data, at, -EPROTO, S22_BT_TRANSPORT_H4_IBS)) return 3;
+
+    at = 4;
+    add_record(data, &at, 17, 6, 0x00);
+    add_record(data, &at, 17, 6, 0x80);
+    seal_container(data, at);
+    if (!check_transport(data, at, -EPROTO, S22_BT_TRANSPORT_H4_IBS)) return 4;
+
+    at = 4;
+    add_record(data, &at, 17, 5, 0x00);
+    seal_container(data, at);
+    if (!check_transport(data, at, -EPROTO, S22_BT_TRANSPORT_H4_IBS)) return 5;
+
+    at = 4;
+    add_record(data, &at, 17, 6, 0x00);
+    seal_container(data, at);
+    data[1]++;
+    if (!check_transport(data, at, -EINVAL, S22_BT_TRANSPORT_H4_IBS)) return 6;
+
+    at = 4;
+    add_record(data, &at, 17, 6, 0x00);
+    seal_container(data, at);
+    if (!check_transport(data, at - 1, -EINVAL, S22_BT_TRANSPORT_H4_IBS)) return 7;
+
+    return 0;
+}
+'''
+
+
 class BridgeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -334,6 +466,7 @@ class BridgeTests(unittest.TestCase):
         cls.BINARY = os.path.join(cls._build_tmp.name, "bt-h4-ibs-bridge")
         cls.UNIT_BINARY = os.path.join(cls._build_tmp.name, "bt-h4-ibs-bridge-unit")
         cls.LIFECYCLE_BINARY = os.path.join(cls._build_tmp.name, "bt-h4-ibs-bridge-lifecycle")
+        cls.PROFILE_BINARY = os.path.join(cls._build_tmp.name, "bt-qca6490-profile-test")
         source = os.path.join(ROOT, "tools/hardware/bt-h4-ibs-bridge.c")
         subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-O2",
                         source, "-o", cls.BINARY, "-lutil"], check=True)
@@ -343,6 +476,15 @@ class BridgeTests(unittest.TestCase):
         subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-O2",
                         "-pthread", "-I", ROOT, "-x", "c", "-", "-o", cls.LIFECYCLE_BINARY,
                         "-lutil", "-pthread"], input=LIFECYCLE_SOURCE, text=True, check=True)
+        probe_path = os.path.join(ROOT, "tools/hardware/bt-qca6490-hci-bridge-probe.c")
+        with open(probe_path, encoding="utf-8") as source_file:
+            probe_source = source_file.read()
+        profile_function = extract_c_function(probe_source,
+            "static int qca6490_runtime_transport_mode")
+        profile_test = """#include <errno.h>\n#include <stdint.h>\n#include <stddef.h>\n#include <string.h>\n#include <sys/types.h>\nenum s22_bt_transport_mode { S22_BT_TRANSPORT_H4_IBS = 0, S22_BT_TRANSPORT_H4_NO_IBS = 1 };\n""" + profile_function + PROFILE_TEST_TAIL
+        subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-O2",
+                        "-x", "c", "-", "-o", cls.PROFILE_BINARY],
+                       input=profile_test, text=True, check=True)
 
     @classmethod
     def tearDownClass(cls):
@@ -462,6 +604,26 @@ class BridgeTests(unittest.TestCase):
 
     def test_ibs_wake_ack_sleep_unit(self):
         subprocess.run([self.UNIT_BINARY, "ibs"], check=True)
+
+    def test_embedded_runtime_tag17_selects_only_valid_transport_profiles(self):
+        subprocess.run([self.PROFILE_BINARY], check=True)
+
+    def test_embedded_plain_h4_forwards_command_without_wake(self):
+        result = self.run_lifecycle_case("plain-h4")
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("bridge_transport_mode=h4-no-ibs", result.stdout)
+        self.assertIn("bridge_result=0 commands=1 events=0 ibs_wake_rx=0 ibs_ack_rx=0 queued=0",
+                      result.stdout)
+        self.assertIn("detach_calls=1", result.stdout)
+
+    def test_ibs_wake_exhaustion_has_specific_timeout_diagnostic(self):
+        result = self.run_lifecycle_case("wake-timeout")
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("bridge_failure=ibs_wake_ack_timeout wake_attempts=3 ack_rx=0 queued=1 errno="
+                      + str(errno.ETIMEDOUT), result.stderr)
+        self.assertIn("bridge_result=-1 commands=1 events=0 ibs_wake_rx=0 ibs_ack_rx=0 queued=1",
+                      result.stdout)
+        self.assertIn("detach_calls=1", result.stdout)
 
     def test_nonblocking_short_write_recovery(self):
         subprocess.run([self.UNIT_BINARY, "short-write"], check=True)

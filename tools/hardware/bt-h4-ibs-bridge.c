@@ -1,4 +1,5 @@
-// Host-only QCA H4+IBS UART bridge. It never powers or initializes a controller.
+// Userspace QCA H4 UART bridge; standalone callers default to H4+IBS.
+// Embedded N_HCI attachment can trigger kernel controller power-on/init.
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
@@ -27,6 +28,11 @@
 #define HCIUARTSETPROTO _IOW('U', 200, int)
 #define HCIUARTGETDEVICE _IOR('U', 202, int)
 
+enum s22_bt_transport_mode {
+    S22_BT_TRANSPORT_H4_IBS = 0,
+    S22_BT_TRANSPORT_H4_NO_IBS = 1,
+};
+
 static volatile sig_atomic_t running = 1;
 static void stop_signal(int sig) { (void)sig; running = 0; }
 void s22_bridge_request_stop(void) { running = 0; }
@@ -45,6 +51,9 @@ struct bridge {
     size_t pending_head, pending_count;
     int tx_awake, rx_awake, waiting_ack, retries;
     int queue_overflow;
+    enum s22_bt_transport_mode transport_mode;
+    const char *failure_reason;
+    int failure_errno;
     int hci_attached;
     int hci_index;
     unsigned commands, events, ibs_ack_rx, ibs_wake_rx;
@@ -115,7 +124,11 @@ static int queue_pty_frame(struct bridge *x, const uint8_t *b, size_t n) {
         printf("bridge_hci_command=%02x%02x length=%zu\n",b[2],b[1],n);
     }
     if (!x->tx_awake && !x->waiting_ack) {
-        if (send_wake(x) < 0) return -1;
+        if (send_wake(x) < 0) {
+            x->failure_reason = "ibs_wake_write_failed";
+            x->failure_errno = errno ? errno : EIO;
+            return -1;
+        }
         x->waiting_ack = 1; x->retries = 1; x->wake_at = now_ms() + WAKE_RETRY_MS;
     } else if (x->tx_awake) {
         if (flush_pending(x) < 0) return -1;
@@ -123,7 +136,8 @@ static int queue_pty_frame(struct bridge *x, const uint8_t *b, size_t n) {
     return 0;
 }
 static int handle_uart_byte(struct bridge *x, uint8_t c) {
-    if (!x->uart_rx.n && (c == IBS_WAKE || c == IBS_SLEEP || c == IBS_ACK)) {
+    if (x->transport_mode == S22_BT_TRANSPORT_H4_IBS && !x->uart_rx.n &&
+        (c == IBS_WAKE || c == IBS_SLEEP || c == IBS_ACK)) {
         if (c == IBS_WAKE) { const uint8_t a = IBS_ACK; x->ibs_wake_rx++; if (write_full(x->uart, &a, 1) < 0) return -1; }
         if (c == IBS_SLEEP) x->rx_awake = 0;
         if (c == IBS_ACK && x->waiting_ack) {
@@ -206,22 +220,38 @@ static int run_bridge(struct bridge *x, int duration_ms) {
         if (p[0].revents & POLLIN) { ssize_t n = read(x->uart, buf, sizeof(buf)); if (n <= 0) return -1; for (ssize_t i=0;i<n;i++) if (handle_uart_byte(x,buf[i]) < 0) return -1; }
         if (p[1].revents & POLLIN) { ssize_t n = read(x->pty_master, buf, sizeof(buf)); if (n <= 0) return -1; for (ssize_t i=0;i<n;i++) if (handle_pty_byte(x,buf[i]) < 0) return -1; }
         if (x->waiting_ack && now_ms() >= x->wake_at) {
-            if (x->retries >= MAX_WAKE_RETRIES) return -1;
-            if (send_wake(x) < 0) return -1;
+            if (x->retries >= MAX_WAKE_RETRIES) {
+                x->failure_reason = "ibs_wake_ack_timeout";
+                x->failure_errno = ETIMEDOUT;
+                errno = ETIMEDOUT;
+                return -1;
+            }
+            if (send_wake(x) < 0) {
+                x->failure_reason = "ibs_wake_write_failed";
+                x->failure_errno = errno ? errno : EIO;
+                return -1;
+            }
             x->retries++; x->wake_at = now_ms() + WAKE_RETRY_MS;
         }
     }
     return running ? 0 : -ECANCELED;
 }
 
-int s22_bridge_run(int uart, int duration_ms) {
-    if(duration_ms<1 || duration_ms>60000)return -EINVAL;
+int s22_bridge_run(int uart, int duration_ms,
+                   enum s22_bt_transport_mode transport_mode) {
+    if (duration_ms < 1 || duration_ms > 60000 ||
+        (transport_mode != S22_BT_TRANSPORT_H4_IBS &&
+         transport_mode != S22_BT_TRANSPORT_H4_NO_IBS))
+        return -EINVAL;
     running = 1;
     struct sigaction action={0},old_int,old_term;
     action.sa_handler=stop_signal;sigemptyset(&action.sa_mask);
     if(sigaction(SIGINT,&action,&old_int))return -1;
     if(sigaction(SIGTERM,&action,&old_term)) { sigaction(SIGINT,&old_int,NULL);return -1; }
     struct bridge x; memset(&x, 0, sizeof(x)); x.uart = uart; x.pty_master = x.pty_slave = -1;
+    x.transport_mode = transport_mode;
+    x.tx_awake = transport_mode == S22_BT_TRANSPORT_H4_NO_IBS;
+    x.rx_awake = transport_mode == S22_BT_TRANSPORT_H4_NO_IBS;
     int rc=-1, primary_errno=0;
     if (openpty(&x.pty_master, &x.pty_slave, x.slave_name, NULL, NULL) < 0) goto out;
     int fl = fcntl(x.pty_master, F_GETFL, 0); if (fl < 0 || fcntl(x.pty_master, F_SETFL, fl | O_NONBLOCK)<0) goto out;
@@ -234,8 +264,20 @@ int s22_bridge_run(int uart, int duration_ms) {
         errno = primary_errno;
         goto out;
     }
+    printf("bridge_transport_mode=%s\n",
+           transport_mode == S22_BT_TRANSPORT_H4_IBS ? "h4-ibs" : "h4-no-ibs");
+    fflush(stdout);
     rc = run_bridge(&x, duration_ms);
-    if (rc < 0) primary_errno = errno;
+    if (rc < 0) {
+        primary_errno = errno;
+        if (x.failure_reason) {
+            int failure_errno = x.failure_errno ? x.failure_errno : EIO;
+            fprintf(stderr,
+                    "bridge_failure=%s wake_attempts=%d ack_rx=%u queued=%zu errno=%d (%s)\n",
+                    x.failure_reason, x.retries, x.ibs_ack_rx, x.pending_count,
+                    failure_errno, strerror(failure_errno));
+        }
+    }
     report_queue_overflow(&x);
     printf("bridge_result=%d commands=%u events=%u ibs_wake_rx=%u ibs_ack_rx=%u queued=%zu\n",
            rc,x.commands,x.events,x.ibs_wake_rx,x.ibs_ack_rx,x.pending_count);fflush(stdout);
