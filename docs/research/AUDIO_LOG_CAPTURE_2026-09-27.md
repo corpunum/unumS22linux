@@ -34,8 +34,9 @@ last definition wins) and config predict that the ABOX objects have no
 effective `dev_dbg()` enabling macro. This is not preprocessor or object
 inspection: macros from forced includes or other headers have not been ruled
 out. The parser therefore labels this a prediction with effective macro state
-unverified; malformed/missing `-D`/`-U` operands are classified unknown. It
-does not claim the `dev_dbg()` path was compiled out. The separate Memlogger
+unverified; `direct_macro_flags_parseable` covers only those direct tokens,
+and malformed/missing `-D`/`-U` operands are classified unknown. It does not
+claim the `dev_dbg()` path was compiled out. The separate Memlogger
 finding is precise: current ABOX
 debug-level-5 messages sent to `abox-mem` are filtered by the observed level.
 Taken together, current marker capture remains unproven; this says nothing
