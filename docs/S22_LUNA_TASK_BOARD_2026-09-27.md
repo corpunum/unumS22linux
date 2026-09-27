@@ -651,3 +651,167 @@ HCI restoration, or established independent rescue. The coordinator asked
 that narrow question while host work continued; no answer is recorded yet.
 Fresh operation-specific readiness must still be checked before execution.
 No previous HCI single-attempt authorization or marker may be reused.
+
+### Owner-approved camera boot trial — 2026-09-27 continuation
+
+The owner answered “ok go” to the exact candidate-specific question above.
+This records acceptance of one unattended installation/RECOVERY boot of
+camera image `b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f`,
+and one conditional restoration/RECOVERY boot of current HCI image
+`42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5`.
+Temporary loss of remote access requiring physical attendance was explicitly
+stated in that question. Independent hardware rescue remains **unproven**.
+This is not authority for camera activation/firmware staging, NPU BOOTUP,
+other partitions, another candidate, or repeated flash/reboot attempts.
+
+The coordinator verified unchanged remote HEAD `7ae6f2b`, preserved the dirty
+original checkout, and found no existing camera trial marker or transient
+operation unit. The actual complete image hashes were recomputed and both
+profile manifests revalidated. Focused host checks passed again: deployment
+22/22 and observer 21/21. Hosted run `36313673089` had passed at that exact
+review HEAD. Durable owner acceptance and baseline receipts are kept in the
+private camera-trial state directory, not in this public tree.
+
+Reused explicitly selected Luna/Max workers: `/root/review_wave2_20260927`
+for the unchanged procedure/reconciliation audit; `/root/camera_build_20260927`
+for the source-backed next camera acceptance step; `/root/audio_ipc_20260927`
+for synchronized audio DMA evidence interpretation. Each retains separate
+worktree/file ownership. Only the coordinator accesses the phone; workers
+cannot stage, flash, reboot, open hardware, or run inference.
+
+Fresh USB and Wi-Fi read-only connections identified the same native boot,
+expected full HCI RECOVERY and old camera module, 325 loaded modules and
+passing current readiness. Battery was Full/100% at 27 C; maximum reported
+zone was 42 C. `/srv/s22` is writable device 259:20 with 101772271616 available
+bytes and 1652485 free inodes, separate from root overlay 0:26 (34844672 free
+bytes). Neither camera staging directory existed. Full available dmesg was
+captured privately: 255760 bytes, timestamps 243855.49–244134.22 seconds,
+not full-boot coverage. No fatal/warning conclusion is inferred from an
+exhausted hung-task warning budget: timeout remains 120, panic 0, warnings 0,
+as in the prior reviewed baseline. No setting was changed. Optional
+`findmnt` and PID-namespace links are absent; actual mountinfo, native guardian
+and mount namespace checks are used instead, without installing packages.
+
+This entry records authorization/preparation, not a successful stage, write,
+new boot, camera operation, or physical acceptance. Subsequent operation
+receipts must establish each milestone separately.
+
+### Executed camera boot trial — 11:32 UTC
+
+The preparation-only status above is superseded by the actual trial receipt
+[s22-camera-boot-trial-20260927.json](../evidence/s22-camera-boot-trial-20260927.json).
+Independent Luna reviewer `/root/review_wave2_20260927` approved the unchanged
+forward/readback/reboot procedure before execution. Only the coordinator
+accessed the phone. Separate persistent user services used `Restart=no`,
+private rig-side logs and an authorized sleep inhibitor inside each service;
+the observer did not depend on an interactive SSH session.
+
+The candidate and exact HCI backup were staged once on `/srv/s22` and
+independently rehashed. One RECOVERY write was flushed and verified across
+all 100663296 bytes, followed by a separate full readback before reboot.
+The current boot and old loaded camera module were verified unchanged at
+that point. At 11:20 UTC the existing native helper received exactly one
+targeted RECOVERY request. Its transport timed out (UNKNOWN); no retry was
+issued. Subsequent evidence established one new RECOVERY boot, full installed
+image `b1041271…`, unchanged kernel GNU `b2dda820…`, and newly loaded camera
+module GNU `59e54c03…`. The verified rollback remains `42da267f…`, not the
+older audio image.
+
+The bounded observer completed 481.38 seconds and 85 samples with status
+**not_accepted**, exit 3. It saw no fatal fault, identity/helper mismatch,
+or second unexpected boot. Ten TrustZone hung-task warnings matched the
+previously pinned wait-stack classes, with progress still unmeasured.
+Timeout 120 seconds/panic 0 remained unchanged; the warning budget dropped
+from its new-boot value 10 to zero. Later ring rotation and a quiet log are
+not evidence of resolved liveness. Full available rings were saved privately
+at several checkpoints; none is claimed to cover the complete boot.
+
+At final read-only reconciliation, uptime was 667.93 seconds, 325 modules
+were loaded, the exact candidate/module identities still matched, native
+control, desktop Pi, browser service, model health/idleness and networking
+were ready. USB and Wi-Fi same-boot access had both been verified. The
+dedicated browser Pi session remained expected on-demand standby; no healthy
+session was restarted and no inference was submitted. Existing auto-ACK
+and the parked resident research assistant were left unchanged.
+
+The UNKNOWN reboot marker was explicitly reconciled using the terminal
+observation and fresh boot/identity evidence, without calling it hardware
+acceptance or authorizing repetition. Earlier markers and receipts remain
+intact. No new material regression was identified to invoke conditional
+rollback. Counts for this trial: **one stage, one partition write, one
+RECOVERY request, zero rollback writes/reboots**. No camera open, camera
+firmware staging, new HCI operation or NPU BOOTUP occurred. Independent
+hardware rescue remains unproven; no immediate physical intervention is
+required while current access remains usable.
+
+Powered camera acceptance remains blocked by unresolved liveness. A future
+open/QUERYCAP/close is not passive: review additionally found that close-time
+sensor deinit may internally toggle streams. Resolve the active module,
+configuration and that cleanup path before a separately authorized operation.
+No speculative rebuild or warning-policy change was used to obtain a pass.
+
+### Parallel host implementation and review
+
+All three workers below reused their accepted explicit `gpt-6-luna` / `max`
+configuration, without a claim of independent backend attestation. Their
+worktrees stayed separate; none accessed the phone.
+
+| Worker | Isolated worktree | Deliverable and evidence |
+| --- | --- | --- |
+| `/root/audio_ipc_20260927` | `s22-workers/audio-log-20260927` | Audio DMA interpreter `7e1a969b31694eb1470b97ac11af0ccc14435be8`, integrated `83274b5`; seven tests pass normally, under `-O`, and genuine `PYTHONOPTIMIZE=1`. |
+| `/root/camera_build_20260927` | `s22-workers/camera-deploy-20260927` | Independently approved the audio interpreter and reproduced the saved aggregate result; camera next-step source note under correction/re-review for internal deinit stream toggling. |
+| `/root/review_wave2_20260927` | `s22-workers/camera-deploy-review-20260927` | Independent operation/procedure review, camera next-step safety finding, and approval of the three matching audio-test CI allowlist additions. |
+
+The saved audio trial contains 19/19 timed ALSA/RDMA sample pairs and 18
+adjacent comparisons: sampled hardware pointer stays zero, RDMA enable and
+progress remain false. Two trigger API-entry log markers do not prove DSP
+delivery. Absent sender/handler markers remain unknown because historical
+capture coverage is not established. These are stronger diagnostics of the
+existing trial, **not** working audio or a new device experiment.
+
+After the completed negative camera observation, the coordinator identified
+a host replay hazard: starting a new observation window could forget sticky
+warnings once the kernel ring rotates. The audio worker was reassigned in
+`s22-workers/camera-observer-20260927` to refuse replay of a completed window,
+with camera worker independent review. No observer replay was performed on
+the phone. Completion and final integrated regression receipts follow after
+that separate review; the actual trial result above remains immutable.
+
+The replay fix is now complete: worker `7a1d74324816b8f70c4649c70bef2e1fd6df0836`
+was independently reviewed by `/root/camera_build_20260927`, documented in
+`37f052158d1cbf0af8864283efa248ff5699ecd5`, and integrated as `63a8312` plus
+review note `60daf53`. Author and reviewer each passed 24/24 cases normally,
+under `-O`, and under genuine `PYTHONOPTIMIZE=1`; the coordinator repeated
+the latter and the full integrated suite. Both positive and negative complete
+receipts now refuse a fresh window before transport; malformed history also
+refuses. An interrupted run without a final receipt remains resumable.
+This does not serialize two concurrently launched read-only observers before
+either completes. That limitation is explicit; the actual trial used one
+coordinator-owned serialized observer. No live observation was repeated.
+
+The reviewed CI-only change `60650f0` includes the audio DMA suite. Full host
+regressions passed **30 normal scripts and 27 optimized scripts**, with three
+documented optimized-script exclusions and zero failures. Runner policy
+passed 7/7 normally and optimized. Optional source/build and three local
+AVB-tool fixture skips remain explicit, not fabricated coverage. The saved
+[host follow-up receipt](../evidence/s22-camera-trial-host-followup-20260927.json)
+keeps these host results separate from the negative kernel-liveness outcome.
+
+Camera next-step note `7c609dc` plus correction `3dfecc1` were integrated as
+`26270c6` / `ef6e6b2`. Independent reviewer `/root/review_wave2_20260927`
+requested two final wording corrections, committed as `46386c6`: GN3 is
+one conditional CIS deinit implementation, not the proved active sensor;
+the reconciled marker is not acceptance. The reviewer approved that exact
+corrected source note and independently compared the sanitized trial receipt
+with the frozen private boot/identity/observation/disposition receipts. Counts,
+negative status, 481.38 seconds/85 samples, hashes/build IDs and log sizes
+matched; no raw traces, boot UUIDs or private endpoints were published.
+
+After host tests, a fresh coordinator-only read at 11:43 UTC confirmed the
+same candidate boot at 1365.32 seconds uptime, native control, desktop Pi,
+browser service and idle model healthy. This was a read-only snapshot, not
+a new observer window, powered camera operation, or liveness acceptance.
+The original checkout still has its same five tracked modifications on
+local master `fb60a2c`; remote master remains `20605db`. Publication is only
+to the existing unmerged review branch, with remote SHA and exact-head
+hosted CI checked after push.
