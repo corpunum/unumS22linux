@@ -218,6 +218,13 @@ class CameraRecoveryPackageTests(unittest.TestCase):
         with self.assertRaisesRegex(BUILDER.BuildError, "omitted required header fields"):
             BUILDER._header_values(incomplete)
 
+    def test_candidate_image_selector_uses_avb_partition_basename(self) -> None:
+        workdir = Path("/tmp/camera-candidate-path-fixture")
+        self.assertEqual(
+            BUILDER.candidate_recovery_image_path(workdir),
+            workdir / "recovery.img",
+        )
+
     def test_manifest_write_failure_removes_only_new_receipt(self) -> None:
         with tempfile.TemporaryDirectory(prefix="camera-manifest-write-failure-") as temporary:
             root = Path(temporary)
