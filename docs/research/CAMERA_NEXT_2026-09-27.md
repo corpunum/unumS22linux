@@ -215,7 +215,7 @@ establish camera functionality or physical regulator/clock state.
    and compatibility receipt is
    [`camera-module-build-2026-09-27.json`](camera-module-build-2026-09-27.json).
    The unstripped module and a separately validated debug-only-stripped copy
-   are not packaged or deployed. The host tests and build are not deployment
+   were subsequently packaged on the host (see below), but not deployed. The host tests and build are not deployment
    evidence, and clock-provider side effects remain unverified.
 4. Only after those gates, a separately reviewed, exact-candidate
    `/dev/video101` open/`VIDIOC_QUERYCAP`/close trial may establish static
@@ -255,12 +255,12 @@ is 8,239,848 bytes, SHA-256 `ba492fcc…1d085d3`, mode `0100644`, uid/gid `0:0`;
 `modules.dep`, `modules.alias`, and `modules.softdep` must remain byte-identical
 because the candidate's module name, aliases, and dependencies are unchanged.
 
-The host-only packager under review is
+The independently reviewed host-only packager is
 [`build-camera-module-recovery.py`](../../tools/hardware/build-camera-module-recovery.py).
 It is designed to replace only `lib/modules/fimc-is.ko`, preserve every other
 raw CPIO record and all unmodified boot payloads/header fields, and emit a
-separate manifest. It has not been run on the real recovery image pending
-independent code review. Its synthetic test command is:
+separate manifest. The coordinator subsequently ran it successfully against
+the exact HCI image after the review corrections below. Its test command is:
 
 ```sh
 python3 -I -B tools/hardware/test-build-camera-module-recovery.py
@@ -280,5 +280,42 @@ root:root. Its 8,239,848-byte payload has no `.debug_*` sections but retains
 The new 56,384,552-byte host output retains debug sections. A separate
 7,164,248-byte debug-only-stripped copy has the same build ID and validated
 imports/exports/aliases/direct dependencies, and has no module signature
-metadata. Neither module copy is packaged or deployed yet. None of this
+metadata. The stripped copy is now packaged on the host, but neither has been
+deployed. None of this
 implies that a module can be safely replaced on a live system.
+
+## Actual host RECOVERY package — 07:32 UTC
+
+The saved candidate is `builds/camera-module-recovery-20260927/recovery.img`,
+100,663,296 bytes, SHA-256
+`b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f`.
+The [sanitized verification receipt](../../evidence/s22-camera-package-20260927.json)
+records the input/output hashes and evidence limits. Images, modules and full
+private build artifacts remain excluded from GitHub.
+
+Only `lib/modules/fimc-is.ko` changes among 963 CPIO records; bootstrap and all
+other raw records are identical. The existing HCI kernel, DTB and recovery DTBO
+are byte-identical. Non-derived boot header fields are preserved; ramdisk size,
+aligned DTBO offset, image ID and AVB hash/footer are recomputed. AVB `NONE`
+footer/hash verification passed, including a separate check of the saved image.
+This is not Samsung authentication or evidence that the candidate has booted.
+
+Independent Luna review caught a success-shaped receipt surviving a final
+fsync failure; exact-created-inode cleanup and failure-injection tests fixed
+that before execution. The first real host packaging attempt then refused at
+AVB verification because its temporary basename was `candidate.recovery.img`.
+The public verifier resolves the `recovery` descriptor to sibling `recovery.img`.
+A reviewed filename correction and real public-tool synthetic fixture now
+reproduce the old failure, verify the correct path and reject payload tampering.
+The first attempt made no durable output/receipt; the corrected attempt exited
+zero. All 16 focused tests pass normally, under `-O`, and with
+`PYTHONOPTIMIZE=1`; the basename-only test also runs when AVB is unavailable.
+
+No live module replacement, firmware staging, camera open/capture, partition
+write or reboot occurred. The next implementation is a separately reviewed
+camera-specific deployment/rollback profile, with current HCI `42da267f…`
+as the baseline to preserve. The expected kernel build ID stays unchanged;
+new RECOVERY readback, new boot evidence and loaded `fimc_is` build ID
+`59e54c032c545fff3ba52156f226fb6d69aadf64` must distinguish a future installation.
+Existing consumed HCI trial identities cannot authorize this different image.
+Provider/clock failure behavior and camera function remain unverified.
