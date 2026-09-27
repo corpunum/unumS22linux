@@ -2,6 +2,7 @@
 """Host-only PTY and unit regressions for the QCA H4/IBS bridge."""
 import os
 import errno
+import importlib.util
 import pty
 import select
 import signal
@@ -15,6 +16,16 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 COMMAND = bytes.fromhex("01 03 0c 00")
 EVENT = bytes.fromhex("04 0e 04 01 03 0c 00")
+
+
+def current_trial_identity():
+    runner = os.path.join(ROOT, "tools/hardware/run-bt-hci-bridge-once.py")
+    spec = importlib.util.spec_from_file_location("bt_hci_registration_adapter", runner)
+    if spec is None or spec.loader is None:
+        raise ImportError(runner)
+    adapter = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(adapter)
+    return adapter.TRIAL_ID
 
 
 def raw(fd):
@@ -161,19 +172,36 @@ static void ibs_state_test(void) {
 }
 
 static void plain_h4_test(void) {
-    int sv[2];
+    int sv[2], pty_master, pty_slave;
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv)) die("socketpair for plain H4 test");
-    struct bridge x = {.uart = sv[0], .pty_master = -1, .pty_slave = -1,
+    if (openpty(&pty_master, &pty_slave, NULL, NULL, NULL))
+        die("openpty for HCI Command Complete test");
+    struct termios tty;
+    if (tcgetattr(pty_slave, &tty)) die("read test PTY termios");
+    cfmakeraw(&tty);
+    if (tcsetattr(pty_slave, TCSANOW, &tty)) die("set raw test PTY termios");
+    struct bridge x = {.uart = sv[0], .pty_master = pty_master, .pty_slave = pty_slave,
                        .transport_mode = S22_BT_TRANSPORT_H4_NO_IBS,
                        .tx_awake = 1};
-    const uint8_t command[] = {1, 3, 0x0c, 0};
+    const uint8_t command[] = {1, 3, 0x10, 0};
+    const uint8_t complete[] = {
+        4, 0x0e, 0x0c, 1, 3, 0x10, 0, 0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7
+    };
     uint8_t sent[sizeof(command)];
     if (queue_pty_frame(&x, command, sizeof(command)) ||
         read(sv[1], sent, sizeof(sent)) != (ssize_t)sizeof(sent) ||
         memcmp(sent, command, sizeof(command)))
-        die("plain H4 did not forward command without IBS wake");
+        die("plain H4 did not forward Read Local Supported Features without IBS wake");
+    for (size_t i = 0; i < sizeof(complete); ++i)
+        if (handle_uart_byte(&x, complete[i]))
+            die("plain H4 rejected fragmented Read Local Supported Features completion");
+    uint8_t received[sizeof(complete)];
+    if (read(pty_slave, received, sizeof(received)) != (ssize_t)sizeof(received) ||
+        memcmp(received, complete, sizeof(complete)) || x.events != 1)
+        die("plain H4 did not forward exact Read Local Supported Features completion");
     if (handle_uart_byte(&x, IBS_ACK) == 0)
         die("plain H4 incorrectly consumed an IBS control byte");
+    close(pty_master); close(pty_slave);
     close(sv[0]); close(sv[1]);
 }
 
@@ -716,7 +744,7 @@ class BridgeTests(unittest.TestCase):
         command = [sys.executable]
         if not __debug__:
             command.append("-O")
-        command.extend([runner, "bt-hci-registration-20260927", "--execute"])
+        command.extend([runner, current_trial_identity(), "--execute"])
         result = subprocess.run(command, check=False,
                                 capture_output=True, text=True, timeout=3)
         if __debug__:
