@@ -50,6 +50,25 @@
   "corrected_host_packaging_exit_status": 0,
   "packager_worker_commits": ["0391048d9414b22d45f273bd9684bab62f742441", "1756e84a1d42002345510c20eb01c1eae8f9e959", "36bd9f2ea03a87a4d9829639c89c80257ba35c1a", "3012c7aebcb3ad0e031d616c51572c9a0443c81e"],
   "independent_code_reviewer": "/root/review_wave2_20260927",
+  "independent_saved_artifact_review": {
+    "reviewer": "/root/review_wave2_20260927",
+    "image_module_and_private_manifest_hashes_matched": true,
+    "base_and_rollback_hashes_matched": true,
+    "pinned_avb_verification_passed": true,
+    "independently_unpacked_candidate_and_base": true,
+    "ordered_cpio_records_checked": 963,
+    "only_raw_record_changed": "lib/modules/fimc-is.ko",
+    "module_metadata_and_boot_payload_preservation_confirmed": true,
+    "sanitized_receipt_privacy_review_passed": true,
+    "phone_access": false
+  },
+  "integrated_host_regressions": {
+    "normal_scripts_passed": 26,
+    "optimized_scripts_passed": 23,
+    "optimized_scripts_explicitly_skipped": 3,
+    "failures": 0,
+    "runner_policy_tests_passed": 7
+  },
   "focused_tests_per_mode": 16,
   "tested_modes": ["normal", "-O", "PYTHONOPTIMIZE=1"],
   "public_avb_fixture_executed_locally": true,

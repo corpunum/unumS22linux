@@ -441,3 +441,12 @@ operations can add hardware acceptance. Audio still needs a reviewed logging
 capture; current debug filtering is not evidence of IPC failure. NPU ownership
 and publication-drain liveness remain unresolved with BOOTUP refused. Bluetooth
 retains its earlier bounded initialization pass, not pairing/audio acceptance.
+
+Independent saved-artifact review subsequently passed: Luna reviewer
+`/root/review_wave2_20260927` rehashed the image, module, private manifest,
+current HCI baseline and older native rollback; ran pinned AVB verification;
+and independently unpacked/compared all 963 ordered CPIO records and unchanged
+boot payloads. It confirmed only the intended module record changed, with
+metadata and module lookup files preserved. The sanitized receipt/privacy
+review passed. This is separate from code review and still not a phone boot,
+camera load/open/capture or physical regulator/clock acceptance.
