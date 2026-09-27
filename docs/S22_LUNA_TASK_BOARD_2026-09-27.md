@@ -146,3 +146,34 @@ side effect. `1c41f09` is preserved as rejected WIP, not accepted code. Worker
 `/root/driver_review_20260926` is preparing a narrow correction/removal of the
 unsafe candidate hunk in an isolated worktree, with independent review to follow.
 No NPU deployment or BOOTUP occurred. Passing host tests did not override review.
+
+## Source corrections and build — 00:12 UTC
+
+The rejected NPU addition was removed from the active candidate by worker
+`db74bb7`, integrated `febb02f`; history and an honest baseline reproducer remain.
+The underlying ignored-error/shared-STM ownership bug is **unfixed**. No BOOTUP
+authorization/readiness was added. The source-fixture/reproducer is not actual
+kernel callback execution or proof of an unwind.
+
+Camera worker `afe3bd1` (integrated `cbac569`) added only first-resource PHY-LDO
+failure unwind: reverse earlier successful votes, preserve the original error,
+avoid false resource-count increments and release the wake reference. Four
+tests pass normally/optimized; the patch applies to pinned vendor source.
+Independent reviewer `/root/bt_next_20260926` found no scoped unwind issue.
+Failed-provider physical state and unchecked runtime-PM remain unresolved;
+there is no camera build, deployment, open or capture acceptance. CI includes
+the extracted-C camera regressions (`34cbc88`).
+
+BT worker `8cd4246`/`56cf572` (integrated `a5f1f65`/`63372b5`) corrected the
+observed transport mismatch: this embedded runtime NVM has IBS disabled, so
+the profile selects plain H4. Generic operation stays IBS; malformed profile
+metadata refuses attachment. `/root/audio_next_20260926` independently approved
+the source and all 24 normal/optimized bridge tests, including opcode 1003.
+The small userspace probe was rebuilt with the unchanged verified toolchain and
+private inputs; identity is in `BT_IBS_PROFILE_2026-09-27.md`. No kernel rebuild.
+
+Coordinator adapter `217ee89` pins that exact new ELF and a fresh one-shot ID
+`bt-hci-plain-h4-20260927`, with source-derived cleanup and nonzero command/event
+progress checks. Its 31 tests pass in both modes. Independent adapter review is
+pending; no plain-H4 trial has run at this checkpoint. Full integrated host
+suite: 21 normal, 18 optimized, three documented optimized skips, zero failures.
