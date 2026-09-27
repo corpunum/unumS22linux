@@ -450,3 +450,97 @@ boot payloads. It confirmed only the intended module record changed, with
 metadata and module lookup files preserved. The sanitized receipt/privacy
 review passed. This is separate from code review and still not a phone boot,
 camera load/open/capture or physical regulator/clock acceptance.
+
+## Camera deployment preparation continuation — 09:13 UTC
+
+Owner said to proceed after the camera-package checkpoint. Fetch reconciled
+`b623fbe479cbee772e1f63c4fc602b77a00775d5` with the review branch, with no
+newer upstream work. Its hosted regression run `36303780196` succeeded.
+The original checkout's five tracked modifications and all older worktrees
+remain preserved; no active build or hardware experiment was found. Native
+auto-ACK and resident Pi-loop services remain running and unchanged. Old
+failed transient unit states correspond to retained historical trials; all
+five shared device-guard markers are complete or explicitly reconciled.
+
+Three existing workers with previously accepted explicit `gpt-6-luna` / `max`
+selection were actually resumed. No new model selection or backend identity
+attestation is claimed. They use new isolated worktrees at `b623fbe` and have
+no phone access:
+
+| Actual worker | Worktree | Narrow assignment |
+| --- | --- | --- |
+| `/root/camera_build_20260927` | `s22-workers/camera-deploy-20260927` | Exact camera forward/reverse deployment adapter and executable regressions; no reboot or kernel rebuild |
+| `/root/audio_ipc_20260927` | `s22-workers/audio-log-20260927` | Host logging-coverage diagnostic, source/reader-ownership audit and tests; no payload consumption or verbosity change |
+| `/root/review_wave2_20260927` | `s22-workers/camera-deploy-review-20260927` | Independent code/safety review of both implementations |
+
+Fresh coordinator-only read-only baseline passed at uptime 236997.88 seconds:
+full RECOVERY `42da267f…`, kernel GNU `b2dda820…`, 325 modules, native desktop,
+browser/model/network/power readiness and idle model. The loaded camera module
+is still the old `8286071582b5efedff0e0c6169ba1a23018fb814`, not the new
+candidate module. The available kernel ring had no hung-task warnings;
+full-boot coverage is not claimed. Host image `b1041271…`, private manifest
+`dc697023…` and HCI rollback `42da267f…` rehashed exactly.
+
+Actual SSH destination `/srv/s22` is writable ext4 on device 259:20 with
+101772271616 free bytes and 1652485 free inodes. The root overlay has only
+34844672 free bytes. A first combined read-only query encountered ENOENT for
+`/proc/1/root/srv/s22`; a per-path query reconciled this without any filesystem
+change. Guardian and shell have the same mount-namespace inode but different
+root views. The missing guardian-relative path is not absence of the real SSH
+staging mount and must not become an automatic blocker for `/srv/s22`.
+
+This wave prepares the exact camera operation; it does not reuse the consumed
+HCI unattended authorization. Independent hardware rescue is still unproven.
+No camera-specific unattended-risk acceptance is recorded merely from the
+broad continuation, and no flash/reboot/camera activation has occurred.
+
+The camera adapter was independently approved at worker commits
+`3cabe1546e5a920ddd9bad51bc190ea9af495d25` and
+`c73bf1b4b4bd3e3d350eecae9bc207f69ed7eb0a`, integrated as `1c1550c` and
+`b4243e4`. Its 16 executable tests passed normally, with `-O`, and with a
+genuine `PYTHONOPTIMIZE=1` run (without `-I`, which ignores that variable).
+The coordinator also reran the integrated 16-test suite and both default
+host-only plans against the existing private artifacts. Forward is exactly
+`42da267f…` to `b1041271…`; reverse restores `42da267f…`. Neither plan
+contacted the phone. Review record `872717f4e499638f9f4faf223c69bf0c60aaad9a`
+was integrated as `4c9bac6`; the reviewer's first manually copied full hash
+was invalid and was corrected against actual Git output before integration.
+
+The review verified that the unchanged CPIO `modules.load` explicitly lists
+`fimc-is`. A future camera observer must check the already-loaded module's
+GNU build ID, not assume absence is expected standby or infer module identity
+from the unchanged kernel release/build ID. No forced module load or camera
+node open is part of this deployment adapter.
+
+A second read-only coordinator baseline passed at uptime 237995.45 seconds
+and was saved in a private host preparation journal with its actual boot ID.
+It is not a flash receipt, operation marker, authorization, or fresh gate for
+a later write. The installed native reboot helper and restart2 binary match
+the preserved reviewed host artifacts; they were hashed, not executed.
+Installed host help confirms `systemd-run --user --unit --no-block` and
+`systemd-inhibit --what=sleep:idle --mode=block` are available for a future
+durable observer. No transient camera service or inhibitor was started.
+
+Audio implementation `f8b756f`, ordered flag parser `d314540`, and naming
+clarification `1348f05` were independently approved at exact final worker
+HEAD `1348f05ad411e125e900aee4e45aeb1a1af0b31f`, then integrated as
+`2fd886b`, `6a25dbc`, and `d265670`. The 12-test suite passed normally,
+with `-O`, and with genuine `PYTHONOPTIMIZE=1`, including the retained source
+and O-tree checks. Coordinator independently reran all 12 source/build tests.
+Current Memlogger filtering is established from saved metadata; direct compiler
+flags are parsed in order, but effective preprocessing and historical marker
+coverage remain unproven. The tool never consumes shared Memlogger buffers or
+changes policy. This is not an audio DMA repair or sound acceptance.
+
+The integrated initial adapter/audio wave passed 28 normal and 25 optimized
+allowlisted scripts, with three documented optimized-script skips and zero
+failures. Runner policy passed 7/7. Optional source fixtures are tested
+separately; three deployment AVB-specific tests explicitly skipped because
+the trusted AVB tool was absent from this integration worktree. The retained
+image verification from the preceding package wave remains separate evidence.
+See [host receipts](../evidence/s22-camera-adapter-host-20260927.json).
+
+Camera worker continues the minimal boot-bound flash receipt and separate
+camera-only reboot observer; those forthcoming changes are not covered by
+the initial adapter approval or these counts. They must undergo independent
+review before any live use. No device mutation has occurred in this wave.

@@ -1,0 +1,62 @@
+{
+  "schema": "s22-camera-deployment-prep-20260927/v1",
+  "evidence_level": "coordinator read-only device and host preparation; no camera installation",
+  "repository_baseline": "b623fbe479cbee772e1f63c4fc602b77a00775d5",
+  "target": "SM-S901B/DS r0s",
+  "uptime_seconds": 236997.88,
+  "running_kernel_gnu_build_id": "b2dda820b18d410d9bf12f1bd2584567d545991d",
+  "installed_recovery_sha256": "42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5",
+  "loaded_camera_module_gnu_build_id": "8286071582b5efedff0e0c6169ba1a23018fb814",
+  "loaded_camera_module_state": "live",
+  "loaded_module_count": 325,
+  "native_desktop_browser_model_network_power_checks_passed": true,
+  "model_idle": true,
+  "available_ring_hung_task_warnings": false,
+  "full_boot_log_coverage": false,
+  "destination_filesystem": {
+    "path": "/srv/s22",
+    "filesystem": "ext4",
+    "device": "259:20",
+    "read_only": false,
+    "free_bytes": 101772271616,
+    "free_inodes": 1652485,
+    "root_overlay_free_bytes": 34844672,
+    "root_overlay_free_inodes": 29780,
+    "guardian_relative_staging_path_errno": 2,
+    "guardian_and_shell_mount_namespace_match": true,
+    "guardian_relative_missing_path_is_not_missing_ssh_staging_mount": true,
+    "filesystem_or_overlay_backing_files_changed": false
+  },
+  "memory_snapshot_kib": {
+    "MemAvailable": 3024220,
+    "MemFree": 215024,
+    "MemTotal": 7448688,
+    "SwapFree": 0,
+    "SwapTotal": 0
+  },
+  "existing_reboot_route_read_only_verification": {
+    "helper_path": "/usr/local/sbin/s22-reboot",
+    "helper_sha256": "25df3dafd81a0fb8ff0b89055977918e386bd83959f23e5723018feda82f2c42",
+    "helper_matches_reviewed_source": true,
+    "binary_path": "/usr/local/libexec/s22-restart2",
+    "binary_sha256": "8a602f6182eff2501af57569b8f5499f78a0a0a73fd5dabea1e55a82bb683eb1",
+    "binary_matches_preserved_host_artifact": true,
+    "helper_and_binary_uid": 0,
+    "helper_and_binary_mode": "0755",
+    "executed": false
+  },
+  "host_artifacts_rehashed": {
+    "camera_candidate": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+    "private_candidate_manifest": "dc6970230542ab1ab391d2964ff64d88ecba150097de3a4d44f8dc856a1a00b8",
+    "current_hci_rollback": "42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5"
+  },
+  "existing_guard_markers_terminal": 5,
+  "auto_ack_and_resident_pi_host_services_preserved": true,
+  "independent_hardware_rescue_demonstrated": false,
+  "camera_specific_unattended_risk_acceptance_recorded": false,
+  "camera_candidate_staged_on_phone": false,
+  "partition_writes": 0,
+  "reboot_requests": 0,
+  "camera_open_or_capture_attempted": false,
+  "npu_bootup_attempted": false
+}
