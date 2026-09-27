@@ -108,5 +108,5 @@ synthetic host evidence, not phone functionality.
 ```sh
 python3 -I -B tools/hardware/test-camera-recovery-profile.py
 python3 -O -I -B tools/hardware/test-camera-recovery-profile.py
-PYTHONOPTIMIZE=1 python3 -I -B tools/hardware/test-camera-recovery-profile.py
+PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-camera-recovery-profile.py
 ```
