@@ -1,11 +1,11 @@
 /*
- * Host execution harness for the exact added npu_hwdev_bootup() text extracted
- * from npu-session-lifecycle-fix.patch by test-npu-session-lifecycle.py.
+ * Host reproducer harness for the pinned baseline npu_hwdev_bootup() text.
  *
  * The reference-count helpers below mirror npu_hw_ref_get()/put() from the
  * pinned npu-hw-device.h, including increment-before-first-callback behavior.
- * This exercises C control flow and rollback ordering with injected callback
- * failures; it does not execute Linux or prove device/runtime behavior.
+ * This demonstrates ignored callback errors and the shared-STM side effect of
+ * an unsafe generic inverse. It does not execute Linux or prove device/runtime
+ * behavior.
  */
 #include <stdbool.h>
 #include <stdint.h>
@@ -59,6 +59,8 @@ static int fail_first_error;
 static __u32 fail_final_id;
 static enum ref_kind fail_final_kind;
 static int fail_final_error;
+static int stm_enable_count;
+static int stm_disable_calls;
 
 static void record(enum event_op op, enum ref_kind kind, __u32 id)
 {
@@ -80,6 +82,11 @@ static int first_callback(struct npu_hw_device *hdev, enum ref_kind kind)
 static int final_callback(struct npu_hw_device *hdev, enum ref_kind kind)
 {
 	record(EV_FINAL, kind, hdev->id);
+	if (kind == REF_INIT) {
+		/* Pinned npu_stm_disable() decrements shared state on init teardown. */
+		stm_enable_count--;
+		stm_disable_calls++;
+	}
 	if (hdev->id == fail_final_id && kind == fail_final_kind)
 		return fail_final_error;
 	return 0;
@@ -125,16 +132,11 @@ static int npu_hw_ref_put(struct npu_device *dev, struct npu_hw_refcount *ref)
 	return (--ref->refcount == 0) ? ref->final(dev, ref->hdev) : 0;
 }
 
-static void npu_device_set_emergency_err(struct npu_device *dev)
-{
-	dev->emergency = true;
-}
-
 #define BUG_ON(condition) do { if (condition) abort(); } while (0)
 #define npu_info(...) ((void)0)
 #define npu_err(...) ((void)0)
 
-/* Exact production function is emitted by the Python test. */
+/* Verbatim pinned baseline function is emitted by the Python test. */
 #include "npu-hwdev-bootup-extracted.inc"
 
 static void fail(const char *message)
@@ -161,6 +163,8 @@ static void reset_case(void)
 	fail_final_id = 0;
 	fail_final_kind = 0;
 	fail_final_error = 0;
+	stm_enable_count = 1;
+	stm_disable_calls = 0;
 	for (int i = 0; i < 3; i++) {
 		devices[i].id = (__u32)(1U << i);
 		devices[i].name = i == 0 ? "one" : i == 1 ? "two" : "four";
@@ -186,7 +190,7 @@ static void expect_event(size_t at, enum event_op op, enum ref_kind kind,
 	}
 }
 
-static void test_boot_callback_failure_balances_only_owned_refs(void)
+static void test_baseline_boot_callback_failure_is_ignored(void)
 {
 	int ret;
 
@@ -197,23 +201,23 @@ static void test_boot_callback_failure_balances_only_owned_refs(void)
 	fail_first_kind = REF_BOOT;
 	fail_first_error = -5;
 	ret = npu_hwdev_bootup(&device, 1U | 4U);
-	expect(ret == -5, "boot callback failure was not returned unchanged");
+	expect(ret == 0, "baseline reproducer no longer demonstrates ignored boot error");
 	expect(events[0].op == EV_FIRST && events[0].kind == REF_BOOT &&
 	       events[0].id == 4, "failed boot first callback was not recorded");
-	expect_event(1, EV_PUT, REF_BOOT, 4);
-	expect_event(2, EV_FINAL, REF_BOOT, 4);
-	expect_event(3, EV_PUT, REF_BOOT, 1);
-	expect(event_count == 4, "boot error unwind had an unexpected extra release");
-	expect(devices[0].boot_cnt.refcount == 1,
-	       "unwind dropped another owner's pre-existing boot reference");
-	expect(devices[2].boot_cnt.refcount == 0 &&
-	       devices[1].boot_cnt.refcount == 0,
-	       "boot failure leaked a selected reference or touched unselected device");
-	expect(!device.emergency, "successful rollback spuriously marked emergency");
-	puts("PASS actual C bootup: failed first callback balances just this call's refs");
+	expect_event(1, EV_FIRST, REF_INIT, 1);
+	expect_event(2, EV_FIRST, REF_INIT, 4);
+	expect(event_count == 3, "baseline boot reproducer had unexpected callbacks");
+	expect(devices[0].boot_cnt.refcount == 2 &&
+	       devices[2].boot_cnt.refcount == 1,
+	       "baseline did not preserve the acquired/failed reference counts");
+	expect(devices[0].init_cnt.refcount == 1 &&
+	       devices[2].init_cnt.refcount == 1,
+	       "baseline unexpectedly stopped before init after boot callback error");
+	expect(!device.emergency, "baseline unexpectedly quarantined failed boot");
+	puts("REPRO baseline C: boot callback error is ignored and refs remain");
 }
 
-static void test_init_failure_unwinds_partial_init_then_boot_in_reverse(void)
+static void test_baseline_init_failure_is_ignored_before_stm_start(void)
 {
 	int ret;
 
@@ -221,36 +225,44 @@ static void test_init_failure_unwinds_partial_init_then_boot_in_reverse(void)
 	fail_first_id = 4;
 	fail_first_kind = REF_INIT;
 	fail_first_error = -28;
-	fail_final_id = 4;
-	fail_final_kind = REF_INIT;
-	fail_final_error = -5;
 	ret = npu_hwdev_bootup(&device, 1U | 4U);
-	expect(ret == -28, "cleanup error replaced the original init failure");
+	expect(ret == 0, "baseline reproducer no longer demonstrates ignored init error");
 	expect_event(0, EV_FIRST, REF_BOOT, 1);
 	expect_event(1, EV_FIRST, REF_BOOT, 4);
 	expect_event(2, EV_FIRST, REF_INIT, 1);
 	expect_event(3, EV_FIRST, REF_INIT, 4);
-	expect_event(4, EV_PUT, REF_INIT, 4);
-	expect_event(5, EV_FINAL, REF_INIT, 4);
-	expect_event(6, EV_PUT, REF_INIT, 1);
-	expect_event(7, EV_FINAL, REF_INIT, 1);
-	expect_event(8, EV_PUT, REF_BOOT, 4);
-	expect_event(9, EV_FINAL, REF_BOOT, 4);
-	expect_event(10, EV_PUT, REF_BOOT, 1);
-	expect_event(11, EV_FINAL, REF_BOOT, 1);
-	expect(event_count == 12,
-	       "partial init unwind did not attempt every acquired reference exactly once");
-	expect(devices[0].boot_cnt.refcount == 0 &&
-	       devices[2].boot_cnt.refcount == 0 &&
-	       devices[0].init_cnt.refcount == 0 &&
-	       devices[2].init_cnt.refcount == 0,
-	       "init failure left a selected boot/init count unbalanced");
+	expect(event_count == 4, "baseline init reproducer had unexpected callbacks");
+	expect(devices[0].boot_cnt.refcount == 1 &&
+	       devices[2].boot_cnt.refcount == 1 &&
+	       devices[0].init_cnt.refcount == 1 &&
+	       devices[2].init_cnt.refcount == 1,
+	       "baseline did not retain references after failed init callback");
 	expect(devices[1].boot_cnt.refcount == 0 &&
 	       devices[1].init_cnt.refcount == 0,
-	       "init failure touched an unselected hdev");
-	expect(device.emergency,
-	       "failed final callback was not reported through emergency state");
-	puts("PASS actual C bootup: partial-init rollback is reverse ordered and preserves primary error");
+	       "baseline init reproducer touched an unselected hdev");
+	expect(!device.emergency, "baseline unexpectedly quarantined failed init");
+	expect(stm_enable_count == 1 && stm_disable_calls == 0,
+	       "baseline init failure unexpectedly ran a final callback");
+	puts("REPRO baseline C: init callback error is ignored before STM start");
+}
+
+static void test_generic_put_after_failed_init_changes_shared_stm_state(void)
+{
+	int ret;
+
+	reset_case();
+	fail_first_id = 4;
+	fail_first_kind = REF_INIT;
+	fail_first_error = -28;
+	ret = npu_hw_ref_get(&device, &devices[2].init_cnt);
+	expect(ret == -28 && devices[2].init_cnt.refcount == 1,
+	       "test precondition failed: ref helper did not increment before callback");
+	ret = npu_hw_ref_put(&device, &devices[2].init_cnt);
+	expect(ret == 0 && devices[2].init_cnt.refcount == 0,
+	       "test precondition failed: generic put did not reach its final callback");
+	expect(stm_enable_count == 0 && stm_disable_calls == 1,
+	       "generic init put did not reproduce the shared STM decrement");
+	puts("REPRO helper: generic init put decrements shared STM count");
 }
 
 static void test_success_honors_exact_hids(void)
@@ -273,14 +285,15 @@ static void test_success_honors_exact_hids(void)
 	expect(devices[1].boot_cnt.refcount == 0 &&
 	       devices[1].init_cnt.refcount == 0,
 	       "success touched an hdev outside the requested id mask");
-	puts("PASS actual C bootup: success acquires only exact requested hids");
+	puts("PASS baseline C: success keeps the selected references");
 }
 
 int main(void)
 {
-	test_boot_callback_failure_balances_only_owned_refs();
-	test_init_failure_unwinds_partial_init_then_boot_in_reverse();
+	test_baseline_boot_callback_failure_is_ignored();
+	test_baseline_init_failure_is_ignored_before_stm_start();
+	test_generic_put_after_failed_init_changes_shared_stm_state();
 	test_success_honors_exact_hids();
-	puts("LIMIT: extracted C and callback shims do not validate Linux runtime or hardware behavior");
+	puts("LIMIT: baseline C and callback shims are a reproducer, not a kernel fix or runtime proof");
 	return 0;
 }

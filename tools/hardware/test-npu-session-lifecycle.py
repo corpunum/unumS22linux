@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Host source checks, candidate-helper C regression, and Python model.
+"""Host source checks, extracted-helper C regression, and Python model.
 
-The C harness executes helper text extracted from the candidate patch under
-host shims; neither it nor the threaded model executes the kernel driver.
+The C harness executes the pinned baseline hwdev function and candidate waiter
+helpers under host shims; neither it nor the threaded model executes Linux.
 """
 from __future__ import annotations
 
@@ -20,10 +20,10 @@ KERNEL_FILES = (
     "drivers/vision/npu/core/npu-session.c",
     "drivers/vision/npu/core/npu-protodrv.c",
     "drivers/vision/npu/core/npu-vertex.c",
-    "drivers/vision/npu/core/npu-hw-device.c",
 )
 HOST_C_HARNESS = ROOT / "tools/hardware/npu-power-wait-harness.c"
 HOST_HWDEV_HARNESS = ROOT / "tools/hardware/npu-ownership-harness.c"
+HOST_HWDEV_BASELINE = ROOT / "tools/hardware/npu-hwdev-bootup-baseline.inc"
 
 
 def check(condition: bool, message: str) -> None:
@@ -73,40 +73,34 @@ def extract_production_wait_helpers() -> str:
     return helpers
 
 
-def extract_production_hwdev_bootup() -> str:
-    """Extract the exact added npu_hwdev_bootup() function from the patch."""
+def extract_baseline_hwdev_bootup() -> str:
+    """Load the verbatim pinned baseline function used to reproduce the bug."""
     text = PATCH.read_text()
-    start = text.find("+int npu_hwdev_bootup(")
-    check(start >= 0, "candidate patch omits the checked hwdev bootup function")
-    lines = []
-    for line in text[start:].splitlines():
-        if not line.startswith("+") or line.startswith("+++"):
-            break
-        lines.append(line[1:])
-    body = function_body("\n".join(lines), "int npu_hwdev_bootup(")
-    check(body, "candidate hwdev bootup extraction is incomplete")
+    check("diff --git a/drivers/vision/npu/core/npu-hw-device.c" not in text,
+          "unsafe hwdev callback-unwind candidate hunk is still active")
+    check(HOST_HWDEV_BASELINE.is_file(), "pinned hwdev baseline fixture is missing")
+    body = function_body(HOST_HWDEV_BASELINE.read_text(), "int npu_hwdev_bootup(")
+    check(body, "pinned baseline hwdev bootup fixture is incomplete")
     for marker in (
-        "ret = npu_hw_ref_get(device, &hdev->boot_cnt)",
-        "boot_hids |= hdev->id",
-        "ret = npu_hw_ref_get(device, &hdev->init_cnt)",
-        "init_hids |= hdev->id",
-        "npu_hw_ref_put(device, &hdev->init_cnt)",
-        "npu_hw_ref_put(device, &hdev->boot_cnt)",
-        "npu_device_set_emergency_err(device)",
+        "npu_hw_ref_get(device, &hdev->boot_cnt)",
+        "npu_hw_ref_get(device, &hdev->init_cnt)",
+        "return ret;",
     ):
-        check(marker in body, f"candidate hwdev bootup omits {marker}")
+        check(marker in body, f"baseline hwdev bootup omits {marker}")
+    check("if (ret)" not in body,
+          "baseline reproducer unexpectedly propagates callback errors")
     return body
 
 
-def test_actual_c_hwdev_bootup_unwind() -> None:
-    """Execute exact patched C with refcount callback failures injected."""
+def test_actual_c_hwdev_failure_reproducer() -> None:
+    """Execute pinned baseline C and show ignored errors plus unsafe inverse."""
     check(HOST_HWDEV_HARNESS.is_file(), "actual-C hwdev ownership harness is missing")
     compiler = shutil.which("cc") or shutil.which("gcc")
     check(compiler is not None, "host C compiler (cc/gcc) is required for hwdev regression")
     with tempfile.TemporaryDirectory(prefix="npu-hwdev-c-") as temp:
         include = Path(temp) / "npu-hwdev-bootup-extracted.inc"
         binary = Path(temp) / "npu-hwdev-ownership-harness"
-        include.write_text(extract_production_hwdev_bootup())
+        include.write_text(extract_baseline_hwdev_bootup())
         try:
             compiled = subprocess.run(
                 [compiler, "-std=gnu11", "-Wall", "-Wextra", "-Werror",
@@ -126,9 +120,10 @@ def test_actual_c_hwdev_bootup_unwind() -> None:
         check(executed.returncode == 0,
               "actual-C hwdev harness failed:\n" + executed.stdout + executed.stderr)
         for marker in (
-            "PASS actual C bootup: failed first callback balances just this call's refs",
-            "PASS actual C bootup: partial-init rollback is reverse ordered and preserves primary error",
-            "PASS actual C bootup: success acquires only exact requested hids",
+            "REPRO baseline C: boot callback error is ignored and refs remain",
+            "REPRO baseline C: init callback error is ignored before STM start",
+            "REPRO helper: generic init put decrements shared STM count",
+            "PASS baseline C: success keeps the selected references",
             "LIMIT:",
         ):
             check(marker in executed.stdout,
@@ -314,6 +309,8 @@ class SessionModel:
 def test_source_contract() -> None:
     check(PATCH.is_file(), "generated kernel patch is missing")
     text = PATCH.read_text()
+    check("diff --git a/drivers/vision/npu/core/npu-hw-device.c" not in text,
+          "rejected hwdev callback-unwind hunk is still active")
     for path in KERNEL_FILES:
         check(f"{path}" in text, f"patch omits owned source {path}")
     added = "\n".join(
@@ -361,7 +358,7 @@ def test_source_contract() -> None:
         session = (KERNEL_ROOT / KERNEL_FILES[0]).read_text()
         proto = (KERNEL_ROOT / KERNEL_FILES[1]).read_text()
         vertex = (KERNEL_ROOT / KERNEL_FILES[2]).read_text()
-        hwdev = (KERNEL_ROOT / KERNEL_FILES[3]).read_text()
+        hwdev = (KERNEL_ROOT / "drivers/vision/npu/core/npu-hw-device.c").read_text()
         hwdev_header = (KERNEL_ROOT / "drivers/vision/npu/core/npu-hw-device.h").read_text()
         msgid_source = (KERNEL_ROOT / "drivers/vision/npu/core/npu-util-msgidgen.c").read_text()
         interface_source = (KERNEL_ROOT / "drivers/vision/npu/core/interface/hardware/npu-interface.c").read_text()
@@ -437,22 +434,13 @@ def test_source_contract() -> None:
               "normal boot lacks reverse unwind")
         check("npu_stm_enable(&device->system, session->hids)" in boot_body,
               "normal boot does not check STM enable")
-        check("boot_hids |= hdev->id" in hwdev_boot_body and
-              "init_hids |= hdev->id" in hwdev_boot_body and
-              "if (ret)" in hwdev_boot_body and
-              "npu_device_set_emergency_err(device)" in hwdev_boot_body,
-              "patched hwdev bootup does not propagate and unwind ref acquisition failures")
+        check(extract_baseline_hwdev_bootup() == hwdev_boot_body,
+              "host reproducer differs from the pinned hwdev bootup source")
         check("atomic_inc_return(&hw_ref->refcount) == 1" in hwdev_header and
               "hw_ref->first(device, hw_ref->hdev)" in hwdev_header,
               "pinned ref helper no longer increments before the first callback")
-        patched_hwdev_boot = extract_production_hwdev_bootup()
-        check(patched_hwdev_boot.find("boot_hids |= hdev->id") <
-              patched_hwdev_boot.find("if (ret)"),
-              "boot reference must be recorded before handling first-callback failure")
-        check(patched_hwdev_boot.find("init_hids |= hdev->id") <
-              patched_hwdev_boot.find("if (ret)",
-                                      patched_hwdev_boot.find("init_hids |= hdev->id")),
-              "init reference must be recorded before handling first-callback failure")
+        check("diff --git a/drivers/vision/npu/core/npu-hw-device.c" not in PATCH.read_text(),
+              "rejected hwdev unwind hunk must not be in the active candidate")
         check("kzalloc" not in wait_body and "kmalloc" not in wait_body,
               "stack waiter must have no allocation-failure path")
         unwind_markers = (
@@ -747,7 +735,7 @@ def test_reverse_boot_unwind() -> None:
 def main() -> None:
     test_source_contract()
     test_actual_c_waiter_helpers()
-    test_actual_c_hwdev_bootup_unwind()
+    test_actual_c_hwdev_failure_reproducer()
     test_queue_and_callback_edges()
     test_timeout_callback_race()
     test_timeout_publication_handshake()
