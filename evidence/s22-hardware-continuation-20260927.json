@@ -109,8 +109,13 @@
     "registered_hci_index": 0,
     "transport_mode": "h4-no-ibs",
     "bridge_result": 0,
+    "command_event_count_scope": "bounded bridge phase, excluding bootstrap firmware transfer",
     "commands": 41,
     "events": 41,
+    "attached_phase_command_complete_statuses_all_zero": true,
+    "pre_attach_baud_opcode": "0xfc48",
+    "pre_attach_baud_completion_status": "0x01",
+    "pre_attach_baud_nonzero_status_explanation": "unresolved; not normalized to success",
     "ibs_wake_received": 0,
     "ibs_ack_received": 0,
     "queued_commands_remaining": 0,
@@ -132,7 +137,7 @@
     "bluetooth_audio_verified": false
   },
   "camera": {
-    "evidence_level": "passive live metadata plus host-only asset recovery",
+    "evidence_level": "passive live metadata, host-only asset recovery and reviewed host patch/tests",
     "video_nodes_inventoried": 56,
     "media_nodes_inventoried": 0,
     "sensor_leader_driver": "exynos-is-sensor",
@@ -146,7 +151,28 @@
     "source_image_sha256": "6dfe677119792e95a37b016092c327ad62bc0dc7759851424ad05e6bcb31b206",
     "firmware_staged_on_phone": false,
     "guardian_firmware_destination_free_bytes": 2357919744,
-    "capture_functionality_verified": false
+    "capture_functionality_verified": false,
+    "reviewed_host_patches": ["camera-resource-unwind.patch", "camera-runtime-pm-unwind.patch"],
+    "ordered_patch_application_to_pinned_source_passed": true,
+    "extracted_c_failure_tests_normal_and_optimized_passed": true,
+    "portable_c_fixture_tests_passed_without_vendor_checkout": true,
+    "kernel_build_verified_for_these_patches": false,
+    "patches_deployed": false,
+    "physical_regulator_or_clock_cleanup_verified": false
+  },
+  "npu_host_followup": {
+    "evidence_level": "pinned vendor C bodies executed with host shims, not kernel runtime",
+    "callback_fixtures_match_pinned_source": true,
+    "ignored_failed_acquisition_reproduced": true,
+    "shared_stm_unsigned_underflow_reproduced": true,
+    "concurrent_first_acquisition_gap_reproduced": true,
+    "missing_function_false_readiness_regression_fixed": true,
+    "normal_and_optimized_tests_passed": true,
+    "independent_review_passed": true,
+    "hardware_ownership_bug_fixed": false,
+    "publication_drain_liveness_resolved": false,
+    "bootup_authorized": false,
+    "bootup_attempted": false
   },
   "host_control": {
     "user_transient_service_verified": true,

@@ -92,3 +92,10 @@ retained-kernel-window checks passed; the durable marker is complete/success.
 The independent reviewer also validated the persisted receipt host-side.
 The controller was intentionally detached afterward. This is bounded exchange,
 not a permanent service, pairing, Bluetooth audio or sustained acceptance.
+
+The independent [command-receipt reconciliation](BT_COMMAND_RECEIPTS_2026-09-27.md)
+confirms all 41 attached-phase completions have zero status. These are separate
+from bootstrap transfer/probes: opcode `0xfc48` returned nonzero status before
+attachment, despite the later identity and transfer succeeding. Its explanation
+remains unresolved and is not silently normalized to success. Firmware mode-3
+uses one final acknowledgement, not one per patch segment.

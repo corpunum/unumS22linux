@@ -217,3 +217,59 @@ The NPU removal `febb02f` also received independent review from
 failure reproducers are not advertised as a working fix. No worker may access
 the phone, mutate shared receipts or deploy a kernel. New implementations need
 independent review before integration or any separately reviewed device step.
+
+## Reviewed host follow-up
+
+BT worker `71e45c8` (integrated `c4bfca8`) reconciled the private UART capture
+against source transfer phases. All 41 attached-phase command completions have
+zero status. The 806 patch segments intentionally use one final mode-3 ACK;
+NVM's 29 segments each receive an ACK. The separate pre-attach baud command
+`0xfc48` returned `0x01`, whose explanation remains unresolved despite later
+communication succeeding. It is not silently treated as harmless. The full
+sanitized accounting is in `research/BT_COMMAND_RECEIPTS_2026-09-27.md`.
+
+Camera worker `/root/audio_next_20260926` delivered `a34ee68` plus `4302e45`,
+integrated as `dfdcb2d` / `da4152c`. The additional ordered patch checks runtime
+PM acquisition, balances a failed get, avoids false power-bit/count updates,
+and unwinds first-resource votes without tearing down other active users.
+Coordinator review caught a dependency on the local vendor checkout in the C
+test; the follow-up provides a pinned GPL fixture so CI executes the C cases
+even without that checkout. Source equality/application checks remain separate
+and explicitly skipped when unavailable. Runtime-PM and earlier LDO suites each
+pass 4/4 normal and optimized. Absent-source simulation runs the new suite with
+two explicit provenance skips and two executable tests. Independent Luna
+review by `/root/driver_review_20260926` approved the ordered patches, fixture
+follow-up and exact CI allowlist additions. No kernel build or camera operation;
+provider/clock physical-state uncertainty remains explicit.
+
+NPU worker `/root/driver_review_20260926` delivered `16f18dd` plus `0dcc1e8`,
+integrated as `d5d4825` / `d050d93`. Exact pinned C callback bodies now reproduce
+ignored failed acquisition, shared-STM unsigned underflow and concurrent get
+success before the first callback fails, using documented host shims. These
+are bug reproductions, not an NPU fix. Independent Luna reviewer
+`/root/bt_next_20260926` matched fixtures byte-for-byte to pinned source and
+approved the final correction. Review first reproduced an inaccurate green
+intermediate gate when required function bodies were absent; the follow-up
+keeps such gaps unknown and requires explicit known-false gap values. Normal
+and optimized lifecycle/preflight suites pass, including the exact formerly
+failing scenario. BOOTUP remains refused; publication-drain liveness and
+callback/STM ownership are unresolved. The active kernel patch adds no
+hw-device callback fix.
+
+A later coordinator read-only phone check passed at uptime 205647.3 seconds:
+same expected GNU build ID, native guardian, 325 modules, desktop Pi and browser
+ready, model healthy/idle, full battery at 27.3 C, maximum thermal reading 41 C.
+The available kernel ring had no fault indicators; full-boot log coverage was
+not claimed. Dedicated browser Pi remains intentionally on demand. No additional
+device mutation accompanied this host wave. First and failed trial evidence,
+original dirty checkout, rollback artifacts and master remain preserved.
+
+Integrated verification passed: runner-policy suite 7/7; fixed host suite
+22 normal scripts and 19 optimized scripts, three documented optimized skips,
+zero failures. The deployment messages in these logs are fake-filesystem/SSH
+fixtures, not new phone writes or reboots. A final output-only wording change
+clarifies that extracted C ran with host shims, not a full kernel; the NPU
+lifecycle suite was rerun in both modes afterward. Hosted provenance checks
+that lack the pinned vendor checkout remain explicit skips; portable camera
+and NPU C fixtures still execute. No private firmware, images, weights,
+credentials or raw traces are part of the published changes.
