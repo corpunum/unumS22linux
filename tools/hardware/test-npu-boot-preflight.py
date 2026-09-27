@@ -60,11 +60,14 @@ def check(condition: bool, message: str) -> None:
 
 
 def run(config_text: str, root: Path, *, missing: str | None = None,
-        unreadable: str | None = None) -> tuple[int, dict]:
+        unreadable: str | None = None,
+        omit_definition: tuple[str, str] | None = None) -> tuple[int, dict]:
     cfg = root / "config"
     cfg.write_text(config_text)
     source = root / "source"
     for rel, text in SOURCE.items():
+        if omit_definition is not None and omit_definition[0] == rel:
+            text = text.replace(omit_definition[1], "", 1)
         path = source / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.is_dir():
@@ -185,6 +188,43 @@ def main() -> None:
                       f"missing {unavailable} must report {gap} unknown")
             check(not any(result["readiness_gates"].values()),
                   f"missing {unavailable} must not promote readiness")
+
+        for relative, marker, gap in (
+            ("drivers/vision/npu/core/npu-vertex.c",
+             "int npu_hwdev_normal_bootup(", "normal_boot_unwind_missing"),
+            ("drivers/vision/npu/core/npu-hw-device.c",
+             "int npu_hwdev_bootup(", "hwdev_bootup_callback_errors_ignored"),
+            ("drivers/vision/npu/core/npu-hw-device.h",
+             "static inline int npu_hw_ref_get(",
+             "hwdev_first_callback_failure_keeps_increment"),
+            ("drivers/vision/npu/core/npu-hw-device.h",
+             "static inline int npu_hw_ref_init(", "hwdev_parent_get_error_ignored"),
+            ("drivers/vision/npu/core/npu-stm.c",
+             "int npu_stm_disable(", "shared_stm_disable_unmatched_decrement"),
+        ):
+            status, result = run(
+                CONFIG, root, omit_definition=(relative, marker))
+            check(status == 2, f"missing function body {marker} must fail closed")
+            check(result["checks"]["source"]["hwdev_sources_available"] is True,
+                  "function-body absence must not masquerade as a missing file")
+            check(result["checks"]["known_lifecycle_gaps"][gap] is None,
+                  f"missing function body {marker} must report {gap} unknown")
+            check(result["readiness_gates"]["normal_boot_error_unwind_resolved"] is False,
+                  f"missing function body {marker} must block boot unwind readiness")
+            check(result["readiness_gates"][
+                      "hwdev_failed_first_acquire_ownership_kernel_validated"] is False,
+                  f"missing function body {marker} must not promote callback ownership")
+            if marker == "int npu_hwdev_normal_bootup(":
+                check(result["checks"]["source"]["normal_boot_body_available"] is False,
+                      "missing normal boot body must be reported separately from unreadable input")
+                check(result["checks"]["known_lifecycle_gaps"][gap] is None,
+                      "missing normal boot body must not be classified as a confirmed gap")
+            if marker in ("int npu_hwdev_bootup(",
+                          "static inline int npu_hw_ref_get(",
+                          "static inline int npu_hw_ref_init(",
+                          "int npu_stm_disable("):
+                check(result["checks"]["source"]["hwdev_callback_bodies_available"] is False,
+                      "missing hwdev callback body must be explicit")
 
     # Even a fully passing synthetic artifact/config/source audit cannot
     # mark BOOTUP ready while kernel lifecycle and device/authorization gates
