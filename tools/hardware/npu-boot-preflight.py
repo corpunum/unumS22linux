@@ -106,8 +106,8 @@ def evaluate_readiness(
         "detached_waiter_outstanding_cap_validated": False,
         "normal_boot_error_unwind_resolved": (
             lifecycle_source_available and hwdev_source_available
-            and not lifecycle_gaps.get("normal_boot_unwind_missing", True)
-            and not lifecycle_gaps.get("hwdev_bootup_callback_errors_ignored", True)
+            and lifecycle_gaps.get("normal_boot_unwind_missing") is False
+            and lifecycle_gaps.get("hwdev_bootup_callback_errors_ignored") is False
         ),
         "hwdev_failed_first_acquire_ownership_kernel_validated": False,
         "hwdev_first_callback_concurrency_serialized_kernel_validated": False,
@@ -212,23 +212,28 @@ def main() -> int:
         and "npu_hw_ref_get(device, &hdev->init_cnt);" in hwdev_boot
         and "ret = npu_hw_ref_get" not in hwdev_boot
         and "if (ret)" not in hwdev_boot
-    ) if hwdev_source_available else None
+    ) if hwdev_source_available and hwdev_boot else None
     first_callback_error_keeps_increment = (
         bool(ref_get)
         and "atomic_inc_return(&hw_ref->refcount) == 1" in ref_get
         and "hw_ref->first(device, hw_ref->hdev)" in ref_get
         and "if (ret)" not in ref_get
-    ) if hwdev_source_available else None
+    ) if hwdev_source_available and ref_get else None
     parent_get_error_ignored = (
         bool(ref_init)
         and "npu_hw_ref_get(device, &phdev->init_cnt);" in ref_init
         and "ret = npu_hw_ref_get" not in ref_init
-    ) if hwdev_source_available else None
+    ) if hwdev_source_available and ref_init else None
     shared_stm_disable_unmatched_decrement = (
         bool(stm_disable)
         and "npu_stm_data.enable_cnt--;" in stm_disable
         and "if (!npu_stm_data.enable_cnt)" not in stm_disable
-    ) if hwdev_source_available else None
+    ) if hwdev_source_available and stm_disable else None
+    normal_boot_body_available = bool(normal_boot) if lifecycle_source_available else None
+    hwdev_bodies_available = (
+        all((bool(hwdev_boot), bool(ref_get), bool(ref_init), bool(stm_disable)))
+        if hwdev_source_available else None
+    )
 
     checks["source"] = {
         "normal_fw_name_AIE": (
@@ -254,12 +259,17 @@ def main() -> int:
             and "waiter->req_id == result.nw.npu_req_id" in callback
             and "!waiter->cancelled" in callback
         ),
-        "normal_boot_unwind_missing": "npu_hwdev_shutdown(device, ctrl->value)" not in normal_boot,
+        "normal_boot_body_available": normal_boot_body_available,
+        "normal_boot_unwind_missing": (
+            "npu_hwdev_shutdown(device, ctrl->value)" not in normal_boot
+            if normal_boot else None
+        ),
         "hwdev_bootup_callback_errors_ignored": hwdev_bootup_callback_errors_ignored,
         "hwdev_first_callback_failure_keeps_increment": first_callback_error_keeps_increment,
         "hwdev_parent_get_error_ignored": parent_get_error_ignored,
         "shared_stm_disable_unmatched_decrement": shared_stm_disable_unmatched_decrement,
         "hwdev_sources_available": hwdev_source_available,
+        "hwdev_callback_bodies_available": hwdev_bodies_available,
         "system_calls_signature_loader": "npu_firmware_file_read_signature" in system,
         "lifecycle_sources_available": lifecycle_source_available,
         "binary_source_available": binary_available,
@@ -288,7 +298,7 @@ def main() -> int:
     checks["known_lifecycle_gaps"] = {
         "normal_boot_unwind_missing": (
             checks["source"]["normal_boot_unwind_missing"]
-            if lifecycle_source_available else None
+            if lifecycle_source_available and normal_boot_body_available else None
         ),
         "hwdev_bootup_callback_errors_ignored": (
             checks["source"]["hwdev_bootup_callback_errors_ignored"]
