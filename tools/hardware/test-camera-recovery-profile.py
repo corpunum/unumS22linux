@@ -216,14 +216,94 @@ class DirectionAndArtifactTests(CameraFixture):
                     DEPLOY.main([option, str(self.root / 'alternate')])
                 self.assertEqual(raised.exception.code, 2)
 
+    def test_readonly_capture_and_boot_bound_shared_flash_are_valid_python(self):
+        compile(DEPLOY.CAMERA_IDENTITY_SNAPSHOT, 'camera-identity-capture', 'exec')
+        shared_body = SHARED.render_remote(
+            base_sha=self.baseline_sha, new_sha=self.camera_sha,
+            staging_directory='/srv/s22/camera-test', rollback_filename='rollback.img')
+        expected_boot = '11111111-2222-4333-8444-555555555555'
+        wrapped = DEPLOY.render_boot_bound_flash(shared_body, expected_boot)
+        compile(wrapped, 'camera-boot-bound-flash', 'exec')
+        self.assertTrue(wrapped.endswith(shared_body),
+                        'camera boot guard must preserve the shared rendered body verbatim')
+        with self.assertRaisesRegex(ValueError, 'canonical UUID'):
+            DEPLOY.render_boot_bound_flash(shared_body, 'not-a-boot-id')
+
+    def test_boot_prelude_runs_body_only_when_captured_boot_id_still_matches(self):
+        expected = '11111111-2222-4333-8444-555555555555'
+
+        class FakeBootPath:
+            def __init__(self, actual):
+                self.actual = actual
+
+            def read_text(self):
+                return self.actual + '\n'
+
+        for actual, should_run in ((expected, True),
+                                   ('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', False)):
+            with self.subTest(actual=actual):
+                fake_pathlib = SimpleNamespace(
+                    Path=lambda path: (self.assertEqual(
+                        path, '/proc/sys/kernel/random/boot_id') or FakeBootPath(actual)))
+                namespace = {}
+                wrapped = DEPLOY.render_boot_bound_flash('body_ran=True', expected)
+                with mock.patch.dict(sys.modules, {'pathlib': fake_pathlib}):
+                    if should_run:
+                        exec(wrapped, namespace)
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, 'boot ID changed'):
+                            exec(wrapped, namespace)
+                self.assertEqual(namespace.get('body_ran', False), should_run)
+
+    def test_procfs_identity_parsers_reject_missing_truncated_and_malformed_data(self):
+        namespace = {}
+        exec(DEPLOY.CAMERA_PROC_VALIDATION, namespace)
+        mountinfo = namespace['mountinfo_has_recovery']
+        modules = namespace['fimc_is_live_in_modules']
+        read_complete = namespace['read_complete_proc_text']
+        self.assertFalse(mountinfo(
+            '36 25 259:1 / /mnt rw,relatime shared:1 - ext4 /dev/root rw\n'))
+        self.assertTrue(mountinfo(
+            '36 25 259:0 / /mnt rw,relatime shared:1 - ext4 /dev/recovery rw\n'))
+        for invalid in (None, '', 'truncated-without-newline'):
+            with self.subTest(mountinfo=invalid), self.assertRaises(ValueError):
+                mountinfo(invalid)
+        for invalid in ('record without separator\n',
+                        '36 25 invalid / /mnt rw - ext4 /dev/root rw\n'):
+            with self.subTest(mountinfo=invalid), self.assertRaisesRegex(
+                    ValueError, 'mountinfo record'):
+                mountinfo(invalid)
+
+        self.assertTrue(modules('fimc_is 123 0 - Live 0xffffffc012345678\n'))
+        self.assertFalse(modules('other_module 123 0 - Live 0xffffffc012345678\n'))
+        self.assertFalse(modules(''))
+        with self.assertRaisesRegex(ValueError, 'unavailable'):
+            modules(None)
+        with self.assertRaisesRegex(ValueError, 'malformed'):
+            modules('fimc_is truncated\n')
+
+        with tempfile.TemporaryDirectory(prefix='s22-camera-procfs-') as temp:
+            root = Path(temp)
+            missing = root / 'missing'
+            with self.assertRaisesRegex(RuntimeError, 'read failed'):
+                read_complete(str(missing), 32, 'missing fixture')
+            oversized = root / 'oversized'
+            oversized.write_bytes(b'x' * 8)
+            with self.assertRaisesRegex(RuntimeError, 'bounded read limit'):
+                read_complete(str(oversized), 8, 'truncated fixture')
+            incomplete = root / 'incomplete'
+            incomplete.write_bytes(b'record')
+            with self.assertRaisesRegex(RuntimeError, 'incomplete'):
+                read_complete(str(incomplete), 16, 'incomplete fixture')
+
 
 class GuardedOperationTests(CameraFixture):
-    def run_fake(self, profile, mode, identity, fake_transport, *, receipt_dir=None):
+    def run_fake(self, profile, mode, identity, fake_transport, *, receipt_dir=None, state_root=None):
         with contextlib.redirect_stdout(io.StringIO()):
             return DEPLOY.main_camera_profile(
                 profile, mode, project_root=self.project, artifact_root=self.artifacts,
                 receipt_dir=receipt_dir or self.receipt_dir(identity),
-                state_root=self.state_root(), trial_identity=identity, execute=True,
+                state_root=state_root or self.state_root(), trial_identity=identity, execute=True,
                 shared=SHARED, guard=GUARD, transport=fake_transport)
 
     @staticmethod
@@ -243,6 +323,28 @@ class GuardedOperationTests(CameraFixture):
         return {'mode': 'flash', 'partition_written': 'recovery', 'bytes': DEPLOY.SIZE,
                 'before_sha256': resolved['before_sha256'],
                 'readback_sha256': resolved['new_sha256'], 'reboot_performed': False}
+
+    def identity_snapshot(self, profile, recovery_sha, *, boot_id='11111111-2222-4333-8444-555555555555'):
+        forward = profile == 'camera-forward'
+        return {
+            'schema': 'camera-recovery-identity/v1',
+            'boot_id': boot_id,
+            'pid1': 'native-guardian',
+            'native_ready': True,
+            'kernel_release': '5.10.260-g4e5c5ad7d950',
+            'kernel_gnu_build_id': DEPLOY.RUNNING_KERNEL_BUILD_ID,
+            'recovery_sha256': recovery_sha,
+            'recovery_target': {
+                'alias_target': '/dev/sda16',
+                'rdev': '259:0',
+                'capacity_bytes': DEPLOY.SIZE,
+                'sysfs_sectors': DEPLOY.SIZE // 512,
+                'partition_name': 'recovery',
+                'mounted': False,
+            },
+            'camera_module_loaded': forward,
+            'camera_module_gnu_build_id': 'old-camera-build-id' if forward else None,
+        }
 
     def test_forward_stage_persists_receipt_and_durable_consumed_marker(self):
         calls = []
@@ -281,19 +383,37 @@ class GuardedOperationTests(CameraFixture):
         def transport(path, command, *, input_data, timeout, project_root):
             calls.append((command, input_data))
             profile = DEPLOY.resolve_profile('camera-reverse')
+            self.assertEqual(input_data, b'')
+            if 'camera-recovery-identity/v1' in command:
+                if len([item for item in calls if 'camera-recovery-identity/v1' in item[0]]) == 1:
+                    return self.result(self.identity_snapshot(
+                        'camera-reverse', profile['before_sha256']))
+                return self.result(self.identity_snapshot(
+                    'camera-reverse', profile['new_sha256']))
             self.assertIn(profile['before_sha256'], command)
             self.assertIn(profile['new_sha256'], command)
-            self.assertEqual(input_data, b'')
+            self.assertIn('expected_boot_id=', command)
+            self.assertIn('actual_boot_id!=expected_boot_id', command)
+            prewrite = self.receipt_dir(identity) / 'camera-recovery-reverse-flash-prewrite.json'
+            self.assertTrue(prewrite.exists(), 'prewrite identity must be durable before flash')
+            self.assertEqual(json.loads((self.state_root() / f'{identity}.json').read_text())['status'],
+                             'pending')
             return self.result(self.flash_receipt('camera-reverse'))
 
         identity = DEPLOY.TRIAL_IDENTITIES[('camera-reverse', 'flash')]
         self.assertEqual(self.run_fake('camera-reverse', 'flash', identity, transport), 0)
-        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(calls), 3)
         receipt = self.receipt_dir(identity) / 'camera-recovery-reverse-flash.json'
         parsed = json.loads(receipt.read_text())
         self.assertEqual(parsed['before_sha256'], self.camera_sha)
         self.assertEqual(parsed['readback_sha256'], self.baseline_sha)
         self.assertFalse(parsed['reboot_performed'])
+        self.assertEqual(parsed['prewrite_boot_id'], '11111111-2222-4333-8444-555555555555')
+        self.assertTrue(parsed['prewrite_postwrite_same_boot'])
+        self.assertFalse(parsed['prewrite_camera_module_loaded'],
+                         'reverse rollback must not require a healthy camera module')
+        self.assertTrue((self.receipt_dir(identity) /
+                         'camera-recovery-reverse-flash-write-readback.json').exists())
 
     def test_invalid_remote_receipt_leaves_unknown_marker_and_no_local_receipt(self):
         calls = []
@@ -317,12 +437,15 @@ class GuardedOperationTests(CameraFixture):
 
         def timeout_transport(*args, **kwargs):
             calls.append((args, kwargs))
+            if len(calls) == 1:
+                return self.result(self.identity_snapshot(
+                    'camera-forward', DEPLOY.resolve_profile('camera-forward')['before_sha256']))
             raise subprocess.TimeoutExpired('fake-ssh', 1)
 
         identity = DEPLOY.TRIAL_IDENTITIES[('camera-forward', 'flash')]
         with self.assertRaisesRegex(RuntimeError, 'outcome may be unknown'):
             self.run_fake('camera-forward', 'flash', identity, timeout_transport)
-        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(calls), 2, 'one read-only capture and one flash attempt; no retry')
         marker = json.loads((self.state_root() / f'{identity}.json').read_text())
         self.assertEqual(marker['status'], 'unknown')
 
@@ -336,15 +459,90 @@ class GuardedOperationTests(CameraFixture):
 
         def partial_transport(*args, **kwargs):
             calls.append(1)
+            if len(calls) == 1:
+                return self.result(self.identity_snapshot(
+                    'camera-forward', DEPLOY.resolve_profile('camera-forward')['before_sha256']))
             return SimpleNamespace(returncode=23, stdout=b'',
                                    stderr=b'RECOVERY write failed after partial bytes')
 
         identity = DEPLOY.TRIAL_IDENTITIES[('camera-forward', 'flash')]
         with self.assertRaisesRegex(RuntimeError, 'outcome may be unknown'):
             self.run_fake('camera-forward', 'flash', identity, partial_transport)
-        self.assertEqual(calls, [1], 'partial remote failure must not trigger a retry')
+        self.assertEqual(calls, [1, 1],
+                         'one read-only capture and one partial flash attempt; no retry')
         marker = json.loads((self.state_root() / f'{identity}.json').read_text())
         self.assertEqual(marker['status'], 'unknown')
+
+    def test_postwrite_capture_failure_preserves_raw_readback_and_unknown_state(self):
+        calls = []
+        identity = DEPLOY.TRIAL_IDENTITIES[('camera-forward', 'flash')]
+        profile = DEPLOY.resolve_profile('camera-forward')
+
+        def transport(path, command, *, input_data, timeout, project_root):
+            calls.append(command)
+            if 'camera-recovery-identity/v1' in command:
+                if len(calls) == 1:
+                    return self.result(self.identity_snapshot('camera-forward', profile['before_sha256']))
+                return SimpleNamespace(returncode=1, stdout=b'', stderr=b'capture unavailable')
+            return self.result(self.flash_receipt('camera-forward'))
+
+        with self.assertRaisesRegex(RuntimeError, 'identity capture failed'):
+            self.run_fake('camera-forward', 'flash', identity, transport)
+        self.assertEqual(len(calls), 3)
+        receipt_root = self.receipt_dir(identity)
+        self.assertTrue((receipt_root / 'camera-recovery-forward-flash-prewrite.json').exists())
+        self.assertTrue((receipt_root / 'camera-recovery-forward-flash-write-readback.json').exists(),
+                        'validated full write/readback receipt must be durable before post-query')
+        self.assertFalse((receipt_root / 'camera-recovery-forward-flash.json').exists())
+        marker = json.loads((self.state_root() / f'{identity}.json').read_text())
+        self.assertEqual(marker['status'], 'unknown')
+
+    def test_postwrite_boot_change_preserves_raw_readback_without_bound_success(self):
+        calls = []
+        identity = DEPLOY.TRIAL_IDENTITIES[('camera-forward', 'flash')]
+        profile = DEPLOY.resolve_profile('camera-forward')
+        changed_boot = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+
+        def transport(path, command, *, input_data, timeout, project_root):
+            calls.append(command)
+            if 'camera-recovery-identity/v1' in command:
+                boot_id = ('11111111-2222-4333-8444-555555555555'
+                           if len(calls) == 1 else changed_boot)
+                return self.result(self.identity_snapshot(
+                    'camera-forward',
+                    profile['before_sha256'] if len(calls) == 1 else profile['new_sha256'],
+                    boot_id=boot_id))
+            return self.result(self.flash_receipt('camera-forward'))
+
+        with self.assertRaisesRegex(RuntimeError, 'boot ID changed across RECOVERY write/readback'):
+            self.run_fake('camera-forward', 'flash', identity, transport)
+        self.assertEqual(len(calls), 3)
+        receipt_root = self.receipt_dir(identity)
+        raw = json.loads((receipt_root /
+                          'camera-recovery-forward-flash-write-readback.json').read_text())
+        self.assertEqual(raw['prewrite_boot_id'], '11111111-2222-4333-8444-555555555555')
+        self.assertFalse((receipt_root / 'camera-recovery-forward-flash.json').exists())
+        marker = json.loads((self.state_root() / f'{identity}.json').read_text())
+        self.assertEqual(marker['status'], 'unknown')
+
+    def test_prewrite_alias_or_size_mismatch_never_dispatches_flash(self):
+        identity = DEPLOY.TRIAL_IDENTITIES[('camera-forward', 'flash')]
+        profile = DEPLOY.resolve_profile('camera-forward')
+        for field, wrong in (('alias_target', '/dev/block/other'), ('capacity_bytes', DEPLOY.SIZE - 512)):
+            calls = []
+            bad = self.identity_snapshot('camera-forward', profile['before_sha256'])
+            bad['recovery_target'][field] = wrong
+
+            def transport(path, command, *, input_data, timeout, project_root):
+                calls.append(command)
+                return self.result(bad)
+
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'RECOVERY target mismatch'):
+                self.run_fake('camera-forward', 'flash', identity, transport,
+                              receipt_dir=self.receipt_dir(identity, suffix=field),
+                              state_root=self.root / (field + '-state'))
+            self.assertEqual(len(calls), 1, 'unsafe read-only capture must stop before flash')
+            self.assertNotIn('actual_boot_id!=expected_boot_id', calls[0])
 
     def test_consumed_complete_identity_cannot_be_reused(self):
         identity = DEPLOY.TRIAL_IDENTITIES[('camera-forward', 'stage')]

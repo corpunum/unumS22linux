@@ -50,6 +50,22 @@ restoration path: it requires the current complete camera-candidate image
 hash, but does not require the camera module to be healthy or loaded in order
 to restore the HCI image.
 
+Before flash, while the global guard is pending, the adapter runs a narrow
+read-only identity capture. It resolves the by-name alias to `/dev/sda16`,
+requires block `rdev 259:0`, exact 100,663,296-byte ioctl capacity and matching
+sysfs sectors/`PARTNAME=recovery`, confirms the partition is unmounted, and
+hashes exactly one image-size from the opened block FD. It records actual boot
+ID, running kernel GNU build ID, `fimc_is` loaded state/build ID, and minimal
+native-context fields. Forward requires the expected old `fimc_is` build ID;
+reverse records module state but does not require a healthy camera. The
+validated pre-write receipt is durable before the flash command. The unchanged
+shared flash body is prefixed with a read-only boot-ID equality check before
+any remote mutation. After the shared body persists full-image readback proof,
+a second read-only capture must verify the new RECOVERY hash and same boot ID
+before a bound success receipt can terminalize the guard. If that post-query
+fails, pre-write and raw readback receipts remain while the guard stays
+unknown/pending; no reboot or retry follows.
+
 Each stage and flash operation has a distinct never-reused identity under the
 existing host-global `device-trial-guard`. It writes a durable pending marker
 before transport; a timeout, partial transport, malformed receipt, or local
@@ -67,11 +83,11 @@ not demonstrated and there is no exact camera-trial unattended acceptance
 record. A recovery-image hash and a CLI opt-in do not supply either condition.
 
 This adapter deliberately has no reboot, reconnect, or post-boot observer.
-Its module build IDs are expected artifact identities; it does not measure the
-actual live pre-write kernel ID, camera-module ID, or boot ID. A separate
-read-only pre-write identity receipt must be bound to the full RECOVERY
-readback receipt and boot ID before a reviewed camera-specific observer may
-request exactly one verified native `s22-reboot recovery`. That observer must
+Its flash receipt now contains measured pre-write IDs and a same-boot
+post-write binding; it still cannot observe the new boot. A separate reviewed
+camera-specific observer must consume that binding and full RECOVERY readback
+receipt before it may request exactly one verified native
+`s22-reboot recovery`. That observer must
 then perform a bounded read-only reconnect and check the resulting RECOVERY
 hash, running kernel/module IDs, and stable system health (including an
 explicit candidate-versus-rollback result). If the boot ID changes between
@@ -101,9 +117,10 @@ than retry. This document records no such approval or device operation.
 
 The executable regression checks exact forward/reverse role mapping, pinned
 artifact and manifest rejection, durable receipt/guard semantics, one-use
-identities, unknown outcomes, and the exact shared rendered remote body using
-the existing fake-filesystem fixture. The rendered stage/flash integration is
-synthetic host evidence, not phone functionality.
+identities, unknown outcomes, procfs completeness/parsing, both boot-ID guard
+outcomes, and the exact shared rendered remote body using the existing
+fake-filesystem fixture. The rendered stage/flash integration is synthetic
+host evidence, not phone functionality.
 
 ```sh
 python3 -I -B tools/hardware/test-camera-recovery-profile.py

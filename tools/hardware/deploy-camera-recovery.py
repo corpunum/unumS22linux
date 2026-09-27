@@ -14,6 +14,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import sys
@@ -32,6 +33,175 @@ PACKAGE_EVIDENCE_SHA256 = '841e14b428e7832286cecb768cd14ad1305694f47c232ee8f6881
 BASELINE_IMAGE_SHA256 = '42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5'
 CAMERA_MODULE_BUILD_ID = '59e54c032c545fff3ba52156f226fb6d69aadf64'
 BASELINE_MODULE_BUILD_ID = '8286071582b5efedff0e0c6169ba1a23018fb814'
+RUNNING_KERNEL_BUILD_ID = 'b2dda820b18d410d9bf12f1bd2584567d545991d'
+
+# Shared pure parsers are embedded in the remote read-only snapshot and tested
+# locally so failed/truncated procfs evidence cannot become a negative fact.
+CAMERA_PROC_VALIDATION = r'''import re
+def read_complete_proc_text(path,limit,label,allow_empty=False):
+ try:
+  with open(path,'rb') as f:data=f.read(limit+1)
+ except OSError as error:raise RuntimeError(label+' read failed') from error
+ if len(data)>=limit:raise RuntimeError(label+' exceeds bounded read limit')
+ if not data and not allow_empty:raise RuntimeError(label+' is empty')
+ if data and not data.endswith(b'\n'):raise RuntimeError(label+' is incomplete')
+ try:return data.decode('utf-8','strict')
+ except UnicodeError as error:raise RuntimeError(label+' is not UTF-8') from error
+def mountinfo_has_recovery(text):
+ if not text or not text.endswith('\n'):raise ValueError('mountinfo is empty or incomplete')
+ lines=text.splitlines()
+ if not lines:raise ValueError('mountinfo has no records')
+ mounted=False
+ for line in lines:
+  fields=line.split()
+  try:separator=fields.index('-')
+  except ValueError as error:raise ValueError('mountinfo record has no separator') from error
+  if (len(fields)<10 or separator<6 or len(fields)<separator+4 or
+      not fields[0].isdigit() or not fields[1].isdigit() or
+      not re.fullmatch(r'[0-9]+:[0-9]+',fields[2]) or
+      not fields[4].startswith('/') or not fields[separator+1] or
+      not fields[separator+2]):
+   raise ValueError('mountinfo record is malformed')
+  if fields[2]=='259:0':mounted=True
+ return mounted
+def fimc_is_live_in_modules(text):
+ if not isinstance(text,str):raise ValueError('/proc/modules is unavailable')
+ live=False
+ for line in text.splitlines():
+  fields=line.split()
+  if (len(fields)<6 or not re.fullmatch(r'[A-Za-z0-9_]+',fields[0]) or
+      not fields[1].isdigit() or not fields[2].isdigit() or
+      fields[4] not in ('Live','Loading','Unloading') or
+      not re.fullmatch(r'(?:0x[0-9a-fA-F]+|-)',fields[5])):
+   raise ValueError('/proc/modules record is malformed')
+  if fields[0]=='fimc_is' and fields[4]=='Live':live=True
+ return live
+'''
+
+# Narrow read-only identity capture used immediately before a camera flash and
+# again after the shared renderer's full-image readback. It does not access
+# camera nodes, firmware, kernel logs, or module controls.
+CAMERA_IDENTITY_SNAPSHOT = r'''import fcntl,hashlib,json,os,pathlib,stat,struct
+p=pathlib.Path
+size=100663296
+def require(ok,message):
+ if not ok:raise RuntimeError(message)
+def read(path,limit=65536):
+ try:
+  with open(path,'rb') as f:return f.read(limit).decode('utf-8','strict').strip('\x00\r\n ')
+ except OSError:return None
+def readb(path,limit=1048576):
+ try:
+  with open(path,'rb') as f:return f.read(limit)
+ except OSError:return None
+def build_id(notes):
+ if notes is None:return None
+ pos=0
+ while pos+12<=len(notes):
+  namesz,descsz,kind=struct.unpack_from('<III',notes,pos);pos+=12
+  name_end=pos+namesz;name_pad=pos+((namesz+3)&~3)
+  desc_end=name_pad+descsz;next_pos=name_pad+((descsz+3)&~3)
+  if name_end>len(notes) or desc_end>len(notes) or next_pos>len(notes):return None
+  if notes[pos:name_end].rstrip(b'\x00')==b'GNU' and kind==3:return notes[name_pad:desc_end].hex()
+  pos=next_pos
+ return None
+''' + CAMERA_PROC_VALIDATION + r'''
+alias=p('/dev/block/by-name/recovery')
+resolved=str(alias.resolve(strict=True))
+node=p('/dev/sda16')
+require(resolved=='/dev/sda16','RECOVERY alias target mismatch')
+require(not node.is_symlink(),'RECOVERY block node became a symlink')
+expected_rdev=os.makedev(259,0)
+fd=os.open(node,os.O_RDONLY|os.O_CLOEXEC|os.O_NOFOLLOW)
+try:
+ info=os.fstat(fd)
+ require(stat.S_ISBLK(info.st_mode) and info.st_rdev==expected_rdev,
+         'RECOVERY block device identity mismatch')
+ capacity=struct.unpack('<Q',fcntl.ioctl(fd,0x80081272,b'\x00'*8))[0]
+ sysfs_sectors=int(read('/sys/class/block/sda16/size'))
+ uevent=(read('/sys/class/block/sda16/uevent',4096) or '').splitlines()
+ mount_text=read_complete_proc_text('/proc/self/mountinfo',262144,
+                                    '/proc/self/mountinfo')
+ mounted=mountinfo_has_recovery(mount_text)
+ require(capacity==size and sysfs_sectors==size//512,
+         'RECOVERY capacity mismatch')
+ require('PARTNAME=recovery' in uevent and not mounted,
+         'RECOVERY partition name/mount state mismatch')
+ h=hashlib.sha256()
+ offset=0
+ while offset<size:
+   block=os.pread(fd,min(1048576,size-offset),offset)
+   require(bool(block),'short RECOVERY identity read')
+   h.update(block)
+   offset+=len(block)
+ require(offset==size,'RECOVERY identity read exceeded the pinned size')
+ recovery_hash=h.hexdigest()
+finally:os.close(fd)
+modules=read_complete_proc_text('/proc/modules',1048576,'/proc/modules',allow_empty=True)
+loaded=fimc_is_live_in_modules(modules)
+module_note='/sys/module/fimc_is/notes/.note.gnu.build-id'
+state={'schema':'camera-recovery-identity/v1',
+ 'boot_id':read('/proc/sys/kernel/random/boot_id'),
+ 'pid1':read('/proc/1/comm'),
+ 'native_ready':os.path.exists('/run/native-ready'),
+ 'kernel_release':read('/proc/sys/kernel/osrelease'),
+ 'kernel_gnu_build_id':build_id(readb('/sys/kernel/notes')),
+ 'recovery_sha256':recovery_hash,
+ 'recovery_target':{'alias_target':resolved,'rdev':'259:0',
+  'capacity_bytes':capacity,'sysfs_sectors':sysfs_sectors,
+  'partition_name':'recovery','mounted':mounted},
+ 'camera_module_loaded':loaded,
+ 'camera_module_gnu_build_id':build_id(readb(module_note)) if loaded else None}
+print(json.dumps(state,separators=(',',':')))
+'''
+
+
+def render_boot_bound_flash(rendered_shared_body: str, expected_boot_id: str) -> str:
+    """Check the captured boot ID before shared flash code can mutate state."""
+    uuid_pattern = r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}'
+    if not isinstance(expected_boot_id, str) or not re.fullmatch(uuid_pattern, expected_boot_id):
+        raise ValueError('pre-write boot ID must be a canonical UUID')
+    prelude = (
+        'import pathlib\n'
+        f"expected_boot_id={expected_boot_id!r}\n"
+        "actual_boot_id=pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip()\n"
+        "if actual_boot_id!=expected_boot_id: raise RuntimeError('boot ID changed before RECOVERY write; no retry')\n"
+    )
+    return prelude + rendered_shared_body
+
+
+def validate_camera_identity(snapshot: dict, *, expected_recovery_sha: str,
+                             require_baseline_camera_module: bool) -> dict:
+    if not isinstance(snapshot, dict) or snapshot.get('schema') != 'camera-recovery-identity/v1':
+        raise ValueError('camera identity snapshot has an invalid schema')
+    boot_id = snapshot.get('boot_id')
+    if not isinstance(boot_id, str) or not re.fullmatch(
+            r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}', boot_id):
+        raise ValueError('camera identity snapshot has no canonical boot ID')
+    if snapshot.get('recovery_sha256') != expected_recovery_sha:
+        raise ValueError('camera identity snapshot RECOVERY hash mismatch')
+    target = snapshot.get('recovery_target')
+    if not isinstance(target, dict):
+        raise ValueError('camera identity snapshot has no RECOVERY target proof')
+    for key, expected in {
+        'alias_target': '/dev/sda16',
+        'rdev': '259:0',
+        'capacity_bytes': SIZE,
+        'sysfs_sectors': SIZE // 512,
+        'partition_name': 'recovery',
+        'mounted': False,
+    }.items():
+        if target.get(key) != expected:
+            raise ValueError(f'camera identity snapshot RECOVERY target mismatch for {key}')
+    if snapshot.get('pid1') != 'native-guardian' or snapshot.get('native_ready') is not True:
+        raise ValueError('native recovery context is not ready')
+    if snapshot.get('kernel_gnu_build_id') != RUNNING_KERNEL_BUILD_ID:
+        raise ValueError('running kernel GNU build ID is not the pinned HCI kernel')
+    if require_baseline_camera_module and (
+            snapshot.get('camera_module_loaded') is not True or
+            snapshot.get('camera_module_gnu_build_id') != BASELINE_MODULE_BUILD_ID):
+        raise ValueError('pre-write fimc_is is not the expected loaded HCI module')
+    return snapshot
 
 PROFILES = {
     'camera-forward': {
@@ -183,6 +353,34 @@ def validate_cli_execution(profile_name: str, mode: str, trial_identity: str | N
     return expected
 
 
+def camera_identity_command():
+    return 'python3 -c ' + shlex.quote(CAMERA_IDENTITY_SNAPSHOT)
+
+
+def _run_transport(shared, artifact_root, command, *, input_data, timeout, transport):
+    if transport is None:
+        return shared.run_approved_ssh_wrapper(
+            artifact_root / 'tools/s22-ssh', command, input_data=input_data,
+            timeout=timeout, project_root=artifact_root)
+    return transport(artifact_root / 'tools/s22-ssh', command,
+                     input_data=input_data, timeout=timeout,
+                     project_root=artifact_root)
+
+
+def _capture_camera_identity(shared, artifact_root, *, transport):
+    result = _run_transport(shared, artifact_root, camera_identity_command(),
+                            input_data=b'', timeout=60, transport=transport)
+    if result.returncode:
+        raise RuntimeError('read-only camera identity capture failed; operation outcome may be unknown')
+    try:
+        value = json.loads(result.stdout)
+    except (TypeError, ValueError, json.JSONDecodeError) as error:
+        raise RuntimeError('read-only camera identity capture returned invalid JSON') from error
+    if not isinstance(value, dict):
+        raise RuntimeError('read-only camera identity capture returned a non-object')
+    return value
+
+
 def _run_operation(profile, mode, image, *, project_root, receipt_dir,
                    artifact_root, state_root, shared, guard, trial_identity,
                    transport=None):
@@ -201,8 +399,13 @@ def _run_operation(profile, mode, image, *, project_root, receipt_dir,
     except (OSError, ValueError) as error:
         raise RuntimeError(f'private camera receipt directory unavailable: {error}') from error
     out = receipt_dir / f'{profile["receipt_prefix"]}-{mode}.json'
+    prewrite_out = receipt_dir / f'{profile["receipt_prefix"]}-flash-prewrite.json'
+    raw_write_out = receipt_dir / f'{profile["receipt_prefix"]}-flash-write-readback.json'
     try:
         shared.ensure_new_receipt(out, directory_fd=receipt_dir_fd)
+        if mode == 'flash':
+            shared.ensure_new_receipt(prewrite_out, directory_fd=receipt_dir_fd)
+            shared.ensure_new_receipt(raw_write_out, directory_fd=receipt_dir_fd)
         # Validate transport identity before the durable pending marker. The
         # actual wrapper is opened/hash-pinned again by run_approved_ssh_wrapper.
         if transport is None:
@@ -218,18 +421,34 @@ def _run_operation(profile, mode, image, *, project_root, receipt_dir,
                 state_root=state_root) as operation:
             operation.begin(project_root=project_root)
             try:
-                if transport is None:
-                    result = shared.run_approved_ssh_wrapper(
-                        artifact_root / 'tools/s22-ssh', command,
-                        input_data=image if mode == 'stage' else b'',
-                        timeout=100 if mode == 'stage' else None,
-                        project_root=artifact_root)
-                else:
-                    result = transport(
-                        artifact_root / 'tools/s22-ssh', command,
-                        input_data=image if mode == 'stage' else b'',
-                        timeout=100 if mode == 'stage' else None,
-                        project_root=artifact_root)
+                prewrite = None
+                prewrite_sha = None
+                if mode == 'flash':
+                    prewrite = _capture_camera_identity(
+                        shared, artifact_root, transport=transport)
+                    validate_camera_identity(
+                        prewrite, expected_recovery_sha=profile['before_sha256'],
+                        require_baseline_camera_module=profile['profile'] == 'camera-forward')
+                    prewrite_record = {
+                        'schema': 'camera-recovery-prewrite/v1',
+                        'profile': profile['profile'],
+                        'trial_identity': trial_identity,
+                        'partition': PARTITION,
+                        'expected_write_sha256': profile['new_sha256'],
+                        'identity': prewrite,
+                    }
+                    shared.persist_receipt(prewrite_out, prewrite_record,
+                                           directory_fd=receipt_dir_fd)
+                    prewrite_sha = _sha256(shared.read_host_artifact(
+                        prewrite_out, 'durable camera pre-write identity receipt'))
+                    code = render_boot_bound_flash(code, prewrite['boot_id'])
+                    command = 'python3 -c ' + shlex.quote(code) + ' flash'
+
+                result = _run_transport(
+                    shared, artifact_root, command,
+                    input_data=image if mode == 'stage' else b'',
+                    timeout=100 if mode == 'stage' else None,
+                    transport=transport)
                 if result.returncode:
                     detail=result.stderr.decode(errors='replace')
                     raise RuntimeError(
@@ -253,7 +472,39 @@ def _run_operation(profile, mode, image, *, project_root, receipt_dir,
                     'expected_write_module_build_id': profile['write']['module_build_id'],
                     'explicit_execute_flag_present': True,
                 })
-                shared.persist_receipt(out, receipt, directory_fd=receipt_dir_fd)
+                if mode == 'flash':
+                    receipt.update({
+                        'schema': 'camera-recovery-write-readback/v1',
+                        'prewrite_identity_receipt_sha256': prewrite_sha,
+                        'prewrite_boot_id': prewrite['boot_id'],
+                        'prewrite_kernel_gnu_build_id': prewrite['kernel_gnu_build_id'],
+                        'prewrite_camera_module_loaded': prewrite['camera_module_loaded'],
+                        'prewrite_camera_module_gnu_build_id': prewrite['camera_module_gnu_build_id'],
+                    })
+                    # Preserve full write/readback proof before another remote
+                    # query. If the return identity check fails, this receipt
+                    # remains while the global marker stays unresolved.
+                    shared.persist_receipt(raw_write_out, receipt,
+                                           directory_fd=receipt_dir_fd)
+                    postwrite = _capture_camera_identity(
+                        shared, artifact_root, transport=transport)
+                    validate_camera_identity(
+                        postwrite, expected_recovery_sha=profile['new_sha256'],
+                        require_baseline_camera_module=profile['profile'] == 'camera-forward')
+                    if postwrite['boot_id'] != prewrite['boot_id']:
+                        raise RuntimeError(
+                            'boot ID changed across RECOVERY write/readback; do not reboot or retry')
+                    receipt = dict(receipt)
+                    receipt.update({
+                        'schema': 'camera-recovery-flash-bound/v1',
+                        'write_readback_receipt_sha256': _sha256(shared.read_host_artifact(
+                            raw_write_out, 'durable camera write/readback receipt')),
+                        'postwrite_identity': postwrite,
+                        'prewrite_postwrite_same_boot': True,
+                    })
+                    shared.persist_receipt(out, receipt, directory_fd=receipt_dir_fd)
+                else:
+                    shared.persist_receipt(out, receipt, directory_fd=receipt_dir_fd)
                 # The SSH subprocess has exited and the operation receipt is
                 # durable; retained stage files are intentional, not cleanup.
                 operation.complete(out, outcome='success', cleanup_confirmed=True)
