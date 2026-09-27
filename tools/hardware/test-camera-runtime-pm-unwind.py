@@ -2,6 +2,7 @@
 """Host-only failure injection for the camera runtime-PM acquire unwind."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import re
 import shutil
@@ -14,8 +15,10 @@ ROOT = Path(__file__).resolve().parents[2]
 LDO_PATCH = ROOT / "tools/hardware/camera-resource-unwind.patch"
 PATCH = ROOT / "tools/hardware/camera-runtime-pm-unwind.patch"
 HARNESS = ROOT / "tools/hardware/camera-runtime-pm-unwind-harness.c"
-PINNED_SOURCE = Path(
-    "/home/corpunum/s22-linux/lineage/android_kernel_samsung_s5e9925")
+PM_HELPER_FIXTURE = ROOT / "tools/hardware/camera-pm-runtime-resume-and-get.inc"
+PINNED_SOURCE = Path(os.environ.get(
+    "S22_CAMERA_PM_SOURCE_ROOT",
+    "/home/corpunum/s22-linux/lineage/android_kernel_samsung_s5e9925"))
 PINNED_COMMIT = "4e5c5ad7d950e4de0688b5663965f2075654b2ad"
 RESOURCE_SOURCE = Path(
     "drivers/media/platform/exynos/camera/is-resourcemgr.c")
@@ -49,7 +52,7 @@ def extract_function(source: str, name: str, *, added_diff: bool = False) -> str
     raise ValueError("function has unbalanced braces: " + name)
 
 
-def checked_patch_sequence() -> tuple[str, str]:
+def checked_patch_sequence() -> str:
     """Apply-check both ordered patches in a temp copy, never in vendor source."""
     if not (PINNED_SOURCE / ".git").exists():
         raise unittest.SkipTest("pinned vendor source checkout is unavailable")
@@ -61,10 +64,9 @@ def checked_patch_sequence() -> tuple[str, str]:
 
     with tempfile.TemporaryDirectory(prefix="camera-runtime-pm-patch-") as temp:
         temp_root = Path(temp)
-        for relative in (RESOURCE_SOURCE, PM_HEADER):
-            staged = temp_root / relative
-            staged.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(PINNED_SOURCE / relative, staged)
+        staged = temp_root / RESOURCE_SOURCE
+        staged.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(PINNED_SOURCE / RESOURCE_SOURCE, staged)
         for patch_file in (LDO_PATCH, PATCH):
             check = subprocess.run(
                 ["git", "apply", "--check", str(patch_file)], cwd=temp_root,
@@ -78,13 +80,12 @@ def checked_patch_sequence() -> tuple[str, str]:
             if applied.returncode:
                 raise AssertionError(
                     "could not stage camera patch in temporary copy: " + applied.stderr)
-        return ((temp_root / RESOURCE_SOURCE).read_text(encoding="utf-8"),
-                (temp_root / PM_HEADER).read_text(encoding="utf-8"))
+        return (temp_root / RESOURCE_SOURCE).read_text(encoding="utf-8")
 
 
 class CameraRuntimePmUnwindTests(unittest.TestCase):
     def test_baseline_ignored_return_and_ordered_patch_application(self) -> None:
-        patched, _ = checked_patch_sequence()
+        patched = checked_patch_sequence()
         original = (PINNED_SOURCE / RESOURCE_SOURCE).read_text(encoding="utf-8")
         self.assertIn("pm_runtime_get_sync(&resource->pdev->dev);", original)
         self.assertNotIn(
@@ -99,6 +100,22 @@ class CameraRuntimePmUnwindTests(unittest.TestCase):
         rsc_err = patched.index("\nrsc_err:", p_err)
         self.assertIn("atomic_inc(&resource->rsccount);", patched[p_err:rsc_err])
         self.assertIn("atomic_inc(&core->rsccount);", patched[p_err:rsc_err])
+
+    def test_pm_helper_fixture_matches_pinned_source_when_available(self) -> None:
+        pinned_header = PINNED_SOURCE / PM_HEADER
+        if not pinned_header.is_file():
+            self.skipTest("pinned vendor PM header unavailable; GPL fixture is used")
+        revision = subprocess.run(
+            ["git", "-C", str(PINNED_SOURCE), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=False)
+        if revision.returncode or revision.stdout.strip() != PINNED_COMMIT:
+            raise AssertionError("camera PM fixture source is not the reviewed pin")
+        fixture = PM_HELPER_FIXTURE.read_text(encoding="utf-8")
+        pinned = pinned_header.read_text(encoding="utf-8")
+        self.assertEqual(
+            extract_function(fixture, "pm_runtime_resume_and_get"),
+            extract_function(pinned, "pm_runtime_resume_and_get"),
+        )
 
     def test_sensor_power_bit_is_set_only_after_success(self) -> None:
         patch_text = PATCH.read_text(encoding="utf-8")
@@ -128,7 +145,7 @@ class CameraRuntimePmUnwindTests(unittest.TestCase):
         self.assertEqual(template.count("/* CAMERA_SENSOR_RUNTIME_HELPERS */"), 1)
         self.assertEqual(template.count("/* CAMERA_PM_RUNTIME_HELPER */"), 1)
         template = template.replace("/* CAMERA_SENSOR_RUNTIME_HELPERS */", helpers)
-        pm_source = (PINNED_SOURCE / PM_HEADER).read_text(encoding="utf-8")
+        pm_source = PM_HELPER_FIXTURE.read_text(encoding="utf-8")
         pm_helper = extract_function(pm_source, "pm_runtime_resume_and_get")
 
         with tempfile.TemporaryDirectory(prefix="camera-runtime-pm-c-") as temp:

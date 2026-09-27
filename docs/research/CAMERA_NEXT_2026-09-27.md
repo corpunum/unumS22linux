@@ -182,13 +182,17 @@ python3 -I -B -O tools/hardware/test-camera-runtime-pm-unwind.py
 These tests establish only that the inventory implementation respects its
 bounds and avoids opening device nodes, and that the proposed LDO helper/cleanup
 branch and runtime-PM helpers pass host-side injected failures. The PM test
-extracts the exact proposed C helpers and the pinned `pm_runtime_resume_and_get()`
-implementation, compiles both CONFIG_PM and direct-callback variants, and
-injects negative and positive resume results, shared/first-resource state,
-reverse LDO cleanup failures, and dynamic-memory cleanup failure. It also checks
-that the ordered source patches apply in a temporary copy, not the vendor tree.
-These checks do not compile the full kernel, prove either patch was applied to
-the phone, or establish camera functionality or physical regulator/clock state.
+uses the GPL-2.0 [function-body fixture](../../tools/hardware/camera-pm-runtime-resume-and-get.inc)
+extracted verbatim from the pinned `pm_runtime_resume_and_get()` implementation,
+so its CONFIG_PM and direct-callback C failure injection runs even without the
+private vendor checkout. When that checkout is available, the test byte-compares
+the fixture to the pinned header and checks both ordered patches in a temporary
+source copy; those provenance/apply checks explicitly skip if the checkout is
+absent.
+It injects negative and positive resume results, shared/first-resource state,
+reverse LDO cleanup failures, and dynamic-memory cleanup failure. These checks
+do not compile the full kernel, prove either patch was applied to the phone, or
+establish camera functionality or physical regulator/clock state.
 
 ## Evidence required before stronger claims
 
