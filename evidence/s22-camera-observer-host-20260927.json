@@ -1,0 +1,65 @@
+{
+  "schema": "s22-camera-observer-host-20260927/v1",
+  "evidence_level": "host implementation and synthetic regression; separate read-only phone baseline",
+  "implementation_worker": "/root/audio_ipc_20260927",
+  "worker_commit": "931866f62176e1989774a80b0ca23e7ecbee69d9",
+  "independent_reviewer": "/root/review_wave2_20260927",
+  "review_commit": "57c3d43ca1317f4151e41711315b19c79316b094",
+  "procedure_reviewer": "/root/camera_build_20260927",
+  "worker_configuration": "reused accepted explicit gpt-6-luna/max selections; no independent backend identity attestation claimed",
+  "review_verdict": "scoped pass for host integration, not live authorization",
+  "focused_tests": {
+    "author_normal_passed": 21,
+    "author_python_O_passed": 21,
+    "author_PYTHONOPTIMIZE_1_without_I_passed": 21,
+    "reviewer_normal_passed": 21,
+    "reviewer_python_O_passed": 21,
+    "reviewer_PYTHONOPTIMIZE_1_without_I_passed": 21,
+    "coordinator_normal_passed": 21
+  },
+  "integrated_host_suite": {
+    "normal_scripts_passed": 29,
+    "optimized_scripts_passed": 26,
+    "documented_optimized_script_skips": 3,
+    "failed_scripts": 0,
+    "runner_policy_cases_passed": 7,
+    "saved_real_baseline_readiness_replay": "pass; host replay, not a fresh phone observation"
+  },
+  "coverage_limits": [
+    "Synthetic filesystem, transport and clock tests do not execute a real reboot or kernel camera path.",
+    "Optional source/build fixtures skip without their retained trees; three AVB-tool-specific deployment cases skip when the trusted public tool is absent.",
+    "Observation is USB-only. Wi-Fi exhaustion and independent hardware rescue are not established.",
+    "Observer receipts retain identity and diagnostic summaries, not a complete raw kernel-log capture.",
+    "Host launcher check ran only /usr/bin/true inside a transient user unit and sleep inhibitor; it is not evidence of a live trial."
+  ],
+  "read_only_phone_checkpoint": {
+    "captured_at": "2026-09-27T10:38:38.466882+00:00",
+    "same_boot_as_earlier_preparation": true,
+    "uptime_seconds": 242161.64,
+    "full_recovery_sha256": "42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5",
+    "running_kernel_gnu_build_id": "b2dda820b18d410d9bf12f1bd2584567d545991d",
+    "loaded_module_count": 325,
+    "native_application_network_readiness": "pass",
+    "desktop_pi_status": "ready",
+    "browser_terminal_status": "ready",
+    "dedicated_pi_session": "absent; expected on-demand standby",
+    "serious_fault_in_available_log": false,
+    "liveness_unresolved_in_available_log": false,
+    "full_boot_log_coverage_claimed": false,
+    "battery_percent": 100,
+    "battery_status": "Full",
+    "battery_temperature_celsius": 27.0,
+    "maximum_reported_thermal_zone_celsius": 40.0
+  },
+  "trial_state": {
+    "camera_stage_operations": 0,
+    "camera_partition_writes": 0,
+    "camera_reboot_requests": 0,
+    "camera_global_guard_markers": 0,
+    "camera_open_or_capture_attempted": false,
+    "npu_bootup_attempted": false,
+    "independent_hardware_rescue_proven": false,
+    "camera_specific_unattended_risk_acceptance_recorded": false,
+    "next_condition": "Owner accepts the exact b1041271 camera-image unattended trial with exact 42da267f HCI rollback, or independent rescue is established; then revalidate fresh operation-specific readiness before execution."
+  }
+}
