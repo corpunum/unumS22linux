@@ -56,19 +56,35 @@ views lacked the corresponding `/dev/snd/pcmC0D2p` node.
 The pinned read-only vendor source separates the codec amplifier path from the
 ABOX frontend-to-backend traversal. `cs35l41.c:386-387,1121,1192-1194` defines
 `AMP Enable` as a DAPM switch between `AMP Playback` and codec-side ASPRX1/2.
-The ABOX DAPM graph contains the selected `SPUS OUT2 -> SIFS0 -> SIFS0 OUT ->
-UAIF1 SPK -> UAIF1 PLA` path (`abox_cmpnt_3.c:4852-4855,4940,5011,5025,5074`).
+The earlier note cited `abox_cmpnt_3.c`, but that is not the component selected
+by this build: its kernel config is `CONFIG_SND_SOC_SAMSUNG_ABOX_VERSION=0x40001`
+with V4 enabled, and the ABOX Makefile selects `abox_soc_4.o`, `abox_soc.o`, and
+`abox_cmpnt.o`. In that V4 graph, the path is
+`SPUS OUT2 -> SPUS OUT2-SIFS0 -> SIFS0 -> SIFS0 PGA -> STMIX -> SIFS0 OUT ->
+UAIF1 SPK -> UAIF1 PLA` (`abox_cmpnt.c:6776,6861,6944,6952,6954,6970,7026`).
+`STMIX` and `SIFS0 PGA` are NOPM graph widgets with no local kcontrol in this
+component source. The UAIF1 speaker enum maps index 0 to `RESERVED` and index 1
+to `SIFS0` (`abox_cmpnt.c:5719-5724`); the bounded stream temporarily set
+`ABOX SPUS OUT2=1` and `ABOX UAIF1 SPK=1` (SIFS0), then verified cleanup restored
+both to 0. Those active-trial writes and the later cleanup state must not be
+conflated. Runtime topology/template effects remain outside this
+static-source check.
+
 The DPCM FE walk starts from the FE CPU DAI and stops when it reaches a `no_pcm`
 backend DAI widget (`soc-pcm.c:1251-1269,1271-1288`); `dpcm_add_paths()` connects
-the matching BE at that widget (`soc-pcm.c:1371-1388`). The reviewed route
-selectors and FE/BE link are therefore observable before the codec amp switch.
-
-Source does **not** support the claim that `AMP Enable Switch=off` itself
-disconnects the RDMA2 FE from the UAIF1 ABOX backend or prevents observing RDMA2
-progress. It does constrain the codec-side signal path and intentionally keeps
-the speaker amps disabled. The route, amp-off, and no-gain-change guards stay
-in place; a muted diagnostic cannot be promoted into a codec-output or sound
-claim.
+the matching BE at that widget (`soc-pcm.c:1371-1388`). Source therefore does
+not support that `AMP Enable Switch=off` itself severs FE-to-BE DPCM traversal.
+That fact does **not** establish a powered V4 DAPM path or prove RDMA2 progress.
+In the node-repaired receipt, three sampled ABOX widgets
+(`SPUS OUT2-SIFS0`, `SIFS0`, `SIFS0 OUT`) read Off in each of 19 RUNNING samples;
+`UAIF1 SPK` and `UAIF1 PLA` were not sampled there. Those are partial software
+widget snapshots, not proof of why the DMA pointer stayed at zero. A separate
+read-only audit after cleanup found `SIFS0 OUT Switch=on` and `UAIF1 Switch=on`,
+but PCM was closed and both route selectors were back at 0; all-Off idle widgets
+are not the trial's active route state. The expected ASoC DAPM widget
+power tracepoint was not present in either checked tracefs event tree. Keep the
+speaker amps off and gain unchanged; neither amp-off nor these partial/idle
+observations diagnose the zero pointer or support an audio-output claim.
 
 ## Runner boundaries
 
