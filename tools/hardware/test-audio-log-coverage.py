@@ -98,7 +98,7 @@ class AudioLogCoverageTests(unittest.TestCase):
 
     def test_dynamic_debug_compile_flag_matrix(self) -> None:
         base = {"available": True, "defines_debug": False,
-                "defines_dynamic_debug_module": False}
+                "defines_dynamic_debug_module": False, "macro_flags_complete": True}
         self.assertEqual(coverage._dev_dbg_class(
             {"CONFIG_DYNAMIC_DEBUG": "n", "CONFIG_DYNAMIC_DEBUG_CORE": "y"},
             base, True),
@@ -114,6 +114,25 @@ class AudioLogCoverageTests(unittest.TestCase):
         self.assertEqual(coverage._dev_dbg_class(
             {"CONFIG_DYNAMIC_DEBUG": "n", "CONFIG_DYNAMIC_DEBUG_CORE": "y"},
             base, False), "unknown_compiled_source_differs_from_pinned_audit")
+
+    def test_macro_flags_support_split_attached_and_last_definition_wins(self) -> None:
+        macros = coverage._parse_macro_flags([
+            "-D", "MODULE", "-DDEBUG=1", "-U", "DEBUG", "-UDYNAMIC_DEBUG_MODULE",
+            "-DDYNAMIC_DEBUG_MODULE=1", "-UMODULE",
+        ])
+        self.assertEqual(macros, {
+            "MODULE": False, "DEBUG": False, "DYNAMIC_DEBUG_MODULE": True,
+        })
+        macros = coverage._parse_macro_flags(["-UDEBUG", "-D", "DEBUG=1"])
+        self.assertEqual(macros, {"DEBUG": True})
+
+    def test_malformed_macro_flags_make_dev_dbg_state_unknown(self) -> None:
+        self.assertIsNone(coverage._parse_macro_flags(["-DMODULE", "-D"]))
+        self.assertIsNone(coverage._parse_macro_flags(["-U", "-DDEBUG"]))
+        command = {"available": True, "macro_flags_complete": False}
+        self.assertEqual(coverage._dev_dbg_class(
+            {"CONFIG_DYNAMIC_DEBUG": "n", "CONFIG_DYNAMIC_DEBUG_CORE": "y"},
+            command, True), "unknown_malformed_command_line_define_flags")
 
     def test_source_blob_check_rejects_missing_or_modified_pinned_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -163,6 +182,8 @@ class AudioLogCoverageTests(unittest.TestCase):
             self.assertTrue(command["defines_module"], obj)
             self.assertFalse(command["defines_debug"], obj)
             self.assertFalse(command["defines_dynamic_debug_module"], obj)
+            self.assertTrue(command["macro_flags_complete"], obj)
+            self.assertTrue(command["forced_includes_present"], obj)
             self.assertEqual(
                 command["dev_dbg"],
                 "command_line_config_predicts_no_dev_dbg_effective_macros_unverified",

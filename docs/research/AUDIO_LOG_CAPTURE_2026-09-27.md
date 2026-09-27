@@ -29,12 +29,14 @@ commands is at `f52cbbd7e2783d529e1e5742d94e0fd64889bbdf`; the ABOX sources,
 ABOX logging header, Memlogger source/header, and `dev_printk.h` bytes checked
 by the tool match the pinned audit source at
 `4e5c5ad7d950e4de0688b5663965f2075654b2ad`. With this source/config/flag
-combination, the command-line/configuration predicts that the ABOX objects
-have no effective `dev_dbg()` enabling macro. This is not preprocessor or
-object inspection: a macro supplied by another header or forced include has
-not been ruled out. The parser therefore labels this a prediction with
-effective macro state unverified; it does not claim the `dev_dbg()` path was
-compiled out. The separate Memlogger finding is precise: current ABOX
+combination, the ordered direct `-D`/`-U` command flags (attached or split;
+last definition wins) and config predict that the ABOX objects have no
+effective `dev_dbg()` enabling macro. This is not preprocessor or object
+inspection: macros from forced includes or other headers have not been ruled
+out. The parser therefore labels this a prediction with effective macro state
+unverified; malformed/missing `-D`/`-U` operands are classified unknown. It
+does not claim the `dev_dbg()` path was compiled out. The separate Memlogger
+finding is precise: current ABOX
 debug-level-5 messages sent to `abox-mem` are filtered by the observed level.
 Taken together, current marker capture remains unproven; this says nothing
 about unrelated log severities or the historical stream.
@@ -65,7 +67,7 @@ S22_AUDIO_LOG_BUILD_TREE=/path/to/retained/kernel-output \
   python3 -I -B tools/hardware/test-audio-log-coverage.py
 ```
 
-The retained-tree integration run in this worktree passes 10 tests. Missing
+The retained-tree integration run in this worktree passes 12 tests. Missing
 metadata or build artifacts remain `unknown`, not negative evidence. Compile
 flags are parsed observations from existing `.cmd` files, not reconstructed
 build inputs or effective-preprocessor proof. The source checks are literal

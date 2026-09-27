@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shlex
 import subprocess
 import sys
@@ -214,6 +215,37 @@ def _parse_config(path: Path) -> tuple[dict[str, str], str | None]:
     return values, hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
+_MACRO_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _parse_macro_flags(tokens: list[str]) -> dict[str, bool] | None:
+    """Return final direct -D/-U states; None means malformed flag syntax."""
+    macros: dict[str, bool] = {}
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token in ("-D", "-U"):
+            if index + 1 >= len(tokens):
+                return None
+            operation, operand = token, tokens[index + 1]
+            index += 2
+        elif token.startswith("-D") and len(token) > 2:
+            operation, operand = "-D", token[2:]
+            index += 1
+        elif token.startswith("-U") and len(token) > 2:
+            operation, operand = "-U", token[2:]
+            index += 1
+        else:
+            index += 1
+            continue
+
+        name = operand.split("=", 1)[0] if operation == "-D" else operand
+        if not _MACRO_NAME.fullmatch(name):
+            return None
+        macros[name] = operation == "-D"
+    return macros
+
+
 def _command_record(path: Path, expected_source: str) -> dict[str, Any]:
     try:
         content = path.read_text(encoding="utf-8", errors="replace").replace("\\\n", " ")
@@ -227,7 +259,7 @@ def _command_record(path: Path, expected_source: str) -> dict[str, Any]:
         tokens = shlex.split(line.split(":=", 1)[1])
     except ValueError:
         return {"available": False, "dev_dbg": "unknown"}
-    defines = {token[2:].split("=", 1)[0] for token in tokens if token.startswith("-D")}
+    macros = _parse_macro_flags(tokens)
     source_tokens = [token for token in tokens if token.endswith("/" + expected_source)]
     source_path = Path(source_tokens[-1]).resolve() if source_tokens else None
     source_root = _git_root(source_path.parent) if source_path and source_path.exists() else None
@@ -242,9 +274,13 @@ def _command_record(path: Path, expected_source: str) -> dict[str, Any]:
             pass
     return {
         "available": True,
-        "defines_module": "MODULE" in defines,
-        "defines_debug": "DEBUG" in defines,
-        "defines_dynamic_debug_module": "DYNAMIC_DEBUG_MODULE" in defines,
+        "macro_flags_complete": macros is not None,
+        "defines_module": macros.get("MODULE", False) if macros is not None else None,
+        "defines_debug": macros.get("DEBUG", False) if macros is not None else None,
+        "defines_dynamic_debug_module": (
+            macros.get("DYNAMIC_DEBUG_MODULE", False) if macros is not None else None
+        ),
+        "forced_includes_present": "-include" in tokens,
         "source_file": expected_source if source_path else None,
         "source_commit": _git_head(source_root) if source_root else None,
         "source_path_matches_expected": source_path_matches,
@@ -267,6 +303,8 @@ def _dev_dbg_class(config: dict[str, str], command: dict[str, Any],
                    source_matches: bool) -> str:
     if not command.get("available"):
         return "unknown_missing_compiled_command"
+    if not command.get("macro_flags_complete"):
+        return "unknown_malformed_command_line_define_flags"
     if not source_matches:
         return "unknown_compiled_source_differs_from_pinned_audit"
     if config.get("CONFIG_DYNAMIC_DEBUG") == "y":
