@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -23,6 +24,14 @@ CPIO_PATH = ROOT / "tools/headless-recovery/build_native_handoff.py"
 CPIO_API = BUILDER._load_module(
     CPIO_PATH, "camera_recovery_test_cpio", BUILDER.CPIO_PARSER_SHA256,
 )
+IMAGE_HELPER = BUILDER._load_module(
+    ROOT / "tools/hardware/build-bt-hci-recovery.py",
+    "camera_recovery_test_image_helper", BUILDER.IMAGE_HELPER_SHA256,
+)
+PUBLIC_AVBTOOL = Path(os.environ.get(
+    "S22_AVBTOOL",
+    ROOT.parents[1] / "s22-linux/tools/avb/avbtool.py",
+))
 
 
 def _fields(*, mode: int, ino: int, uid: int = 0, gid: int = 0,
@@ -300,6 +309,44 @@ class CameraRecoveryPackageTests(unittest.TestCase):
                     manifest, b'{"complete":true}\n', write_file=replace_path_then_fail,
                 )
             self.assertEqual(manifest.read_bytes(), replacement)
+
+    def test_public_avbtool_partition_name_requires_recovery_image_basename(self) -> None:
+        if not PUBLIC_AVBTOOL.is_file():
+            self.skipTest(f"pinned public avbtool unavailable: {PUBLIC_AVBTOOL}")
+        with tempfile.TemporaryDirectory(prefix="camera-avb-name-contract-") as temporary:
+            root = Path(temporary)
+            bad_dir = root / "bad-name"
+            bad_dir.mkdir()
+            bad_path = bad_dir / "candidate.recovery.img"
+            payload = bytes(index % 251 for index in range(512 * 1024))
+            bad_path.write_bytes(payload)
+            IMAGE_HELPER.run_trusted_avbtool(
+                PUBLIC_AVBTOOL, "add_hash_footer", "--image", bad_path,
+                "--partition_size", str(2 * 1024 * 1024),
+                "--partition_name", "recovery", "--algorithm", "NONE",
+                "--rollback_index", "0", "--salt", "11" * 32,
+            )
+            with self.assertRaisesRegex(RuntimeError, "trusted avbtool verify_image failed"):
+                IMAGE_HELPER.verify_image(PUBLIC_AVBTOOL, bad_path)
+
+            good_dir = root / "correct-name"
+            good_dir.mkdir()
+            good_path = BUILDER.candidate_recovery_image_path(good_dir)
+            self.assertEqual(good_path.name, "recovery.img")
+            good_path.write_bytes(payload)
+            IMAGE_HELPER.run_trusted_avbtool(
+                PUBLIC_AVBTOOL, "add_hash_footer", "--image", good_path,
+                "--partition_size", str(2 * 1024 * 1024),
+                "--partition_name", "recovery", "--algorithm", "NONE",
+                "--rollback_index", "0", "--salt", "11" * 32,
+            )
+            self.assertTrue(IMAGE_HELPER.verify_image(PUBLIC_AVBTOOL, good_path))
+
+            tampered = bytearray(good_path.read_bytes())
+            tampered[123] ^= 1
+            good_path.write_bytes(tampered)
+            with self.assertRaisesRegex(RuntimeError, "trusted avbtool verify_image failed"):
+                IMAGE_HELPER.verify_image(PUBLIC_AVBTOOL, good_path)
 
 
 if __name__ == "__main__":

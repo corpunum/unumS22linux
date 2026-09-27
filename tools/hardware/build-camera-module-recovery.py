@@ -406,6 +406,11 @@ def _header_values(info) -> dict[str, object]:
     return {field: getattr(info, field) for field in UNMODIFIED_HEADER_FIELDS}
 
 
+def candidate_recovery_image_path(workdir: Path) -> Path:
+    """Return AVB's required `<partition_name><extension>` image basename."""
+    return Path(workdir) / "recovery.img"
+
+
 def _copy_new(source: Path, destination: Path, expected_sha256: str) -> str:
     """Copy a verified temp artifact into the new output and independently hash it."""
     source = Path(source)
@@ -614,7 +619,7 @@ def build_candidate(args) -> dict[str, object]:
         _run([str(lz4), "-l", "-12", str(candidate_cpio_path), str(candidate_ramdisk)],
              "lz4 candidate ramdisk encode")
 
-        candidate_image = work / "candidate.recovery.img"
+        candidate_image = candidate_recovery_image_path(work)
         boot_args = base_info.format_mkbootimg_argument()
         try:
             ramdisk_index = boot_args.index("--ramdisk")
