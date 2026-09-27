@@ -273,3 +273,113 @@ lifecycle suite was rerun in both modes afterward. Hosted provenance checks
 that lack the pinned vendor checkout remain explicit skips; portable camera
 and NPU C fixtures still execute. No private firmware, images, weights,
 credentials or raw traces are part of the published changes.
+
+## Owner continuation — 06:09 UTC
+
+Fetch reconciled `3acf43b6714d88bd78c32490a734530be31896a9` with the remote
+review branch (zero ahead/behind); the integration worktree was clean. Original
+local master and its five tracked edits remain untouched. No active kernel
+build or device trial was found. The resident Pi loop and native auto-ACK host
+services remain running and unmodified. All five prior guard markers are
+terminal complete/reconciled; the successful plain-H4 identity stays consumed.
+
+Fresh coordinator-only read-only checks passed: exact RECOVERY SHA
+`42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5`, expected
+GNU build ID, native guardian, 325 modules, desktop/browser/model readiness,
+uptime 225977.24 seconds, full battery at 26.9 C and maximum thermal 39 C.
+The available kernel ring had no fault indicators; full-boot coverage is not
+claimed. Independent rescue remains unproven. No flash, reboot or hardware
+activation accompanies this baseline collection.
+
+### Actual new Luna workers
+
+All three launches explicitly selected `gpt-6-luna` and `max` reasoning through
+the supported subagent interface. Selection was accepted without a known
+override; this is configuration evidence, not an independent backend identity
+attestation. Each starts from the reconciled published head in a new worktree.
+
+| Actual worker ID | Worktree | Narrow implementation ownership |
+| --- | --- | --- |
+| `/root/bt_baud_20260927` | `s22-workers/bt-baud-20260927` | Exact baud-response interpretation, new classifier/tests and sanitized source note; no changes to consumed probe/profile |
+| `/root/audio_ipc_20260927` | `s22-workers/audio-ipc-20260927` | Source-backed trigger/IPC diagnostic or narrow fix with executable tests; no repeated old zero-stream trial |
+| `/root/camera_build_20260927` | `s22-workers/camera-build-20260927` | Real isolated ARM64 build of reviewed camera changes, provenance/compatibility and smallest packaging seam |
+
+Only the camera worker may start a heavy host build, narrowed to `nice -n10`
+and one job after reporting the exact identity/command. No worker may access
+the phone or change its state. Camera is modular: the artifact is `fimc-is.ko`
+and its loaded module name is `fimc_is`; do not rebuild an unchanged kernel Image merely to produce a
+receipt or misuse the kernel-only RECOVERY packager. No NPU change is bundled.
+Independent review remains required before device use or publication of fixes.
+
+### Source reconciliation and independent review
+
+Bluetooth worker `69a91c6` is integrated locally as `4226738`: an offline FC48
+frame parser, nine normal/optimized regressions, and a bounded source note.
+The captured return byte remains unresolved; the older Rome success value
+belongs to a different vendor event. No new Bluetooth action is authorized
+by the parser's output.
+
+Independent reviewer `/root/review_wave2_20260927` was actually launched with
+explicit `gpt-6-luna` / `max` selection, in
+`s22-workers/review-wave2-20260927`. This worker owns no shared implementation
+files and has no phone access; it reviews the Bluetooth, audio and camera
+deliverables as they become available.
+
+Coordinator read-only audio inspection found both `ABOX SIFS0 OUT Switch` and
+`ABOX UAIF1 Switch` on. The two route selectors are zero as expected after the
+previous trial's cleanup; this idle state is not the prior RUNNING state.
+Amplifiers stayed off and PCM remained closed. Live graph nodes route SIFS0
+through SIFS0 PGA and STMIX. The actual config selects ABOX `0x40001` and
+`abox_cmpnt.c`, not the earlier cited `abox_cmpnt_3.c`; the audio worker is
+correcting the source model. No controls were written, tracepoints enabled,
+PCM opened, or audio trial repeated.
+
+The audio implementation `7f15698` and sanitized-count follow-up `d082f88`
+are integrated as `1c30912` and `1943c56`. Normal and optimized tests execute
+five cases each plus one explicit optional source skip; both source-enabled
+modes pass all six. Independent Luna review reproduced the saved receipt's
+19 RUNNING samples and two RDMA2-prefixed trigger entries, without treating
+missing debug messages as failed firmware delivery.
+
+A second coordinator read-only audit found `abox-mem` enabled at log level 2
+and `abox-file` disabled at level 2. The source's debug messages use level 5
+and are filtered by that current policy. No log payload was opened or consumed,
+no verbosity changed and no flush requested. Current settings do not prove
+historical coverage. Existing logging must be reviewed before proposing a new
+instrumentation kernel or another stream attempt.
+
+Camera's first module artifact was rejected despite build exit zero because
+its `__versions` section was empty. The normal in-tree single-module target,
+using exact original symbol inputs with only old camera exports excluded,
+then produced a module with 378 version records. Independent review matched
+all 378 CRCs (323 vmlinux, 55 other-module exports), including `module_layout`.
+The existing 75 camera exports, alias set and dependency set remain unchanged.
+This is build/loader evidence only, not a loaded camera driver or capture test.
+
+An attempted reactivation of the completed Bluetooth worker for packaging was
+rejected by the runtime with `agent thread limit reached`; no such packaging
+worker ran. The existing camera worker retains that follow-on host-only task.
+The unused `s22-workers/camera-package-20260927` worktree remains preserved;
+no active worker directory was moved or overwritten.
+
+### Reviewed host checkpoint — 06:57 UTC
+
+Stage-1 camera worker commit `11dac1a` is integrated as `facd342`.
+`/root/review_wave2_20260927` approved its helper, tests, source/build receipt
+and compatibility claims after independently reproducing all three set hashes,
+378 imported CRC matches and unchanged 75 exports. The five symvers-helper
+tests pass normally, under `-O` and with `PYTHONOPTIMIZE=1`. The first incomplete
+artifact stays preserved and rejected. No module was loaded or image deployed.
+
+The same reviewer approved Bluetooth `69a91c6` after the coordinator corrected
+the older receipt note's overconfident status terminology, and approved audio
+`7f15698` / `d082f88` after the source/reader-semantics follow-up. These are
+separate host-evidence approvals, not hardware acceptance.
+
+The integrated fixed suite passed 25 normal scripts and 22 optimized scripts,
+with three documented optimized skips and zero failures; runner-policy tests
+passed 7/7. Fetch still found no new remote review-branch work. Remote master
+remains `20605dbe623e0909cf219c3cae9ef7bb597b15a6`; original local master and
+all five tracked modifications remain untouched. Only sanitized code, source
+notes and aggregate evidence are selected for publication. Camera packaging
+continues separately; no image, firmware, module binary or raw trace is added.
