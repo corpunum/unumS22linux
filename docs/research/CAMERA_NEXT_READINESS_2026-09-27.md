@@ -20,7 +20,8 @@ dispatches the sensor leader to `is_sensor_open()`, which opens the device
 manager/CAMIF/CSI and calls `is_resource_get()`; the sensor resource path
 runtime-resumes the device. `is_sensor_close()` dispatches sensor deinit and
 calls `is_resource_put()`. At pinned source commit
-`3fca50941422439b2019db2e4a3dc1016b2138a1`, that deinit path reaches
+`3fca50941422439b2019db2e4a3dc1016b2138a1`, the generic deinit path invokes
+the selected CIS deinit operation. Its pinned GN3 implementation is
 `sensor_gn3_cis_deinit()`; when `USE_CAMERA_SENSOR_RETENTION` is enabled and
 `sensor_gn3_load_retention` is false, GN3 deinit calls CIS stream-on/wait and
 stream-off/wait. The pinned rsv v01 vendor config enables that option. This is
@@ -45,8 +46,11 @@ replace a post-boot identity receipt.
    the exact camera image, running kernel GNU ID
    `b2dda820b18d410d9bf12f1bd2584567d545991d`, and loaded `fimc_is` GNU ID
    `59e54c032c545fff3ba52156f226fb6d69aadf64`. A reboot ACK or image hash
-   alone is insufficient. Explicitly account for the observer's still-pending
-   global one-shot marker before starting another guarded camera operation.
+   alone is insufficient. Account for the global one-shot marker separately;
+   reconciliation is bookkeeping, not kernel-liveness acceptance. The completed
+   camera trial is currently `not_accepted` and its marker was explicitly
+   reconciled without acceptance. This gate remains closed; do not replay the
+   completed observer to create a new acceptance window.
 2. Rerun the existing passive inventory and independently verify the current
    node mapping: requested video node 101, actual `/dev/video101` character
    device (historical passive evidence: `81:17`), sysfs `dev`/name, driver and
