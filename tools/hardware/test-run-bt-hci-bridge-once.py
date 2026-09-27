@@ -116,8 +116,10 @@ static int run_probe(const char *a,const char *b,unsigned c,unsigned d,bool e)
                 self.assertFalse(board.live_wlan_check_valid(result))
 
     def test_consumed_preflight_identity_is_not_accepted(self):
-        with self.assertRaisesRegex(adapter.GateError, 'exact controller-registration'):
-            adapter.run_trial('bt-hci-registration-20260926', observer=None, board=None)
+        for name in ('bt-hci-registration-20260926','bt-hci-registration-20260927'):
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(adapter.GateError, 'exact controller-registration'):
+                    adapter.run_trial(name, observer=None, board=None)
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="bt-registration-adapter-")
@@ -211,9 +213,10 @@ static int run_probe(const char *a,const char *b,unsigned c,unsigned d,bool e)
                                            "device_fds": [], "independent_usb": True}),
             "after_vote_check_stdout": "",
             "after_vote_check_stderr": "",
-            "uart_output": "bridge_registered_hci=0\nbridge_result=0 commands=0\n"
+            "uart_output": "bridge_registered_hci=0\nbridge_transport_mode=h4-no-ibs\n"
+                           "bridge_result=0 commands=1 events=1 ibs_wake_rx=0 ibs_ack_rx=0 queued=0\n"
                            "pty_cleanup_ioctl_result=0\n",
-            "uart_stderr": "stage=power_off_and_vote_restored\n",
+            "uart_stderr": "baud_probe_result=0\n",
             "strace_capture_path": adapter.TRIAL_DIR + "/" + adapter.TRACE_NAME,
             "strace_capture_bytes": len(trace_data),
             "strace_capture_sha256": hashlib.sha256(trace_data).hexdigest(),
@@ -356,6 +359,26 @@ static int run_probe(const char *a,const char *b,unsigned c,unsigned d,bool e)
         marker = json.loads((self.guard_root / f"{adapter.TRIAL_ID}.json").read_text())
         self.assertEqual(marker["status"], "unknown")
 
+    def test_plain_h4_completion_requires_progress_and_exact_cleanup_profile(self):
+        adapter.configure_board(self.board)
+        self.invoke_board(self.board, adapter.TRIAL_ID)
+        path = adapter.trial_receipt_directory(self.root, adapter.TRIAL_ID) / 'receipt.json'
+        original = json.loads(path.read_text())
+        cases = [
+            {'uart_stderr':'baud_probe_result=-1\n'},
+            {'uart_stderr':'stage=power_off_and_vote_restored\n'},
+            {'uart_stderr':'baud_probe_result=0\nwarning\n'},
+            {'uart_output':original['uart_output'].replace('h4-no-ibs','h4-ibs')},
+            {'uart_output':original['uart_output'].replace('events=1','events=0')},
+            {'uart_output':original['uart_output'].replace('commands=1','commands=0')},
+            {'uart_output':original['uart_output'].replace('queued=0','queued=1')},
+        ]
+        for replacement in cases:
+            with self.subTest(replacement=replacement):
+                path.write_text(json.dumps({**original, **replacement}))
+                with self.assertRaises(adapter.GateError):
+                    adapter.validate_completed_trial_receipt(
+                        self.root, adapter.TRIAL_ID, require_live=False)
     def test_trace_only_delta_is_distinct_and_does_not_block_completion(self):
         kernel_delta = (
             b"[ 241.0] Call trace:\n"
