@@ -81,6 +81,16 @@
     "runner_policy_tests_passed": 7,
     "hardware_evidence": false
   },
+  "later_read_only_postflight": {
+    "passed": true,
+    "uptime_seconds": 229054.24,
+    "full_recovery_sha256": "42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5",
+    "gnu_build_id": "b2dda820b18d410d9bf12f1bd2584567d545991d",
+    "loaded_module_count": 325,
+    "desktop_browser_model_network_power_checks_passed": true,
+    "dedicated_pi_session": "absent_on_demand",
+    "independent_rescue_proof": false
+  },
   "new_partition_writes": 0,
   "new_reboot_requests": 0,
   "prior_trial_identities_reused": false,

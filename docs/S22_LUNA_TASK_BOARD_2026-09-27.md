@@ -383,3 +383,61 @@ remains `20605dbe623e0909cf219c3cae9ef7bb597b15a6`; original local master and
 all five tracked modifications remain untouched. Only sanitized code, source
 notes and aggregate evidence are selected for publication. Camera packaging
 continues separately; no image, firmware, module binary or raw trace is added.
+
+Published checkpoint `6fb59ab6668e768ae3c09f0b28df3dda426bf090` was verified
+on the remote review branch. [Hosted regression run 36301628572](https://github.com/corpunum/unumS22linux/actions/runs/36301628572)
+completed successfully for that exact SHA. This hosted result does not add
+device or camera acceptance; master remains unchanged.
+
+### Completed camera host package — 07:32 UTC
+
+The existing explicitly selected Luna/Max camera worker
+`/root/camera_build_20260927` continued in its same isolated worktree. It
+delivered the packager/strip provenance in `0391048`, then receipt-durability
+fix `1756e84`. Independent Luna reviewer `/root/review_wave2_20260927` first
+found a success manifest surviving final fsync failure; the follow-up removes
+only the exact newly created receipt inode and preserves payloads and unrelated
+files. These commits are integrated as `c5262c8` and `9df1885`.
+
+The coordinator's first real host-only packaging attempt exited 2: the AVB
+descriptor looked for `recovery.img`, whereas the temporary image was named
+`candidate.recovery.img`. It created no durable output or success receipt.
+The worker corrected the shared path selector in `36bd9f2` and added an
+unconditional filename regression in `3012c7a`, integrated as `34e05e5` and
+`3c3f16c`. Independent review checked the pinned AVB implementation and ran
+the synthetic public-tool fixture: wrong basename refuses, correct basename
+verifies, corrupted payload refuses. All 16 focused tests pass normally,
+under `-O`, and with `PYTHONOPTIMIZE=1`. The public-tool case is an explicit
+skip if unavailable; the basename guard still runs. No private fixture is
+published. The three CI allowlist additions were independently reviewed.
+
+After that review, the coordinator reran the same host packaging command
+successfully. The saved private image is
+`builds/camera-module-recovery-20260927/recovery.img`, SHA-256
+`b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f`,
+100,663,296 bytes. The exact current HCI kernel, DTB and recovery DTBO are
+preserved; only `lib/modules/fimc-is.ko` changes among 963 CPIO records.
+The new module has 378 matching imported CRCs and unchanged aliases/dependencies
+and 75 exports. AVB footer/hash verification passed again on the saved output.
+Both original HCI and older native rollback images were independently rehashed
+and remain unchanged. Full artifact details/limits are in the
+[sanitized receipt](../evidence/s22-camera-package-20260927.json).
+
+The final integrated host suite passed 26 normal and 23 optimized scripts,
+with three documented optimized skips and zero failures; runner policy passed
+7/7. This includes the real AVB synthetic fixture locally, not phone evidence.
+No camera open, firmware staging, live module replacement, flash, reboot or
+NPU BOOTUP occurred in this continuation. Latest coordinator read-only
+postflight still identified HCI `42da267f…` / GNU `b2dda820…`, 325 modules,
+native/Pi/model/network/power healthy at uptime 231149.2 seconds in a fresh
+post-package read-only check; the model remained idle and the available kernel
+ring had no hung-task warnings. Full-boot coverage is not claimed.
+Dedicated browser Pi remains on demand; independent rescue is unproven.
+
+Next: implement/review an exact camera-specific deployment and rollback
+profile against the current HCI image, preserving consumed prior trial IDs.
+Only subsequent actual boot/module-identity checks and resource-safe camera
+operations can add hardware acceptance. Audio still needs a reviewed logging
+capture; current debug filtering is not evidence of IPC failure. NPU ownership
+and publication-drain liveness remain unresolved with BOOTUP refused. Bluetooth
+retains its earlier bounded initialization pass, not pairing/audio acceptance.
