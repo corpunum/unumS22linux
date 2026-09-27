@@ -474,6 +474,53 @@ def _fsync_directory(path: Path) -> None:
         os.close(fd)
 
 
+def _write_all_fd(fd: int, data: bytes) -> None:
+    view = memoryview(data)
+    offset = 0
+    while offset < len(view):
+        written = os.write(fd, view[offset:])
+        if written <= 0:
+            raise BuildError("short write while publishing success manifest")
+        offset += written
+
+
+def _publish_success_manifest(path: Path, data: bytes, *, write_file=None,
+                              fsync_file=None, fsync_directory=None) -> None:
+    """Publish the receipt last; remove only its own inode if durability fails."""
+    path = Path(path)
+    write_file = _write_all_fd if write_file is None else write_file
+    fsync_file = os.fsync if fsync_file is None else fsync_file
+    sync_directory = _fsync_directory if fsync_directory is None else fsync_directory
+    fd = os.open(
+        path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+    )
+    created = os.fstat(fd)
+    try:
+        write_file(fd, data)
+        fsync_file(fd)
+        os.close(fd)
+        fd = -1
+        sync_directory(path.parent)
+    except BaseException:
+        if fd >= 0:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        try:
+            current = path.lstat()
+            if (stat.S_ISREG(current.st_mode)
+                    and (current.st_dev, current.st_ino) == (created.st_dev, created.st_ino)):
+                path.unlink()
+                sync_directory(path.parent)
+        except OSError:
+            # Best-effort cleanup only; never remove a different inode.
+            pass
+        raise
+
+
 def _write_new(path: Path, data: bytes) -> None:
     fd = os.open(
         path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0)
@@ -740,8 +787,10 @@ def build_candidate(args) -> dict[str, object]:
             },
             "output_files": output_hashes,
         }
-        _write_new(out / "manifest.json", (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode())
-        _fsync_directory(out)
+        _publish_success_manifest(
+            out / "manifest.json",
+            (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode(),
+        )
         return manifest
 
 

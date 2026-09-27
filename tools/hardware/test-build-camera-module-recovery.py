@@ -209,6 +209,98 @@ class CameraRecoveryPackageTests(unittest.TestCase):
         with self.assertRaisesRegex(BUILDER.BuildError, "omitted required header fields"):
             BUILDER._header_values(incomplete)
 
+    def test_manifest_write_failure_removes_only_new_receipt(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="camera-manifest-write-failure-") as temporary:
+            root = Path(temporary)
+            output = root / "out"
+            output.mkdir()
+            candidate = output / "recovery.img"
+            candidate.write_bytes(b"verified candidate image")
+            keep = output / "other-output.json"
+            keep.write_bytes(b"preserve me")
+            manifest = output / "manifest.json"
+            success_shaped = b'{"complete":true,"success":true}\n'
+
+            def write_then_fail(fd: int, data: bytes) -> None:
+                BUILDER._write_all_fd(fd, data)
+                raise OSError("injected manifest write failure")
+
+            with self.assertRaisesRegex(OSError, "injected manifest write failure"):
+                BUILDER._publish_success_manifest(
+                    manifest, success_shaped, write_file=write_then_fail,
+                )
+            self.assertFalse(manifest.exists())
+            self.assertEqual(candidate.read_bytes(), b"verified candidate image")
+            self.assertEqual(keep.read_bytes(), b"preserve me")
+
+    def test_manifest_file_fsync_failure_removes_new_receipt(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="camera-manifest-file-fsync-") as temporary:
+            output = Path(temporary) / "out"
+            output.mkdir()
+            manifest = output / "manifest.json"
+
+            def fail_fsync(_fd: int) -> None:
+                raise OSError("injected manifest file fsync failure")
+
+            with self.assertRaisesRegex(OSError, "injected manifest file fsync failure"):
+                BUILDER._publish_success_manifest(
+                    manifest, b'{"complete":true}\n', fsync_file=fail_fsync,
+                )
+            self.assertFalse(manifest.exists())
+
+    def test_final_directory_fsync_failure_removes_new_receipt(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="camera-manifest-dir-fsync-") as temporary:
+            output = Path(temporary) / "out"
+            output.mkdir()
+            candidate = output / "recovery.img"
+            candidate.write_bytes(b"keep verified payload")
+            manifest = output / "manifest.json"
+            sync_calls = []
+
+            def fail_first_directory_sync(path: Path) -> None:
+                sync_calls.append(path)
+                if len(sync_calls) == 1:
+                    raise OSError("injected final directory fsync failure")
+                BUILDER._fsync_directory(path)
+
+            with self.assertRaisesRegex(OSError, "injected final directory fsync failure"):
+                BUILDER._publish_success_manifest(
+                    manifest, b'{"complete":true}\n',
+                    fsync_directory=fail_first_directory_sync,
+                )
+            self.assertFalse(manifest.exists())
+            self.assertEqual(candidate.read_bytes(), b"keep verified payload")
+            self.assertEqual(sync_calls, [output, output])
+
+    def test_manifest_publisher_never_removes_preexisting_receipt(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="camera-manifest-existing-") as temporary:
+            output = Path(temporary) / "out"
+            output.mkdir()
+            manifest = output / "manifest.json"
+            manifest.write_bytes(b'{"prior":true}\n')
+            with self.assertRaises(FileExistsError):
+                BUILDER._publish_success_manifest(manifest, b'{"complete":true}\n')
+            self.assertEqual(manifest.read_bytes(), b'{"prior":true}\n')
+
+    def test_manifest_failure_preserves_replacement_inode(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="camera-manifest-inode-") as temporary:
+            output = Path(temporary) / "out"
+            output.mkdir()
+            manifest = output / "manifest.json"
+            replacement = b'{"owner":"other"}\n'
+
+            def replace_path_then_fail(fd: int, data: bytes) -> None:
+                BUILDER._write_all_fd(fd, data)
+                manifest.unlink()
+                manifest.write_bytes(replacement)
+                raise OSError("injected manifest writer failure")
+
+            with self.assertRaisesRegex(OSError, "injected manifest writer failure"):
+                BUILDER._publish_success_manifest(
+                    manifest, b'{"complete":true}\n', write_file=replace_path_then_fail,
+                )
+            self.assertEqual(manifest.read_bytes(), replacement)
+
 
 if __name__ == "__main__":
     unittest.main()
