@@ -52,6 +52,12 @@ change shared state. When `S22_NPU_KERNEL_TREE` is set, the test also compares
 the fixture with the source function. These are host shims and a reproducer,
 not execution of Linux callbacks or proof of a physical unwind.
 
+That optional environment variable expects a tree with the existing candidate
+session/protodrv/vertex changes applied, not the pristine baseline checkout;
+the wider source-contract check deliberately rejects the latter. Independent
+review also compared the baseline fixture directly to the pristine pinned
+function without running the optional candidate-tree checks.
+
 The NPU lifecycle host suite has passed normal and optimized Python modes. The
 candidate patch still has no kernel build, runtime, or device validation. The
 mailbox publication drain remains unbounded if its synchronous publisher

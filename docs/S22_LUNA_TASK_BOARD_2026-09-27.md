@@ -177,3 +177,43 @@ Coordinator adapter `217ee89` pins that exact new ELF and a fresh one-shot ID
 progress checks. Its 31 tests pass in both modes. Independent adapter review is
 pending; no plain-H4 trial has run at this checkpoint. Full integrated host
 suite: 21 normal, 18 optimized, three documented optimized skips, zero failures.
+
+## Executed checkpoint — plain-H4 transport passes
+
+Independent adapter review by `/root/driver_review_20260926` approved `217ee89`
+and its pinned ELF before execution. At 00:17 UTC, the coordinator ran
+`bt-hci-plain-h4-20260927` once through the durable host service. It finished in
+25.121 seconds with return zero: hci0 registration, 41 commands and 41 events,
+no IBS wake/ack frames, no pending command, detach zero and
+`baud_probe_result=0`. Full candidate RECOVERY/build identity, unchanged boot,
+native/Pi/model/network/power checks passed. The retained kernel-log boundary
+was present with no new fatal/hung-task indicators. Postflight found no remaining
+controller or device FDs, and WLAN's vote remained intact. The global guard
+records complete/success; the independent reviewer also executed the host-only
+validator against the persisted receipt successfully.
+
+This is actual bounded HCI transport evidence, not permanent Bluetooth service,
+pairing, Bluetooth audio, RF range or sustained acceptance. The controller was
+deliberately detached and powered down afterward. No new RECOVERY write,
+reboot, NPU BOOTUP or repeat of the earlier raw-HCI socket test occurred.
+Independent hardware rescue remains unproven. All earlier failed/reconciled
+operation markers and private artifacts remain preserved.
+
+Remote branch `24e1aa2c4f4948b6866e1633e675faeba25d736b` was verified;
+GitHub Actions run `36281788663` passed. The source suite remains 21 normal and
+18 optimized scripts, with three documented optimized skips and no failures.
+The original dirty checkout and both local/remote master are unchanged.
+
+### Next host-only Luna wave
+
+| Worker (same explicit Luna/Max configuration) | Separate worktree | Assignment |
+| --- | --- | --- |
+| `/root/bt_next_20260926` | `s22-workers/bt-ibs-20260927` | Independently interpret persisted command/event evidence and delimit next Bluetooth acceptance; no second device trial |
+| `/root/audio_next_20260926` | `s22-workers/camera-pm-20260927` | Repair unchecked camera runtime-PM failure handling with executable extracted-C regressions |
+| `/root/driver_review_20260926` | `s22-workers/npu-callback-20260927` | Investigate/repair ownership at the actual failed first-init callback boundary, preserving shared STM state and BOOTUP refusal |
+
+The NPU removal `febb02f` also received independent review from
+`/root/bt_next_20260926`: the unsafe outer-unwind hunk is absent, and baseline
+failure reproducers are not advertised as a working fix. No worker may access
+the phone, mutate shared receipts or deploy a kernel. New implementations need
+independent review before integration or any separately reviewed device step.
