@@ -7,15 +7,18 @@ below are source, artifact, and operation-safety prerequisites, not a renewed
 request for broad camera permission. The worker performed host work only;
 the coordinator alone may execute a reviewed device operation.
 
-Camera readiness and capture remain **not assessed**. The only addition in this
-wave is [`camera-readiness-once.py`](../../tools/hardware/camera-readiness-once.py),
-a bounded, host-testable inventory intended for later use through the existing
-pinned transport. It reads fixed `/proc`, `/sys`, and device-tree attributes,
-stats fixed `/dev/videoN` and `/dev/mediaN` paths without opening them, and
-stats a fixed firmware filename list in four candidate roots. It does not query
-kernel logs, issue ioctls, request camera power, or access sensor ID, OTP,
-EEPROM, or calibration attributes. Missing files or nodes in one namespace are
-not a camera failure and do not establish their absence in another namespace.
+Camera readiness and capture remain **not assessed**. This continuation adds a
+source patch for the previously identified failed-open runtime-PM accounting
+path and an extracted-C host regression; it does not alter the earlier
+inventory behavior. [`camera-readiness-once.py`](../../tools/hardware/camera-readiness-once.py)
+is a bounded, host-testable inventory intended for later use through the
+existing pinned transport. It reads fixed `/proc`, `/sys`, and device-tree
+attributes, stats fixed `/dev/videoN` and `/dev/mediaN` paths without opening
+them, and stats a fixed firmware filename list in four candidate roots. It does
+not query kernel logs, issue ioctls, request camera power, or access sensor ID,
+OTP, EEPROM, or calibration attributes. Missing files or nodes in one namespace
+are not a camera failure and do not establish their absence in another
+namespace.
 
 The result deliberately says `readiness: not_assessed`. V4L2/media node
 presence, module names, DT metadata, and firmware file sizes are inventory—not
@@ -108,12 +111,36 @@ without modifying the vendor checkout.
 These checks do not prove regulator hardware state. A provider can return an
 enable error after physical state has changed; a rollback disable can itself
 fail. The patch therefore makes a best-effort vote unwind, not a physical
-power-off guarantee. It also intentionally does not address the separate
-source issue that `pm_runtime_get_sync()`'s return is ignored in
-`is_resource_get()` (`is-resourcemgr.c:1863-1877`); runtime resume can return an
-error from the pre-hook or clock-on sequence
-(`is-device-sensor_v2.c:4026-4041`). That remains a separate blocker to claiming
-sensor-open cleanup.
+power-off guarantee.
+
+The follow-up [`camera-runtime-pm-unwind.patch`](../../tools/hardware/camera-runtime-pm-unwind.patch)
+is ordered after `camera-resource-unwind.patch`. In the pinned baseline,
+`is_resource_get()` ignores the `pm_runtime_get_sync()` return and then sets
+the sensor power bit; the later `p_err` label increments resource/core counts.
+The pinned PM header specifies that `pm_runtime_get_sync()` keeps its usage
+reference even on error, while `pm_runtime_resume_and_get()` drops that
+reference on a negative resume result (`include/linux/pm_runtime.h:386-420`).
+The new helper uses the latter when CONFIG_PM is enabled, checks and
+normalizes the direct callback result otherwise, and sets the sensor power bit
+only on success. A failed resume returns via `rsc_err` before the count label.
+For a first core acquire it best-effort disables the LDO votes acquired by that
+attempt in reverse order, deinitializes dynamic memory, clears resource state,
+and releases the wake reference. If other resources are already active, it
+leaves shared LDO, memory, and wake state untouched. A cleanup error is logged
+and the original resume error is returned; incomplete LDO cleanup is explicitly
+hardware-state-unknown.
+
+The patch is only a host candidate, not a complete physical resume-failure
+unwind proof. In the r0s v10.1 source path, the runtime-resume pre-hook returns
+zero and the explicit generic error checks for a missing sensor device or CSI
+subdevice precede ICLK setup (`is-device-sensor_v2.c:4004-4041`,
+`is-hw-pwr.c:24-28`). However, the r0s clock-operation wrappers discard the
+return from `exynos9925_is_sensor_iclk_cfg/on()` and return zero
+(`setup-is-sensor.c:184-198`); the underlying clock/gate operations therefore
+remain unverified by the runtime-PM result. No claim is made that they succeeded
+or were physically rolled back. The patch handles the PM reference, software
+resource state, and first-acquire regulator votes; physical clock/regulator
+state still requires separate evidence.
 
 `VIDIOC_QUERYCAP` itself only fills static capability fields in
 `is_vidioc_querycap()` (`is-video.c:2914-2934`), but reaching it requires an
@@ -148,13 +175,20 @@ python3 -I -B tools/hardware/test-camera-readiness-once.py
 python3 -O -I -B tools/hardware/test-camera-readiness-once.py
 python3 -I -B tools/hardware/test-camera-resource-unwind.py
 python3 -I -B -O tools/hardware/test-camera-resource-unwind.py
+python3 -I -B tools/hardware/test-camera-runtime-pm-unwind.py
+python3 -I -B -O tools/hardware/test-camera-runtime-pm-unwind.py
 ```
 
 These tests establish only that the inventory implementation respects its
 bounds and avoids opening device nodes, and that the proposed LDO helper/cleanup
-branch passes host-side injected failures. They do not compile the full kernel,
-prove the patch was applied to the phone, or establish camera functionality or
-physical regulator state.
+branch and runtime-PM helpers pass host-side injected failures. The PM test
+extracts the exact proposed C helpers and the pinned `pm_runtime_resume_and_get()`
+implementation, compiles both CONFIG_PM and direct-callback variants, and
+injects negative and positive resume results, shared/first-resource state,
+reverse LDO cleanup failures, and dynamic-memory cleanup failure. It also checks
+that the ordered source patches apply in a temporary copy, not the vendor tree.
+These checks do not compile the full kernel, prove either patch was applied to
+the phone, or establish camera functionality or physical regulator/clock state.
 
 ## Evidence required before stronger claims
 
@@ -165,9 +199,10 @@ physical regulator state.
    candidate release locally, and confirm runtime paths/namespace. Do not
    publish proprietary payload bytes or use an old manifest as proof of current
    compatibility.
-3. Review/build the narrow resource-unwind patch against the exact candidate
-   kernel, then separately resolve the ignored runtime-PM return and failure
-   cleanup. Host patch application is not deployment evidence.
+3. Independently review both ordered resource-unwind patches against the exact
+   candidate source, then build and validate a candidate containing them before
+   any device trial. The host patch application and extracted-C tests are not
+   deployment evidence, and clock-provider side effects remain unverified.
 4. Only after those gates, a separately reviewed, exact-candidate
    `/dev/video101` open/`VIDIOC_QUERYCAP`/close trial may establish static
    capabilities plus that operation's open/close path; it would still not

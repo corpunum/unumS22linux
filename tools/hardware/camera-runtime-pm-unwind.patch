@@ -1,0 +1,85 @@
+diff --git a/drivers/media/platform/exynos/camera/is-resourcemgr.c b/drivers/media/platform/exynos/camera/is-resourcemgr.c
+--- a/drivers/media/platform/exynos/camera/is-resourcemgr.c
++++ b/drivers/media/platform/exynos/camera/is-resourcemgr.c
+@@ -1801,2 +1801,66 @@
+-int is_resource_get(struct is_resourcemgr *resourcemgr, u32 rsc_type)
++static int is_resource_disable_phy_ldos(struct is_resourcemgr *resourcemgr)
++{
++	int i, ret, first_ret = 0;
++
++	for (i = resourcemgr->num_phy_ldos - 1; i >= 0; i--) {
++		ret = regulator_disable(resourcemgr->phy_ldos[i]);
++		if (ret) {
++			err("failed to disable PHY LDO[%d] after sensor resume failure: %d",
++				i, ret);
++			if (!first_ret)
++				first_ret = ret;
++		}
++		usleep_range(1000, 1001);
++	}
++
++	if (first_ret)
++		err("first-resource PHY LDO cleanup incomplete; hardware state unknown (%d)",
++			first_ret);
++
++	return first_ret;
++}
++
++static int is_resource_sensor_runtime_get(struct is_resource *resource)
++{
++#ifdef CONFIG_PM
++	return pm_runtime_resume_and_get(&resource->pdev->dev);
++#else
++	int ret;
++
++	ret = is_sensor_runtime_resume(&resource->pdev->dev);
++	return ret < 0 ? ret : 0;
++#endif
++}
++
++static int is_resource_sensor_power_on(struct is_resourcemgr *resourcemgr,
++		struct is_resource *resource, struct is_core *core, int id,
++		u32 rsccount)
++{
++	int ret, cleanup_ret;
++
++	ret = is_resource_sensor_runtime_get(resource);
++	if (ret) {
++		err("sensor runtime resume is fail(%d)", ret);
++		if (rsccount == 0) {
++			cleanup_ret = is_resource_disable_phy_ldos(resourcemgr);
++			if (cleanup_ret)
++				err("sensor resume LDO cleanup failed: %d; hardware state unknown",
++					cleanup_ret);
++#ifdef ENABLE_DYNAMIC_MEM
++			cleanup_ret = is_resourcemgr_deinit_dynamic_mem(resourcemgr);
++			if (cleanup_ret)
++				err("dynamic memory cleanup after sensor resume failure: %d",
++					cleanup_ret);
++#endif
++			is_resource_clear(resourcemgr);
++			pm_relax(&core->pdev->dev);
++		}
++		return ret;
++	}
++
++	set_bit(IS_RM_SS0_POWER_ON + id, &resourcemgr->state);
++	return 0;
++}
++
++int is_resource_get(struct is_resourcemgr *resourcemgr, u32 rsc_type)
+ {
+@@ -1910,9 +1962,7 @@
+ 		case RESOURCE_TYPE_SENSOR5:
+ 			id = rsc_type - RESOURCE_TYPE_SENSOR0;
+-#ifdef CONFIG_PM
+-			pm_runtime_get_sync(&resource->pdev->dev);
+-#else
+-			is_sensor_runtime_resume(&resource->pdev->dev);
+-#endif
+-			set_bit(IS_RM_SS0_POWER_ON + id, &resourcemgr->state);
++			ret = is_resource_sensor_power_on(resourcemgr, resource, core,
++					id, rsccount);
++			if (ret)
++				goto rsc_err;
+ 			break;
