@@ -30,10 +30,12 @@ reviewer found the newly reachable NPU caller-lock failure before publication;
 the author fixed it and added actual extracted-caller C coverage. No host-model
 result is upgraded to hardware acceptance.
 
-The same explicitly selected NPU Luna worker continues a separate PM/clock
-callback implementation in `npu-pm-callback-20261002`, with a new narrow patch,
-test and document. That work is not included in the reviewed transaction result
-until its own executable tests and independent review pass.
+The same explicitly selected NPU Luna worker completed a separate PM/clock
+callback wave in `npu-pm-callback-20261002`, with a new narrow patch, test and
+document. Author commits `e118b3a`, `4f9a2a1` are integrated as `06bab71`,
+`28154ff`. Independent review `e69b1a0` is integrated as `fed88d7` in the
+separate callback review document. Its source/host-test clearance is still
+explicitly **not** NPU deployment or BOOTUP acceptance.
 
 ## Coordinator implementation
 
@@ -71,6 +73,19 @@ and 30 optimized scripts plus passing runner-policy tests. The sanitized
 continuation receipt binds these results and the two read-only captures to
 timestamps and opaque private-receipt hashes without publishing private logs.
 
+The published first batch `1d38d39deeb45dbbb643ffdc42fa4a129f26d972` passed
+[hosted CI run 36979092992](https://github.com/corpunum/unumS22linux/actions/runs/36979092992).
+Its log confirms execution of the NPU patched helper/caller C, not merely a
+source-string check. Pre-existing fixture-availability skips and the three
+optimization exclusions remain explicit.
+
+`eb6505f` adds only the reviewed callback script to the explicit CI path lists.
+The complete suite at exact tree
+`eb6505f8d16fd3a54127486902176cc2c7c35309` passed 34 normal and 31 optimized
+scripts at 08:03 UTC, with the same three exclusions. Runner policy passes in
+normal, `-O` and `PYTHONOPTIMIZE=1` modes. The continuation receipt adds this
+second wave without replacing the earlier tested-tree receipt.
+
 ## Driver-source changes and limits
 
 The NPU candidate serializes first/final reference callbacks, publishes counts
@@ -85,9 +100,30 @@ label while leaving the already-unlocked secure-count timeout label separate.
 The test executes the pinned caller C, reproduces the baseline held lock and
 checks boot, vref and POWER_NOTIFY errors, timeout balance and unchanged success
 at C `-O0`/`-O2`, in normal and optimized Python modes. This is not a kernel
-build, lockdep run or hardware test. Default PM/clock callback error masking,
-ignored shutdown errors and recovery-close `BUG_ON` policies remain explicit
-non-deployment limits; NPU BOOTUP is still refused.
+build, lockdep run or hardware test. That transaction-only review left PM/clock
+callback error masking, ignored shutdown errors and recovery-close `BUG_ON`
+policies as explicit non-deployment limits; NPU BOOTUP was still refused.
+
+The subsequent callback candidate repairs those **tested callback** result
+defects: failed resume no longer reaches clocks, successful PM returns are
+normalized, clock failure balances its acquired PM reference, and errors are
+not published as successful ON/OFF transitions. It uses the pinned API's
+established cleanup, marks partial state ERROR/unknown and never retries a
+failed release. A missing later clock entry previously returned stale zero
+after rolling back earlier clocks; the source now sets `-EINVAL` at that branch.
+The exact-C test reproduces this deterministic baseline failure and tests both
+first/later missing entries, clock rollback, PM balance and empty-list behavior.
+It deliberately does not assert the undefined first-missing-entry baseline value.
+
+This closes the specified source defects, **not the NPU driver**. Independent
+review confirms a further pre-existing probe hazard: `npu_clk_get()` fills a
+non-zeroed pointer array incrementally, returns on failed clock acquisition,
+and `npu_hwdev_probe()` warns but continues registration. Uninitialized entries
+need not be NULL, so the new guard is insufficient for that path. The next
+source task is checked probe failure and ownership-safe unwind, followed by
+shutdown-error/recovery policies. Callback and helper tests do not establish
+integrated failure atomicity, lockdep, PM/firmware/MMIO behavior or runtime
+acceptance. No new NPU kernel or module was built or deployed.
 
 The audio profile distinguishes historical coverage from current logging
 policy, bounds input reads, and executes preprocessing of the pinned public
