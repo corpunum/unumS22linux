@@ -72,6 +72,38 @@
     "optimized_scripts_explicitly_excluded": 3,
     "hardware_acceptance": false
   },
+  "npu_callback_wave": {
+    "author_commits": [
+      "e118b3ac24b77144b35cb9978cb37914df98b3d5",
+      "4f9a2a1ae9dd9aa0f62dac073cf93aa489f930a8"
+    ],
+    "independent_review_commit": "e69b1a0553a7689e05792957190f00dc24b79b25",
+    "tested_tree_commit": "eb6505f8d16fd3a54127486902176cc2c7c35309",
+    "captured_at": "2026-10-02T08:03:02.885785+00:00",
+    "private_receipt_sha256": "0dfc0bfd2b01651fde47ce4a51541fc77d92cdcb7e5079a2e3fc23fbd7bb2920",
+    "normal_scripts_passed": 34,
+    "optimized_scripts_passed": 31,
+    "optimized_scripts_explicitly_excluded": 3,
+    "runner_policy_passed_all_three_python_modes": true,
+    "actual_c_function_execution": true,
+    "c_optimization_modes": ["-O0", "-O2"],
+    "standalone_and_combined_patch_application_verified": true,
+    "partial_hardware_state": "error_unknown_not_proven_off",
+    "probe_failure_unwind": "unresolved",
+    "higher_level_shutdown_and_recovery_errors": "unresolved",
+    "kernel_build_performed": false,
+    "device_deployment_performed": false,
+    "bootup_authorized": false,
+    "hardware_acceptance": false
+  },
+  "first_publication_hosted_ci": {
+    "head_sha": "1d38d39deeb45dbbb643ffdc42fa4a129f26d972",
+    "run_id": 36979092992,
+    "conclusion": "success",
+    "url": "https://github.com/corpunum/unumS22linux/actions/runs/36979092992",
+    "fixture_availability_skips_present": true,
+    "hardware_acceptance": false
+  },
   "read_only_progress_capture": {
     "captured_at": "2026-10-02T07:19:52.244621+00:00",
     "private_receipt_sha256": "b31c7ec529ba4d51dfc37747198b8cecce150764dda17d554c32f308c56a1f30",
@@ -129,6 +161,7 @@
     "tee_request_completion": "unknown",
     "npu_bootup_authorized_by_host_preflight": false,
     "new_hardware_acceptance": false,
-    "private_logs_and_identifiers_published": false
+    "private_logs_and_identifiers_published": false,
+    "published_identifier_scope": "allowlisted_artifact_fingerprints_only_no_private_device_or_process_ids"
   }
 }
