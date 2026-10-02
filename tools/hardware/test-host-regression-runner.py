@@ -23,6 +23,7 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-npu-session-lifecycle.py",
     "tools/hardware/test-npu-boot-preflight.py",
     "tools/hardware/test-npu-refcount-transaction.py",
+    "tools/hardware/test-npu-default-boot-callback.py",
     "tools/hardware/test-device-trial-guard.py",
     "tools/hardware/test-audio-progress-snapshot.py",
     "tools/hardware/test-audio-route-assessment.py",
