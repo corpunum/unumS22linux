@@ -1,0 +1,27 @@
+{
+  "schema": "s22-hosted-hardware-free-ci-receipt/v1",
+  "repository": "corpunum/unumS22linux",
+  "branch": "s22/luna-driver-completion-20260923",
+  "verified_remote_head": "5bbb4e90914dd253518e273b37ee43773610b449",
+  "remote_master_verified_unchanged": "20605dbe623e0909cf219c3cae9ef7bb597b15a6",
+  "run_id": 37066851495,
+  "run_url": "https://github.com/corpunum/unumS22linux/actions/runs/37066851495",
+  "status": "completed",
+  "conclusion": "success",
+  "normal_script_invocations_passed": 56,
+  "optimized_script_invocations_passed": 53,
+  "failed_script_invocations": 0,
+  "private_CI_log_sha256": "ab2daa718e8dee548c9c1006c3b7732ecc8a2fbab1958a03ded185b53f7ed13f",
+  "coverage_limits": {
+    "unavailable_AVB_fixtures_explicitly_skipped": true,
+    "optional_source_O_tree_checks_explicitly_skipped": true,
+    "three_assert_based_scripts_not_executed_optimized": true,
+    "no_kernel_or_firmware_execution": true,
+    "no_phone_operations": true
+  },
+  "NPU11_alone_cleared": false,
+  "NPU_report_lock_cleanup_in_this_run": false,
+  "new_audio_package_in_this_run": false,
+  "driver_hardware_acceptance": false,
+  "review_branch_merged_into_master": false
+}
