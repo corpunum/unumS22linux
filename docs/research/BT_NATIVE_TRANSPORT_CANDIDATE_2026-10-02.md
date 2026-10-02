@@ -10,7 +10,7 @@ The sole compile was the existing standalone probe route: AArch64 GCC 13, `-stat
 
 The output is identified only by its private build-directory name, `bt-native-transport-candidate-20261002`. The executable is `bt-qca6490-hci-bridge-probe-native-20261002`:
 
-- SHA-256: `74b39343eaa0cd4e7176fb0f0ef0d6a30ee3e6abcea8954f68331381e719d8c61`
+- SHA-256: `74b39343eaa0cd4e7176fb0fef0d6a30ee3e6abcea8954f68331381e719d8c61`
 - GNU build ID: `c5c9be207d9a957fc52734f056c510218ac01be5`
 - ELF64 little-endian AArch64 `ET_EXEC`, statically linked, 1,042,008 bytes, owner-only mode `0700`
 - independent `readelf` inspection found no interpreter or dynamic segment; the artifact was not executed
