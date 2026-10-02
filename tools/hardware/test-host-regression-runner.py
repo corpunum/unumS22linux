@@ -22,6 +22,7 @@ SPEC.loader.exec_module(runner)
 EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-npu-session-lifecycle.py",
     "tools/hardware/test-npu-boot-preflight.py",
+    "tools/hardware/test-npu-refcount-transaction.py",
     "tools/hardware/test-device-trial-guard.py",
     "tools/hardware/test-audio-progress-snapshot.py",
     "tools/hardware/test-audio-route-assessment.py",
@@ -29,6 +30,7 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-audio-snapshot-sync-20260924.py",
     "tools/hardware/test-audio-ipc-evidence.py",
     "tools/hardware/test-audio-log-coverage.py",
+    "tools/hardware/test-audio-log-capture-profile.py",
     "tools/hardware/test-audio-dma-evidence.py",
     "tools/hardware/test-audio-recovery-observer.py",
     "tools/hardware/test-input-power-readiness.py",
@@ -48,6 +50,7 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-bt-qca6490-patch-receipt.py",
     "tools/hardware/test-close-range-kernel-fix.py",
     "tools/hardware/test_trustzone_log_classifier.py",
+    "tools/hardware/test-tz-progress-evidence.py",
     "tools/pi-web/test_pi_readiness.py",
     "tools/pi-web/test_agent_web.py",
 )
