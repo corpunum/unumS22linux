@@ -1,8 +1,30 @@
 {
   "schema": "s22-npu-native-module-build-plan/v1",
   "status": "prepared_waiting_for_coordinator_go",
-  "prepared_at_utc": "2026-10-02T22:01:44Z",
+  "prepared_at_utc": "2026-10-02T22:23:30Z",
   "evidence_class": "host_only_module_build_preparation",
+  "wrapper": {
+    "path": "/home/corpunum/s22-workers/npu-twelve-native-build-20261003/tools/hardware/build-npu-twelve-module-only.py",
+    "sha256": "c4a25c93696217c1ae905df51bb57ece4ca652291b6f001a47c2ab23e8aca842",
+    "mode": "read_only_plan_by_default",
+    "execution_requires": [
+      "--execute",
+      "matching --expect-wrapper-sha256",
+      "exact source-and-wrapper-bound --coordinator-go-token",
+      "separate reviewed coordinator GO"
+    ],
+    "coordinator_go_token_required": "GO:NPU12-MODULE-ONLY:e9c3016233a72ceccb13e537f0b7ef72426582b9:c4a25c93696217c1ae905df51bb57ece4ca652291b6f001a47c2ab23e8aca842",
+    "plan_only_validation": {
+      "normal_python": "PASS_READ_ONLY",
+      "python_O": "PASS_READ_ONLY",
+      "PYTHONOPTIMIZE_1": "PASS_READ_ONLY",
+      "correct_wrapper_sha_without_go_token": {
+        "exit_code": 2,
+        "output_created": false
+      },
+      "module_or_olddefconfig_run": false
+    }
+  },
   "model_provenance": {
     "model": "gpt-6-luna",
     "reasoning_effort": "max",
@@ -53,6 +75,7 @@
     "expected_kernel_release": "5.10.260-g4e5c5ad7d950",
     "expected_options": {
       "CONFIG_EXYNOS_NPU": "m",
+      "CONFIG_NPU_USE_HW_DEVICE": "y",
       "CONFIG_NPU_USE_BOOT_IOCTL": "y",
       "CONFIG_MODVERSIONS": "y",
       "CONFIG_CFI_CLANG": "y",
@@ -82,6 +105,46 @@
     "prior_native_ten_filtered_input_used": false
   },
   "commands": {
+    "wrapper_plan_only": {
+      "status": "READ_ONLY_VALIDATED",
+      "argv": [
+        "/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "LC_ALL=C",
+        "/usr/bin/python3", "-I", "-B",
+        "/home/corpunum/s22-workers/npu-twelve-native-build-20261003/tools/hardware/build-npu-twelve-module-only.py",
+        "--plan-only"
+      ]
+    },
+    "wrapper_execute_after_go_only": {
+      "status": "NOT_RUN",
+      "argv": [
+        "/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "LC_ALL=C",
+        "/usr/bin/python3", "-I", "-B",
+        "/home/corpunum/s22-workers/npu-twelve-native-build-20261003/tools/hardware/build-npu-twelve-module-only.py",
+        "--execute",
+        "--expect-wrapper-sha256",
+        "c4a25c93696217c1ae905df51bb57ece4ca652291b6f001a47c2ab23e8aca842",
+        "--coordinator-go-token",
+        "GO:NPU12-MODULE-ONLY:e9c3016233a72ceccb13e537f0b7ef72426582b9:c4a25c93696217c1ae905df51bb57ece4ca652291b6f001a47c2ab23e8aca842"
+      ]
+    },
+    "symvers_filter": {
+      "status": "NOT_RUN",
+      "helper": "/home/corpunum/s22-workers/npu-msgid-validation-20261002/tools/hardware/prepare-camera-modpost-symvers.py",
+      "helper_sha256": "2404fab4a2ed469eab1930a7275c28fd3f5a0bbb1b23c88369338ca23cd26c67",
+      "argv": [
+        "/usr/bin/python3", "-I",
+        "/home/corpunum/s22-workers/npu-msgid-validation-20261002/tools/hardware/prepare-camera-modpost-symvers.py",
+        "--input", "/home/corpunum/s22-linux/builds/npu-native-eight-out-clang18-recipe-20261002/Module.symvers",
+        "--output", "/home/corpunum/s22-linux/builds/npu-native-twelve-dependencies-20261003.symvers",
+        "--exclude-owner", "drivers/vision/npu",
+        "--expected-input-sha256", "15fc69e815cb4da6cb3372f4b5141005ab2e770b0414b67f230f1b185bf03df7",
+        "--expected-excluded-count", "1",
+        "--expected-excluded-sha256", "d1c251e9556acde53f523b84521ce9d55ce16d531f1e37b54117873852bfc900",
+        "--expected-module-layout-crc", "0x0e3c515c"
+      ],
+      "environment": {"PATH":"/usr/bin:/bin","LC_ALL":"C"},
+      "log": "/home/corpunum/s22-linux/builds/npu-native-twelve-module-only-out-20261003/symvers-filter.log"
+    },
     "olddefconfig": {
       "status": "NOT_RUN",
       "argv": [
@@ -101,7 +164,9 @@
         "TMPDIR": "/tmp"
       },
       "wrapper": "/usr/bin/env -i",
-      "source_head_tree_before_after": "NOT_RUN_AFTER_GO"
+      "source_head_tree_before_after": "NOT_RUN_AFTER_GO",
+      "raw_stdout_stderr_log": "/home/corpunum/s22-linux/builds/npu-native-twelve-module-only-out-20261003/olddefconfig.log",
+      "config_sha_guard": "must equal d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16 before and after"
     },
     "module_build": {
       "status": "NOT_RUN",
@@ -109,6 +174,15 @@
       "jobs": 1,
       "verbosity": "V=1",
       "argv": [
+        "/usr/bin/nice",
+        "-n",
+        "10",
+        "/usr/bin/env",
+        "-i",
+        "PATH=/usr/lib/llvm-18/bin:/usr/bin:/bin",
+        "LC_ALL=C",
+        "LOCALVERSION=",
+        "TMPDIR=/tmp",
         "/usr/bin/make",
         "-C",
         "/home/corpunum/s22-linux/builds/npu-native-twelve-kernel-20261003",
@@ -141,6 +215,13 @@
         "minimum_available_memory": 12884901888,
         "minimum_free_disk": 34359738368
       },
+      "operation_specific_start_thresholds_bytes": {
+        "minimum_available_memory": 12884901888,
+        "minimum_free_disk": 25769803776,
+        "applies_to": "one drivers/vision/npu.ko operation only",
+        "full_profile_constants_modified": false
+      },
+      "wrapper_phase_journal": "/home/corpunum/s22-linux/builds/npu-native-twelve-module-only-out-20261003/module-only-phase.jsonl",
       "inherited_environment": "empty",
       "native_overrides_unset": [
         "GIT_*",
@@ -191,20 +272,23 @@
     ]
   },
   "preflight_snapshot": {
-    "captured_at_utc": "2026-10-02T22:01:44Z",
-    "mem_available_bytes": 23861620736,
+    "captured_at_utc": "2026-10-02T22:23:30Z",
+    "measured_path": "/home/corpunum/s22-linux/builds",
+    "mem_available_bytes": 28263329792,
     "filesystem_source": "/dev/nvme0n1p5",
     "filesystem_type": "ext4",
     "filesystem_mount_for_srv": "/",
-    "disk_free_bytes": 32119492608,
-    "disk_free_inodes": 101109135,
+    "disk_free_bytes": 31187976192,
     "memory_start_gate_met": true,
     "memory_monitor_threshold_met": true,
     "disk_monitor_threshold_met": true,
-    "disk_start_gate_met": false,
-    "disk_start_gate_required_bytes": 34359738368,
-    "launch_ready": false,
-    "note": "Current /srv resolves to root ext4, not the separate /srv capacity in an earlier coordinator snapshot; recheck after GO."
+    "disk_start_gate_met": true,
+    "disk_start_gate_required_bytes": 25769803776,
+    "full_profile_disk_start_gate_bytes": 34359738368,
+    "full_profile_gate_is_unchanged": true,
+    "launch_ready_for_operation_gate_at_sample": true,
+    "coordinator_go_still_required": true,
+    "note": "Host builds filesystem reading is distinct from the coordinator's separate phone collector/PID1 /srv/s22 namespace reading; this worker did not access the phone. These point-in-time host resources are not reserved."
   },
   "artifacts": {
     "new_module_output_directory": "/home/corpunum/s22-linux/builds/npu-native-twelve-module-only-out-20261003",
