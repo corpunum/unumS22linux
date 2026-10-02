@@ -49,7 +49,7 @@ class CommandTest(unittest.TestCase):
         args=m.tmux_query_command()
         self.assertEqual(args[args.index('-S')+1], m.TMUX_SOCKET)
         self.assertEqual(args[args.index('list-panes')+1:args.index('list-panes')+4],
-                         ['-a','-F','#{session_name}\t#{pane_pid}'])
+                         ['-a','-F','#{session_name}:#{pane_pid}'])
         self.assertNotIn('new-session', args)
         self.assertNotIn('kill-server', args)
 

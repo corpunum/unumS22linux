@@ -18,6 +18,8 @@ MODEL_ID = "/mnt/model-bench/models/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4
 PI_EXECUTABLE = Path("opt/s22-pi/0.86.1/pi/pi")
 DESKTOP_PI_EXECUTABLE = Path("/mnt/omarchy-trial/opt/s22-pi/0.86.1/pi/pi")
 TMUX_SOCKET = Path("home/alarm/.pi/agent/web-sessions/web-musl.tmux")
+WEB_SESSION_DIRECTORY = "/home/alarm/.pi/agent/web-sessions"
+PI_PANE_FORMAT = "#{session_name}:#{pane_pid}"
 
 
 def _proc_entry(proc_root: Path, pid: int) -> Path:
@@ -106,6 +108,7 @@ def exact_process_status(
     executable_path: Path,
     *,
     uid: int,
+    exclude_web_session: bool = False,
 ) -> str:
     """Report one exact executable/UID process as ready, absent, or failed."""
     try:
@@ -137,6 +140,28 @@ def exact_process_status(
                 continue
             actual = (entry / "exe").stat()
             if (actual.st_dev, actual.st_ino) == (expected.st_dev, expected.st_ino):
+                if exclude_web_session:
+                    try:
+                        with (entry / "cmdline").open("rb") as stream:
+                            raw = stream.read(65537)
+                        if not raw or len(raw) > 65536:
+                            return "failed"
+                        argv = [part.decode("utf-8", "strict")
+                                for part in raw.split(b"\0") if part]
+                    except (OSError, UnicodeError):
+                        return "failed"
+                    directories = []
+                    for index, argument in enumerate(argv):
+                        if argument == "--session-dir":
+                            if index + 1 >= len(argv) or argv[index + 1].startswith("--"):
+                                return "failed"
+                            directories.append(argv[index + 1])
+                        elif argument.startswith("--session-dir="):
+                            directories.append(argument.partition("=")[2])
+                    if directories:
+                        if directories != [WEB_SESSION_DIRECTORY]:
+                            return "failed"
+                        continue
                 matches += 1
         except (OSError, ValueError, IndexError):
             continue
@@ -229,7 +254,7 @@ def inspect_pi_session(
     pi_pids: list[int] = []
     try:
         for line in output.splitlines():
-            fields = line.split("\t")
+            fields = line.split(":")
             if len(fields) != 2 or not fields[0]:
                 return {"status": "failed", "ready": False}
             if fields[0] == "pi":

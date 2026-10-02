@@ -17,7 +17,7 @@ import time
 import urllib.request
 from pi_readiness import (DESKTOP_PI_EXECUTABLE, exact_process_status,
                           inspect_pi_session, readiness_report,
-                          runtime_process_readiness)
+                          runtime_process_readiness, PI_PANE_FORMAT)
 
 BASE = Path('/srv/s22/agent-web')
 ARCH = Path('/mnt/omarchy-trial')
@@ -101,7 +101,7 @@ def tmux_query_command():
     return user_command([
         MUSL, '--library-path', '/opt/s22-pi-web/tmux-musl/lib', TMUX,
         '-f', '/dev/null', '-S', TMUX_SOCKET,
-        'list-panes', '-a', '-F', '#{session_name}\t#{pane_pid}',
+        'list-panes', '-a', '-F', PI_PANE_FORMAT,
     ])
 
 
@@ -133,6 +133,7 @@ def collect_readiness():
     )
     desktop_pi_status = exact_process_status(
         Path('/proc'), DESKTOP_PI_EXECUTABLE, uid=1000,
+        exclude_web_session=True,
     )
     return readiness_report(
         web_ready=web_ready,
