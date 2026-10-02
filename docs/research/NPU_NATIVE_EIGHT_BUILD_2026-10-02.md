@@ -238,3 +238,36 @@ Existing BOOTUP refusal remains in force: the publication drain still has an
 unbounded `wait_for_completion(&waiter->publish_done)` if synchronous mailbox
 publication never returns, and the existing ownership/liveness evidence does
 not authorize hardware BOOTUP.
+
+## Subsequent exact-recipe launch and independent environment finding
+
+The coordinator launched the frozen exact-recipe helper from author
+`3c5be3728da4789100f29265b9c69e0048186cce` (integrated `6544416`), SHA-256
+`9b94c31a72cf4216dff1e5a8da5dc327cc74ed89465b9d8a8dfb7d6b2b41e3b4`.
+Its fresh `npu-native-eight-out-clang18-recipe-20261002` passed byte-identical
+`olddefconfig` and reached the single `-j1 Image modules` command. Compilation
+is in progress; the earlier preparation refusals are still historical facts.
+
+Independent review found that an inherited `KCONFIG_CONFIG` could redirect
+Kbuild while the helper checked the unused output `.config`. The pinned
+`Makefile:418-419` exports that variable, and `scripts/kconfig/confdata.c`
+reads it. `KBUILD_EXTMOD` also selects a different build mode. The adjacent
+`KCONFIG_AUTOCONFIG` and `KCONFIG_AUTOHEADER` redirect generated config paths.
+The coordinator's new negative test failed all 16 cases on the pre-fix
+helper: four literal names, empty/nonempty values, both profiles. The future
+helper now refuses them before output creation. The full 25-test suite passes
+normally, under `-O`, and with `PYTHONOPTIMIZE=1`. Default build commands are
+unchanged; the six profile gains only this critical environment refusal.
+
+A bounded read of the actual launch process environment confirmed all four
+names were absent, as were the native tool/make overrides; the actual output
+config remains byte-identical to d762. This establishes that the current
+invocation does not exercise the reproduced escape. The future correction
+neither controlled nor restarted that invocation. Independent re-review is
+required before publication, and no completed build or hardware result is
+inferred from these checks.
+
+The existing unprivileged host sleep-inhibitor request returned `Access
+denied`; it was not routed around. The build remains live on the awake rig,
+with its existing memory/disk monitoring. No guaranteed host wake/rescue is
+claimed.
