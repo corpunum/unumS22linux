@@ -10,12 +10,13 @@ reviewed NPU patches below. It does not include audio changes, the NPU9 patch,
 the frozen shutdown-ownership patch, or the separate close-range kernel patch.
 The frozen ownership patch is hash-checked as an excluded input, not applied.
 
-Configured source/config/toolchain preflight is complete and independently
-verified. The coordinator authorized one host-only attempt after commit. It
-stopped at the existing byte-identical-config guard: `olddefconfig` changed
-compiler metadata in the preserved native config, so the helper refused
-before starting `Image modules`. No compilation result is claimed; no retry,
-config relaxation, packaging, or device action occurred.
+The first authorized attempt used the six-profile Clang 21 toolchain and
+stopped at the byte-identical-config guard before `Image modules`. The
+coordinator matched the native config to its HCI artifact manifest and
+directed a profile-only correction to the actual Ubuntu Clang/LLD 18
+toolchain. The Clang 18 profile is implemented and preflight-verified; its
+one-job host attempt is pending a fresh coordinator GO. No compiler setting
+is relaxed, and no packaging or device action occurred.
 
 The task selected `gpt-6-luna` with reasoning `max` as the configured worker
 setting. This is recorded as `explicitly_configured`; no backend
@@ -101,43 +102,46 @@ profile does not edit `.config` or change any of those hardening settings:
 remain enabled. It does not patch binary vermagic. Fresh-output `olddefconfig`
 must leave the config byte-identical or the build stops before compilation.
 
-The existing helper pins Android Clang 21.0.0 based on r563880c at
-`$KERNEL_BUILD_ROOT/toolchain-clang-r563880c-20260922/repo/clang-r563880c/bin`:
-Clang SHA-256 `af0f25ca6818aed54c1cab03dc591acd549f385b8447148326a413e3e59c22b7`
-and `ld.lld` SHA-256
-`784146955ed87545385bf5c89b3b920ca7fe3ac83e034c3e6c53783ce544adf1`. It also
-pins the remaining LLVM helpers, and the native-eight profile requires all
-listed LLVM and GNU cross-tool hashes to match before Kbuild:
+The HCI artifact manifest at
+`$KERNEL_BUILD_ROOT/bt-hci-loader-compatible-20260924-repro/manifest.json`
+records the same d762 config SHA, a complete build, and Ubuntu Clang/LLD 18.1.3.
+The corrected native-eight profile selects only `/usr/lib/llvm-18/bin`, with
+exact first-line versions `Ubuntu clang version 18.1.3 (1ubuntu1)` and
+`Ubuntu LLD 18.1.3 (compatible with GNU linkers)`. Clang SHA-256 is
+`8ef402d453d1ba4902e4ee0f0f847f6cfa01400c95aa43c24e97818b9c0e3f45`; `ld.lld`
+SHA-256 is
+`7ad9a0e8fe6d0e79b71172d731e33872c0274e49fceb7b516d774876d5a58ade`. The
+profile checks resolved helper aliases and pins all ten LLVM helpers plus the
+existing three GNU cross tools before Kbuild:
 
 | Tool/payload | SHA-256 |
 |---|---|
-| `clang` | `af0f25ca6818aed54c1cab03dc591acd549f385b8447148326a413e3e59c22b7` |
-| `clang-21` | `7202556a0ecae7ab00c67c1221e502692c7a46cf1531262fc62f597820078eef` |
-| `ld.lld` / `lld` | `784146955ed87545385bf5c89b3b920ca7fe3ac83e034c3e6c53783ce544adf1` |
-| `llvm-ar` / `llvm-ranlib` | `9833ebe9c5cb6be4711e667959cb70bf30434c8045dc135667c9f87b0d531b26` |
-| `llvm-nm` | `96bc0865c29acfe30b45d84b4acca27ac14340657ffc6dbea58797f3853be6f1` |
-| `llvm-objcopy` / `llvm-strip` | `1cdde2768f3c94aa5db19361f6857ffe80a1c3c7f87574b64df5da256c4ac959` |
-| `llvm-objdump` | `68736b054c3d7035474e10b827908417b4d92e22b25bb1aa773f0add7f324b1f` |
-| `llvm-readelf` / `llvm-readobj` | `5104576a3518575cf1887c2afa9249bbd0dc175cb9dc0f2af0d430fe0cb20bbe` |
-| `llvm-size` | `50ac8d28bd266f5117de9c8199c84b8ddbaf6994a063f7a38d619fa373a750dd` |
+| `clang` | `8ef402d453d1ba4902e4ee0f0f847f6cfa01400c95aa43c24e97818b9c0e3f45` |
+| `ld.lld` / `lld` | `7ad9a0e8fe6d0e79b71172d731e33872c0274e49fceb7b516d774876d5a58ade` |
+| `llvm-ar` / `llvm-ranlib` | `eedd2efbdee80acf60e17e10adeddf31be0347226245f935be95efa3ae00ec79` |
+| `llvm-nm` | `3f85dd567c2806f2c031e317871e7145f858072fc9595aba4dc33d2e3a671402` |
+| `llvm-objcopy` / `llvm-strip` | `f52b9997b3c5019b4b3043e12b1ae2e821df67996ca344921c234c89c4d23e34` |
+| `llvm-objdump` | `4f98b86448d23bd1f858c50e93fbfc799f1c3640961a95e3b6c89d229a1b91bb` |
+| `llvm-readelf` / `llvm-readobj` | `8ed942a8c33f191480253ff7f236b7e49966c7441d12063d49dce9743aba9a6d` |
+| `llvm-size` | `401e6835686b116baeaa8b98a5ebee54fbe66148b4a3fcda5436ef243a3653f3` |
 | `aarch64-linux-gnu-gcc` | `cd90adc7801f4595267f61a5d25bd3a0c6beb2f9f1f107ab919a97a12972dc9a` |
 | `aarch64-linux-gnu-ld` | `7c903ac277dd1f5c4397277db865f12d8239fe45782f71afbeb3d42180a4b1ae` |
 | `aarch64-linux-gnu-nm` | `96dbed79b11f6cc13b060dd5ca705a277bb5bdecd714df1c470ffaafb2513727` |
 
 Resolved paths, sizes, and SHA-256 identities are captured in the build phase
-and receipt. This stricter hash check applies only to the explicit native-eight
-profile; the default six profile's existing toolchain gate and receipt remain
-unchanged.
+and receipt. Android Clang 21/r563880c remains exclusive to the default six
+profile; its source/config defaults and receipt format remain unchanged.
 
 ## Preflight and proposed command
 
 Before compilation, the helper verifies the profile's direct parent and clean
 worktree, the exact ordered patch tree and hashes, the private config hash and
-required settings, the Clang/LLD hashes and version, and a fresh output path
-under `$KERNEL_BUILD_ROOT/builds` with the `npu-native-eight-out-` prefix. The
-existing six output `npu-six-patch-out-20261002` is neither selected nor
-overwritten. Resource guards remain enabled and the proposed job count is
-one.
+required settings, the profile-specific Clang/LLD version and hashes, helper
+hashes, and a fresh output path under `$KERNEL_BUILD_ROOT/builds` with the
+`npu-native-eight-out-clang18-` prefix. The first failed output
+`npu-native-eight-out-20261002` and existing six output
+`npu-six-patch-out-20261002` are neither selected nor overwritten. Resource
+guards remain enabled and the proposed job count is one.
 
 After coordinator GO, run from this worker repository:
 
@@ -147,21 +151,23 @@ python3 tools/hardware/build-npu-six-profile.py --profile native-eight
 
 This selects source `$KERNEL_BUILD_ROOT/npu-native-eight-kernel-20261002`,
 config `native-config-export-20261002.config`, and fresh output
-`$KERNEL_BUILD_ROOT/npu-native-eight-out-20261002`. It first invokes
+`$KERNEL_BUILD_ROOT/npu-native-eight-out-clang18-20261002`. It first invokes
 `make -C <source> O=<output> ARCH=arm64 LLVM=1 LLVM_IAS=1
-CROSS_COMPILE=aarch64-linux-gnu- LD=<pinned-ld.lld> olddefconfig`, then exactly
-one `make` invocation with those same arguments plus `-j1 Image modules`.
+CROSS_COMPILE=aarch64-linux-gnu- LD=/usr/lib/llvm-18/bin/ld.lld olddefconfig`,
+with `/usr/lib/llvm-18/bin` prepended to `PATH`, then exactly one `make`
+invocation with those same arguments plus `-j1 Image modules`.
 There is no package, deployment, module installation, or phone action in the
 command path. A changed config or resource-guard abort is a stop, not a retry
 or a reason to relax settings.
 
-Preflight regressions passed: 21 tests each with `python3`, `python3 -O`, and
+Preflight regressions passed: 22 tests each with `python3`, `python3 -O`, and
 `PYTHONOPTIMIZE=1 python3`; `py_compile` also passed. Coverage includes default
 six/native-eight separation, config and patch SHA failure, ownership exclusion,
-LLVM/GNU tool hash mismatch, wrong parent/dirty or off-stack trees, reversed
-patch order, cross-profile and reused output refusal, and bounded
-process-group cleanup. A live identity check matched all 11 pinned LLVM tools
-and 3 pinned GNU cross tools.
+wrong compiler/version, LLVM/GNU tool hash mismatch, wrong parent/dirty or
+off-stack trees, reversed patch order, cross-profile and reused output refusal,
+and bounded process-group cleanup. A live identity check matched the pinned
+Clang 18, LLD 18, ten LLVM helpers, and three GNU cross tools; source and d762
+config gates passed.
 
 The committed helper was invoked once as
 `python3 tools/hardware/build-npu-six-profile.py --profile native-eight` at
@@ -189,7 +195,8 @@ along with `olddefconfig.log`; these files were not copied into this
 repository. The helper exited status 2 with
 `BUILD_PREFLIGHT_FAILED olddefconfig changed the preserved configuration;
 build refused`. The `-j1 Image modules` make command was never launched. The
-output is preserved for review and will not be reused by this profile.
+Clang 21 output is preserved for review and will not be reused by the corrected
+profile.
 
 ## Evidence boundary
 
@@ -197,10 +204,10 @@ The `olddefconfig` Kbuild preparation target ran, but `Image modules` did not.
 There are no generated kernel artifact hashes, build IDs, new kernel release,
 module vermagic, or import-CRC results to report. The config/toolchain metadata
 mismatch is preserved as a refusal, not normalized or retried. A future build
-requires coordinator direction on reconciling the preserved config and pinned
-toolchain before another invocation. A host compile, if later authorized, is
-not module-load, firmware, NPU BOOTUP, runtime, device-acceptance, or
-deployment evidence.
+has been directed to use the manifest-matched Clang 18 toolchain and a distinct
+fresh output; that invocation awaits its new coordinator GO. A host compile,
+if later authorized, is not module-load, firmware, NPU BOOTUP, runtime,
+device-acceptance, or deployment evidence.
 Existing BOOTUP refusal remains in force: the publication drain still has an
 unbounded `wait_for_completion(&waiter->publish_done)` if synchronous mailbox
 publication never returns, and the existing ownership/liveness evidence does
