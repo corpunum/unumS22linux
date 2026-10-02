@@ -10,11 +10,12 @@ reviewed NPU patches below. It does not include audio changes, the NPU9 patch,
 the frozen shutdown-ownership patch, or the separate close-range kernel patch.
 The frozen ownership patch is hash-checked as an excluded input, not applied.
 
-Configured host preflight is complete and independently verified. The
-one-job `Image modules` build is **not yet run**; it is authorized only after
-the coordinator's GO, received after the helper and this document are
-committed. This record is a proposal and pre-build receipt, not a compilation
-result. No packaging or device action is part of this profile.
+Configured source/config/toolchain preflight is complete and independently
+verified. The coordinator authorized one host-only attempt after commit. It
+stopped at the existing byte-identical-config guard: `olddefconfig` changed
+compiler metadata in the preserved native config, so the helper refused
+before starting `Image modules`. No compilation result is claimed; no retry,
+config relaxation, packaging, or device action occurred.
 
 The task selected `gpt-6-luna` with reasoning `max` as the configured worker
 setting. This is recorded as `explicitly_configured`; no backend
@@ -162,14 +163,44 @@ patch order, cross-profile and reused output refusal, and bounded
 process-group cleanup. A live identity check matched all 11 pinned LLVM tools
 and 3 pinned GNU cross tools.
 
+The committed helper was invoked once as
+`python3 tools/hardware/build-npu-six-profile.py --profile native-eight` at
+worker commit `f6904535c12437d9d3d41987d25d5d8ed3f072cc`; its launch-time SHA-256
+was `922be92616aee9836f102126e2a42aefe84b9ec2174b54312ce925cd85e66867`. The
+execution session handle was `4798`. Resource checks passed at start (36.7 GB
+available memory and 63,276,441,600 bytes free disk), and the selected output
+path was fresh. The helper copied the exact d762 config to the new output and
+ran its configured `olddefconfig` command. That command changed only these
+five config records:
+
+| Setting | Preserved native export | `olddefconfig` output |
+|---|---|---|
+| `CONFIG_CC_VERSION_TEXT` | Ubuntu Clang 18.1.3 | Pinned Android Clang 21.0.0 (r563880c) |
+| `CONFIG_CLANG_VERSION` | `180103` | `210000` |
+| `CONFIG_AS_VERSION` | `180103` | `210000` |
+| `CONFIG_LLD_VERSION` | `180103` | `210000` |
+| `CONFIG_HAS_LTO_CLANG` | unset | `y` |
+
+The original config remains as `.config.old` (236,183 bytes, SHA-256
+`d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16`). The
+generated output config remains private in the fresh output (236,421 bytes,
+SHA-256 `ae005dd1b63af228db1b562eac0af1c7cc53231d02016f59af8e8a9e26ca60a5`),
+along with `olddefconfig.log`; these files were not copied into this
+repository. The helper exited status 2 with
+`BUILD_PREFLIGHT_FAILED olddefconfig changed the preserved configuration;
+build refused`. The `-j1 Image modules` make command was never launched. The
+output is preserved for review and will not be reused by this profile.
+
 ## Evidence boundary
 
-No Kbuild has run at the time of this proposal, so there are no generated
-artifact hashes, build IDs, kernel release from the new output, module
-vermagic, or import-CRC results to report yet. If compilation is authorized
-and succeeds, those values must come from the actual fresh output and be
-captured in the private build receipt. A host compile is not module-load,
-firmware, NPU BOOTUP, runtime, device-acceptance, or deployment evidence.
+The `olddefconfig` Kbuild preparation target ran, but `Image modules` did not.
+There are no generated kernel artifact hashes, build IDs, new kernel release,
+module vermagic, or import-CRC results to report. The config/toolchain metadata
+mismatch is preserved as a refusal, not normalized or retried. A future build
+requires coordinator direction on reconciling the preserved config and pinned
+toolchain before another invocation. A host compile, if later authorized, is
+not module-load, firmware, NPU BOOTUP, runtime, device-acceptance, or
+deployment evidence.
 Existing BOOTUP refusal remains in force: the publication drain still has an
 unbounded `wait_for_completion(&waiter->publish_done)` if synchronous mailbox
 publication never returns, and the existing ownership/liveness evidence does
