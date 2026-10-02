@@ -22,11 +22,14 @@ PATCH = ROOT / "tools/hardware/npu-refcount-transaction-fix.patch"
 PINNED_BASE = "4e5c5ad7d950e4de0688b5663965f2075654b2ad"
 HEADER = "drivers/vision/npu/core/npu-hw-device.h"
 SOURCE = "drivers/vision/npu/core/npu-hw-device.c"
+VERTEX_SOURCE = "drivers/vision/npu/core/npu-vertex.c"
 SOURCE_COMMIT = "3fca50941422439b2019db2e4a3dc1016b2138a1"
 SOURCE_SHA256 = {
     HEADER: "43165437c7b6a4c50599c2677536376ab31579de0f5866c8b76e33ff7813e9c3",
     SOURCE: "14617a6f8e5b08e1bb169618daa8544f2680ad6709cb9f3b9730919d4dc8e16f",
+    VERTEX_SOURCE: "0e130ccedaebab85b2d6e78453a049610abed431c04ab630e4426a0f7aca077a",
 }
+SOURCE_FILES = (HEADER, SOURCE, VERTEX_SOURCE)
 SOURCE_URL = "https://raw.githubusercontent.com/LineageOS/android_kernel_samsung_s5e9925"
 MAX_SOURCE_BYTES = 128 * 1024
 SOURCE_FETCH_TIMEOUT = 5
@@ -50,6 +53,10 @@ PATCHED_FUNCTIONS = (
     (SOURCE, "int npu_hwdev_bootup("),
     (SOURCE, "int npu_hwdev_shutdown("),
     (SOURCE, "int npu_hwdev_recovery_shutdown("),
+)
+
+NORMAL_CALLER_FUNCTIONS = (
+    (VERTEX_SOURCE, "int npu_hwdev_normal_bootup("),
 )
 
 BASELINE_FUNCTIONS = (
@@ -158,23 +165,23 @@ def load_pinned_sources() -> tuple[dict[str, bytes], str]:
               "configured source worktree must be clean")
         npu_delta = subprocess.run(
             ["git", "-C", str(source_root), "diff", "--quiet", PINNED_BASE,
-             SOURCE_COMMIT, "--", HEADER, SOURCE],
+             SOURCE_COMMIT, "--", *SOURCE_FILES],
             capture_output=True, text=True, check=False, timeout=10,
         )
         check(npu_delta.returncode == 0,
               "NPU hwdev files differ between pinned base and derived source HEAD")
         sources = {relative: (source_root / relative).read_bytes()
-                   for relative in (HEADER, SOURCE)}
+                   for relative in SOURCE_FILES}
         for relative, data in sources.items():
             verify_source_hash(relative, data)
         return sources, f"verified local derived source {SOURCE_COMMIT} == {PINNED_BASE} NPU files"
 
     sources = {relative: fetch_public_source(relative)
-               for relative in (HEADER, SOURCE)}
+               for relative in SOURCE_FILES}
     return sources, f"public pinned source {PINNED_BASE}"
 
 
-def prepare_patched_source(temp: Path, sources: dict[str, bytes]) -> str:
+def prepare_patched_source(temp: Path, sources: dict[str, bytes]) -> tuple[str, str]:
     for relative, data in sources.items():
         destination = temp / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -194,6 +201,7 @@ def prepare_patched_source(temp: Path, sources: dict[str, bytes]) -> str:
     patched_sources = {relative: (temp / relative).read_bytes()
                        for relative in sources}
     extracted = read_source_bytes(patched_sources, PATCHED_FUNCTIONS)
+    caller = read_source_bytes(patched_sources, NORMAL_CALLER_FUNCTIONS)
     for marker in (
         "/* Publish the first owner only after its callback has succeeded. */",
         "if (count <= 0)",
@@ -204,7 +212,9 @@ def prepare_patched_source(temp: Path, sources: dict[str, bytes]) -> str:
         "return ret;",
     ):
         check(marker in extracted, f"patched C extraction omits {marker!r}")
-    return extracted
+    check("p_err:\n\tmutex_unlock(&vertex->lock);\np_err_check:" in caller,
+          "normal bootup error label does not release its held vertex lock")
+    return extracted, caller
 
 
 BASELINE_HARNESS = r"""
@@ -1078,12 +1088,294 @@ int main(void)
 """
 
 
+CALLER_HARNESS = r"""
+#define _GNU_SOURCE
+#include <errno.h>
+#include <pthread.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#ifndef ERESTARTSYS
+#define ERESTARTSYS 512
+#endif
+#define npu_ierr(...) ((void)0)
+#define npu_err(...) ((void)0)
+#define npu_info(...) ((void)0)
+#define container_of(ptr, type, member) \
+    ((type *)((char *)(ptr) - offsetof(type, member)))
+
+struct mutex {
+    pthread_mutex_t native;
+    int lock_calls;
+    int unlock_calls;
+    int bad_unlocks;
+};
+static void mutex_init(struct mutex *lock)
+{
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+    pthread_mutex_init(&lock->native, &attr);
+    pthread_mutexattr_destroy(&attr);
+    lock->lock_calls = 0;
+    lock->unlock_calls = 0;
+    lock->bad_unlocks = 0;
+}
+static int mutex_lock_interruptible(struct mutex *lock)
+{
+    int ret = pthread_mutex_lock(&lock->native);
+    if (!ret)
+        lock->lock_calls++;
+    return ret;
+}
+static void mutex_lock(struct mutex *lock)
+{
+    int ret = pthread_mutex_lock(&lock->native);
+    if (ret)
+        abort();
+    lock->lock_calls++;
+}
+static void mutex_unlock(struct mutex *lock)
+{
+    int ret;
+    lock->unlock_calls++;
+    ret = pthread_mutex_unlock(&lock->native);
+    if (ret)
+        lock->bad_unlocks++;
+}
+static bool lock_is_available(struct mutex *lock)
+{
+    int ret = pthread_mutex_trylock(&lock->native);
+    if (ret)
+        return false;
+    pthread_mutex_unlock(&lock->native);
+    return true;
+}
+
+typedef struct { int value; } atomic_t;
+static int atomic_read(const atomic_t *value) { return value->value; }
+struct npu_hw_refcount { atomic_t refcount; };
+struct npu_hw_device {
+    struct npu_hw_refcount boot_cnt;
+    struct npu_device *device;
+    int id;
+};
+struct npu_vertex;
+struct npu_vertex_ctx { struct npu_vertex *vertex; };
+struct npu_session { struct npu_vertex_ctx vctx; int hids; };
+struct vs4l_ctrl { int value; };
+struct npu_mbox_hdr { bool warm_boot_enable; };
+struct npu_system {
+    struct npu_mbox_hdr *mbox_hdr;
+    bool saved_warm_boot_flag;
+};
+struct npu_device { struct npu_system system; int is_secure; };
+struct npu_vertex {
+    struct mutex lock;
+    int secure_count;
+    int normal_count;
+    struct npu_hw_refcount boot_cnt;
+};
+
+static int bootup_result;
+static int vref_get_result;
+static int power_notify_result;
+static int bootup_calls;
+static int vref_get_calls;
+static int vref_put_calls;
+static int register_calls;
+static int power_notify_calls;
+static int restore_calls;
+static int resume_calls;
+static int restart_calls;
+static struct npu_hw_device hwdev;
+
+static int check_emergency_vctx(struct npu_vertex_ctx *vctx)
+{ (void)vctx; return 0; }
+static int npu_hwdev_bootup(struct npu_device *device, unsigned int hids)
+{ (void)device; (void)hids; bootup_calls++; return bootup_result; }
+static int __vref_get(struct npu_hw_refcount *ref)
+{
+    (void)ref;
+    vref_get_calls++;
+    return vref_get_result;
+}
+static int __vref_put(struct npu_hw_refcount *ref)
+{ (void)ref; vref_put_calls++; return 0; }
+static void npu_sessionmgr_regHW(struct npu_session *session)
+{ (void)session; register_calls++; }
+static int npu_session_NW_CMD_POWER_NOTIFY(struct npu_session *session, bool on)
+{ (void)session; (void)on; power_notify_calls++; return power_notify_result; }
+static struct npu_hw_device *npu_get_hdev_by_id(int id)
+{ (void)id; return &hwdev; }
+static int npu_stm_enable(struct npu_system *system, int hids)
+{ (void)system; (void)hids; return 0; }
+static void npu_hwdev_hwacg(struct npu_system *system, int id, bool on)
+{ (void)system; (void)id; (void)on; }
+static void npu_session_restore_cnt(struct npu_session *session)
+{ (void)session; restore_calls++; }
+static int npu_session_NW_CMD_RESUME(struct npu_session *session)
+{ (void)session; resume_calls++; return 0; }
+static void npu_session_restart(void) { restart_calls++; }
+static void mdelay(int millis) { (void)millis; }
+
+/* Exact extracted normal-bootup implementation, with only service shims. */
+#include "caller.inc"
+
+static void expect(bool condition, const char *message)
+{
+    if (!condition) {
+        fprintf(stderr, "FAIL: %s\n", message);
+        exit(1);
+    }
+}
+struct fixture {
+    struct npu_device device;
+    struct npu_vertex vertex;
+    struct npu_session session;
+    struct npu_mbox_hdr mbox;
+    struct vs4l_ctrl ctrl;
+};
+static void fixture_init(struct fixture *f)
+{
+    memset(f, 0, sizeof(*f));
+    mutex_init(&f->vertex.lock);
+    f->device.system.mbox_hdr = &f->mbox;
+    f->session.vctx.vertex = &f->vertex;
+    f->session.hids = 7;
+    f->ctrl.value = f->session.hids;
+    bootup_result = 0;
+    vref_get_result = 0;
+    power_notify_result = 0;
+    bootup_calls = 0;
+    vref_get_calls = 0;
+    vref_put_calls = 0;
+    register_calls = 0;
+    power_notify_calls = 0;
+    restore_calls = 0;
+    resume_calls = 0;
+    restart_calls = 0;
+}
+static void expect_balanced_unlocked(struct fixture *f, int expected_locks)
+{
+    expect(f->vertex.lock.lock_calls == expected_locks,
+        "unexpected vertex lock acquisition count");
+    expect(f->vertex.lock.unlock_calls == expected_locks,
+        "vertex lock acquisitions and releases are not balanced");
+    expect(f->vertex.lock.bad_unlocks == 0,
+        "normal bootup attempted an unlock it did not own");
+    expect(lock_is_available(&f->vertex.lock),
+        "normal bootup returned while still holding vertex->lock");
+}
+static void test_bootup_error_unlocks_once(void)
+{
+    struct fixture f;
+    int ret;
+    fixture_init(&f);
+    bootup_result = -EIO;
+    ret = npu_hwdev_normal_bootup(&f.device, &f.session.vctx, &f.ctrl);
+#ifdef BASELINE_LOCK_REPRO
+    if (ret == -EIO && f.vertex.lock.lock_calls == 1 &&
+        f.vertex.lock.unlock_calls == 0 && !lock_is_available(&f.vertex.lock)) {
+        puts("BASELINE_FAIL propagated_hwdev_error_left_vertex_lock_held");
+        exit(1);
+    }
+    fprintf(stderr, "baseline lock-leak reproducer no longer matches\n");
+    exit(1);
+#else
+    expect(ret == -EIO, "low-level boot error was changed");
+    expect_balanced_unlocked(&f, 1);
+    expect(f.vertex.normal_count == 0 && bootup_calls == 1,
+        "failed boot changed successful normal-owner state");
+    puts("PASS actual patched caller C: propagated hwdev error unlocks exactly once");
+#endif
+}
+static void test_vref_error_unlocks(void)
+{
+    struct fixture f;
+    int ret;
+    fixture_init(&f);
+    vref_get_result = -ENOMEM;
+    ret = npu_hwdev_normal_bootup(&f.device, &f.session.vctx, &f.ctrl);
+    expect(ret == -ENOMEM && vref_get_calls == 1 && vref_put_calls == 1,
+        "vref error return/cleanup behavior changed");
+    expect_balanced_unlocked(&f, 1);
+    puts("PASS actual patched caller C: vref error unlocks once");
+}
+static void test_power_notify_error_unlocks(void)
+{
+    struct fixture f;
+    int ret;
+    fixture_init(&f);
+    power_notify_result = -EHOSTDOWN;
+    ret = npu_hwdev_normal_bootup(&f.device, &f.session.vctx, &f.ctrl);
+    expect(ret == -EHOSTDOWN && power_notify_calls == 1,
+        "power-notify error return changed");
+    expect_balanced_unlocked(&f, 1);
+    puts("PASS actual patched caller C: unrelated POWER_NOTIFY error unlocks once");
+}
+static void test_secure_timeout_does_not_double_unlock(void)
+{
+    struct fixture f;
+    int ret;
+    fixture_init(&f);
+    f.vertex.secure_count = 1;
+    ret = npu_hwdev_normal_bootup(&f.device, &f.session.vctx, &f.ctrl);
+    expect(ret == -ETIMEDOUT,
+        "secure-count timeout return changed");
+    expect_balanced_unlocked(&f, 1001);
+    expect(bootup_calls == 0,
+        "timed-out secure wait reached hardware bootup");
+    puts("PASS actual patched caller C: secure timeout has no double-unlock");
+}
+static void test_success_path_unchanged(void)
+{
+    struct fixture f;
+    int ret;
+    fixture_init(&f);
+    f.mbox.warm_boot_enable = true;
+    ret = npu_hwdev_normal_bootup(&f.device, &f.session.vctx, &f.ctrl);
+    expect(ret == 0 && f.vertex.normal_count == 1,
+        "normal bootup success no longer publishes its owner");
+    expect(bootup_calls == 1 && vref_get_calls == 1 && register_calls == 1,
+        "successful normal bootup changed its acquisition sequence");
+    expect(restore_calls == 1 && resume_calls == 1 && restart_calls == 1,
+        "warm-boot success sequence changed");
+    expect(power_notify_calls == 0,
+        "warm-boot success unexpectedly used POWER_NOTIFY");
+    expect_balanced_unlocked(&f, 1);
+    puts("PASS actual patched caller C: successful warm boot remains unchanged");
+}
+int main(void)
+{
+    test_bootup_error_unlocks_once();
+#ifndef BASELINE_LOCK_REPRO
+    test_vref_error_unlocks();
+    test_power_notify_error_unlocks();
+    test_secure_timeout_does_not_double_unlock();
+    test_success_path_unchanged();
+    puts("PASS actual patched caller C: normal_bootup lock-path regressions");
+#endif
+    return 0;
+}
+"""
+
+BASELINE_CALLER_HARNESS = "#define BASELINE_LOCK_REPRO 1\n" + CALLER_HARNESS
+
+
 def compile_and_run(compiler: str, directory: Path, source_text: str,
                     include_text: str, source_name: str, expected: str,
                     optimization: str) -> str:
     source = directory / source_name
-    include = directory / ("baseline.inc" if source_name.startswith("baseline")
-                           else "patched.inc")
+    if source_name.startswith("baseline-caller") or source_name.startswith("caller"):
+        include = directory / "caller.inc"
+    elif source_name.startswith("baseline"):
+        include = directory / "baseline.inc"
+    else:
+        include = directory / "patched.inc"
     binary = directory / source_name.removesuffix(".c")
     source.write_text(textwrap.dedent(source_text))
     include.write_text(include_text)
@@ -1119,18 +1411,29 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="npu-refcount-transaction-") as name:
         temp = Path(name)
         baseline = read_source_bytes(sources, BASELINE_FUNCTIONS)
-        patched = prepare_patched_source(temp, sources)
+        baseline_caller = read_source_bytes(sources, NORMAL_CALLER_FUNCTIONS)
+        patched, patched_caller = prepare_patched_source(temp, sources)
         for optimization in ("-O0", "-O2"):
             baseline_output = compile_and_run(
                 compiler, temp, BASELINE_HARNESS, baseline,
                 f"baseline-{optimization[2:]}.c", "baseline-fails", optimization,
             )
             print(baseline_output, end="")
+            baseline_caller_output = compile_and_run(
+                compiler, temp, BASELINE_CALLER_HARNESS, baseline_caller,
+                f"baseline-caller-{optimization[2:]}.c", "baseline-fails", optimization,
+            )
+            print(baseline_caller_output, end="")
             patched_output = compile_and_run(
                 compiler, temp, PATCHED_HARNESS, patched,
                 f"patched-{optimization[2:]}.c", "passes", optimization,
             )
             print(patched_output, end="")
+            caller_output = compile_and_run(
+                compiler, temp, CALLER_HARNESS, patched_caller,
+                f"caller-{optimization[2:]}.c", "passes", optimization,
+            )
+            print(caller_output, end="")
     print(f"SOURCE {source_label}")
     print("LIMIT exact extracted C with host pthread/PM/STM/manager shims only; no kernel build, runtime, or device evidence")
     return 0

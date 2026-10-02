@@ -425,3 +425,17 @@ index 93157b0..de29cb6 100755
  	if (!hdev->ops.boot || !hdev->ops.init) {
  		atomic_set(&hw_ref->refcount, 0);
  		return;
+
+diff --git a/drivers/vision/npu/core/npu-vertex.c b/drivers/vision/npu/core/npu-vertex.c
+--- a/drivers/vision/npu/core/npu-vertex.c
++++ b/drivers/vision/npu/core/npu-vertex.c
+@@ -1224,7 +1224,8 @@
+ 	vertex->normal_count = 1;
+ 	mutex_unlock(&vertex->lock);
+ 	return 0;
++p_err:
++	mutex_unlock(&vertex->lock);
+ p_err_check:
+-p_err:
+ 	return ret;
+ }
