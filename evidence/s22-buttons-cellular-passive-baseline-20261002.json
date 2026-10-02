@@ -1,0 +1,100 @@
+{
+  "schema": "s22-buttons-cellular-passive-baseline/v1",
+  "scope": "native_input_inventory_configuration_and_wifi_https_not_physical_button_or_cellular_acceptance",
+  "starting_review_commit": "2524ff036a6190bb4a22dc94606a2da5a739ebe4",
+  "input_inventory_at": "2026-10-02T11:32:57.231971+00:00",
+  "native_long_bits": 64,
+  "physical_button_nodes": [
+    {
+      "event": "event0",
+      "name": "gpio_keys",
+      "capabilities_ev": "3",
+      "capabilities_key": "8000000000000 0",
+      "key_codes": [115],
+      "character_device": true,
+      "mode": "0660",
+      "uid": 0,
+      "gid": 23,
+      "wakeup": "enabled"
+    },
+    {
+      "event": "event1",
+      "name": "sec-pmic-key",
+      "capabilities_ev": "3",
+      "capabilities_key": "14000000000000 0",
+      "key_codes": [114, 116],
+      "character_device": true,
+      "mode": "0660",
+      "uid": 0,
+      "gid": 23,
+      "wakeup": "enabled"
+    }
+  ],
+  "desktop_query_at": "2026-10-02T11:34:32.182363+00:00",
+  "hyprland": {
+    "version": "0.56.2",
+    "commit": "efb50993780079460b0cbed1363e2166a2de1d9f",
+    "physical_devices_enumerated": ["gpio_keys", "sec-pmic-key"],
+    "active_config_sha256": "ed9dff6bf6775a942df85c81c0f46f8c9c201091d5a49c54a8022de4242f877d",
+    "power_key_binding": "XF86PowerOff",
+    "power_action": "display_DPMS_toggle_only",
+    "power_binding_locked": true,
+    "power_binding_repeat": false,
+    "volume_key_binding_count": 0,
+    "display_enabled": true,
+    "display_DPMS_on": true
+  },
+  "audio_volume_prerequisites": {
+    "checked_arch_tool_paths": true,
+    "pactl_present": true,
+    "wpctl_present": false,
+    "amixer_present": false,
+    "expected_omarchy_volume_helpers_present": false,
+    "pipewire_proc_count": 0,
+    "wireplumber_proc_count": 0,
+    "pulseaudio_proc_count": 0,
+    "pipewire_pulse_proc_count": 0,
+    "audio_route_or_speaker_acceptance": false
+  },
+  "wifi_https_confirmation": {
+    "captured_at": "2026-10-02T11:49:00.388696+00:00",
+    "kind": "bounded_HTTPS_HEAD_not_passive_inventory",
+    "interface_forced": "wlan0",
+    "address_family": "IPv4",
+    "destination": "https://example.com/",
+    "connect_timeout_seconds": 4,
+    "total_curl_timeout_seconds": 8,
+    "curl_exit_code": 0,
+    "http_status": 200,
+    "tls_verify_result": 0,
+    "cellular_route_or_radio_activated": false
+  },
+  "cellular": {
+    "state_read_at": "2026-10-02T11:36:09.912359+00:00",
+    "platform_device": "cpif",
+    "bound_driver": "cp_interface",
+    "read_path": "/sys/bus/platform/devices/cpif/modem_state",
+    "read_byte_cap": 128,
+    "read_complete": true,
+    "modem_state": "INIT",
+    "rmnet_interfaces_observed_down": 8,
+    "wlan0_operstate": "up",
+    "read_handler_source_commit": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+    "modem_main_c_sha256": "05a2a09b92370a18fea86389e70e2992de8f55e2bff7ca8736eb9bca1e1b9db7",
+    "sim_present": null,
+    "sim_registered": null,
+    "cellular_data_validated": false,
+    "ims_voice_validated": false,
+    "two_way_call_audio_validated": false
+  },
+  "acceptance_limits": {
+    "actual_physical_buttons_pressed": false,
+    "input_injected": false,
+    "display_audio_or_power_state_changed": false,
+    "modem_boot_or_sim_activation": false,
+    "calls_or_messages_placed": false,
+    "firmware_partition_or_service_write": false,
+    "physical_button_acceptance": false,
+    "independent_hardware_rescue_demonstrated": false
+  }
+}
