@@ -1,0 +1,37 @@
+{
+  "schema": "s22-runtime-host-module-build-id-correlation-sanitized/v1",
+  "scope": "bounded coordinator-only read-only runtime build-note capture followed by host-only exact retained artifact comparison",
+  "captured_at_utc": "2026-10-02T21:12:28.806483+00:00",
+  "phone": "SM-S901B r0s",
+  "expected_host_image_sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+  "host_image_bytes": 100663296,
+  "selected_external_wlan_sha256": "cbf8932d079e97006a5b7aae0e1b5acfe65b3e8b5113ab8fa095daa36796738d",
+  "running_inventory": {
+    "module_count": 325,
+    "all_GNU_build_notes_parsed": true,
+    "proc_modules_identical_before_and_after": true,
+    "module_name_set_stable": true
+  },
+  "host_comparison": {
+    "ramdisk_modules": 324,
+    "selected_WLAN_modules": 1,
+    "ELF_internal_names_unique": true,
+    "runtime_and_host_name_sets_equal": true,
+    "running_GNU_build_IDs_matching_host_ELFs": 325,
+    "mismatches_or_missing": 0,
+    "unexpected_running_names": 0
+  },
+  "private_runtime_capture_sha256": "197592779f8c71b349e61002f5c8e10c07ac5a5fb7f9eb7a16937e632a1cad71",
+  "private_host_comparison_receipt_sha256": "1f6c9367702ba99e4699d14e30c958e2db4008bb3c175acb0678315930c6cec4",
+  "kernel_memory_or_loaded_file_paths_attested": false,
+  "live_RECOVERY_partition_readback_by_this_operation": false,
+  "new_audio_or_NPU_candidates_installed": false,
+  "phone_partition_writes_reboots_service_changes_powered_tests": 0,
+  "HCI_or_camera_acceptance_replayed": false,
+  "physical_audio_or_NPU_hardware_acceptance": false,
+  "limitations": [
+    "Available GNU build notes correlate running modules with pinned host binaries; they are not a cryptographic measurement of all loaded memory or proof of the file paths used during boot.",
+    "This is the current preserved baseline, not execution or acceptance of the new coherent audio group or NPU candidates.",
+    "A per-module import/CRC check of a future package is still required; the separate 329-module build inventory is not substituted for the current payload."
+  ]
+}
