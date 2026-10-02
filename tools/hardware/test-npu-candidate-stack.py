@@ -133,10 +133,10 @@ def load_fixtures() -> tuple[dict[str, bytes], str]:
     return sources, identity
 
 
-def patch_paths() -> tuple[Path, ...]:
+def patch_paths(repo_root: Path = ROOT) -> tuple[Path, ...]:
     paths = []
     for name, expected in PATCHES:
-        path = PATCH_DIR / name
+        path = repo_root / "tools/hardware" / name
         check(path.is_file(), f"required ordered patch is missing: {name}")
         data = path.read_bytes()
         check(len(data) <= HELPERS.MAX_SOURCE_BYTES,
@@ -237,12 +237,37 @@ def check_swapped_order(source_root: Path, paths: tuple[Path, ...]) -> None:
     print(diagnostic)
 
 
-def check_missing_patch(source_root: Path, paths: tuple[Path, ...],
-                        temp: Path) -> None:
+def check_missing_manifest_patch(temp: Path, paths: tuple[Path, ...]) -> None:
+    """Exercise the same required-input reader used by main, before apply."""
+    controlled_root = temp / "missing-manifest-repo"
+    patch_dir = controlled_root / "tools/hardware"
+    patch_dir.mkdir(parents=True, exist_ok=True)
+    for index, path in enumerate(paths):
+        if index == 1:
+            continue
+        data = path.read_bytes()
+        verify_digest(path.name, data, PATCHES[index][1])
+        (patch_dir / path.name).write_bytes(data)
+    diagnostic = ""
+    try:
+        patch_paths(controlled_root)
+    except RuntimeError as error:
+        diagnostic = str(error)
+    check(diagnostic ==
+          "required ordered patch is missing: npu-refcount-transaction-fix.patch",
+          "mandatory patch input reader did not reject the missing refcount input")
+    check(not (patch_dir / "npu-refcount-transaction-fix.patch").exists(),
+          "controlled manifest unexpectedly contains the omitted refcount patch")
+    print("PASS negative manifest-loader: exact other three patches verified; missing refcount rejected before apply")
+    print(diagnostic)
+
+
+def check_missing_apply_path(source_root: Path, paths: tuple[Path, ...],
+                             temp: Path) -> None:
     apply_checked(source_root, paths[0])
     missing = temp / "intentionally-missing-refcount.patch"
     diagnostic = expect_rejected(source_root, missing, "missing required patch")
-    print("PASS negative missing-patch apply: ordered stack does not silently skip refcount")
+    print("PASS negative git-apply missing-path diagnostic: nonexistent patch file is rejected")
     print(diagnostic)
 
 
@@ -359,9 +384,11 @@ def main() -> int:
             write_fixture(swapped, sources)
             check_swapped_order(swapped, paths)
 
+            check_missing_manifest_patch(temp, paths)
+
             missing = temp / "missing-patch"
             write_fixture(missing, sources)
-            check_missing_patch(missing, paths, temp)
+            check_missing_apply_path(missing, paths, temp)
 
             mutated_patch_source = temp / "mutated-patch-source"
             write_fixture(mutated_patch_source, sources)

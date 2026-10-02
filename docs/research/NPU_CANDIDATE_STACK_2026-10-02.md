@@ -22,10 +22,10 @@ Because the required second patch does not apply, the third `npu-default-boot-ca
 
 ## Negative application checks and BOOTUP gate
 
-The executable test also verifies through actual `git apply` calls that:
+The executable test also verifies that the mandatory patch-input reader rejects a controlled temporary patch directory containing the exact, hash-matching lifecycle, callback, and probe patches but missing the required refcount patch. This happens before source application. Separately, actual `git apply` checks verify that:
 
 - Swapping the first two patches (refcount then lifecycle) is rejected at `npu-vertex.c:1188`.
-- A missing required refcount patch is not silently skipped.
+- A nonexistent patch-file path is rejected by `git apply`; this is only a CLI missing-path diagnostic, not evidence about the stack's required-input loader.
 - Mutating the refcount patch's `normal_count` context is rejected.
 - Mutating that line in the pinned source fixture is rejected.
 
