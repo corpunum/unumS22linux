@@ -68,7 +68,18 @@ NATIVE_EIGHT_PATCHES = (
      "20c700bfa11f13836c76c88cca28a4f8dfa459e5cf146292a814880cd5850b29"),
 )
 NATIVE_EIGHT_SOURCE = BUILDS_ROOT / "npu-native-eight-kernel-20261002"
-NATIVE_EIGHT_OUTPUT = BUILDS_ROOT / "npu-native-eight-out-20261002"
+NATIVE_EIGHT_OUTPUT = BUILDS_ROOT / "npu-native-eight-out-clang18-20261002"
+NATIVE_EIGHT_TOOLCHAIN_BIN = Path("/usr/lib/llvm-18/bin")
+NATIVE_EIGHT_CLANG_SHA256 = (
+    "8ef402d453d1ba4902e4ee0f0f847f6cfa01400c95aa43c24e97818b9c0e3f45"
+)
+NATIVE_EIGHT_LD_LLD_SHA256 = (
+    "7ad9a0e8fe6d0e79b71172d731e33872c0274e49fceb7b516d774876d5a58ade"
+)
+NATIVE_EIGHT_CLANG_VERSION = "Ubuntu clang version 18.1.3 (1ubuntu1)"
+NATIVE_EIGHT_LLD_VERSION = (
+    "Ubuntu LLD 18.1.3 (compatible with GNU linkers)"
+)
 NATIVE_EIGHT_CONFIG_PATH = Path(
     "/home/corpunum/s22-linux/builds/native-config-export-20261002.config"
 )
@@ -90,18 +101,21 @@ NATIVE_EIGHT_REQUIRED_CONFIG = (
     "CONFIG_NPU_USE_HW_DEVICE=y",
     "CONFIG_NPU_USE_BOOT_IOCTL=y",
 )
+NATIVE_EIGHT_LLVM_TOOLS = (
+    "clang", "ld.lld", "llvm-ar", "llvm-nm", "llvm-objcopy",
+    "llvm-objdump", "llvm-readelf", "llvm-strip", "llvm-ranlib", "llvm-size",
+)
 NATIVE_EIGHT_LLVM_TOOL_SHA256 = {
-    "clang": CLANG_SHA256,
-    "ld.lld": LD_LLD_SHA256,
-    "llvm-ar": "9833ebe9c5cb6be4711e667959cb70bf30434c8045dc135667c9f87b0d531b26",
-    "llvm-nm": "96bc0865c29acfe30b45d84b4acca27ac14340657ffc6dbea58797f3853be6f1",
-    "llvm-objcopy": "1cdde2768f3c94aa5db19361f6857ffe80a1c3c7f87574b64df5da256c4ac959",
-    "llvm-objdump": "68736b054c3d7035474e10b827908417b4d92e22b25bb1aa773f0add7f324b1f",
-    "llvm-readelf": "5104576a3518575cf1887c2afa9249bbd0dc175cb9dc0f2af0d430fe0cb20bbe",
-    "llvm-strip": "1cdde2768f3c94aa5db19361f6857ffe80a1c3c7f87574b64df5da256c4ac959",
-    "llvm-ranlib": "9833ebe9c5cb6be4711e667959cb70bf30434c8045dc135667c9f87b0d531b26",
-    "llvm-size": "50ac8d28bd266f5117de9c8199c84b8ddbaf6994a063f7a38d619fa373a750dd",
-    "clang-21": "7202556a0ecae7ab00c67c1221e502692c7a46cf1531262fc62f597820078eef",
+    "clang": NATIVE_EIGHT_CLANG_SHA256,
+    "ld.lld": NATIVE_EIGHT_LD_LLD_SHA256,
+    "llvm-ar": "eedd2efbdee80acf60e17e10adeddf31be0347226245f935be95efa3ae00ec79",
+    "llvm-nm": "3f85dd567c2806f2c031e317871e7145f858072fc9595aba4dc33d2e3a671402",
+    "llvm-objcopy": "f52b9997b3c5019b4b3043e12b1ae2e821df67996ca344921c234c89c4d23e34",
+    "llvm-objdump": "4f98b86448d23bd1f858c50e93fbfc799f1c3640961a95e3b6c89d229a1b91bb",
+    "llvm-readelf": "8ed942a8c33f191480253ff7f236b7e49966c7441d12063d49dce9743aba9a6d",
+    "llvm-strip": "f52b9997b3c5019b4b3043e12b1ae2e821df67996ca344921c234c89c4d23e34",
+    "llvm-ranlib": "eedd2efbdee80acf60e17e10adeddf31be0347226245f935be95efa3ae00ec79",
+    "llvm-size": "401e6835686b116baeaa8b98a5ebee54fbe66148b4a3fcda5436ef243a3653f3",
 }
 NATIVE_EIGHT_GNU_TOOL_SHA256 = {
     "aarch64-linux-gnu-gcc": "cd90adc7801f4595267f61a5d25bd3a0c6beb2f9f1f107ab919a97a12972dc9a",
@@ -147,6 +161,15 @@ class BuildProfile:
     config_path: Path
     config_sha256: str
     required_config: tuple[str, ...]
+    toolchain_bin: Path
+    clang_sha256: str
+    ld_lld_sha256: str
+    clang_version_first_line: str | None
+    clang_version_contains: tuple[str, ...]
+    lld_version_first_line: str | None
+    llvm_tools: tuple[str, ...]
+    llvm_tool_sha256: tuple[tuple[str, str], ...]
+    gnu_tool_sha256: tuple[tuple[str, str], ...]
 
 
 PROFILES = {
@@ -161,6 +184,15 @@ PROFILES = {
         config_path=CONFIG_PATH,
         config_sha256=CONFIG_SHA256,
         required_config=REQUIRED_CONFIG,
+        toolchain_bin=TOOLCHAIN_BIN,
+        clang_sha256=CLANG_SHA256,
+        ld_lld_sha256=LD_LLD_SHA256,
+        clang_version_first_line=None,
+        clang_version_contains=("r563880c", "clang version 21.0.0"),
+        lld_version_first_line=None,
+        llvm_tools=LLVM_TOOLS,
+        llvm_tool_sha256=(),
+        gnu_tool_sha256=(),
     ),
     "native-eight": BuildProfile(
         name="native-eight",
@@ -168,11 +200,20 @@ PROFILES = {
         patches=NATIVE_EIGHT_PATCHES,
         default_source=NATIVE_EIGHT_SOURCE,
         default_output=NATIVE_EIGHT_OUTPUT,
-        output_prefix="npu-native-eight-out-",
+        output_prefix="npu-native-eight-out-clang18-",
         stack_label="native-eight NPU patch",
         config_path=NATIVE_EIGHT_CONFIG_PATH,
         config_sha256=NATIVE_EIGHT_CONFIG_SHA256,
         required_config=NATIVE_EIGHT_REQUIRED_CONFIG,
+        toolchain_bin=NATIVE_EIGHT_TOOLCHAIN_BIN,
+        clang_sha256=NATIVE_EIGHT_CLANG_SHA256,
+        ld_lld_sha256=NATIVE_EIGHT_LD_LLD_SHA256,
+        clang_version_first_line=NATIVE_EIGHT_CLANG_VERSION,
+        clang_version_contains=(),
+        lld_version_first_line=NATIVE_EIGHT_LLD_VERSION,
+        llvm_tools=NATIVE_EIGHT_LLVM_TOOLS,
+        llvm_tool_sha256=tuple(NATIVE_EIGHT_LLVM_TOOL_SHA256.items()),
+        gnu_tool_sha256=tuple(NATIVE_EIGHT_GNU_TOOL_SHA256.items()),
     ),
 }
 
@@ -241,9 +282,11 @@ def verify_config(path: Path = CONFIG_PATH, expected_sha256: str = CONFIG_SHA256
     return {"path": str(path), "sha256": actual}
 
 
-def toolchain_identities(toolchain_bin: Path = TOOLCHAIN_BIN) -> list[dict[str, str | int]]:
+def toolchain_identities(
+        toolchain_bin: Path = TOOLCHAIN_BIN,
+        helpers: tuple[str, ...] = LLVM_TOOLS) -> list[dict[str, str | int]]:
     identities: list[dict[str, str | int]] = []
-    for name in LLVM_TOOLS:
+    for name in helpers:
         path = toolchain_bin / name
         if not path.is_file() or not os.access(path, os.X_OK):
             raise BuildError(f"pinned LLVM helper is missing or not executable: {path}")
@@ -258,9 +301,11 @@ def toolchain_identities(toolchain_bin: Path = TOOLCHAIN_BIN) -> list[dict[str, 
     return identities
 
 
-def cross_tool_identities() -> list[dict[str, str | int]]:
+def cross_tool_identities(
+        expected_tools: tuple[tuple[str, str], ...]
+        ) -> list[dict[str, str | int]]:
     identities: list[dict[str, str | int]] = []
-    for name in NATIVE_EIGHT_GNU_TOOL_SHA256:
+    for name, _expected in expected_tools:
         found = shutil.which(name)
         if found is None:
             raise BuildError(f"required GNU cross tool is missing from PATH: {name}")
@@ -276,23 +321,41 @@ def cross_tool_identities() -> list[dict[str, str | int]]:
     return identities
 
 
-def verify_native_toolchain_identities(
+def verify_profile_toolchain_identities(
+        profile: BuildProfile,
         llvm_tools: list[dict[str, str | int]],
         cross_tools: list[dict[str, str | int]]) -> None:
-    for tools, expected, label in (
-            (llvm_tools, NATIVE_EIGHT_LLVM_TOOL_SHA256, "LLVM"),
-            (cross_tools, NATIVE_EIGHT_GNU_TOOL_SHA256, "GNU cross")):
+    expected_llvm = dict(profile.llvm_tool_sha256)
+    expected_cross = dict(profile.gnu_tool_sha256)
+    for tools, helpers, expected, label in (
+            (llvm_tools, profile.llvm_tools, expected_llvm, "LLVM"),
+            (cross_tools, tuple(expected_cross), expected_cross, "GNU cross")):
         actual = {str(item["name"]): str(item["sha256"]) for item in tools}
-        if set(actual) != set(expected):
-            raise BuildError(f"native-eight {label} tool inventory mismatch")
+        if set(actual) != set(helpers):
+            raise BuildError(f"{profile.name} {label} tool inventory mismatch")
         mismatches = {
             name: actual[name] for name, digest in expected.items()
             if actual[name] != digest
         }
         if mismatches:
             raise BuildError(
-                f"native-eight pinned {label} tool hash mismatch: {mismatches}"
+                f"{profile.name} pinned {label} tool hash mismatch: {mismatches}"
             )
+
+
+def verify_toolchain_versions(profile: BuildProfile, clang_version: str,
+                              lld_version: str | None = None) -> None:
+    if profile.clang_version_first_line is not None:
+        if clang_version != profile.clang_version_first_line:
+            raise BuildError(
+                f"unexpected {profile.name} Clang version: {clang_version}"
+            )
+    elif any(expected not in clang_version
+             for expected in profile.clang_version_contains):
+        raise BuildError(f"unexpected Android Clang version: {clang_version}")
+    if (profile.lld_version_first_line is not None and
+            lld_version != profile.lld_version_first_line):
+        raise BuildError(f"unexpected {profile.name} LLD version: {lld_version}")
 
 
 def validate_output_path(output: Path, builds_root: Path = BUILDS_ROOT,
@@ -568,23 +631,26 @@ def main() -> int:
         config_path, profile.config_sha256, profile.required_config
     )
 
-    clang = TOOLCHAIN_BIN / "clang"
-    lld = TOOLCHAIN_BIN / "ld.lld"
-    if sha256(clang) != CLANG_SHA256 or sha256(lld) != LD_LLD_SHA256:
-        raise BuildError("local Android Clang 21 toolchain binary hash mismatch")
-    toolchain_tools = toolchain_identities()
+    clang = profile.toolchain_bin / "clang"
+    lld = profile.toolchain_bin / "ld.lld"
+    if (sha256(clang) != profile.clang_sha256 or
+            sha256(lld) != profile.ld_lld_sha256):
+        raise BuildError(f"{profile.name} Clang/LLD binary hash mismatch")
+    toolchain_tools = toolchain_identities(profile.toolchain_bin, profile.llvm_tools)
     version = run([str(clang), "--version"], cwd=source).stdout.splitlines()[0]
-    if "r563880c" not in version or "clang version 21.0.0" not in version:
-        raise BuildError(f"unexpected Android Clang version: {version}")
+    lld_version = None
+    if profile.lld_version_first_line is not None:
+        lld_version = run([str(lld), "--version"], cwd=source).stdout.splitlines()[0]
+    verify_toolchain_versions(profile, version, lld_version)
     cross_tools: list[dict[str, str | int]] = []
-    if profile.name == "native-eight":
-        cross_tools = cross_tool_identities()
-        verify_native_toolchain_identities(toolchain_tools, cross_tools)
+    if profile.gnu_tool_sha256:
+        cross_tools = cross_tool_identities(profile.gnu_tool_sha256)
     else:
         for tool in ("aarch64-linux-gnu-gcc", "aarch64-linux-gnu-ld",
                      "aarch64-linux-gnu-nm"):
             if shutil.which(tool) is None:
                 raise BuildError(f"required GNU cross tool is missing from PATH: {tool}")
+    verify_profile_toolchain_identities(profile, toolchain_tools, cross_tools)
     make = shutil.which("make")
     if make is None:
         raise BuildError("make is missing from PATH")
@@ -606,8 +672,10 @@ def main() -> int:
     print("PATCHES " + " -> ".join(item[0] for item in profile.patches))
     print(f"CONFIG_SHA256 {config_info['sha256']}")
     print(f"CLANG {version}")
-    print(f"CLANG_SHA256 {CLANG_SHA256}")
-    print(f"LD_LLD_SHA256 {LD_LLD_SHA256}")
+    print(f"CLANG_SHA256 {profile.clang_sha256}")
+    print(f"LD_LLD_SHA256 {profile.ld_lld_sha256}")
+    if lld_version is not None:
+        print(f"LD_LLD_VERSION {lld_version}")
     print(f"OUTPUT {output}")
     print(f"START_MEM_AVAILABLE {memory_before}")
     print(f"START_DISK_FREE {disk_before}")
@@ -619,7 +687,7 @@ def main() -> int:
         raise BuildError("copied fresh-output config does not match the preserved SHA")
 
     env = os.environ.copy()
-    env["PATH"] = str(TOOLCHAIN_BIN) + os.pathsep + env.get("PATH", "")
+    env["PATH"] = str(profile.toolchain_bin) + os.pathsep + env.get("PATH", "")
     env["LC_ALL"] = "C"
     common = [make, "-C", str(source), f"O={output}", "ARCH=arm64", "LLVM=1",
               "LLVM_IAS=1", "CROSS_COMPILE=aarch64-linux-gnu-", f"LD={lld}"]
@@ -637,8 +705,8 @@ def main() -> int:
         "source": source_info,
         "config": config_info,
         "toolchain": {
-            "clang_sha256": CLANG_SHA256,
-            "ld_lld_sha256": LD_LLD_SHA256,
+            "clang_sha256": profile.clang_sha256,
+            "ld_lld_sha256": profile.ld_lld_sha256,
             "llvm_tools": toolchain_tools,
         },
         "command": build,
@@ -652,6 +720,8 @@ def main() -> int:
     if profile.name != "six":
         phase_info["profile"] = profile.name
         phase_info["toolchain"]["gnu_cross_tools"] = cross_tools
+        phase_info["toolchain"]["clang_version"] = version
+        phase_info["toolchain"]["ld_lld_version"] = lld_version
     try:
         exit_code, resource_abort = run_monitored_build(build, source, output, env, phase_info)
     except Exception as error:
@@ -702,8 +772,9 @@ def main() -> int:
         **patch_receipt_fields(profile, patch_info),
         "config_sha256": profile.config_sha256,
         "toolchain": {
-            "clang": version, "clang_sha256": CLANG_SHA256,
-            "ld_lld_sha256": LD_LLD_SHA256, "bin": str(TOOLCHAIN_BIN),
+            "clang": version, "clang_sha256": profile.clang_sha256,
+            "ld_lld_sha256": profile.ld_lld_sha256,
+            "bin": str(profile.toolchain_bin),
             "llvm_tools": toolchain_tools,
         },
         "builder_sha256": builder_hash_from_launch(phase_info),
@@ -721,6 +792,7 @@ def main() -> int:
         receipt["source_profile_base_commit"] = profile.source_base_commit
         receipt["config_path"] = config_info["path"]
         receipt["toolchain"]["gnu_cross_tools"] = cross_tools
+        receipt["toolchain"]["ld_lld_version"] = lld_version
     (output / "build-receipt.json").write_text(
         json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )

@@ -335,7 +335,43 @@ class NpuBuildProfileSafetyTests(unittest.TestCase):
         self.assertNotEqual(native.config_sha256, six.config_sha256)
         self.assertNotEqual(native.default_source, six.default_source)
         self.assertNotEqual(native.default_output, six.default_output)
-        self.assertEqual(native.output_prefix, "npu-native-eight-out-")
+        self.assertEqual(native.default_output.name,
+                         "npu-native-eight-out-clang18-20261002")
+        self.assertEqual(native.output_prefix, "npu-native-eight-out-clang18-")
+        self.assertEqual(six.toolchain_bin, BUILDER.TOOLCHAIN_BIN)
+        self.assertEqual(six.clang_sha256, BUILDER.CLANG_SHA256)
+        self.assertEqual(six.ld_lld_sha256, BUILDER.LD_LLD_SHA256)
+        self.assertEqual(six.llvm_tools, BUILDER.LLVM_TOOLS)
+        self.assertEqual(six.llvm_tool_sha256, ())
+        self.assertEqual(native.toolchain_bin, Path("/usr/lib/llvm-18/bin"))
+        self.assertNotEqual(native.toolchain_bin, six.toolchain_bin)
+        self.assertEqual(native.clang_sha256, BUILDER.NATIVE_EIGHT_CLANG_SHA256)
+        self.assertEqual(native.ld_lld_sha256, BUILDER.NATIVE_EIGHT_LD_LLD_SHA256)
+        self.assertEqual(native.clang_version_first_line,
+                         "Ubuntu clang version 18.1.3 (1ubuntu1)")
+        self.assertEqual(native.lld_version_first_line,
+                         "Ubuntu LLD 18.1.3 (compatible with GNU linkers)")
+        self.assertEqual(native.llvm_tools, BUILDER.NATIVE_EIGHT_LLVM_TOOLS)
+        self.assertEqual(dict(native.llvm_tool_sha256),
+                         BUILDER.NATIVE_EIGHT_LLVM_TOOL_SHA256)
+
+    def test_profile_toolchain_version_guard_rejects_wrong_compiler(self) -> None:
+        six = BUILDER.PROFILES["six"]
+        native = BUILDER.PROFILES["native-eight"]
+        clang21 = (
+            "Android (14054515, +pgo, +bolt, +lto, +mlgo, based on r563880c) "
+            "clang version 21.0.0"
+        )
+        clang18 = "Ubuntu clang version 18.1.3 (1ubuntu1)"
+        lld18 = "Ubuntu LLD 18.1.3 (compatible with GNU linkers)"
+        BUILDER.verify_toolchain_versions(six, clang21)
+        BUILDER.verify_toolchain_versions(native, clang18, lld18)
+        with self.assertRaisesRegex(BUILDER.BuildError, "unexpected native-eight Clang"):
+            BUILDER.verify_toolchain_versions(native, clang21, lld18)
+        with self.assertRaisesRegex(BUILDER.BuildError, "unexpected native-eight LLD"):
+            BUILDER.verify_toolchain_versions(native, clang18, "LLD 21.0.0")
+        with self.assertRaisesRegex(BUILDER.BuildError, "unexpected Android Clang"):
+            BUILDER.verify_toolchain_versions(six, clang18)
 
     def test_patch_hash_manifest_fails_closed_and_keeps_ownership_excluded(self) -> None:
         six = BUILDER.PROFILES["six"]
@@ -465,13 +501,20 @@ class NpuBuildProfileSafetyTests(unittest.TestCase):
             linked.symlink_to(root / "npu-six-patch-out-target")
             with self.assertRaisesRegex(BUILDER.BuildError, "symbolic-link"):
                 BUILDER.validate_output_path(linked, root)
-            native_output = root / "npu-native-eight-out-fresh"
+            native_output = root / "npu-native-eight-out-clang18-fresh"
             BUILDER.validate_output_path(native_output, root,
-                                         "npu-native-eight-out-")
-            with self.assertRaisesRegex(BUILDER.BuildError, "npu-native-eight-out-"):
+                                         "npu-native-eight-out-clang18-")
+            with self.assertRaisesRegex(BUILDER.BuildError,
+                                        "npu-native-eight-out-clang18-"):
+                BUILDER.validate_output_path(
+                    root / "npu-native-eight-out-20261002", root,
+                    "npu-native-eight-out-clang18-",
+                )
+            with self.assertRaisesRegex(BUILDER.BuildError,
+                                        "npu-native-eight-out-clang18-"):
                 BUILDER.validate_output_path(
                     root / "npu-six-patch-out-cross-profile", root,
-                    "npu-native-eight-out-",
+                    "npu-native-eight-out-clang18-",
                 )
 
     def test_config_preflight_rejects_hash_and_required_option_mismatch(self) -> None:
@@ -509,14 +552,19 @@ class NpuBuildProfileSafetyTests(unittest.TestCase):
             for name, digest in BUILDER.NATIVE_EIGHT_GNU_TOOL_SHA256.items()
         ]
         self.assertEqual(
-            set(BUILDER.NATIVE_EIGHT_LLVM_TOOL_SHA256), set(BUILDER.LLVM_TOOLS)
+            set(BUILDER.NATIVE_EIGHT_LLVM_TOOL_SHA256),
+            set(BUILDER.NATIVE_EIGHT_LLVM_TOOLS),
         )
-        BUILDER.verify_native_toolchain_identities(llvm_tools, cross_tools)
+        BUILDER.verify_profile_toolchain_identities(
+            BUILDER.PROFILES["native-eight"], llvm_tools, cross_tools
+        )
 
         llvm_tools[0]["sha256"] = "0" * 64
         with self.assertRaisesRegex(BUILDER.BuildError,
                                     "native-eight pinned LLVM tool hash mismatch"):
-            BUILDER.verify_native_toolchain_identities(llvm_tools, cross_tools)
+            BUILDER.verify_profile_toolchain_identities(
+                BUILDER.PROFILES["native-eight"], llvm_tools, cross_tools
+            )
 
         llvm_tools[0]["sha256"] = BUILDER.NATIVE_EIGHT_LLVM_TOOL_SHA256[
             str(llvm_tools[0]["name"])
@@ -524,7 +572,9 @@ class NpuBuildProfileSafetyTests(unittest.TestCase):
         cross_tools[0]["sha256"] = "0" * 64
         with self.assertRaisesRegex(BUILDER.BuildError,
                                     "native-eight pinned GNU cross tool hash mismatch"):
-            BUILDER.verify_native_toolchain_identities(llvm_tools, cross_tools)
+            BUILDER.verify_profile_toolchain_identities(
+                BUILDER.PROFILES["native-eight"], llvm_tools, cross_tools
+            )
 
     def test_toolchain_receipt_resolves_symlinks_and_hashes_payloads(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
