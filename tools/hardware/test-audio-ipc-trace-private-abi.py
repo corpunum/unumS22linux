@@ -28,7 +28,7 @@ BASELINE_FAILURES = (
 MUTATION_FAILURES = {
     "OMIT_ZERO_OVERWRITE": (
         "FAIL: zero-sequence put overwrites reused private metadata before dequeue",
-        "FAIL: actual get zero-overwrites the reused slot before send tracing is enabled",
+        "FAIL: actual put zero-overwrites the reused slot before traced dequeue",
     ),
     "OMIT_CLEAR": (
         "FAIL: actual queue_get clears the consumed private sequence slot",
