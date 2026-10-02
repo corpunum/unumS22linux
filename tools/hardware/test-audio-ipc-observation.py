@@ -17,6 +17,8 @@ import re
 import shlex
 import subprocess
 import tempfile
+import urllib.error
+import urllib.request
 
 
 DERIVED_HEAD = "3fca50941422439b2019db2e4a3dc1016b2138a1"
@@ -28,6 +30,8 @@ SOURCE_FILES = {
     "sound/soc/samsung/abox/abox_rdma.c": "6c7e7fa10a7517ac15192df6ab5a182685fb3e79dc563dd47bb96aa0c6bab0df",
 }
 MAX_SOURCE_BYTES = 256 * 1024
+SOURCE_URL = "https://raw.githubusercontent.com/LineageOS/android_kernel_samsung_s5e9925"
+SOURCE_FETCH_TIMEOUT = 5
 
 
 def require(condition: bool, message: str) -> None:
@@ -35,7 +39,11 @@ def require(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
-def run(command: list[str], *, cwd: Path | None = None) -> str:
+class SourceFixtureUnavailable(Exception):
+    """The pinned public fixture could not be reached for an environmental reason."""
+
+
+def run(command: list[str], *, cwd: Path | None = None, timeout: int = 30) -> str:
     completed = subprocess.run(
         command,
         cwd=cwd,
@@ -43,6 +51,7 @@ def run(command: list[str], *, cwd: Path | None = None) -> str:
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        timeout=timeout,
     )
     require(
         completed.returncode == 0,
@@ -52,6 +61,7 @@ def run(command: list[str], *, cwd: Path | None = None) -> str:
 
 
 def checked_source(source_root: Path) -> dict[str, bytes]:
+    require(source_root.is_dir(), f"source tree not found: {source_root}")
     head = run(["git", "-C", str(source_root), "rev-parse", "HEAD"])
     require(head == DERIVED_HEAD, f"source HEAD mismatch: expected {DERIVED_HEAD}, got {head}")
     run(["git", "-C", str(source_root), "cat-file", "-e", f"{BASE_COMMIT}^{{commit}}"])
@@ -67,6 +77,10 @@ def checked_source(source_root: Path) -> dict[str, bytes]:
         worktree_file = source_root / relpath
         require(worktree_file.is_file(), f"missing worktree source: {worktree_file}")
         require(
+            worktree_file.stat().st_size <= MAX_SOURCE_BYTES,
+            f"worktree source cap exceeded: {relpath}",
+        )
+        require(
             hashlib.sha256(worktree_file.read_bytes()).hexdigest() == expected_hash,
             f"worktree source changed from pinned fixture: {relpath}",
         )
@@ -74,14 +88,186 @@ def checked_source(source_root: Path) -> dict[str, bytes]:
     return fixtures
 
 
-def run_bytes(command: list[str]) -> bytes:
-    completed = subprocess.run(command, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+def run_bytes(command: list[str], *, timeout: int = 10) -> bytes:
+    completed = subprocess.run(
+        command, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        timeout=timeout,
+    )
     require(
         completed.returncode == 0,
         f"command failed ({completed.returncode}): {shlex.join(command)}\n"
         f"{completed.stderr.decode(errors='replace')}",
     )
     return completed.stdout
+
+
+def fetch_pinned_source(
+    relative: str,
+    expected_hash: str,
+    *,
+    opener=None,
+    max_bytes: int = MAX_SOURCE_BYTES,
+    timeout: int = SOURCE_FETCH_TIMEOUT,
+) -> bytes:
+    require(relative in SOURCE_FILES, f"unexpected pinned source path: {relative}")
+    require(0 < max_bytes <= MAX_SOURCE_BYTES, "invalid fixture byte cap")
+    url = f"{SOURCE_URL}/{BASE_COMMIT}/{relative}"
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "S22-audio-ipc-observation-host-test/1"}
+    )
+    open_url = opener or urllib.request.urlopen
+    try:
+        with open_url(request, timeout=timeout) as response:
+            final_url = response.geturl()
+            require(final_url == url, f"pinned source redirected unexpectedly: {final_url}")
+            content_length = response.headers.get("Content-Length")
+            if content_length is not None:
+                require(
+                    re.fullmatch(r"[0-9]+", content_length) is not None,
+                    f"malformed Content-Length for {relative}: {content_length!r}",
+                )
+                declared_size = int(content_length)
+                require(
+                    declared_size <= max_bytes,
+                    f"pinned source too large: {relative} ({declared_size} bytes)",
+                )
+            else:
+                declared_size = None
+            data = response.read(max_bytes + 1)
+    except urllib.error.HTTPError as error:
+        if error.code == 429 or 500 <= error.code <= 599:
+            raise SourceFixtureUnavailable(
+                f"pinned source service unavailable (HTTP {error.code})"
+            ) from error
+        raise RuntimeError(
+            f"pinned source request rejected (HTTP {error.code}) for {relative}"
+        ) from error
+    except (urllib.error.URLError, TimeoutError, OSError) as error:
+        raise SourceFixtureUnavailable(f"pinned source fetch unavailable: {error}") from error
+
+    require(len(data) <= max_bytes, f"pinned source too large: {relative}")
+    if declared_size is not None:
+        require(
+            len(data) == declared_size,
+            f"pinned source size mismatch for {relative}: declared {declared_size}, got {len(data)}",
+        )
+    digest = hashlib.sha256(data).hexdigest()
+    require(digest == expected_hash, f"pinned-source hash mismatch for {relative}: {digest}")
+    return data
+
+
+def load_sources(source_root: Path | None, *, opener=None) -> tuple[dict[str, bytes], str]:
+    if source_root is not None:
+        fixtures = checked_source(source_root.expanduser().resolve())
+        return fixtures, f"verified derived source {DERIVED_HEAD}"
+    fixtures = {
+        relative: fetch_pinned_source(relative, expected_hash, opener=opener)
+        for relative, expected_hash in SOURCE_FILES.items()
+    }
+    return fixtures, f"public pinned source {BASE_COMMIT}"
+
+
+class _FakeResponse:
+    def __init__(self, url: str, body: bytes, headers: dict[str, str] | None = None):
+        self._url = url
+        self._body = body
+        self.headers = headers or {"Content-Length": str(len(body))}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def geturl(self) -> str:
+        return self._url
+
+    def read(self, size: int = -1) -> bytes:
+        return self._body if size < 0 else self._body[:size]
+
+
+def run_loader_regressions() -> int:
+    relative = next(iter(SOURCE_FILES))
+    url = f"{SOURCE_URL}/{BASE_COMMIT}/{relative}"
+    payload = b"bounded public fixture regression\n"
+    digest = hashlib.sha256(payload).hexdigest()
+    calls = 0
+
+    def response_opener(response):
+        def open_fake(request, *, timeout):
+            nonlocal calls
+            calls += 1
+            require(request.full_url == url, "loader requested an unexpected fixture URL")
+            require(timeout == SOURCE_FETCH_TIMEOUT, "loader did not apply the bounded timeout")
+            return response
+        return open_fake
+
+    fetched = fetch_pinned_source(
+        relative, digest,
+        opener=response_opener(_FakeResponse(url, payload)),
+    )
+    require(fetched == payload and calls == 1, "exact fetched fixture was not preserved")
+
+    def must_reject(label: str, response, expected_hash: str = digest,
+                    max_bytes: int = MAX_SOURCE_BYTES) -> None:
+        try:
+            fetch_pinned_source(
+                relative, expected_hash,
+                opener=response_opener(response), max_bytes=max_bytes,
+            )
+        except RuntimeError:
+            return
+        raise RuntimeError(f"offline loader regression accepted {label}")
+
+    must_reject("tampered hash", _FakeResponse(url, payload + b"tampered"))
+    must_reject(
+        "oversized Content-Length",
+        _FakeResponse(url, payload, {"Content-Length": str(MAX_SOURCE_BYTES + 1)}),
+    )
+    must_reject(
+        "oversized body without length",
+        _FakeResponse(url, b"x" * (MAX_SOURCE_BYTES + 1), {}),
+    )
+    must_reject(
+        "malformed Content-Length",
+        _FakeResponse(url, payload, {"Content-Length": "unknown"}),
+    )
+    must_reject(
+        "unexpected redirect",
+        _FakeResponse(url + "/redirected", payload),
+    )
+
+    try:
+        fetch_pinned_source(
+            relative, digest,
+            opener=lambda request, *, timeout: (_ for _ in ()).throw(
+                urllib.error.URLError("offline regression")
+            ),
+        )
+    except SourceFixtureUnavailable:
+        pass
+    else:
+        raise RuntimeError("offline loader regression did not classify network unavailability")
+
+    fetch_calls = 0
+
+    def must_not_fetch(request, *, timeout):
+        nonlocal fetch_calls
+        fetch_calls += 1
+        raise RuntimeError("explicit source tree unexpectedly fell back to network")
+
+    with tempfile.TemporaryDirectory(prefix="abox-loader-missing-root-") as temporary:
+        missing_tree = Path(temporary) / "missing-source-tree"
+        try:
+            load_sources(missing_tree, opener=must_not_fetch)
+        except RuntimeError as error:
+            require("source tree not found" in str(error), "missing explicit source failed unexpectedly")
+        else:
+            raise RuntimeError("offline loader regression accepted a missing explicit source tree")
+    require(fetch_calls == 0, "missing explicit tree silently fell back to public fetch")
+
+    print("PASS: 8 offline source-loader regressions (exact, tamper, cap, malformed length, redirect, unavailable, explicit missing/no fallback)")
+    return 8
 
 
 def c_block(source: str, marker: str, *, kind: str = "function") -> str:
@@ -602,8 +788,7 @@ int main(void)
 """
 
 
-def build_harness(source_root: Path, cc: str) -> None:
-    fixtures = checked_source(source_root)
+def build_harness(fixtures: dict[str, bytes], cc: str) -> None:
     patch_path = Path(__file__).with_name("audio-ipc-observation-fix.patch")
     require(patch_path.is_file(), f"missing patch: {patch_path}")
     patch_bytes = patch_path.read_bytes()
@@ -777,15 +962,23 @@ def main() -> int:
     parser.add_argument(
         "--source-tree",
         type=Path,
-        default=Path("/home/corpunum/s22-workers/camera-kernel-build-20260927"),
-        help="read-only derived source repository at the pinned HEAD",
+        default=None,
+        help=(
+            "read-only derived source repository at the pinned HEAD; when omitted, "
+            "fetch exact SHA-256-verified files from the public pinned commit"
+        ),
     )
     parser.add_argument("--cc", default=os.environ.get("CC", "cc"))
     args = parser.parse_args()
-    require(args.source_tree.is_dir(), f"source tree not found: {args.source_tree}")
-    build_harness(args.source_tree.resolve(), args.cc)
-    print(f"PASS: source fixtures {BASE_COMMIT} from derived HEAD {DERIVED_HEAD}")
-    print(f"PASS: bounded to {len(SOURCE_FILES)} files (maximum {MAX_SOURCE_BYTES} bytes each)")
+    run_loader_regressions()
+    try:
+        fixtures, source_identity = load_sources(args.source_tree)
+    except SourceFixtureUnavailable as error:
+        print(f"SKIP: SOURCE_FIXTURE_UNAVAILABLE: {error}")
+        return 77
+    build_harness(fixtures, args.cc)
+    print(f"PASS: source fixtures {source_identity}")
+    print(f"PASS: bounded to {len(SOURCE_FILES)} files (maximum {MAX_SOURCE_BYTES} bytes each; fetch timeout {SOURCE_FETCH_TIMEOUT}s/file)")
     return 0
 
 

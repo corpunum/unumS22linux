@@ -12,9 +12,18 @@ firmware, module, image, or hardware operation was performed for this work.
 The patch is based on source commit
 `4e5c5ad7d950e4de0688b5663965f2075654b2ad`, whose ABOX files match the
 read-only derived source tree at `3fca50941422439b2019db2e4a3dc1016b2138a1`.
-The host test verifies those commits, the SHA-256 of each exact fixture, and a
-256 KiB per-file read cap before reconstructing a temporary tree and applying
-the patch there.
+By default, the host test fetches only four pinned public files and verifies
+each file's fixed SHA-256, a 256 KiB per-file cap, response length, and a
+five-second request timeout before reconstructing a temporary tree and
+applying the patch. `--source-tree` keeps the stricter derived-tree path: the
+tree must exist at the exact derived HEAD, contain the pinned base commit, and
+have matching pinned blobs and worktree files. An invalid explicit tree is a
+hard failure and never falls back to network fetch.
+
+Only environmental fetch unavailability (network/timeout or HTTP 429/5xx) is
+reported as `SOURCE_FIXTURE_UNAVAILABLE` with exit code 77. Redirects,
+malformed or oversized lengths, non-retryable HTTP failures, missing explicit
+trees, and SHA mismatches are errors rather than skips.
 
 ## Events and interpretation
 
@@ -59,15 +68,28 @@ hash-verified pinned source fixtures, applies the patch in a temporary copy,
 and extracts/compiles the actual patched queue put/get, scheduler, worker,
 request, sender, and RDMA handler functions. Its host shims include the real
 trace-event header so the actual `TP_fast_assign` field assignments execute.
-The nine scenarios cover disabled-default side effects, asynchronous queue vs
-sender boundary, sender-only selection, local sender failure, all queue-full
+The nine C scenarios cover disabled-default side effects, asynchronous queue
+vs sender boundary, sender-only selection, local sender failure, all queue-full
 retries, capture/non-trigger filters, stale metadata on ring wrap, direct
 synchronous send, and valid/invalid/backend RDMA callback selection. It checks
 that disabled tracing does not call the monotonic clock, increment the
 correlation counter, or allocate; host compilation is performed at `-O0` and
-`-O2`.
+`-O2`. Before source loading, eight explicit Python checks exercise exact
+fixture acceptance, tampered hashes, both declared and actual size caps,
+malformed lengths, unexpected redirects, network-unavailable classification,
+and rejection of a missing configured tree without fallback. These checks use
+controlled local response shims, not SSH or successful network mocks.
 
-Run from this worktree with the verified derived source tree:
+Run from this worktree without a source-tree argument to exercise the portable
+public pinned-fixture path:
+
+```sh
+python3 tools/hardware/test-audio-ipc-observation.py
+python3 -O tools/hardware/test-audio-ipc-observation.py
+PYTHONOPTIMIZE=1 python3 tools/hardware/test-audio-ipc-observation.py
+```
+
+The explicit derived-tree mode remains available:
 
 ```sh
 python3 tools/hardware/test-audio-ipc-observation.py \
@@ -78,10 +100,16 @@ PYTHONOPTIMIZE=1 python3 tools/hardware/test-audio-ipc-observation.py \
   --source-tree /home/corpunum/s22-workers/camera-kernel-build-20260927
 ```
 
-All three runs passed: nine compiled scenarios at each C optimization level.
-Each run performs normal `git apply --check` and application against its
-temporary fixture copy. This is host/source evidence, not a complete kernel
-build, a tracepoint ABI/runtime test, or audio acceptance.
+All six invocations passed in this worktree: each of the three Python modes
+passed both with the configured local derived tree and with actual public
+fetch of the four pinned files. Each invocation passed all eight offline
+loader checks and nine compiled C scenarios at each C optimization level;
+each performs normal `git apply --check` and patch application on its temporary
+fixture copy. The pre-fix CI failure was reproduced by piping the original
+script from commit `a5baa605f56d7287c39ccfd5c00336f5311367ac` a nonexistent
+explicit path; it exited 1 with `RuntimeError: source tree not found`, rather
+than entering a public fixture path. This is host/source evidence, not a
+complete kernel build, a tracepoint ABI/runtime test, or audio acceptance.
 
 ## Remaining unknowns
 
