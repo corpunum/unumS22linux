@@ -7,10 +7,12 @@ import importlib.util
 import os
 from pathlib import Path
 import subprocess
+import struct
 import sys
 import tempfile
 import unittest
 import copy
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -186,6 +188,154 @@ class AudioCoherentRecoveryPackageTests(unittest.TestCase):
             BUILDER.compare_module_discovery_metadata(
                 CAMERA, "first", "first", ["alias:a"], ["alias:changed"], "fixture.ko",
             )
+
+    def test_external_wlan_internal_name_comes_from_modinfo_not_report_label(self) -> None:
+        label = "selected external Lineage WLAN"
+        module_path = Path("/tmp/wlan.ko")
+        with mock.patch.object(BUILDER, "_modinfo_value", return_value="wlan") as read_name:
+            actual = BUILDER.validate_internal_module_name(
+                BUILDER.MODINFO, module_path, BUILDER.WLAN_MODULE_NAME, label,
+            )
+        read_name.assert_called_once_with(BUILDER.MODINFO, module_path, "name")
+        self.assertEqual(actual, "wlan")
+        self.assertNotEqual(actual, label)
+
+        for wrong_name in ("not_wlan", label):
+            with mock.patch.object(BUILDER, "_modinfo_value", return_value=wrong_name):
+                with self.assertRaisesRegex(BUILDER.BuildError, "internal module name differs"):
+                    BUILDER.validate_internal_module_name(
+                        BUILDER.MODINFO, module_path, BUILDER.WLAN_MODULE_NAME, label,
+                    )
+
+    def test_mkbootimg_wrong_gki_helper_hash_fails_before_child(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="audio-mkbootimg-wrong-gki-") as temporary:
+            directory = Path(temporary)
+            script = directory / "mkbootimg.py"
+            helper = directory / "gki" / "generate_gki_certificate.py"
+            helper.parent.mkdir()
+            script.write_bytes(b"pinned fixture script\n")
+            helper.write_bytes(b"untrusted helper fixture\n")
+            with (
+                mock.patch.object(BUILDER, "MKBOOTIMG_SHA256",
+                                  hashlib.sha256(script.read_bytes()).hexdigest()),
+                mock.patch.object(BUILDER, "GKI_CERT_HELPER", helper),
+                mock.patch.object(BUILDER, "GKI_CERT_HELPER_SHA256", "0" * 64),
+                mock.patch.object(BUILDER.subprocess, "run") as child,
+            ):
+                with self.assertRaisesRegex(BUILDER.BuildError, "SHA-256 mismatch"):
+                    BUILDER._run_mkbootimg(Path(sys.executable), script, ["--help"])
+                child.assert_not_called()
+
+    def test_mkbootimg_missing_gki_helper_fails_without_success(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="audio-mkbootimg-missing-gki-") as temporary:
+            directory = Path(temporary)
+            script = directory / "mkbootimg.py"
+            script.write_bytes(b"pinned fixture script\n")
+            missing_helper = directory / "gki" / "generate_gki_certificate.py"
+            success_output = directory / "should-not-exist.img"
+            with (
+                mock.patch.object(BUILDER, "MKBOOTIMG_SHA256",
+                                  hashlib.sha256(script.read_bytes()).hexdigest()),
+                mock.patch.object(BUILDER, "GKI_CERT_HELPER", missing_helper),
+                mock.patch.object(BUILDER.subprocess, "run") as child,
+            ):
+                with self.assertRaisesRegex(BUILDER.BuildError, "unavailable"):
+                    BUILDER._run_mkbootimg(
+                        Path(sys.executable), script, ["--output", str(success_output)],
+                    )
+                child.assert_not_called()
+            self.assertFalse(success_output.exists())
+
+    def test_isolated_mkbootimg_bootstrap_imports_only_explicit_fixture_root(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="audio-mkbootimg-bootstrap-") as temporary:
+            package_root = Path(temporary) / "mkbootimg-package"
+            gki_dir = package_root / "gki"
+            gki_dir.mkdir(parents=True)
+            helper = gki_dir / "generate_gki_certificate.py"
+            helper.write_text('marker = "pinned-fixture-helper"\n', encoding="utf-8")
+            script = package_root / "mkbootimg.py"
+            script.write_text(
+                "from pathlib import Path\n"
+                "import sys\n"
+                "from gki.generate_gki_certificate import marker\n"
+                "Path(sys.argv[1]).write_text('\\t'.join((marker, "
+                "str(sys.flags.isolated), str(sys.flags.no_site), sys.path[0])), "
+                "encoding='utf-8')\n",
+                encoding="utf-8",
+            )
+            output = Path(temporary) / "import-proof.txt"
+            with (
+                mock.patch.object(BUILDER, "MKBOOTIMG_SHA256",
+                                  hashlib.sha256(script.read_bytes()).hexdigest()),
+                mock.patch.object(BUILDER, "GKI_CERT_HELPER", helper),
+                mock.patch.object(BUILDER, "GKI_CERT_HELPER_SHA256",
+                                  hashlib.sha256(helper.read_bytes()).hexdigest()),
+                mock.patch.object(BUILDER, "MKBOOTIMG_IMPORT_ROOT", package_root),
+            ):
+                command = BUILDER._mkbootimg_command(
+                    Path(sys.executable), script, [str(output)], package_root,
+                )
+                self.assertEqual(command[1:4], ["-I", "-S", "-B"])
+                BUILDER._run_mkbootimg(Path(sys.executable), script, [str(output)])
+            self.assertEqual(
+                output.read_text(encoding="utf-8"),
+                f"pinned-fixture-helper\t1\t1\t{package_root}",
+            )
+
+    def _require_local_pinned_mkbootimg_fixture(self) -> None:
+        for path, expected_sha, label in (
+            (BUILDER.MKBOOTIMG, BUILDER.MKBOOTIMG_SHA256, "pinned mkbootimg.py"),
+            (BUILDER.GKI_CERT_HELPER, BUILDER.GKI_CERT_HELPER_SHA256,
+             "pinned mkbootimg GKI helper"),
+        ):
+            self.assertFalse(path.is_symlink(), f"{label} must not be a symlink")
+            if not path.exists():
+                self.skipTest(f"{label} fixture unavailable: {path}")
+            self.assertEqual(
+                hashlib.sha256(path.read_bytes()).hexdigest(), expected_sha,
+                f"{label} fixture hash mismatch",
+            )
+
+    def test_pinned_mkbootimg_help_runs_with_pinned_gki_import(self) -> None:
+        self._require_local_pinned_mkbootimg_fixture()
+        result = BUILDER._run_mkbootimg(
+            Path(sys.executable), BUILDER.MKBOOTIMG, ["--help"],
+        )
+        self.assertIn("usage:", result.stdout.lower())
+
+    def test_pinned_mkbootimg_writes_tiny_header_v2_fixture(self) -> None:
+        self._require_local_pinned_mkbootimg_fixture()
+        with tempfile.TemporaryDirectory(prefix="audio-mkbootimg-v2-smoke-") as temporary:
+            directory = Path(temporary)
+            files = {}
+            for name, content in (
+                ("kernel", b"tiny synthetic kernel"),
+                ("ramdisk", b"tiny synthetic ramdisk"),
+                ("second", b"tiny synthetic second"),
+                ("dtb", b"tiny synthetic dtb"),
+            ):
+                path = directory / name
+                path.write_bytes(content)
+                files[name] = path
+            output = directory / "tiny-header-v2.img"
+            BUILDER._run_mkbootimg(
+                Path(sys.executable), BUILDER.MKBOOTIMG,
+                [
+                    "--base", "0x0", "--pagesize", "2048", "--header_version", "2",
+                    "--os_version", "16.0.0", "--os_patch_level", "2026-09",
+                    "--kernel", str(files["kernel"]), "--ramdisk", str(files["ramdisk"]),
+                    "--second", str(files["second"]), "--dtb", str(files["dtb"]),
+                    "--output", str(output),
+                ],
+            )
+            image = output.read_bytes()
+            self.assertEqual(image[:8], b"ANDROID!")
+            self.assertEqual(struct.unpack_from("<I", image, 40)[0], 2)
+            self.assertGreater(len(image), 2048)
+
+    def test_effective_pythonoptimize_environment_is_not_ignored_by_test_runner(self) -> None:
+        if os.environ.get("PYTHONOPTIMIZE") == "1":
+            self.assertEqual(sys.flags.optimize, 1)
 
     def test_static_abi_gate_rejects_stale_imports_and_missing_layout_evidence(self) -> None:
         good_versions = {
