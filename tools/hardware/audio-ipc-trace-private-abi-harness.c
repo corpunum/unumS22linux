@@ -406,7 +406,7 @@ static void test_actual_queue_get_zero_and_physical_slot_reuse(void)
 	CHECK(get_result == 0 && dequeued_sequence == 0 &&
 			g_abi_send_event_count == send_before &&
 			dequeued.msg.msg.pcmtask.channel_id == 62,
-		"actual get zero-overwrites the reused slot before send tracing is enabled");
+		"actual put zero-overwrites the reused slot before traced dequeue");
 	abi_destroy_data(&g_abox, &g_abox_dev);
 }
 

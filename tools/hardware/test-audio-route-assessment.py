@@ -551,7 +551,12 @@ class Assessment(unittest.TestCase):
             self.assertEqual(readback.returncode,0,readback.stderr)
             record=json.loads(readback.stdout)
             self.assertEqual(base64.b64decode(record['data_base64']),payload)
-            trace.unlink();trace.write_bytes(b'replacement')
+            # Retain the old inode: unlink/recreate may reuse it immediately,
+            # which does not exercise the different-inode rejection contract.
+            original=trace.with_name('retained-original-trace')
+            trace.rename(original)
+            trace.write_bytes(b'replacement')
+            self.assertNotEqual(original.stat().st_ino,trace.stat().st_ino)
             replaced=isolated_python(route.REMOTE_TRACE_READ,*read_args)
             self.assertNotEqual(replaced.returncode,0)
 
