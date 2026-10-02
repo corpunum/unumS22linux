@@ -1,5 +1,47 @@
 # S22 continuation — 2026-10-02
 
+## Actual prelaunch corrections — 2026-10-02 22:32 UTC
+
+- Independent audio package review `2f8a9dc9`, integrated `2a6dd80`, found
+  two deterministic host blockers despite the initial eight-test pass:
+  a preflight display label was incorrectly compared with WLAN's internal
+  module name, and isolated `mkbootimg.py` could not import its required
+  `gki` helper. No package was created. Follow-up author `c8606ff2`, integrated
+  `8f87edd`, separates internal ELF identity and pins the imported helper while
+  retaining isolated child startup. Fifteen focused tests passed in three
+  Python modes, including actual pinned-tool help and a tiny synthetic v2
+  image. Independent corrective review is pending; host packaging GO is false.
+- Native NPU12 wrapper `98b1d0a` is also **blocked before any build**:
+  the verified toolchain mapping was omitted from its plan and the generated
+  release was checked prematurely after config-only `olddefconfig`.
+  Root and Luna review traced both actual code/source defects. A narrow
+  correction and executable temp/fake-process orchestration regression are
+  being implemented; default-plan/token tests alone did not cover dispatch.
+- The immutable `c189649` full suite preserves **108/113 passing**, exit 1,
+  with five pinned-public-source network/read/SSL timeouts. A separate
+  five-check supplement using the existing clean `3fca5094` source fixture
+  passed all five with the existing revision/hash checks. Neither that
+  supplement nor the packager smoke tests relabels the failed full run.
+  Receipt: `evidence/s22-driver-host-tests-tenth-frozen-20261003.json`.
+- Fresh coordinator-only snapshot at 22:25:35 UTC has the same boot and GNU
+  kernel `b2dda820…`, 325 modules, native/network/persistent/desktop readiness,
+  both Pi sessions ready, and a healthy idle model API. Battery is 100%/Full,
+  26.2 C; maximum reported thermal zone is 41 C. No serious fault appears in
+  the available ring; full-boot coverage and hardware progress remain unproved.
+
+The actual reused Luna/Max lanes now are: audio corrections by
+`/root/bt_candidate_independent_review_20261002` in
+`audio-coherent-package-fix-20261003`; independent audio correction review by
+`/root/autonomous_driver_review_20261002` in `audio-package-fix-review-20261003`;
+NPU wrapper correction by `/root/audio_driver_path_next_20261002` in
+`npu-twelve-native-build-20261003`, with independent follow-up review assigned
+to the completed audio author in `npu-twelve-build-fix-review-20261003`.
+Their previous worktrees, reports and blocked results are preserved.
+
+No native NPU12 compile, real audio package, module load or powered device
+trial has run yet. This turn still has zero partition writes, reboots,
+application changes and inference requests. Master is unchanged.
+
 ## Continued host implementation — 2026-10-02 22:10 UTC (Oct 3 local)
 
 The older entries remain immutable historical checkpoints. No completed
