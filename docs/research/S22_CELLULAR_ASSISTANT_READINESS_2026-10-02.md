@@ -23,6 +23,14 @@ There is no `/proc` read, AT/QMI request, network probe, call, SMS, firmware
 load, or write. A fake sysfs root can be injected with `--sysfs-root` for host
 tests.
 
+A positive `cp_interface` binding requires the driver link to resolve strictly
+to an existing directory at the exact sysfs
+`/sys/bus/platform/drivers/cp_interface` path. A valid driver directory in
+that same namespace is reported as `bound_other`; dangling or out-of-namespace
+links remain unknown. Module inventory retains the `listed` and `not_listed`
+lists and now includes per-name `unknown`/`errors` details; any per-module
+lookup error marks that inventory `partial`.
+
 The parser uses the exact state strings in the pinned Samsung kernel at
 `4e5c5ad7d950e4de0688b5663965f2075654b2ad`:
 `drivers/soc/samsung/cpif/modem_utils.h`'s `modem_state_string[]` and
