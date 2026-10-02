@@ -148,3 +148,17 @@ must be checked separately through the existing Lua binding with display
 restoration confirmed. Volume-effect acceptance remains blocked on a working
 audio route and a later authorized config change. No such owner-assisted press
 test or live event collection has occurred in this work item.
+
+## Host collector-path regression scope
+
+The event-evidence tests now also execute `collect()` through three bounded
+syscall-path failures using a fake capability inventory, a temporary file
+opened read-only, and a mocked `fstat` identifying it as the expected
+character-device number. Controlled `read`, `select`, and host time are used;
+no real event device is opened. They exercise a read error and descriptor
+cleanup, a partial record followed by EOF, and exhaustion of the raw-record
+budget where the final counted record is a discarded private key code. The
+budget case preserves the earlier complete POWER press/release frames for
+diagnosis but requires the overall status to be incomplete and confirms that
+the private key event payload is absent from output. These are deterministic
+host regressions, not evidence about live evdev behavior or physical buttons.

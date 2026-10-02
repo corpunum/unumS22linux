@@ -71,6 +71,26 @@ class ButtonEventEvidenceTests(unittest.TestCase):
             self.ev(evidence.EV_SYN, evidence.SYN_REPORT, 0, device=device),
         ]
 
+    def fake_readiness(self, *nodes: dict[str, object]) -> types.SimpleNamespace:
+        capability_reader = evidence._readiness_module()
+        return types.SimpleNamespace(
+            inputs=lambda *_args: list(nodes),
+            parse_sysfs_bitmap=capability_reader.parse_sysfs_bitmap,
+            EV_MAX=capability_reader.EV_MAX,
+            KEY_MAX=capability_reader.KEY_MAX,
+        )
+
+    def fake_character_stat(self) -> types.SimpleNamespace:
+        return types.SimpleNamespace(
+            st_mode=stat.S_IFCHR | 0o660,
+            st_rdev=os.makedev(13, 65),
+        )
+
+    def assert_descriptors_closed(self, descriptors: list[int]) -> None:
+        self.assertEqual(len(descriptors), 1)
+        with self.assertRaises(OSError):
+            os.fstat(descriptors[0])
+
     def test_complete_press_release_requires_capability_and_syn_reports(self) -> None:
         inventory = [self.capable_node()]
         result = evidence.analyze_button_events(inventory, self.power_tap())
@@ -307,6 +327,133 @@ class ButtonEventEvidenceTests(unittest.TestCase):
             self.assertEqual(result["capture"]["status"], "no_nodes_opened")
             self.assertEqual(result["capture"]["node_statuses"][0]["open_error"],
                              "opened_node_device_number_mismatch")
+
+    def test_collect_read_error_is_incomplete_and_closes_open_descriptor(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="button-event-read-error-") as directory:
+            path = Path(directory) / "event1"
+            path.write_bytes(b"")
+            candidate = self.capable_node(device=str(path), codes=("KEY_POWER",))
+            descriptors: list[int] = []
+            real_open = os.open
+
+            def record_open(target: str, flags: int, *args: object, **kwargs: object) -> int:
+                fd = real_open(target, flags, *args, **kwargs)
+                descriptors.append(fd)
+                return fd
+
+            def read_error(_fd: int, _size: int) -> bytes:
+                raise OSError(5, "host-test read error")
+
+            with mock.patch.object(evidence, "_readiness_module",
+                                   return_value=self.fake_readiness(candidate)), \
+                    mock.patch.object(evidence.os, "open", side_effect=record_open), \
+                    mock.patch.object(evidence.os, "fstat",
+                                      return_value=self.fake_character_stat()), \
+                    mock.patch.object(evidence.os, "read", side_effect=read_error) as read, \
+                    mock.patch.object(evidence.select, "select",
+                                      side_effect=lambda readers, *_args: (readers, [], [])) as select, \
+                    mock.patch.object(evidence.time, "monotonic", return_value=0.0):
+                result = evidence.collect(5, max_events=8)
+
+            node = result["capture"]["node_statuses"][0]
+            self.assertEqual(read.call_count, 1)
+            self.assertEqual(select.call_count, 1)
+            self.assertEqual(result["capture"]["status"],
+                             "one_or_more_streams_ended_or_failed")
+            self.assertEqual(node["read_error"], "OSError")
+            self.assertEqual(result["events"], [])
+            self.assertEqual(result["button_analysis"]["KEY_POWER"]["status"],
+                             "incomplete_capture")
+            self.assert_descriptors_closed(descriptors)
+
+    def test_collect_partial_record_at_eof_is_incomplete_and_closes_descriptor(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="button-event-partial-eof-") as directory:
+            path = Path(directory) / "event1"
+            path.write_bytes(b"")
+            candidate = self.capable_node(device=str(path), codes=("KEY_POWER",))
+            descriptors: list[int] = []
+            real_open = os.open
+            chunks = iter((b"\x01\x02\x03", b""))
+
+            def record_open(target: str, flags: int, *args: object, **kwargs: object) -> int:
+                fd = real_open(target, flags, *args, **kwargs)
+                descriptors.append(fd)
+                return fd
+
+            with mock.patch.object(evidence, "_readiness_module",
+                                   return_value=self.fake_readiness(candidate)), \
+                    mock.patch.object(evidence.os, "open", side_effect=record_open), \
+                    mock.patch.object(evidence.os, "fstat",
+                                      return_value=self.fake_character_stat()), \
+                    mock.patch.object(evidence.os, "read",
+                                      side_effect=lambda _fd, _size: next(chunks)) as read, \
+                    mock.patch.object(evidence.select, "select",
+                                      side_effect=lambda readers, *_args: (readers, [], [])) as select, \
+                    mock.patch.object(evidence.time, "monotonic", return_value=0.0):
+                result = evidence.collect(5, max_events=8)
+
+            node = result["capture"]["node_statuses"][0]
+            self.assertEqual(read.call_count, 2)
+            self.assertEqual(select.call_count, 1)
+            self.assertTrue(node["eof"])
+            self.assertTrue(node["partial_record"])
+            self.assertEqual(node["partial_record_bytes"], 3)
+            self.assertEqual(result["capture"]["status"],
+                             "one_or_more_streams_ended_or_failed")
+            self.assertEqual(result["events"], [])
+            self.assertEqual(result["button_analysis"]["KEY_POWER"]["status"],
+                             "incomplete_capture")
+            self.assert_descriptors_closed(descriptors)
+
+    def test_collect_record_limit_counts_discarded_private_key_and_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="button-event-record-limit-") as directory:
+            path = Path(directory) / "event1"
+            path.write_bytes(b"")
+            candidate = self.capable_node(device=str(path), codes=("KEY_POWER",))
+            descriptors: list[int] = []
+            real_open = os.open
+            records = b"".join((
+                evidence.EVENT.pack(1, 0, evidence.EV_KEY, 116, 1),
+                evidence.EVENT.pack(1, 0, evidence.EV_SYN, evidence.SYN_REPORT, 0),
+                evidence.EVENT.pack(1, 1, evidence.EV_KEY, 116, 0),
+                evidence.EVENT.pack(1, 1, evidence.EV_SYN, evidence.SYN_REPORT, 0),
+                evidence.EVENT.pack(1, 2, evidence.EV_KEY, 30, 1),
+            ))
+
+            def record_open(target: str, flags: int, *args: object, **kwargs: object) -> int:
+                fd = real_open(target, flags, *args, **kwargs)
+                descriptors.append(fd)
+                return fd
+
+            def bounded_read(_fd: int, size: int) -> bytes:
+                return records[:size]
+
+            with mock.patch.object(evidence, "_readiness_module",
+                                   return_value=self.fake_readiness(candidate)), \
+                    mock.patch.object(evidence.os, "open", side_effect=record_open), \
+                    mock.patch.object(evidence.os, "fstat",
+                                      return_value=self.fake_character_stat()), \
+                    mock.patch.object(evidence.os, "read", side_effect=bounded_read) as read, \
+                    mock.patch.object(evidence.select, "select",
+                                      side_effect=lambda readers, *_args: (readers, [], [])) as select, \
+                    mock.patch.object(evidence.time, "monotonic", return_value=0.0):
+                result = evidence.collect(5, max_events=5)
+
+            node = result["capture"]["node_statuses"][0]
+            self.assertEqual(read.call_count, 1)
+            self.assertEqual(select.call_count, 1)
+            self.assertEqual(result["capture"]["event_records_read"], 5)
+            self.assertEqual(result["capture"]["status"], "event_record_limit_reached")
+            self.assertFalse(result["capture"]["complete_window"])
+            self.assertTrue(node["event_limit_reached"])
+            power = result["button_analysis"]["KEY_POWER"]
+            self.assertTrue(power["nodes"][0]["press_seen"])
+            self.assertTrue(power["nodes"][0]["release_after_press_seen"])
+            self.assertEqual(power["status"], "incomplete_capture")
+            self.assertFalse(any(event["type"] == evidence.EV_KEY and event["code"] == 30
+                                 for event in result["events"]))
+            self.assertNotIn('"code": 30', json.dumps(result))
+            self.assert_descriptors_closed(descriptors)
 
     def test_event_and_time_budgets_are_explicit(self) -> None:
         with self.assertRaises(ValueError):
