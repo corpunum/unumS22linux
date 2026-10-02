@@ -271,9 +271,9 @@ handler before reporting its PID. The helper sent SIGINT to the group; the
 leader exited with return code `-2`, while the descendant ignored SIGINT and
 remained live. `stop_own_process_group()` nevertheless returned `True`.
 The reviewer then SIGKILLed and reaped the controlled descendant in `finally`;
-no process was left running. The current mock-based tests cover bounded waits
-when the direct process itself remains unreaped, but not this leader-exits-
-first case.
+no process was left running. At that frozen helper revision, the tests
+covered bounded waits when the direct process itself remained unreaped, but
+not this leader-exits-first case.
 
 **Builder/CI disposition:** the helper is not cleared for process cleanup
 until it continues bounded group-wide termination after the direct leader
@@ -282,3 +282,83 @@ CI allowlist delta is internally consistent and the policy tests pass, but
 that does not clear the builder finding or establish full-suite/CI success.
 No kernel build result, `Image`, module completion, or build receipt is
 claimed by this review.
+
+## Final builder cleanup and completed-build receipt follow-up
+
+Retested the frozen intermediate author commit
+`d5ba8e0519ed84cd2f324d9bda2a4e5e48860fa2` / integrated
+`65a85a1bcddb5dc0d976cf88968cbae9fa84b125` and final author commit
+`328301716156033f3746383435b1c1c9416605ed` / integrated
+`2f17e695268ba7d832b6cd9cff36e44495612c8f`. The builder/test files match
+between each author and integrated commit. The intermediate builder SHA-256
+is `45bec3c9b0f7632d40d89c869f256e38aa4796eb391e0141bee022a1181991bf`; the
+final builder SHA-256 is
+`c9122938aba78a7ce9a8af0242de7666aa69d81dc42f0d7d04e6bf8472e72998`.
+Both are future-run helper revisions. The active build phase records launched
+helper SHA-256 `13cec8b3b0cbb28f45856a374d843702c8e79cc7c80c286b3b19525b19aa3de1`;
+neither future helper restarted or controlled that build. The earlier
+`5eb090...` helper was source/host reviewed, but likewise did not control
+Kbuild.
+
+All 16 tests at the intermediate frozen tree passed in normal, `-O`, and
+`PYTHONOPTIMIZE=1` modes. All 17 at the final frozen tree passed in all three
+modes. The final suite includes real controlled-process regressions for a
+same-group descendant that ignores SIGINT/SIGTERM, both while its leader exits
+on SIGINT and after the leader has already been reaped. I independently
+repeated those two cases against the final helper: cleanup returned confirmed
+only after the process group disappeared. The controlled descendant was
+reaped; no process remained. The earlier live-descendant result against
+`5eb090...` is retained above as the negative control that motivated the fix.
+
+The final cleanup path also keeps the original monitor exception if cleanup
+itself raises, and reports group absence as unknown/unconfirmed rather than
+claiming success. The new regression checks exception identity and diagnostic
+text. Separately, with `killpg(pgid, 0)` mocked to raise `EIO`, I observed
+`process_group_exists()` return unknown and `stop_own_process_group()` return
+false without sending a signal; `ESRCH` maps to absent and permission failure
+maps to present. The bounded escalation regression remains fail-closed if
+group disappearance is not observed after SIGKILL.
+
+Receipt identity handling is captured, not reread after build: the final
+helper validates a 64-character lowercase SHA-256 in its in-memory launch
+phase and uses that value for a future-run build receipt. Its focused test
+replaces the later file-hash function with a failure and verifies the
+captured value is used, while absent/malformed launch digests are rejected.
+The existing completed build predates that change: its raw
+`build-receipt.json` has no builder SHA, while the recorded phase data has
+`executed_builder_sha256_before_followup_fixes=13cec8...` and a null raw
+receipt builder hash. This evidence is kept separate from the future helper
+hashes; the final helper was not applied retroactively to the running build.
+
+I independently inspected the completed sanitized receipt and the exact
+existing local outputs read-only. The source worktree is clean at commit
+`e5af0ba1cefc959094d03e1a136b8e33ff938b2a`, tree
+`fa42c38acfe973a6bbe1c0e4fc1fb9cf44cdc38f`. The output phase records exit 0,
+no resource abort, 3,340 seconds, and 334 monitor samples. Output `.config`
+matches the preserved SHA-256. Sizes and hashes for `Image`, `vmlinux`,
+`drivers/vision/npu.ko`, `Module.symvers`, generated `compile.h`, and
+`utsrelease.h` match the sanitized receipt. The kernel release is
+`5.10.260-ge5af0ba1cefc`; `modules.order` has 329 entries and includes
+`drivers/vision/npu.ko`. Read-only ELF inspection confirmed an ELF64 AArch64
+module, the documented module/vmlinux build IDs, `.modinfo` and `__versions`,
+and the documented vermagic. I parsed its 234 `__versions` records against
+`Module.symvers`: all 234 symbols were unique, with zero missing symbols or
+CRC mismatches. The `Image`, `vmlinux`, and NPU module sizes/hashes match the
+raw build receipt and sanitized table; `Module.symvers` and generated-header
+hashes match the separate sanitized artifact record. This only corroborates
+the same-build host artifacts.
+
+The narrow follow-up documentation commit
+`6636770eebb020e845941069ae0ded8fb0852265` changes only the build research
+note; I verified the diff fixes “hashes group presence” to “checks group
+presence,” records the intermediate `45bec...` lineage, clarifies that
+`5eb090...` did not control Kbuild, and reports the final 17-test results in
+the modes actually run. Its builder and test bytes are unchanged. The raw
+build receipt still has no builder hash; the phase record is the separate
+launch-hash evidence.
+
+**Final helper disposition:** the previously blocking leader-exits-first
+cleanup finding is cleared for final helper `c912...` and its tests. The
+successful build/artifact evidence remains host-only and was produced under
+the separately recorded `13cec...` helper; no device, firmware, deployment,
+or NPU runtime acceptance follows from this review.
