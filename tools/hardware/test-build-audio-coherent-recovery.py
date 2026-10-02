@@ -12,6 +12,7 @@ import sys
 import tempfile
 import unittest
 import copy
+import shutil
 from unittest import mock
 
 
@@ -65,6 +66,148 @@ def _test_pins(old: dict[str, bytes], replacements: dict[str, bytes]):
 
 
 class AudioCoherentRecoveryPackageTests(unittest.TestCase):
+    def _compile_synthetic_elf(self, directory: Path) -> tuple[Path, Path]:
+        compiler = shutil.which("cc", path="/usr/bin:/bin")
+        if compiler is None:
+            self.skipTest("local C compiler unavailable for ELF transform fixture")
+        source = directory / "strip-fixture.c"
+        output = directory / "strip-fixture.o"
+        source.write_text(
+            "extern int external_value;\n"
+            "int fixture_function(void) { return external_value + 7; }\n",
+            encoding="utf-8",
+        )
+        environment = {"PATH": "/usr/bin:/bin", "LC_ALL": "C", "TMPDIR": str(directory)}
+        result = subprocess.run(
+            [compiler, "-g", "-c", str(source), "-o", str(output)],
+            capture_output=True, text=True, check=False, env=environment,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return source, output
+
+    def _strip_synthetic_elf(self, directory: Path) -> tuple[bytes, bytes, list[str]]:
+        _source, object_path = self._compile_synthetic_elf(directory)
+        original = object_path.read_bytes()
+        BUILDER._verify_tool_alias(
+            BUILDER.OBJCOPY, BUILDER.OBJCOPY_REALPATH, BUILDER.OBJCOPY_SHA256,
+            "pinned llvm-objcopy-18",
+        )
+        result = subprocess.run(
+            [str(BUILDER.OBJCOPY), "--strip-debug", str(object_path)],
+            capture_output=True, text=True, check=False,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C", "TMPDIR": str(directory)},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        stripped = object_path.read_bytes()
+        old_names = {section["name"] for section in BUILDER._parse_elf64(original, "fixture source")["sections"]}
+        new_names = {section["name"] for section in BUILDER._parse_elf64(stripped, "fixture stripped")["sections"]}
+        removed = sorted(old_names - new_names)
+        self.assertTrue(removed)
+        self.assertTrue(all(BUILDER._is_debug_section(name) for name in removed))
+        return original, stripped, removed
+
+    def test_real_objcopy_strip_preserves_runtime_elf_semantics(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="audio-strip-synthetic-") as temporary:
+            original, stripped, removed = self._strip_synthetic_elf(Path(temporary))
+            summary = BUILDER.validate_debug_strip_transform(original, stripped, removed)
+            self.assertEqual(summary["removed_debug_sections"], removed)
+            self.assertGreater(summary["allocated_section_count"], 0)
+            self.assertGreater(summary["runtime_relocation_entry_count"], 0)
+            self.assertEqual(summary["source_sha256"], hashlib.sha256(original).hexdigest())
+            self.assertEqual(summary["stripped_sha256"], hashlib.sha256(stripped).hexdigest())
+
+    def test_transform_validator_rejects_alloc_relocation_and_symbol_table_damage(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="audio-strip-negative-") as temporary:
+            original, stripped, removed = self._strip_synthetic_elf(Path(temporary))
+            parsed = BUILDER._parse_elf64(stripped, "synthetic stripped output")
+            alloc_section = next(
+                section for section in parsed["sections"]
+                if section["flags"] & BUILDER.ELF_SHF_ALLOC and section["size"] > 0
+                and section["type"] != BUILDER.ELF_SHT_NOBITS
+            )
+            damaged_alloc = bytearray(stripped)
+            damaged_alloc[alloc_section["offset"]] ^= 1
+            with self.assertRaisesRegex(BUILDER.BuildError, "SHF_ALLOC section contents changed"):
+                BUILDER.validate_debug_strip_transform(original, bytes(damaged_alloc), removed)
+
+            rela = next(
+                section for section in parsed["sections"]
+                if section["type"] in (BUILDER.ELF_SHT_REL, BUILDER.ELF_SHT_RELA)
+                and not BUILDER._is_debug_section(section["name"]) and section["size"]
+            )
+            damaged_relocation = bytearray(stripped)
+            if rela["type"] == BUILDER.ELF_SHT_RELA:
+                field_offset = rela["offset"] + 16
+                value = struct.unpack_from("<q", damaged_relocation, field_offset)[0]
+                struct.pack_into("<q", damaged_relocation, field_offset, value + 1)
+            else:
+                value = struct.unpack_from("<Q", damaged_relocation, rela["offset"])[0]
+                struct.pack_into("<Q", damaged_relocation, rela["offset"], value + 1)
+            with self.assertRaisesRegex(BUILDER.BuildError, "runtime relocation semantics changed"):
+                BUILDER.validate_debug_strip_transform(original, bytes(damaged_relocation), removed)
+
+            source_elf = BUILDER._parse_elf64(original, "synthetic source")
+            symtab = next(
+                section for section in source_elf["sections"]
+                if section["type"] == BUILDER.ELF_SHT_SYMTAB
+            )
+            symbol_count = symtab["size"] // BUILDER.ELF64_SYMBOL.size
+            bad_source = bytearray(original)
+            shoff, shentsize = source_elf["header"][6], source_elf["header"][11]
+            struct.pack_into(
+                "<I", bad_source, shoff + symtab["index"] * shentsize + 44,
+                symbol_count + 1,
+            )
+            with self.assertRaisesRegex(BUILDER.BuildError, "local boundary is out of range"):
+                BUILDER.validate_debug_strip_transform(bytes(bad_source), stripped, removed)
+
+    def test_transform_refuses_appended_kernel_module_signature(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="audio-strip-signature-") as temporary:
+            original, stripped, removed = self._strip_synthetic_elf(Path(temporary))
+            with self.assertRaisesRegex(BUILDER.BuildError, "signature trailer is unsupported"):
+                BUILDER.validate_debug_strip_transform(
+                    original + b"signature~Module signature appended~\n",
+                    stripped, removed,
+                )
+
+    def test_actual_pinned_modules_have_exact_debug_only_derivatives(self) -> None:
+        missing = []
+        for identity in BUILDER.TARGET_MODULES.values():
+            source = identity["source"]
+            if source.is_symlink():
+                self.fail(f"pinned module input unexpectedly became a symlink: {source}")
+            if not source.exists():
+                missing.append(source.name)
+            else:
+                BUILDER._verify_file(
+                    source, f"unstripped source fixture {source.name}",
+                    identity["source_sha256"], identity["source_bytes"],
+                )
+        if missing:
+            self.skipTest(f"private pinned module fixture(s) unavailable: {', '.join(missing)}")
+        with tempfile.TemporaryDirectory(prefix="audio-strip-actual-modules-") as temporary:
+            root = Path(temporary)
+            for relative, identity in BUILDER.TARGET_MODULES.items():
+                source = identity["source"]
+                BUILDER._verify_file(
+                    source, f"unstripped source fixture {relative}",
+                    identity["source_sha256"], identity["source_bytes"],
+                )
+                output = root / Path(relative).name
+                data, summary = BUILDER.strip_debug_candidate(source, output, identity)
+                self.assertEqual(len(data), identity["candidate_bytes"], relative)
+                self.assertEqual(summary["stripped_sha256"], identity["candidate_sha256"], relative)
+                self.assertEqual(summary["source_sha256"], identity["source_sha256"], relative)
+                self.assertEqual(summary["source_build_id_sha1"], identity["source_build_id"], relative)
+                self.assertEqual(summary["stripped_build_id_sha1"], identity["candidate_build_id"], relative)
+                self.assertEqual(summary["removed_debug_sections"], identity["stripped_debug_sections"], relative)
+                self.assertGreater(summary["runtime_symbol_table_count"], 0, relative)
+                self.assertGreater(summary["runtime_symbol_count"], 0, relative)
+                BUILDER._verify_file(
+                    source, f"unchanged source fixture {relative}",
+                    identity["source_sha256"], identity["source_bytes"],
+                )
+
     def test_replace_changes_exactly_three_payloads_and_preserves_raw_records(self) -> None:
         base, old = _fixture_cpio()
         replacements = {path: b"new:" + path.encode() for path in TARGETS}
