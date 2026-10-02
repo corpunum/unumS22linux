@@ -10,13 +10,16 @@ reviewed NPU patches below. It does not include audio changes, the NPU9 patch,
 the frozen shutdown-ownership patch, or the separate close-range kernel patch.
 The frozen ownership patch is hash-checked as an excluded input, not applied.
 
-The first authorized attempt used the six-profile Clang 21 toolchain and
-stopped at the byte-identical-config guard before `Image modules`. The
-coordinator matched the native config to its HCI artifact manifest and
-directed a profile-only correction to the actual Ubuntu Clang/LLD 18
-toolchain. The Clang 18 profile is implemented and preflight-verified; its
-one-job host attempt is pending a fresh coordinator GO. No compiler setting
-is relaxed, and no packaging or device action occurred.
+Two guarded attempts reached `olddefconfig` and stopped at the byte-identical
+config guard before `Image modules`. The first used Android Clang 21 rather
+than the native compiler and changed compiler metadata. The second used the
+manifest-matched Ubuntu Clang 18 but passed `LLVM_IAS=1`, enabling the Kconfig
+capability symbol `CONFIG_HAS_LTO_CLANG=y`. Inspection found the HCI build
+recipe omits both `LLVM_IAS` and explicit `LD`; a bounded `olddefconfig` check
+with those recipe variables left d762 unchanged. The native profile now mirrors
+that recipe while the six-profile command remains unchanged. Its new frozen
+output path and profile-specific tests are ready for coordinator review. No
+compile, packaging, or device action occurred.
 
 The task selected `gpt-6-luna` with reasoning `max` as the configured worker
 setting. This is recorded as `explicitly_configured`; no backend
@@ -138,10 +141,11 @@ Before compilation, the helper verifies the profile's direct parent and clean
 worktree, the exact ordered patch tree and hashes, the private config hash and
 required settings, the profile-specific Clang/LLD version and hashes, helper
 hashes, and a fresh output path under `$KERNEL_BUILD_ROOT/builds` with the
-`npu-native-eight-out-clang18-` prefix. The first failed output
-`npu-native-eight-out-20261002` and existing six output
-`npu-six-patch-out-20261002` are neither selected nor overwritten. Resource
-guards remain enabled and the proposed job count is one.
+`npu-native-eight-out-clang18-` prefix. The failed outputs
+`npu-native-eight-out-20261002` and `npu-native-eight-out-clang18-20261002`,
+the olddefconfig-only check output `npu-native-eight-olddefconfig-check-20261002`,
+and existing six output `npu-six-patch-out-20261002` are neither selected nor
+overwritten. Resource guards remain enabled and the proposed job count is one.
 
 After coordinator GO, run from this worker repository:
 
@@ -151,63 +155,85 @@ python3 tools/hardware/build-npu-six-profile.py --profile native-eight
 
 This selects source `$KERNEL_BUILD_ROOT/npu-native-eight-kernel-20261002`,
 config `native-config-export-20261002.config`, and fresh output
-`$KERNEL_BUILD_ROOT/npu-native-eight-out-clang18-20261002`. It first invokes
-`make -C <source> O=<output> ARCH=arm64 LLVM=1 LLVM_IAS=1
-CROSS_COMPILE=aarch64-linux-gnu- LD=/usr/lib/llvm-18/bin/ld.lld olddefconfig`,
-with `/usr/lib/llvm-18/bin` prepended to `PATH`, then exactly one `make`
+`$KERNEL_BUILD_ROOT/npu-native-eight-out-clang18-recipe-20261002`. It sets
+`LOCALVERSION=` and prepends `/usr/lib/llvm-18/bin` to `PATH`, then invokes
+`make -C <source> O=<output> ARCH=arm64 LLVM=1
+CROSS_COMPILE=aarch64-linux-gnu- olddefconfig`. The native profile deliberately
+omits `LLVM_IAS` and explicit `LD`, matching the HCI manifest's recipe; with
+`LLVM=1`, Kbuild selects `ld.lld` and its Makefile retains integrated assembly
+when `LLVM_IAS` is unset. Before creating the output, the helper refuses if
+any of `LLVM_IAS`, `LD`, `CC`, `AS`, `MAKEFLAGS`, `MFLAGS`, `GNUMAKEFLAGS`, or
+`MAKEOVERRIDES` is inherited, so omitted variables cannot be silently
+reintroduced from the parent environment. It then runs exactly one make
 invocation with those same arguments plus `-j1 Image modules`.
 There is no package, deployment, module installation, or phone action in the
 command path. A changed config or resource-guard abort is a stop, not a retry
 or a reason to relax settings.
 
-Preflight regressions passed: 22 tests each with `python3`, `python3 -O`, and
+Preflight regressions passed: 24 tests each with `python3`, `python3 -O`, and
 `PYTHONOPTIMIZE=1 python3`; `py_compile` also passed. Coverage includes default
 six/native-eight separation, config and patch SHA failure, ownership exclusion,
 wrong compiler/version, LLVM/GNU tool hash mismatch, wrong parent/dirty or
 off-stack trees, reversed patch order, cross-profile and reused output refusal,
-and bounded process-group cleanup. A live identity check matched the pinned
-Clang 18, LLD 18, ten LLVM helpers, and three GNU cross tools; source and d762
-config gates passed.
+profile-specific exact make arguments and environment, inherited native build
+override refusal, and bounded process-group cleanup. A live identity check
+matched the pinned Clang 18, LLD 18, ten LLVM helpers, and three GNU cross
+tools; source and d762 config gates passed. The active shell had none of the
+eight refused names set and had no inherited `LOCALVERSION` value.
 
-The committed helper was invoked once as
-`python3 tools/hardware/build-npu-six-profile.py --profile native-eight` at
-worker commit `f6904535c12437d9d3d41987d25d5d8ed3f072cc`; its launch-time SHA-256
-was `922be92616aee9836f102126e2a42aefe84b9ec2174b54312ce925cd85e66867`. The
-execution session handle was `4798`. Resource checks passed at start (36.7 GB
-available memory and 63,276,441,600 bytes free disk), and the selected output
-path was fresh. The helper copied the exact d762 config to the new output and
-ran its configured `olddefconfig` command. That command changed only these
-five config records:
+The first Clang 21 attempt used worker commit
+`f6904535c12437d9d3d41987d25d5d8ed3f072cc` and launch-time helper SHA-256
+`922be92616aee9836f102126e2a42aefe84b9ec2174b54312ce925cd85e66867` in session
+`4798`. It changed compiler/version config records and set
+`CONFIG_HAS_LTO_CLANG=y`; the output
+`npu-native-eight-out-20261002` is preserved and not reused. No `Image modules`
+target ran.
 
-| Setting | Preserved native export | `olddefconfig` output |
+The second guarded attempt used worker commit
+`f9756516800fd225e2e77639c766e18cc2a26503`, helper SHA-256
+`be249211fb197ce065d4a4f8770b8d5e0443b739b1fcabddec87fa003f07328a`, and
+command `python3 -I -B tools/hardware/build-npu-six-profile.py --profile
+native-eight` (execution session `45923`). The output was fresh and the live
+source, d762 config, Clang 18/LLD 18, ten LLVM helper, and three GNU tool gates
+passed. `olddefconfig` changed only these config records:
+
+| Setting | Preserved native export | Clang 18 `LLVM_IAS=1` output |
 |---|---|---|
-| `CONFIG_CC_VERSION_TEXT` | Ubuntu Clang 18.1.3 | Pinned Android Clang 21.0.0 (r563880c) |
-| `CONFIG_CLANG_VERSION` | `180103` | `210000` |
-| `CONFIG_AS_VERSION` | `180103` | `210000` |
-| `CONFIG_LLD_VERSION` | `180103` | `210000` |
 | `CONFIG_HAS_LTO_CLANG` | unset | `y` |
+| LTO choice records | `CONFIG_LTO_NONE=y` | remains `CONFIG_LTO_NONE=y`; full/thin unset records emitted |
 
-The original config remains as `.config.old` (236,183 bytes, SHA-256
+The exact input remains `.config.old` (236,183 bytes, SHA-256
 `d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16`). The
-generated output config remains private in the fresh output (236,421 bytes,
-SHA-256 `ae005dd1b63af228db1b562eac0af1c7cc53231d02016f59af8e8a9e26ca60a5`),
-along with `olddefconfig.log`; these files were not copied into this
+derived output config SHA-256 is
+`3070889600076df1a1ae847f79f8d2ff5a2c195f79ef3ef3c94ab9b197d79d6c`. The
+output and `olddefconfig.log` remain private under
+`npu-native-eight-out-clang18-20261002`; they are not copied into this
 repository. The helper exited status 2 with
 `BUILD_PREFLIGHT_FAILED olddefconfig changed the preserved configuration;
-build refused`. The `-j1 Image modules` make command was never launched. The
-Clang 21 output is preserved for review and will not be reused by the corrected
-profile.
+build refused`. The `-j1 Image modules` make command was never launched.
+
+To isolate the cause, the exact d762 config was copied to the fresh
+`npu-native-eight-olddefconfig-check-20261002` scratch output and only the HCI
+manifest recipe variables were used with `olddefconfig` as the target:
+`env PATH=/usr/lib/llvm-18/bin:$PATH LOCALVERSION= make -C <source> O=<scratch>
+ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig`. No `LLVM_IAS`
+or explicit `LD` argument was supplied. Kbuild reported `No change to
+.config`; the resulting config SHA remained d762. Source `arch/Kconfig`
+defines `HAS_LTO_CLANG` only when `test $(LLVM_IAS) -eq 1`, while the top-level
+Makefile uses integrated assembly when `LLVM_IAS` is unset (`ifneq` against
+zero). Thus the prior override affected a capability symbol, not the selected
+LTO mode; `CONFIG_LTO_NONE=y` was preserved. This reproduces the HCI recipe's
+configuration behavior without starting compilation.
 
 ## Evidence boundary
 
-The `olddefconfig` Kbuild preparation target ran, but `Image modules` did not.
-There are no generated kernel artifact hashes, build IDs, new kernel release,
-module vermagic, or import-CRC results to report. The config/toolchain metadata
-mismatch is preserved as a refusal, not normalized or retried. A future build
-has been directed to use the manifest-matched Clang 18 toolchain and a distinct
-fresh output; that invocation awaits its new coordinator GO. A host compile,
-if later authorized, is not module-load, firmware, NPU BOOTUP, runtime,
-device-acceptance, or deployment evidence.
+Both guarded attempts stopped before the `Image modules` target. There are no
+generated kernel artifact hashes, build IDs, new kernel release, module
+vermagic, or import-CRC results to report. Both failure outputs and the bounded
+scratch output remain preserved. The corrected helper matches the native HCI
+recipe and keeps the exact-config guard; it awaits coordinator review and a new
+GO before one host compile. A host compile, if authorized, is not module-load,
+firmware, NPU BOOTUP, runtime, device-acceptance, or deployment evidence.
 Existing BOOTUP refusal remains in force: the publication drain still has an
 unbounded `wait_for_completion(&waiter->publish_done)` if synchronous mailbox
 publication never returns, and the existing ownership/liveness evidence does

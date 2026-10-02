@@ -4,8 +4,8 @@
 This host-only builder keeps the six-patch profile as its default and exposes
 the HCI/camera-preserving eight-patch profile only through an explicit switch.
 It verifies the exact source commit, ordered patch tree, preserved config, and
-local Android Clang 21 toolchain before invoking Kbuild. It never packages or
-deploys the result.
+profile-specific toolchain before invoking Kbuild. It never packages or deploys
+the result.
 """
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ NATIVE_EIGHT_PATCHES = (
      "20c700bfa11f13836c76c88cca28a4f8dfa459e5cf146292a814880cd5850b29"),
 )
 NATIVE_EIGHT_SOURCE = BUILDS_ROOT / "npu-native-eight-kernel-20261002"
-NATIVE_EIGHT_OUTPUT = BUILDS_ROOT / "npu-native-eight-out-clang18-20261002"
+NATIVE_EIGHT_OUTPUT = BUILDS_ROOT / "npu-native-eight-out-clang18-recipe-20261002"
 NATIVE_EIGHT_TOOLCHAIN_BIN = Path("/usr/lib/llvm-18/bin")
 NATIVE_EIGHT_CLANG_SHA256 = (
     "8ef402d453d1ba4902e4ee0f0f847f6cfa01400c95aa43c24e97818b9c0e3f45"
@@ -170,6 +170,10 @@ class BuildProfile:
     llvm_tools: tuple[str, ...]
     llvm_tool_sha256: tuple[tuple[str, str], ...]
     gnu_tool_sha256: tuple[tuple[str, str], ...]
+    llvm_ias: str | None
+    explicit_ld: bool
+    make_environment: tuple[tuple[str, str], ...]
+    refuse_environment: tuple[str, ...]
 
 
 PROFILES = {
@@ -193,6 +197,10 @@ PROFILES = {
         llvm_tools=LLVM_TOOLS,
         llvm_tool_sha256=(),
         gnu_tool_sha256=(),
+        llvm_ias="1",
+        explicit_ld=True,
+        make_environment=(),
+        refuse_environment=(),
     ),
     "native-eight": BuildProfile(
         name="native-eight",
@@ -214,6 +222,13 @@ PROFILES = {
         llvm_tools=NATIVE_EIGHT_LLVM_TOOLS,
         llvm_tool_sha256=tuple(NATIVE_EIGHT_LLVM_TOOL_SHA256.items()),
         gnu_tool_sha256=tuple(NATIVE_EIGHT_GNU_TOOL_SHA256.items()),
+        llvm_ias=None,
+        explicit_ld=False,
+        make_environment=(("LOCALVERSION", ""),),
+        refuse_environment=(
+            "LLVM_IAS", "LD", "CC", "AS", "MAKEFLAGS", "MFLAGS",
+            "GNUMAKEFLAGS", "MAKEOVERRIDES",
+        ),
     ),
 }
 
@@ -615,6 +630,36 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def make_common_args(profile: BuildProfile, make: str, source: Path,
+                     output: Path, lld: Path) -> list[str]:
+    """Build profile-specific Kbuild arguments without changing six defaults."""
+    common = [make, "-C", str(source), f"O={output}", "ARCH=arm64", "LLVM=1"]
+    if profile.llvm_ias is not None:
+        common.append(f"LLVM_IAS={profile.llvm_ias}")
+    common.append("CROSS_COMPILE=aarch64-linux-gnu-")
+    if profile.explicit_ld:
+        common.append(f"LD={lld}")
+    return common
+
+
+def make_environment(profile: BuildProfile,
+                     inherited: dict[str, str]) -> dict[str, str]:
+    """Apply only the profile's reviewed build-environment overrides."""
+    inherited_overrides = [
+        name for name in profile.refuse_environment if name in inherited
+    ]
+    if inherited_overrides:
+        raise BuildError(
+            f"{profile.name} refuses inherited Kbuild override variables: "
+            + ", ".join(inherited_overrides)
+        )
+    env = inherited.copy()
+    env["PATH"] = str(profile.toolchain_bin) + os.pathsep + env.get("PATH", "")
+    env["LC_ALL"] = "C"
+    env.update(dict(profile.make_environment))
+    return env
+
+
 def main() -> int:
     args = parse_args()
     profile = PROFILES[args.profile]
@@ -663,6 +708,8 @@ def main() -> int:
     if memory_before < MIN_START_MEM:
         raise BuildError(f"only {memory_before} bytes are available; need at least {MIN_START_MEM}")
 
+    env = make_environment(profile, os.environ)
+
     print(f"SOURCE_BASE {source_info['base_commit']}")
     if profile.name != "six":
         print(f"PROFILE {profile.name}")
@@ -686,11 +733,7 @@ def main() -> int:
     if sha256(output_config) != profile.config_sha256:
         raise BuildError("copied fresh-output config does not match the preserved SHA")
 
-    env = os.environ.copy()
-    env["PATH"] = str(profile.toolchain_bin) + os.pathsep + env.get("PATH", "")
-    env["LC_ALL"] = "C"
-    common = [make, "-C", str(source), f"O={output}", "ARCH=arm64", "LLVM=1",
-              "LLVM_IAS=1", "CROSS_COMPILE=aarch64-linux-gnu-", f"LD={lld}"]
+    common = make_common_args(profile, make, source, output, lld)
     prepare = [*common, "olddefconfig"]
     print("PREPARE_COMMAND " + " ".join(prepare), flush=True)
     prepare_result = run(prepare, cwd=source, env=env)

@@ -336,7 +336,7 @@ class NpuBuildProfileSafetyTests(unittest.TestCase):
         self.assertNotEqual(native.default_source, six.default_source)
         self.assertNotEqual(native.default_output, six.default_output)
         self.assertEqual(native.default_output.name,
-                         "npu-native-eight-out-clang18-20261002")
+                         "npu-native-eight-out-clang18-recipe-20261002")
         self.assertEqual(native.output_prefix, "npu-native-eight-out-clang18-")
         self.assertEqual(six.toolchain_bin, BUILDER.TOOLCHAIN_BIN)
         self.assertEqual(six.clang_sha256, BUILDER.CLANG_SHA256)
@@ -354,6 +354,66 @@ class NpuBuildProfileSafetyTests(unittest.TestCase):
         self.assertEqual(native.llvm_tools, BUILDER.NATIVE_EIGHT_LLVM_TOOLS)
         self.assertEqual(dict(native.llvm_tool_sha256),
                          BUILDER.NATIVE_EIGHT_LLVM_TOOL_SHA256)
+        self.assertEqual(six.llvm_ias, "1")
+        self.assertTrue(six.explicit_ld)
+        self.assertEqual(six.make_environment, ())
+        self.assertIsNone(native.llvm_ias)
+        self.assertFalse(native.explicit_ld)
+        self.assertEqual(native.make_environment, (("LOCALVERSION", ""),))
+        self.assertEqual(six.refuse_environment, ())
+        self.assertEqual(
+            native.refuse_environment,
+            ("LLVM_IAS", "LD", "CC", "AS", "MAKEFLAGS", "MFLAGS",
+             "GNUMAKEFLAGS", "MAKEOVERRIDES"),
+        )
+
+    def test_kbuild_recipe_matches_each_profile_without_cross_profile_flags(self) -> None:
+        source = Path("/kernel/source")
+        output = Path("/kernel/output")
+        lld = Path("/llvm/bin/ld.lld")
+        six = BUILDER.make_common_args(
+            BUILDER.PROFILES["six"], "/usr/bin/make", source, output, lld)
+        native = BUILDER.make_common_args(
+            BUILDER.PROFILES["native-eight"], "/usr/bin/make", source, output,
+            lld)
+        self.assertEqual(
+            six,
+            ["/usr/bin/make", "-C", "/kernel/source", "O=/kernel/output",
+             "ARCH=arm64", "LLVM=1", "LLVM_IAS=1",
+             "CROSS_COMPILE=aarch64-linux-gnu-", "LD=/llvm/bin/ld.lld"],
+        )
+        self.assertEqual(
+            native,
+            ["/usr/bin/make", "-C", "/kernel/source", "O=/kernel/output",
+             "ARCH=arm64", "LLVM=1", "CROSS_COMPILE=aarch64-linux-gnu-"],
+        )
+        native_env = BUILDER.make_environment(
+            BUILDER.PROFILES["native-eight"],
+            {"PATH": "/usr/bin", "LOCALVERSION": "untrusted", "KEEP": "yes"},
+        )
+        six_env = BUILDER.make_environment(
+            BUILDER.PROFILES["six"],
+            {"PATH": "/usr/bin", "LOCALVERSION": "inherited", "KEEP": "yes"},
+        )
+        self.assertEqual(native_env["LOCALVERSION"], "")
+        self.assertEqual(native_env["KEEP"], "yes")
+        self.assertEqual(native_env["PATH"],
+                         str(BUILDER.NATIVE_EIGHT_TOOLCHAIN_BIN) + ":/usr/bin")
+        self.assertEqual(six_env["LOCALVERSION"], "inherited")
+        self.assertEqual(six_env["KEEP"], "yes")
+        self.assertEqual(six_env["PATH"],
+                         str(BUILDER.TOOLCHAIN_BIN) + ":/usr/bin")
+
+    def test_native_recipe_refuses_inherited_make_and_tool_overrides(self) -> None:
+        for name in BUILDER.PROFILES["native-eight"].refuse_environment:
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(
+                        BUILDER.BuildError,
+                        rf"native-eight refuses inherited Kbuild override variables: {name}"):
+                    BUILDER.make_environment(
+                        BUILDER.PROFILES["native-eight"],
+                        {"PATH": "/usr/bin", name: "set"},
+                    )
 
     def test_profile_toolchain_version_guard_rejects_wrong_compiler(self) -> None:
         six = BUILDER.PROFILES["six"]
