@@ -37,31 +37,38 @@ wait path.
 
 ## Collection and identity rules
 
-The remote program samples twice with a fixed two-second sleep. It reads
-`/proc/<pid>/task/<tid>` records and six named kernel sysctls. Boot UUIDs are
-compared inside the remote process, and only a `true`, `false`, or `null`
+The remote native-Python program samples twice with a fixed two-second sleep.
+It reads `/proc/<pid>/task/<tid>` records and six named kernel sysctls. Boot
+UUIDs are compared inside the remote process, and only a `true`, `false`, or `null`
 consistency value is returned. Kernel release is checked across the same
 window. Per-task `/proc/.../stat` start ticks are retained only in the
 transient capture so the host can pair slots safely; task IDs, PIDs, boot
 UUIDs, raw stacks, and network endpoints are not included in the aggregate
 report. A task slot is comparable only when its start ticks match across both
-samples. Missing tasks, unreadable records, identity changes, counter
-regressions, changed boot identity, or an invalid sample window prevent a
-no-change conclusion.
+samples. The bounded selected set is sorted by its private PID/TID directory
+names before slot assignment so enumeration order cannot mispair slots; those
+names are not returned. Missing tasks, unreadable records, identity changes,
+counter regressions, changed boot identity, or an invalid sample window
+prevent a no-change conclusion.
 
-The collector stops after 4096 task records scanned or 16 matching targets
-per sample. Reads are capped at 128 bytes for sysctl, uptime, and boot-ID
-records; 256 bytes for the kernel release and schedstat; 512 bytes for wchan;
-4096 bytes for stat; 65536 bytes for status; and 32768 bytes for stack.
-Oversized or unavailable records become unknown, or cause the host classifier
-to reject malformed/overflowed numeric values. Capture input and remote
-output are capped at 2 MiB. The USB SSH operation has a 15-second deadline;
-an error or timeout is not retried and yields no progress conclusion.
-
-The shell's pathname expansion materializes proc task paths before the
-iteration limit is checked. `MAX_SCAN` bounds task records visited and read,
-but does not cap that temporary pathname list independently of the live
-kernel's procfs task count.
+The collector uses lazy `os.scandir` iterators; it does not materialize a
+pathname glob. Per sample it visits at most 4096 entries from `/proc` and at
+most 4096 entries across all `/proc/<pid>/task` iterators. Both budgets count
+every yielded entry, including nonnumeric entries, and at most 16 matching
+targets are selected. Reaching either directory-entry limit marks the sample
+incomplete, even if the limit might have been the exact end of enumeration.
+Target overflow is detected by reading at most one additional matching `comm`
+after the 16 selected targets. Each procfs read is capped at the listed limit
+plus one byte, so oversize records are detected without unbounded reads: 128 bytes for
+sysctl, uptime, and boot-ID records; 256 bytes for the kernel release and
+schedstat; 512 bytes for wchan; 4096 bytes for stat; 65536 bytes for status;
+32768 bytes for stack; and 128 bytes for task comm. These file caps bound task
+record reads to about 2.1 MiB per sample, plus fixed small boot/sysctl reads.
+Counters must fit unsigned 64-bit values; overflow, regression/wrap, and
+oversized or unavailable records keep comparison unknown or cause the host
+classifier to reject malformed capture values. Capture input and remote output are
+capped at 2 MiB. The USB SSH operation has a 15-second deadline; an error or
+timeout is not retried and yields no progress conclusion.
 
 The top-level report says `observed` or `not_observed` only when the two-sample
 boot and task identity checks pass, enumeration is complete, all three task
@@ -75,17 +82,18 @@ request completion.
 
 `--capture` uses the existing `audio-recovery-reboot-once.py` read-only USB
 route (`_default_remote`), which uses the sealed `tools/s22-ssh` wrapper and
-trusted SSH executable path. The collector runs as native POSIX `sh`; it has
-no ADB or Android `/system/bin/sh` path. `--input` only classifies local JSON.
+trusted SSH executable path. The collector command is shell-quoted native
+`python3 -c`; it has no ADB or Android `/system/bin/sh` path. `--input` only
+classifies local JSON.
 For this implementation, the remote path was not invoked and the phone,
 SSH/ADB services, deploy/reboot paths, and hardware were not accessed.
 
-The fake-procfs tests execute the rendered collector with synthetic procfs
-files. They cover clipped comm names, positive counter deltas, stack
-redaction, boot-ID and task-starttime changes, missing boot IDs and counters,
-the target cap, input-size bounds, and the sealed USB helper handoff. These
-tests establish host behavior only; they do not establish device runtime
-behavior or TrustZone liveness.
+The fake-procfs tests execute the Python program from the rendered collector
+with synthetic procfs files. They cover clipped comm names, positive counter
+deltas, stack redaction, boot-ID and task-starttime changes, missing boot IDs
+and counters, process/task/target visit caps, input-size bounds, and the sealed
+USB helper handoff. These tests establish host behavior only; they do not
+establish device runtime behavior or TrustZone liveness.
 
 ```sh
 python3 tools/hardware/test-tz-progress-evidence.py

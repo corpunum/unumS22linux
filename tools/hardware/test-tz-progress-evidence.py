@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -54,8 +55,6 @@ class FakeProcfs(unittest.TestCase):
         self.task_paths = {}
         for index, (role, (comm, tid, start_ticks)) in enumerate(TASKS.items(), start=1):
             self.task_paths[role] = self.add_task(index * 100003, tid, comm, start_ticks, role)
-        self.fake_bin = self.root / "bin"
-        self.fake_bin.mkdir()
 
     def tearDown(self):
         self.temporary.cleanup()
@@ -84,28 +83,74 @@ class FakeProcfs(unittest.TestCase):
             (task_dir / "stack").write_text("\n".join(frames) + "\n")
         return task_dir
 
-    def install_fake_sleep(self, updates=()):
-        lines = ["#!/bin/sh"]
-        for path, value in updates:
-            lines.append(
-                "printf '%s\\n' " + shlex.quote(value) + " > " + shlex.quote(str(path)))
-        sleeper = self.fake_bin / "sleep"
-        sleeper.write_text("\n".join(lines) + "\n")
-        sleeper.chmod(0o755)
 
-    def execute_collector(self):
+    def execute_collector(self, updates=(), process_cap=None, task_cap=None,
+                          instrument_scandir=False):
         environment = os.environ.copy()
-        environment["PATH"] = str(self.fake_bin) + os.pathsep + environment.get("PATH", "/usr/bin:/bin")
+        environment["PATH"] = environment.get("PATH", "/usr/bin:/bin")
+        command = shlex.split(EVIDENCE.render_remote(self.proc))
+        self.assertEqual(command[:2], ["python3", "-c"])
+        program = command[2]
+        if process_cap is not None:
+            program = program.replace("MAX_PROCESSES = 4096",
+                                      f"MAX_PROCESSES = {process_cap}", 1)
+        if task_cap is not None:
+            program = program.replace("MAX_SCAN = 4096", f"MAX_SCAN = {task_cap}", 1)
+        if instrument_scandir:
+            self.assertIsNotNone(process_cap)
+            self.assertIsNotNone(task_cap)
+            guard_lines = [
+                "_real_scandir = os.scandir",
+                '_guard_counts = {"process": 0, "task": 0}',
+                "class _GuardedScandir:",
+                "    def __init__(self, iterator, kind, limit):",
+                "        self.iterator, self.kind, self.limit = iterator, kind, limit",
+                "    def __iter__(self):",
+                "        return self",
+                "    def __next__(self):",
+                "        if _guard_counts[self.kind] >= self.limit:",
+                '            raise AssertionError("collector requested past visit cap")',
+                "        entry = next(self.iterator)",
+                "        _guard_counts[self.kind] += 1",
+                "        return entry",
+                "    def __enter__(self):",
+                "        return self",
+                "    def __exit__(self, *_args):",
+                "        self.iterator.close()",
+                "def _guarded_scandir(path):",
+                '    kind = "process" if path == PROC_ROOT else "task"',
+                f'    limit = {{"process": {process_cap}, "task": {task_cap}}}[kind]',
+                "    return _GuardedScandir(_real_scandir(path), kind, limit)",
+                "os.scandir = _guarded_scandir",
+                "_original_emit_sample = emit_sample",
+                "def emit_sample(sample_index):",
+                '    _guard_counts["process"] = 0',
+                '    _guard_counts["task"] = 0',
+                "    return _original_emit_sample(sample_index)",
+            ]
+            guard = "\n".join(guard_lines)
+            marker = "\ndef all_consistent(values):"
+            self.assertIn(marker, program)
+            program = program.replace(marker, "\n" + guard + marker, 1)
+        replacement = []
+        for path, value in updates:
+            replacement.extend((
+                f"with open({str(path)!r}, 'w', encoding='utf-8') as update_file:",
+                f"    update_file.write({value!r})",
+            ))
+        replacement.append("time.sleep(0)")
+        self.assertIn("time.sleep(SAMPLE_INTERVAL)", program)
+        program = program.replace(
+            "time.sleep(SAMPLE_INTERVAL)", "\n".join(replacement), 1)
         result = subprocess.run(
-            ["/bin/sh", "-s"], input=EVIDENCE.render_remote(self.proc),
+            [*command[:2], program],
             capture_output=True, text=True, timeout=15, env=environment, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertLessEqual(len(result.stdout.encode("utf-8")), EVIDENCE.MAX_CAPTURE_BYTES)
         return json.loads(result.stdout)
 
     def report_for(self, updates=()):
-        self.install_fake_sleep(updates)
-        return self.execute_collector()
+        return self.execute_collector(updates)
 
     def test_executable_collector_uses_clipped_names_and_emits_only_sanitized_capture(self):
         updates = [(self.proc / "uptime", "102.0 0.0")]
@@ -132,6 +177,9 @@ class FakeProcfs(unittest.TestCase):
         self.assertTrue(report["tasks"]["iwlog"]["expected_wait_stack_in_both_samples"])
         self.assertFalse(report["tasks"]["chub_log"]["source_wait_path_supported"])
         self.assertNotIn(BOOT_ID, serialized)
+        self.assertNotIn("100003", serialized)
+        self.assertNotIn("200006", serialized)
+        self.assertNotIn("300009", serialized)
         self.assertNotIn("27182818", serialized)
         self.assertNotIn("31415926", serialized)
         self.assertNotIn("tz_worker_handler", serialized)
@@ -139,6 +187,10 @@ class FakeProcfs(unittest.TestCase):
         self.assertNotIn("2468022", public_report)
         self.assertNotIn("9753100", public_report)
         self.assertNotIn(BOOT_ID, public_report)
+        for private_identity in ("100003", "200006", "300009", "27182818",
+                                 "31415926", "16180339", "1357911", "2468022",
+                                 "9753100"):
+            self.assertNotIn(private_identity, public_report)
 
     def test_boot_identity_change_blocks_counter_comparison(self):
         new_boot = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
@@ -188,6 +240,25 @@ class FakeProcfs(unittest.TestCase):
                          "unknown_incomplete_or_inconsistent")
         self.assertEqual(report["assessment"]["scheduler_activity"], "unknown")
 
+    def test_remote_uint64_overflow_and_oversized_status_fail_closed(self):
+        worker_dir = self.task_paths["worker"]
+        (worker_dir / "schedstat").write_text(
+            "18446744073709551616 2000 3\n")
+        (worker_dir / "status").write_text("x" * 65537)
+        capture = self.report_for([(self.proc / "uptime", "102.0 0.0")])
+        worker_samples = [task for sample in capture["sampling"]["samples"]
+                          for task in sample["tasks"] if task["role"] == "worker"]
+        self.assertEqual(len(worker_samples), 2)
+        for task in worker_samples:
+            self.assertFalse(task["schedstat_available"])
+            self.assertFalse(task["status_available"])
+            self.assertIsNone(task["run_time_ns"])
+            self.assertIsNone(task["voluntary_context_switches"])
+        report = EVIDENCE.build_report(capture)
+        self.assertFalse(report["capture"]["complete_for_comparison"])
+        self.assertEqual(report["assessment"]["scheduler_activity"], "unknown")
+        self.assertEqual(report["assessment"]["context_switch_activity"], "unknown")
+
     def test_procfs_read_error_blocks_otherwise_positive_counter_delta(self):
         unreadable = self.proc / "777777/task/777777"
         unreadable.mkdir(parents=True)
@@ -215,6 +286,34 @@ class FakeProcfs(unittest.TestCase):
         self.assertFalse(report["capture"]["procfs_enumeration_complete"])
         self.assertEqual(report["assessment"]["scheduler_activity"], "unknown")
 
+    def test_process_visit_cap_is_reported_incomplete_without_eager_glob(self):
+        for offset in range(EVIDENCE.MAX_PROCESSES + 8):
+            task_root = self.proc / str(900000 + offset) / "task"
+            task_root.mkdir(parents=True)
+        capture = self.report_for()
+        for sample in capture["sampling"]["samples"]:
+            self.assertTrue(sample["enumeration"]["scan_capped"])
+            self.assertFalse(sample["enumeration"]["complete"])
+        report = EVIDENCE.build_report(capture)
+        self.assertFalse(report["capture"]["procfs_enumeration_complete"])
+        self.assertEqual(report["assessment"]["scheduler_activity"], "unknown")
+
+    def test_scandir_iterators_never_request_entries_past_process_or_task_budget(self):
+        process_limited = self.execute_collector(
+            process_cap=4, task_cap=8, instrument_scandir=True)
+        self.assertTrue(all(sample["enumeration"]["scan_capped"]
+                            for sample in process_limited["sampling"]["samples"]))
+
+        for task_path in self.task_paths.values():
+            shutil.rmtree(task_path.parents[1])
+        malformed_task = self.proc / "123/task/not-a-tid"
+        malformed_task.mkdir(parents=True)
+        task_limited = self.execute_collector(
+            process_cap=64, task_cap=1, instrument_scandir=True)
+        for sample in task_limited["sampling"]["samples"]:
+            self.assertTrue(sample["enumeration"]["scan_capped"])
+            self.assertEqual(sample["tasks_scanned"], 1)
+
 
 class CaptureValidation(unittest.TestCase):
     def test_rejects_oversized_or_malformed_task_bounds(self):
@@ -238,8 +337,13 @@ class CaptureValidation(unittest.TestCase):
         self.assertEqual(value, {"schema": "fixture"})
         self.assertEqual(calls[0][1], 15)
         self.assertIn("sh -c", calls[0][0])
+        self.assertIn("python3 -c", calls[0][0])
         self.assertNotIn("adb", calls[0][0])
         self.assertNotIn("/system/bin/sh", calls[0][0])
+        shell_check = subprocess.run(
+            ["/bin/sh", "-n"], input=calls[0][0], capture_output=True,
+            text=True, check=False)
+        self.assertEqual(shell_check.returncode, 0, shell_check.stderr)
 
     def test_default_remote_delegates_only_to_the_existing_sealed_usb_helper(self):
         observed = {}
@@ -261,12 +365,15 @@ class CaptureValidation(unittest.TestCase):
 
     def test_remote_collector_has_no_android_or_adb_path(self):
         rendered = EVIDENCE.render_remote()
-        self.assertIn("#!/bin/sh", rendered)
+        self.assertIn("python3 -c", rendered)
         self.assertNotIn("/system/bin/sh", rendered)
         self.assertNotIn("adb", rendered)
-        self.assertIn("MAX_SCAN=4096", rendered)
-        self.assertIn("MAX_TARGETS=16", rendered)
-        self.assertIn("head -c 32769", rendered)
+        self.assertIn("MAX_PROCESSES = 4096", rendered)
+        self.assertIn("MAX_SCAN = 4096", rendered)
+        self.assertIn("MAX_TARGETS = 16", rendered)
+        self.assertIn("os.scandir(PROC_ROOT)", rendered)
+        self.assertIn("os.read(fd", rendered)
+        self.assertNotIn("for process_dir in", rendered)
 
 
 if __name__ == "__main__":

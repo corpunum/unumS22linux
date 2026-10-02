@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Collect and classify bounded, read-only TrustZone task observations.
 
-``--render-remote`` prints the fixed native-Linux shell collector. ``--capture``
+``--render-remote`` prints the fixed native-Linux Python collector command. ``--capture``
 runs it over the project's sealed USB SSH wrapper; ``--input`` classifies an
 existing sanitized capture without contacting a device.
 """
@@ -24,6 +24,7 @@ MAX_CAPTURE_BYTES = 2 * 1024 * 1024
 PINNED_SOURCE_COMMIT = "4e5c5ad7d950e4de0688b5663965f2075654b2ad"
 DERIVED_KERNEL_COMMIT = "3fca50941422439b2019db2e4a3dc1016b2138a1"
 MAX_SCAN = 4096
+MAX_PROCESSES = 4096
 MAX_TARGETS = 16
 _ROLES = ("worker", "iwlog", "chub_log")
 _RELEASE_RE = re.compile(r"^[A-Za-z0-9._+-]{1,64}$")
@@ -35,307 +36,406 @@ class EvidenceError(ValueError):
     """Invalid or incomplete collector input."""
 
 
-# This program emits bounded numeric fields and fixed allowlisted labels. It
-# reads selected procfs files and sysctls; it does not write device state, read
-# TrustZone payloads, inspect logs, or invoke an SMC.
-_REMOTE_SCRIPT = r'''#!/bin/sh
-LC_ALL=C
-export LC_ALL
-PROC_ROOT=/proc
-SAMPLE_INTERVAL=2
-MAX_SCAN=4096
-MAX_TARGETS=16
+# This native Python program emits bounded numeric fields and fixed allowlisted labels.
+# It reads selected procfs files; it does not write device state, read TrustZone
+# payloads or kernel logs, or invoke an SMC.
+_REMOTE_PROGRAM = r'''
+import json
+import math
+import os
+import re
+import time
 
-json_uint() {
-    case "$1" in
-        ''|*[!0-9]*) printf 'null' ;;
-        *) printf '%s' "$1" ;;
-    esac
+PROC_ROOT = "/proc"
+SAMPLE_INTERVAL = 2
+MAX_PROCESSES = 4096
+MAX_SCAN = 4096
+MAX_TARGETS = 16
+UINT64_MAX = (1 << 64) - 1
+ROLE_BY_COMM = {
+    "tz_worker_threa": "worker",
+    "tz_iwlog_thread": "iwlog",
+    "chub_log_kthrea": "chub_log",
 }
+TASK_STATES = {"R", "S", "D", "T", "t", "Z", "X", "I", "K", "W"}
 
-read_uint_file() {
-    uint_data=$(head -c 129 "$1" 2>/dev/null) || return 0
-    [ "${#uint_data}" -le 128 ] || return 0
-    printf '%s\n' "$uint_data" | \
-        awk 'NR == 1 { if ($1 ~ /^[0-9]+$/) print $1; exit }'
+
+def read_limited(path, limit):
+    """Read at most limit + 1 bytes, so overflow is detected without prefetch."""
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0))
+    except OSError:
+        return None
+    try:
+        chunks = []
+        total = 0
+        while total <= limit:
+            chunk = os.read(fd, min(8192, limit + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > limit:
+                return None
+        return b"".join(chunks)
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+
+
+def parse_uint(raw):
+    if raw is None or re.fullmatch(rb"[0-9]+", raw) is None:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        return None
+    return value if value <= UINT64_MAX else None
+
+
+def read_first_uint(path, limit=128):
+    data = read_limited(path, limit)
+    if data is None:
+        return None
+    fields = data.split()
+    return parse_uint(fields[0]) if fields else None
+
+
+def read_uptime():
+    data = read_limited(os.path.join(PROC_ROOT, "uptime"), 128)
+    if data is None:
+        return None
+    fields = data.split()
+    if not fields or re.fullmatch(rb"[0-9]+(?:[.][0-9]+)?", fields[0]) is None:
+        return None
+    try:
+        value = float(fields[0])
+    except ValueError:
+        return None
+    return value if math.isfinite(value) and 0 <= value <= 1.0e10 else None
+
+
+def read_boot_id():
+    data = read_limited(
+        os.path.join(PROC_ROOT, "sys/kernel/random/boot_id"), 128)
+    if data is None:
+        return None
+    fields = data.split()
+    if not fields or re.fullmatch(rb"[0-9a-fA-F-]{36}", fields[0]) is None:
+        return None
+    return fields[0].decode("ascii").lower()
+
+
+def read_kernel_release():
+    data = read_limited(os.path.join(PROC_ROOT, "sys/kernel/osrelease"), 256)
+    if data is None:
+        return None
+    text = data.decode("ascii", errors="replace")
+    release = re.sub(r"[^A-Za-z0-9._+-]", "", text)[:64]
+    return release or None
+
+
+def read_status_counters(task_dir):
+    data = read_limited(os.path.join(task_dir, "status"), 65536)
+    if data is None:
+        return None, None
+    wanted = {
+        b"voluntary_ctxt_switches": None,
+        b"nonvoluntary_ctxt_switches": None,
+    }
+    for line in data.splitlines():
+        key, separator, value = line.partition(b":")
+        if separator and key in wanted and wanted[key] is None:
+            wanted[key] = parse_uint(value.strip())
+    voluntary = wanted[b"voluntary_ctxt_switches"]
+    nonvoluntary = wanted[b"nonvoluntary_ctxt_switches"]
+    if voluntary is None or nonvoluntary is None:
+        return None, None
+    return voluntary, nonvoluntary
+
+
+def read_stat(task_dir):
+    data = read_limited(os.path.join(task_dir, "stat"), 4096)
+    if data is None:
+        return "unknown", None
+    line = data.splitlines()[0] if data.splitlines() else b""
+    close = line.rfind(b") ")
+    if close < 0:
+        return "unknown", None
+    fields = line[close + 2:].split()
+    if len(fields) < 20:
+        return "unknown", None
+    try:
+        state = fields[0].decode("ascii")
+    except UnicodeDecodeError:
+        state = "unknown"
+    start_ticks = parse_uint(fields[19])
+    return (state if state in TASK_STATES else "unknown"), start_ticks
+
+
+def read_schedstat(task_dir):
+    data = read_limited(os.path.join(task_dir, "schedstat"), 256)
+    if data is None:
+        return None
+    lines = data.splitlines()
+    fields = lines[0].split() if lines else []
+    values = [parse_uint(token) for token in fields[:3]]
+    if len(values) != 3 or any(value is None for value in values):
+        return None
+    return values
+
+
+def read_wchan_class(task_dir):
+    data = read_limited(os.path.join(task_dir, "wchan"), 512)
+    if data is None:
+        return "unavailable"
+    lines = data.splitlines()
+    raw = lines[0].decode("ascii", errors="replace") if lines else ""
+    if raw in ("schedule", "__schedule"):
+        return "scheduler_wait"
+    if raw == "schedule_timeout" or raw.startswith("schedule_timeout_") or raw == "io_schedule":
+        return "scheduler_timeout"
+    if not raw or raw == "0" or raw.startswith("0x"):
+        return "unavailable"
+    return "other"
+
+
+def read_stack_match(task_dir, role):
+    data = read_limited(os.path.join(task_dir, "stack"), 32768)
+    if data is None:
+        return False, False
+    if role == "worker":
+        patterns = (
+            rb"__schedule[+]0x",
+            rb"(^|[ \t])schedule[+]0x",
+            rb"tz_worker_handler[+]0x",
+            rb"smpboot_thread_fn[+]0x",
+            rb"kthread[+]0x",
+            rb"ret_from_fork[+]0x",
+        )
+    else:
+        patterns = (
+            rb"__schedule[+]0x",
+            rb"(^|[ \t])schedule[+]0x",
+            rb"tz_iwlog_kthread_handler[+]0x",
+            rb"kthread[+]0x",
+            rb"ret_from_fork[+]0x",
+        )
+    matched = all(re.search(pattern, data, re.MULTILINE) for pattern in patterns)
+    return True, bool(matched)
+
+
+def emit_task(task_dir, role, slot):
+    state, start_ticks = read_stat(task_dir)
+    voluntary, nonvoluntary = read_status_counters(task_dir)
+    schedstat = read_schedstat(task_dir)
+    if schedstat is None:
+        run_time = run_delay = run_count = None
+    else:
+        run_time, run_delay, run_count = schedstat
+    if role == "chub_log":
+        stack_available, wait_match = False, None
+    else:
+        stack_available, wait_match = read_stack_match(task_dir, role)
+    return {
+        "role": role,
+        "slot": slot,
+        "state": state,
+        "stat_available": start_ticks is not None,
+        "start_ticks": start_ticks,
+        "status_available": voluntary is not None and nonvoluntary is not None,
+        "voluntary_context_switches": voluntary,
+        "nonvoluntary_context_switches": nonvoluntary,
+        "schedstat_available": schedstat is not None,
+        "run_time_ns": run_time,
+        "run_delay_ns": run_delay,
+        "run_count": run_count,
+        "wchan_class": read_wchan_class(task_dir),
+        "stack_available": stack_available,
+        "wait_stack_match": wait_match,
+    }
+
+
+class VisitBudget:
+    def __init__(self, limit):
+        self.limit = limit
+        self.visits = 0
+        self.capped = False
+
+    def entries(self, iterator):
+        while self.visits < self.limit:
+            try:
+                entry = next(iterator)
+            except StopIteration:
+                return
+            self.visits += 1
+            yield entry
+        self.capped = True
+
+
+def emit_sample(sample_index):
+    uptime = read_uptime()
+    process_budget = VisitBudget(MAX_PROCESSES)
+    task_budget = VisitBudget(MAX_SCAN)
+    target_candidates = []
+    scan_capped = False
+    target_capped = False
+    unreadable_comm = 0
+    enumeration_errors = 0
+    stop = False
+
+    try:
+        processes = os.scandir(PROC_ROOT)
+    except OSError:
+        processes = None
+        enumeration_errors = 1
+
+    if processes is not None:
+        with processes:
+            for process in process_budget.entries(processes):
+                if not process.name.isdigit():
+                    continue
+                try:
+                    process_is_dir = process.is_dir(follow_symlinks=False)
+                except OSError:
+                    enumeration_errors = min(enumeration_errors + 1, MAX_SCAN)
+                    process_is_dir = False
+                if not process_is_dir:
+                    continue
+                task_root = os.path.join(process.path, "task")
+                try:
+                    task_group = os.scandir(task_root)
+                except OSError:
+                    enumeration_errors = min(enumeration_errors + 1, MAX_SCAN)
+                    continue
+
+                with task_group:
+                    for task in task_budget.entries(task_group):
+                        if not task.name.isdigit():
+                            continue
+                        try:
+                            task_is_dir = task.is_dir(follow_symlinks=False)
+                        except OSError:
+                            enumeration_errors = min(enumeration_errors + 1, MAX_SCAN)
+                            continue
+                        if not task_is_dir:
+                            continue
+                        comm_data = read_limited(os.path.join(task.path, "comm"), 128)
+                        if comm_data is None:
+                            unreadable_comm = min(unreadable_comm + 1, MAX_SCAN)
+                            role = None
+                        else:
+                            comm_lines = comm_data.splitlines()
+                            comm = (comm_lines[0].decode("ascii", errors="replace")
+                                    if comm_lines else "")
+                            if not comm:
+                                unreadable_comm = min(unreadable_comm + 1, MAX_SCAN)
+                                role = None
+                            else:
+                                role = ROLE_BY_COMM.get(comm)
+                        if role is not None:
+                            if len(target_candidates) >= MAX_TARGETS:
+                                target_capped = True
+                                stop = True
+                            else:
+                                target_candidates.append((
+                                    role, process.name, task.name, task.path))
+                        if stop:
+                            break
+                    if task_budget.capped:
+                        scan_capped = True
+                        stop = True
+                    if stop:
+                        break
+            if process_budget.capped:
+                scan_capped = True
+
+    slots = {role: 0 for role in ROLE_BY_COMM.values()}
+    targets = []
+    for role, _pid, _tid, task_dir in sorted(target_candidates):
+        targets.append(emit_task(task_dir, role, slots[role]))
+        slots[role] += 1
+
+    complete = (
+        not scan_capped and not target_capped
+        and unreadable_comm == 0 and enumeration_errors == 0
+    )
+    return {
+        "sample_index": sample_index,
+        "uptime_seconds": uptime,
+        "tasks_scanned": task_budget.visits,
+        "enumeration": {
+            "complete": complete,
+            "scan_capped": scan_capped,
+            "target_capped": target_capped,
+            "unreadable_comm_count": unreadable_comm,
+            "enumeration_error_count": enumeration_errors,
+        },
+        "tasks": targets,
+    }
+
+
+def all_consistent(values):
+    return bool(values) and all(value is not None for value in values) and len(set(values)) == 1
+
+
+kernel_release = read_kernel_release()
+boot_uptime = read_uptime()
+boot_id_start = read_boot_id()
+release_start = read_kernel_release()
+boot_id_0_before = read_boot_id()
+release_0_before = read_kernel_release()
+sample_0 = emit_sample(0)
+boot_id_0_after = read_boot_id()
+release_0_after = read_kernel_release()
+time.sleep(SAMPLE_INTERVAL)
+boot_id_1_before = read_boot_id()
+release_1_before = read_kernel_release()
+sample_1 = emit_sample(1)
+boot_id_1_after = read_boot_id()
+release_1_after = read_kernel_release()
+
+boot_identity_consistent = (
+    all_consistent((boot_id_start, boot_id_0_before, boot_id_0_after,
+                    boot_id_1_before, boot_id_1_after))
+    if all(value is not None for value in
+           (boot_id_start, boot_id_0_before, boot_id_0_after,
+            boot_id_1_before, boot_id_1_after))
+    else None
+)
+kernel_release_consistent = (
+    all_consistent((release_start, release_0_before, release_0_after,
+                    release_1_before, release_1_after))
+    if all(value is not None for value in
+           (release_start, release_0_before, release_0_after,
+            release_1_before, release_1_after))
+    else None
+)
+
+sysctl_names = (
+    "hung_task_timeout_secs", "hung_task_warnings", "hung_task_panic",
+    "watchdog_thresh", "panic_on_warn", "tainted",
+)
+sysctls = {
+    name: read_first_uint(os.path.join(PROC_ROOT, "sys/kernel", name))
+    for name in sysctl_names
 }
-
-read_uptime() {
-    uptime_data=$(head -c 129 "$PROC_ROOT/uptime" 2>/dev/null) || return 0
-    [ "${#uptime_data}" -le 128 ] || return 0
-    printf '%s\n' "$uptime_data" | \
-        awk 'NR == 1 { if ($1 ~ /^[0-9]+([.][0-9]+)?$/) print $1; exit }'
+capture = {
+    "schema": "tz-progress-capture/v2",
+    "boot": {
+        "kernel_release": kernel_release,
+        "uptime_seconds_at_start": boot_uptime,
+        "boot_identity_consistent": boot_identity_consistent,
+        "kernel_release_consistent": kernel_release_consistent,
+    },
+    "sysctls": sysctls,
+    "sampling": {
+        "interval_seconds": SAMPLE_INTERVAL,
+        "samples": [sample_0, sample_1],
+    },
 }
-
-read_boot_id() {
-    boot_data=$(head -c 129 "$PROC_ROOT/sys/kernel/random/boot_id" 2>/dev/null) || return 0
-    [ "${#boot_data}" -le 128 ] || return 0
-    printf '%s\n' "$boot_data" | \
-        awk 'NR == 1 { if (length($1) == 36 && $1 ~ /^[0-9a-fA-F-]+$/) print tolower($1); exit }'
-}
-
-read_kernel_release() {
-    release_data=$(head -c 257 "$PROC_ROOT/sys/kernel/osrelease" 2>/dev/null) || return 0
-    [ "${#release_data}" -le 256 ] || return 0
-    printf '%s' "$release_data" | tr -cd 'A-Za-z0-9._+-' | cut -c1-64
-}
-
-read_status_uint() {
-    status_data=$(head -c 65537 "$1" 2>/dev/null) || return 0
-    [ "${#status_data}" -le 65536 ] || return 0
-    printf '%s\n' "$status_data" | \
-        awk -F: -v key="$2" '$1 == key { gsub(/[[:space:]]/, "", $2); if ($2 ~ /^[0-9]+$/) print $2; exit }'
-}
-
-read_wchan_class() {
-    wchan_data=$(head -c 513 "$1" 2>/dev/null) || wchan_data=
-    [ "${#wchan_data}" -le 512 ] || { printf 'unavailable'; return; }
-    raw=$(printf '%s\n' "$wchan_data" | awk 'NR == 1 { print; exit }')
-    case "$raw" in
-        schedule|__schedule) printf 'scheduler_wait' ;;
-        schedule_timeout|schedule_timeout_*|io_schedule) printf 'scheduler_timeout' ;;
-        ''|0|0x*) printf 'unavailable' ;;
-        *) printf 'other' ;;
-    esac
-}
-
-read_stack_summary() {
-    stack_file=$1
-    stack_role=$2
-    stack_data=$(head -c 32769 "$stack_file" 2>/dev/null) || return 1
-    [ "${#stack_data}" -le 32768 ] || return 1
-    if [ "$stack_role" = worker ]; then
-        printf '%s\n' "$stack_data" | awk '
-            /__schedule[+]0x/ { a=1 }
-            /(^|[[:space:]])schedule[+]0x/ { b=1 }
-            /tz_worker_handler[+]0x/ { c=1 }
-            /smpboot_thread_fn[+]0x/ { d=1 }
-            /kthread[+]0x/ { e=1 }
-            /ret_from_fork[+]0x/ { f=1 }
-            END { printf "%d %d %d %d %d %d\n", a, b, c, d, e, f }
-        '
-    else
-        printf '%s\n' "$stack_data" | awk '
-            /__schedule[+]0x/ { a=1 }
-            /(^|[[:space:]])schedule[+]0x/ { b=1 }
-            /tz_iwlog_kthread_handler[+]0x/ { c=1 }
-            /kthread[+]0x/ { d=1 }
-            /ret_from_fork[+]0x/ { e=1 }
-            END { printf "%d %d %d %d %d\n", a, b, c, d, e }
-        '
-    fi
-}
-
-emit_task() {
-    task_dir=$1
-    role=$2
-    slot=$3
-
-    stat_source=$(head -c 4097 "$task_dir/stat" 2>/dev/null) || stat_source=
-    [ "${#stat_source}" -le 4096 ] || stat_source=
-    stat_data=$(printf '%s\n' "$stat_source" | \
-        awk '{ sub(/^.*\) /, ""); if (NF >= 20) print $1, $20 }')
-    set -- $stat_data
-    raw_state=${1:-}
-    start_ticks=${2:-}
-    case "$raw_state" in
-        R|S|D|T|t|Z|X|I|K|W) task_state=$raw_state ;;
-        *) task_state=unknown ;;
-    esac
-    case "$start_ticks" in
-        ''|*[!0-9]*) stat_available=false; start_ticks_json=null ;;
-        *) stat_available=true; start_ticks_json=$start_ticks ;;
-    esac
-
-    voluntary=$(read_status_uint "$task_dir/status" voluntary_ctxt_switches)
-    nonvoluntary=$(read_status_uint "$task_dir/status" nonvoluntary_ctxt_switches)
-    case "$voluntary:$nonvoluntary" in
-        *[!0-9:]*|:|*:|:*) status_available=false ;;
-        *) status_available=true ;;
-    esac
-
-    sched_source=$(head -c 257 "$task_dir/schedstat" 2>/dev/null) || sched_source=
-    [ "${#sched_source}" -le 256 ] || sched_source=
-    sched_data=$(printf '%s\n' "$sched_source" | \
-        awk 'NR == 1 { if (NF >= 3 && $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/) print $1, $2, $3; exit }')
-    set -- $sched_data
-    run_ns=${1:-}
-    run_delay_ns=${2:-}
-    run_count=${3:-}
-    case "$run_ns:$run_delay_ns:$run_count" in
-        *[!0-9:]*|::|:*|*::|*:) schedstat_available=false ;;
-        *) schedstat_available=true ;;
-    esac
-
-    wchan_class=$(read_wchan_class "$task_dir/wchan")
-    if [ "$role" = chub_log ]; then
-        stack_available=false
-        wait_stack_match_json=null
-    else
-        if stack_flags=$(read_stack_summary "$task_dir/stack" "$role"); then
-            set -- $stack_flags
-            if [ "$role" = worker ]; then
-                if [ "${1:-0}${2:-0}${3:-0}${4:-0}${5:-0}${6:-0}" = 111111 ]; then
-                    wait_stack_match_json=true
-                else
-                    wait_stack_match_json=false
-                fi
-            else
-                if [ "${1:-0}${2:-0}${3:-0}${4:-0}${5:-0}" = 11111 ]; then
-                    wait_stack_match_json=true
-                else
-                    wait_stack_match_json=false
-                fi
-            fi
-            stack_available=true
-        else
-            stack_available=false
-            wait_stack_match_json=false
-        fi
-    fi
-
-    printf '{"role":"%s","slot":%s,"state":"%s","stat_available":%s,"start_ticks":%s,' \
-        "$role" "$slot" "$task_state" "$stat_available" "$start_ticks_json"
-    printf '"status_available":%s,"voluntary_context_switches":%s,"nonvoluntary_context_switches":%s,' \
-        "$status_available" "$(json_uint "$voluntary")" "$(json_uint "$nonvoluntary")"
-    printf '"schedstat_available":%s,"run_time_ns":%s,"run_delay_ns":%s,"run_count":%s,' \
-        "$schedstat_available" "$(json_uint "$run_ns")" "$(json_uint "$run_delay_ns")" "$(json_uint "$run_count")"
-    printf '"wchan_class":"%s","stack_available":%s,"wait_stack_match":%s}' \
-        "$wchan_class" "$stack_available" "$wait_stack_match_json"
-}
-
-emit_sample() {
-    sample_index=$1
-    sample_uptime=$(read_uptime)
-    scan_count=0
-    target_count=0
-    worker_slot=0
-    iwlog_slot=0
-    chub_slot=0
-    scan_capped=0
-    target_capped=0
-    unreadable_comm=0
-    enumeration_errors=0
-    task_comma=0
-
-    printf '{"sample_index":%s,"uptime_seconds":%s,"tasks_scanned":' \
-        "$sample_index" "$(case "$sample_uptime" in ''|*[!0-9.]*|*.*.*) printf null ;; *) printf '%s' "$sample_uptime" ;; esac)"
-    # The actual task list is emitted after bounded enumeration so its count
-    # and completeness flags are available without buffering raw procfs data.
-    # Keep only sanitized records in shell memory.
-    task_records=
-    for process_dir in "$PROC_ROOT"/[0-9]*; do
-        [ -d "$process_dir" ] || continue
-        process_name=${process_dir##*/}
-        case "$process_name" in ''|*[!0-9]*) continue ;; esac
-        task_group="$process_dir/task"
-        if [ ! -d "$task_group" ]; then
-            [ -d "$process_dir" ] && enumeration_errors=$((enumeration_errors + 1))
-            continue
-        fi
-        for task_dir in "$task_group"/[0-9]*; do
-            [ -d "$task_dir" ] || continue
-            task_name=${task_dir##*/}
-            case "$task_name" in ''|*[!0-9]*) continue ;; esac
-            if [ "$scan_count" -ge "$MAX_SCAN" ]; then
-                scan_capped=1
-                break 2
-            fi
-            scan_count=$((scan_count + 1))
-            if task_comm=$(awk 'NR == 1 { print; exit }' "$task_dir/comm" 2>/dev/null); then
-                :
-            else
-                unreadable_comm=$((unreadable_comm + 1))
-                continue
-            fi
-            if [ -z "$task_comm" ]; then
-                unreadable_comm=$((unreadable_comm + 1))
-                continue
-            fi
-            case "$task_comm" in
-                tz_worker_threa) role=worker; slot=$worker_slot; worker_slot=$((worker_slot + 1)) ;;
-                tz_iwlog_thread) role=iwlog; slot=$iwlog_slot; iwlog_slot=$((iwlog_slot + 1)) ;;
-                chub_log_kthrea) role=chub_log; slot=$chub_slot; chub_slot=$((chub_slot + 1)) ;;
-                *) continue ;;
-            esac
-            if [ "$target_count" -ge "$MAX_TARGETS" ]; then
-                target_capped=1
-                break 2
-            fi
-            record=$(emit_task "$task_dir" "$role" "$slot")
-            if [ "$task_comma" -eq 1 ]; then task_records="$task_records,$record"; else task_records=$record; task_comma=1; fi
-            target_count=$((target_count + 1))
-        done
-    done
-    if [ "$scan_capped" -eq 0 ] && [ "$target_capped" -eq 0 ] \
-            && [ "$unreadable_comm" -eq 0 ] && [ "$enumeration_errors" -eq 0 ]; then
-        scan_complete=true
-    else
-        scan_complete=false
-    fi
-    printf '%s,"enumeration":{"complete":%s,"scan_capped":%s,"target_capped":%s,"unreadable_comm_count":%s,"enumeration_error_count":%s},"tasks":[' \
-        "$scan_count" "$scan_complete" "$( [ "$scan_capped" -eq 1 ] && printf true || printf false )" \
-        "$( [ "$target_capped" -eq 1 ] && printf true || printf false )" \
-        "$unreadable_comm" "$enumeration_errors"
-    printf '%s]}\n' "$task_records"
-}
-
-kernel_release=$(read_kernel_release)
-case "$kernel_release" in ''|*[!A-Za-z0-9._+-]*) kernel_release=unknown ;; esac
-boot_uptime=$(read_uptime)
-case "$boot_uptime" in ''|*[!0-9.]*|*.*.*) boot_uptime_json=null ;; *) boot_uptime_json=$boot_uptime ;; esac
-boot_id_start=$(read_boot_id)
-release_start=$(read_kernel_release)
-boot_id_0_before=$(read_boot_id)
-release_0_before=$(read_kernel_release)
-sample_0=$(emit_sample 0)
-boot_id_0_after=$(read_boot_id)
-release_0_after=$(read_kernel_release)
-sleep "$SAMPLE_INTERVAL"
-boot_id_1_before=$(read_boot_id)
-release_1_before=$(read_kernel_release)
-sample_1=$(emit_sample 1)
-boot_id_1_after=$(read_boot_id)
-release_1_after=$(read_kernel_release)
-
-if [ -n "$boot_id_start" ] && [ -n "$boot_id_0_before" ] && [ -n "$boot_id_0_after" ] \
-        && [ -n "$boot_id_1_before" ] && [ -n "$boot_id_1_after" ]; then
-    if [ "$boot_id_start" = "$boot_id_0_before" ] && [ "$boot_id_start" = "$boot_id_0_after" ] \
-            && [ "$boot_id_start" = "$boot_id_1_before" ] && [ "$boot_id_start" = "$boot_id_1_after" ]; then
-        boot_identity_consistent=true
-    else
-        boot_identity_consistent=false
-    fi
-else
-    boot_identity_consistent=null
-fi
-if [ -n "$release_start" ] && [ -n "$release_0_before" ] && [ -n "$release_0_after" ] \
-        && [ -n "$release_1_before" ] && [ -n "$release_1_after" ]; then
-    if [ "$release_start" = "$release_0_before" ] && [ "$release_start" = "$release_0_after" ] \
-            && [ "$release_start" = "$release_1_before" ] && [ "$release_start" = "$release_1_after" ]; then
-        kernel_release_consistent=true
-    else
-        kernel_release_consistent=false
-    fi
-else
-    kernel_release_consistent=null
-fi
-
-case "$kernel_release" in unknown) kernel_release_json=null ;; *) kernel_release_json="\"$kernel_release\"" ;; esac
-sys_hung_task_timeout=$(json_uint "$(read_uint_file "$PROC_ROOT/sys/kernel/hung_task_timeout_secs")")
-sys_hung_task_warnings=$(json_uint "$(read_uint_file "$PROC_ROOT/sys/kernel/hung_task_warnings")")
-sys_hung_task_panic=$(json_uint "$(read_uint_file "$PROC_ROOT/sys/kernel/hung_task_panic")")
-sys_watchdog_thresh=$(json_uint "$(read_uint_file "$PROC_ROOT/sys/kernel/watchdog_thresh")")
-sys_panic_on_warn=$(json_uint "$(read_uint_file "$PROC_ROOT/sys/kernel/panic_on_warn")")
-sys_tainted=$(json_uint "$(read_uint_file "$PROC_ROOT/sys/kernel/tainted")")
-
-printf '{"schema":"tz-progress-capture/v2","boot":{"kernel_release":%s,"uptime_seconds_at_start":%s,"boot_identity_consistent":%s,"kernel_release_consistent":%s},' \
-    "$kernel_release_json" "$boot_uptime_json" "$boot_identity_consistent" "$kernel_release_consistent"
-printf '"sysctls":{"hung_task_timeout_secs":%s,"hung_task_warnings":%s,"hung_task_panic":%s,"watchdog_thresh":%s,"panic_on_warn":%s,"tainted":%s},' \
-    "$sys_hung_task_timeout" "$sys_hung_task_warnings" "$sys_hung_task_panic" \
-    "$sys_watchdog_thresh" "$sys_panic_on_warn" "$sys_tainted"
-printf '"sampling":{"interval_seconds":%s,"samples":[%s,%s]}}\n' \
-    "$SAMPLE_INTERVAL" "$sample_0" "$sample_1"
+print(json.dumps(capture, separators=(",", ":"), allow_nan=False))
 '''
 
 
@@ -700,9 +800,10 @@ def build_report(capture: Any) -> dict[str, Any]:
 
 
 def render_remote(proc_root: str | Path = "/proc") -> str:
-    """Return the fixed collector, optionally rooted at fake procfs for tests."""
-    root = shlex.quote(str(proc_root))
-    return _REMOTE_SCRIPT.replace("PROC_ROOT=/proc", "PROC_ROOT=" + root, 1)
+    """Return a shell-quoted Python collector command for the fixed proc root."""
+    program = _REMOTE_PROGRAM.replace(
+        'PROC_ROOT = "/proc"', "PROC_ROOT = " + repr(str(proc_root)), 1)
+    return "python3 -c " + shlex.quote(program)
 
 
 def _load_module(name: str, path: Path):
@@ -772,7 +873,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--render-remote", action="store_true",
-                      help="print the fixed read-only POSIX shell collector")
+                      help="print the fixed read-only native Python collector command")
     mode.add_argument("--capture", action="store_true",
                       help="collect over native USB SSH with the sealed project wrapper")
     mode.add_argument("--input", type=Path, help="classify sanitized capture JSON")
