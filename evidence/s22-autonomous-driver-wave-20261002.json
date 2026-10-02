@@ -2,6 +2,48 @@
   "schema": "s22-autonomous-driver-wave/v1",
   "captured_at_utc": "2026-10-02T17:54:34Z",
   "source_test_checkpoint_updated_at_utc": "2026-10-02T18:06:45Z",
+  "subsequent_completed_checkpoint": {
+    "captured_at_utc": "2026-10-02T18:45:00Z",
+    "supersedes_earlier_in_progress_states": true,
+    "native_eight_build": "completed_exit_zero; see s22-native-eight-build-completed-20261002.json",
+    "independent_native_artifact_review": "c6eb5c90bdac0a4f36642bccc62b2468f501f780",
+    "npu10_author": "394ecc49e36208781829741638365524291b17f4",
+    "npu10_independent_review": "a7dea564341c6da6713f1a7fe91462036cc3886a",
+    "npu10_committed_publication_drain_bounded": false,
+    "audio_pm_author": "fdf0834f14e79e3bdfa99203a67787f1b9b2770a",
+    "audio_pm_independent_review": "ab0f1f0af0f9debd5931dd1be5bd49b9c48d17e3",
+    "expanded_suite": {
+      "normal_passed": 52,
+      "optimized_passed": 49,
+      "failed": 0,
+      "exit_code": 0,
+      "launch_commit": "5847824",
+      "test_followup_during_run": "87d1986",
+      "supplemental_and_independent_followup_runs_pass": true,
+      "single_frozen_head_claimed": false,
+      "private_log_sha256": "11c4f5c959138cbd84f95e7903e6ab613ebe3c2ffc98e7719279b3e483bf7d63"
+    },
+    "hosted_ci": {
+      "head": "bd8e5fff8ee1fe82c7657913e307ae8919ee4eb6",
+      "run_id": 37045424320,
+      "status": "completed",
+      "conclusion": "success",
+      "normal_passed": 50,
+      "optimized_passed": 47,
+      "private_log_sha256": "c9711898ee5af1a9f0849cc7e5ec4db46c62dc87a3b8370f622ef6eb49d71579"
+    },
+    "local_deployment_AVB_fixture_tests": {
+      "trusted_public_tool_sha256": "5698656733ef5077d62ee30395b5ad34295a0f170fb1ba570026c760ead83782",
+      "tests_each_python_mode": 45,
+      "three_modes_passed": true,
+      "skips_each_mode": 0,
+      "private_log_sha256": ["b9c6db205065ee57c449277f611773d6387b3af99b9bdd9780abc4bf76cbb67a", "4859e2122b5a963de4aef2ce0adf7effe2e0c998c31fe8164486b4232d7af8ed", "4fbc2f865c35de1143746ad7f1681a16fde63f53d96a0daff8bf5d2838831215"]
+    },
+    "latest_readonly_phone_receipt_sha256": "01fc234343f00705b73ef8c6a519fa48497996bc5f2642289a587bc1797badd3",
+    "new_device_mutations": 0,
+    "bootup_authorized": false,
+    "mission_complete": false
+  },
   "review_branch": "s22/luna-driver-completion-20260923",
   "starting_remote_sha": "5e2eebf394e8a39a1d7d7bba2c2c3ec9edb93de7",
   "master_unchanged_sha": "20605dbe623e0909cf219c3cae9ef7bb597b15a6",
