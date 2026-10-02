@@ -18,7 +18,7 @@ import unittest
 from unittest import mock
 
 BUILDER_PATH = Path(__file__).with_name("build-npu-six-profile.py")
-SPEC = importlib.util.spec_from_file_location("npu_six_profile_builder", BUILDER_PATH)
+SPEC = importlib.util.spec_from_file_location("npu_profile_builder", BUILDER_PATH)
 if SPEC is None or SPEC.loader is None:
     raise RuntimeError("cannot load NPU six-profile builder")
 BUILDER = importlib.util.module_from_spec(SPEC)
@@ -45,7 +45,7 @@ class FakeProcess:
         return self.returncode
 
 
-class NpuSixBuildSafetyTests(unittest.TestCase):
+class NpuBuildProfileSafetyTests(unittest.TestCase):
     @staticmethod
     def git(source: Path, *args: str) -> str:
         result = subprocess.run(
@@ -299,7 +299,82 @@ class NpuSixBuildSafetyTests(unittest.TestCase):
             with mock.patch.object(BUILDER, "git", side_effect=[
                     "head", "head unrelated-parent"]):
                 with self.assertRaisesRegex(BUILDER.BuildError, "directly on the pinned base"):
-                    BUILDER.verify_source(source)
+                    BUILDER.verify_source(source, BUILDER.PROFILES["six"])
+            with mock.patch.object(BUILDER, "git", side_effect=[
+                    "head", "head unrelated-parent"]):
+                with self.assertRaisesRegex(
+                        BUILDER.BuildError, "directly on the pinned native HCI/camera base"):
+                    BUILDER.verify_source(source, BUILDER.PROFILES["native-eight"])
+
+    def test_profiles_keep_six_defaults_and_pin_native_eight_separately(self) -> None:
+        default_args = BUILDER.parse_args([])
+        self.assertEqual(default_args.profile, "six")
+        self.assertIsNone(default_args.kernel_source)
+        self.assertIsNone(default_args.output)
+        self.assertIsNone(default_args.config)
+
+        six = BUILDER.PROFILES["six"]
+        native = BUILDER.PROFILES["native-eight"]
+        self.assertEqual(six.source_base_commit, BUILDER.BASE_COMMIT)
+        self.assertEqual(six.patches, BUILDER.PATCHES)
+        self.assertEqual(six.default_source, BUILDER.DEFAULT_SOURCE)
+        self.assertEqual(six.default_output, BUILDER.DEFAULT_OUTPUT)
+        self.assertEqual(six.output_prefix, "npu-six-patch-out-")
+
+        native_args = BUILDER.parse_args(["--profile", "native-eight"])
+        self.assertEqual(native_args.profile, "native-eight")
+        self.assertEqual(native.source_base_commit, BUILDER.NATIVE_EIGHT_SOURCE_BASE)
+        self.assertEqual(native.patches, BUILDER.NATIVE_EIGHT_PATCHES)
+        self.assertEqual(len(native.patches), 8)
+        self.assertEqual(
+            [name for name, _digest in native.patches[-2:]],
+            ["npu-mailbox-missing-callback-reclaim.patch",
+             "npu-mailbox-debug-walk-bounds.patch"],
+        )
+        self.assertEqual(native.config_sha256, BUILDER.NATIVE_EIGHT_CONFIG_SHA256)
+        self.assertNotEqual(native.config_sha256, six.config_sha256)
+        self.assertNotEqual(native.default_source, six.default_source)
+        self.assertNotEqual(native.default_output, six.default_output)
+        self.assertEqual(native.output_prefix, "npu-native-eight-out-")
+
+    def test_patch_hash_manifest_fails_closed_and_keeps_ownership_excluded(self) -> None:
+        six = BUILDER.PROFILES["six"]
+        native = BUILDER.PROFILES["native-eight"]
+        six_inputs = BUILDER.verify_patch_inputs(six.patches)
+        native_inputs = BUILDER.verify_patch_inputs(native.patches)
+        self.assertEqual(len(six_inputs), 7)
+        self.assertEqual(len(native_inputs), 9)
+        self.assertEqual(
+            [item["name"] for item in native_inputs[:-1]],
+            [name for name, _digest in native.patches],
+        )
+        self.assertEqual(native_inputs[-1]["name"],
+                         BUILDER.FROZEN_OWNERSHIP_PATCH[0])
+        self.assertNotIn(BUILDER.FROZEN_OWNERSHIP_PATCH[0],
+                         [name for name, _digest in native.patches])
+        native_receipt = BUILDER.patch_receipt_fields(native, native_inputs)
+        self.assertEqual(len(native_receipt["patches"]), 8)
+        self.assertEqual(len(native_receipt["excluded_patch_inputs"]), 1)
+        self.assertEqual(
+            native_receipt["excluded_patch_inputs"][0]["name"],
+            BUILDER.FROZEN_OWNERSHIP_PATCH[0],
+        )
+        six_receipt = BUILDER.patch_receipt_fields(six, six_inputs)
+        self.assertEqual(len(six_receipt["patches"]), 7)
+        self.assertNotIn("excluded_patch_inputs", six_receipt)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            patch_dir = root / "tools/hardware"
+            patch_dir.mkdir(parents=True)
+            for name, _digest in (*native.patches, BUILDER.FROZEN_OWNERSHIP_PATCH):
+                source_patch = BUILDER.ROOT / "tools/hardware" / name
+                (patch_dir / name).write_bytes(source_patch.read_bytes())
+            tampered = patch_dir / native.patches[-1][0]
+            tampered.write_bytes(tampered.read_bytes() + b"tamper\n")
+            with mock.patch.object(BUILDER, "ROOT", root):
+                with self.assertRaisesRegex(BUILDER.BuildError, "patch SHA-256 mismatch"):
+                    BUILDER.verify_patch_inputs(native.patches)
 
     def test_patched_tree_gate_replays_only_the_exact_ordered_stack(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -318,25 +393,63 @@ class NpuSixBuildSafetyTests(unittest.TestCase):
             self.git(source, "commit", "-qm", "pinned fixture")
             base = self.git(source, "rev-parse", "HEAD")
 
-            for index, (name, _digest) in enumerate(BUILDER.PATCHES, start=1):
+            six_head = ""
+            for index, (name, _digest) in enumerate(
+                    BUILDER.NATIVE_EIGHT_PATCHES, start=1):
                 tracked.write_text(f"profile-{index}\n")
                 patch = self.git(source, "diff", "--binary")
                 (patch_dir / name).write_text(patch + "\n")
                 self.git(source, "add", "fixture.c")
                 self.git(source, "commit", "-qm", f"fixture patch {index}")
+                if index == len(BUILDER.PATCHES):
+                    six_head = self.git(source, "rev-parse", "HEAD")
+            eight_head = self.git(source, "rev-parse", "HEAD")
 
-            with mock.patch.object(BUILDER, "ROOT", patch_root), \
-                    mock.patch.object(BUILDER, "BASE_COMMIT", base):
-                BUILDER.verify_patch_tree(source)
-                with mock.patch.object(BUILDER, "PATCHES", tuple(reversed(BUILDER.PATCHES))):
+            with mock.patch.object(BUILDER, "ROOT", patch_root):
+                self.git(source, "checkout", "--detach", six_head)
+                BUILDER.verify_patch_tree(
+                    source, source_base_commit=base,
+                    patches=BUILDER.PATCHES, stack_label="six-patch",
+                )
+                with self.assertRaisesRegex(BUILDER.BuildError,
+                                            "ordered native-eight NPU patch stack"):
+                    BUILDER.verify_patch_tree(
+                        source, source_base_commit=base,
+                        patches=BUILDER.NATIVE_EIGHT_PATCHES,
+                        stack_label="native-eight NPU patch",
+                    )
+                self.git(source, "checkout", "--detach", eight_head)
+                BUILDER.verify_patch_tree(
+                    source, source_base_commit=base,
+                    patches=BUILDER.NATIVE_EIGHT_PATCHES,
+                    stack_label="native-eight NPU patch",
+                )
+                with self.assertRaisesRegex(BUILDER.BuildError,
+                                            "ordered six-patch stack"):
+                    BUILDER.verify_patch_tree(
+                        source, source_base_commit=base,
+                        patches=BUILDER.PATCHES, stack_label="six-patch",
+                    )
+                with mock.patch.object(BUILDER, "NATIVE_EIGHT_PATCHES",
+                                       tuple(reversed(BUILDER.NATIVE_EIGHT_PATCHES))):
                     with self.assertRaisesRegex(BUILDER.BuildError, "command failed"):
-                        BUILDER.verify_patch_tree(source)
+                        BUILDER.verify_patch_tree(
+                            source, source_base_commit=base,
+                            patches=BUILDER.NATIVE_EIGHT_PATCHES,
+                            stack_label="native-eight NPU patch",
+                        )
 
                 (source / "off-stack.txt").write_text("unexpected tree content\n")
                 self.git(source, "add", "off-stack.txt")
                 self.git(source, "commit", "-qm", "unexpected source change")
-                with self.assertRaisesRegex(BUILDER.BuildError, "not exactly the ordered six-patch stack"):
-                    BUILDER.verify_patch_tree(source)
+                with self.assertRaisesRegex(
+                        BUILDER.BuildError,
+                        "not exactly the ordered native-eight NPU patch stack"):
+                    BUILDER.verify_patch_tree(
+                        source, source_base_commit=base,
+                        patches=BUILDER.NATIVE_EIGHT_PATCHES,
+                        stack_label="native-eight NPU patch",
+                    )
 
     def test_output_preflight_rejects_reuse_and_unscoped_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -352,6 +465,14 @@ class NpuSixBuildSafetyTests(unittest.TestCase):
             linked.symlink_to(root / "npu-six-patch-out-target")
             with self.assertRaisesRegex(BUILDER.BuildError, "symbolic-link"):
                 BUILDER.validate_output_path(linked, root)
+            native_output = root / "npu-native-eight-out-fresh"
+            BUILDER.validate_output_path(native_output, root,
+                                         "npu-native-eight-out-")
+            with self.assertRaisesRegex(BUILDER.BuildError, "npu-native-eight-out-"):
+                BUILDER.validate_output_path(
+                    root / "npu-six-patch-out-cross-profile", root,
+                    "npu-native-eight-out-",
+                )
 
     def test_config_preflight_rejects_hash_and_required_option_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -362,6 +483,48 @@ class NpuSixBuildSafetyTests(unittest.TestCase):
                 BUILDER.verify_config(path, "0" * 64, ())
             with self.assertRaisesRegex(BUILDER.BuildError, "lacks required"):
                 BUILDER.verify_config(path, actual, ("CONFIG_CFI_CLANG=y",))
+            with self.assertRaisesRegex(BUILDER.BuildError, "SHA-256 mismatch"):
+                BUILDER.verify_config(
+                    path, BUILDER.PROFILES["native-eight"].config_sha256,
+                    BUILDER.PROFILES["native-eight"].required_config,
+                )
+
+    def test_native_profile_has_no_config_fallback(self) -> None:
+        native = BUILDER.PROFILES["native-eight"]
+        self.assertEqual(native.config_sha256,
+                         "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16")
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / ".config"
+            with self.assertRaisesRegex(BUILDER.BuildError, "preserved config is missing"):
+                BUILDER.verify_config(missing, native.config_sha256,
+                                      native.required_config)
+
+    def test_native_profile_pins_every_llvm_and_gnu_tool_hash(self) -> None:
+        llvm_tools = [
+            {"name": name, "sha256": digest}
+            for name, digest in BUILDER.NATIVE_EIGHT_LLVM_TOOL_SHA256.items()
+        ]
+        cross_tools = [
+            {"name": name, "sha256": digest}
+            for name, digest in BUILDER.NATIVE_EIGHT_GNU_TOOL_SHA256.items()
+        ]
+        self.assertEqual(
+            set(BUILDER.NATIVE_EIGHT_LLVM_TOOL_SHA256), set(BUILDER.LLVM_TOOLS)
+        )
+        BUILDER.verify_native_toolchain_identities(llvm_tools, cross_tools)
+
+        llvm_tools[0]["sha256"] = "0" * 64
+        with self.assertRaisesRegex(BUILDER.BuildError,
+                                    "native-eight pinned LLVM tool hash mismatch"):
+            BUILDER.verify_native_toolchain_identities(llvm_tools, cross_tools)
+
+        llvm_tools[0]["sha256"] = BUILDER.NATIVE_EIGHT_LLVM_TOOL_SHA256[
+            str(llvm_tools[0]["name"])
+        ]
+        cross_tools[0]["sha256"] = "0" * 64
+        with self.assertRaisesRegex(BUILDER.BuildError,
+                                    "native-eight pinned GNU cross tool hash mismatch"):
+            BUILDER.verify_native_toolchain_identities(llvm_tools, cross_tools)
 
     def test_toolchain_receipt_resolves_symlinks_and_hashes_payloads(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
