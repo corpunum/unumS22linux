@@ -117,6 +117,9 @@ AVBTOOL = S22_ROOT / "tools/avb/avbtool.py"
 AVBTOOL_SHA256 = "5698656733ef5077d62ee30395b5ad34295a0f170fb1ba570026c760ead83782"
 MKBOOTIMG = S22_ROOT / "tools/mkbootimg/mkbootimg.py"
 MKBOOTIMG_SHA256 = "37d84b3d162e0bc62e36c1f4e1c63c85ea0caa9f29be023eb2f8efe006ad948c"
+MKBOOTIMG_IMPORT_ROOT = S22_ROOT / "tools/mkbootimg"
+GKI_CERT_HELPER = MKBOOTIMG_IMPORT_ROOT / "gki/generate_gki_certificate.py"
+GKI_CERT_HELPER_SHA256 = "1bb1feec68a13da18d581aa2c631798f86f6bc10b55d587b2dd31446a0f8a203"
 UNPACK_BOOTIMG = S22_ROOT / "tools/mkbootimg/unpack_bootimg.py"
 UNPACK_BOOTIMG_SHA256 = "a9d260978a63bd06a24b6347e7dee8a28ff96639793caea15dff6aa491316308"
 LZ4 = Path("/usr/bin/lz4")
@@ -513,6 +516,18 @@ def _module_build_id(readelf: Path, path: Path) -> str:
     return matches[0].lower()
 
 
+def validate_internal_module_name(modinfo: Path, module_path: Path,
+                                  expected_name: str, label: str) -> str:
+    """Read the module's internal ELF name; an inspection label is not identity."""
+    actual_name = _modinfo_value(modinfo, module_path, "name")
+    if actual_name != expected_name:
+        raise BuildError(
+            f"{label} internal module name differs from pin: "
+            f"expected {expected_name!r}, got {actual_name!r}"
+        )
+    return actual_name
+
+
 def _validate_target_metadata(camera_helper, cpio_api, base_cpio: bytes,
                               replacement_paths: dict[str, Path],
                               replacement_bytes: dict[str, bytes],
@@ -684,9 +699,11 @@ def inspect_static_abi(cpio_api, preflight, candidate_cpio: bytes,
         except (OSError, RuntimeError, ValueError) as error:
             raise BuildError(f"selected external WLAN static ABI inspection failed: {error}") from error
         wlan_versions = validate_static_abi_report(wlan, "selected external WLAN")
+        wlan_internal_name = validate_internal_module_name(
+            MODINFO, wlan_path, WLAN_MODULE_NAME, "selected external WLAN",
+        )
         if (wlan["sha256"] != WLAN_MODULE_SHA256
                 or wlan_path.stat().st_size != WLAN_MODULE_BYTES
-                or wlan["name"] != WLAN_MODULE_NAME
                 or wlan["vermagic"] != EXPECTED_VERMAGIC
                 or not wlan["versions_section_present"]
                 or wlan_versions["import_count"] != WLAN_IMPORTS
@@ -712,7 +729,8 @@ def inspect_static_abi(cpio_api, preflight, candidate_cpio: bytes,
         },
         "selected_external_wlan": {
             "path": str(wlan_path), "bytes": WLAN_MODULE_BYTES,
-            "sha256": wlan["sha256"], "module_name": wlan["name"],
+            "sha256": wlan["sha256"], "inspection_label": wlan["name"],
+            "module_name": wlan_internal_name,
             "imports": wlan_versions["import_count"],
             "module_layout_crc": MODULE_LAYOUT_CRC,
             "all_imports_complete_and_compatible": True,
@@ -733,12 +751,44 @@ def _isolated_avb_runner(command, **kwargs):
     return subprocess.run(isolated, **kwargs)
 
 
-def _run_mkbootimg(python: Path, mkbootimg: Path, args: list[str]) -> None:
-    _run([str(python), "-I", "-S", "-B", str(mkbootimg), *args], "mkbootimg")
+def _verify_mkbootimg_sources(mkbootimg: Path) -> dict[str, dict[str, object]]:
+    """Require both pinned sources imported by mkbootimg before starting a child."""
+    return {
+        "mkbootimg": _verify_file(mkbootimg, "pinned mkbootimg.py", MKBOOTIMG_SHA256),
+        "mkbootimg_gki_helper": _verify_file(
+            GKI_CERT_HELPER, "pinned mkbootimg GKI certificate helper",
+            GKI_CERT_HELPER_SHA256,
+        ),
+    }
+
+
+def _mkbootimg_command(python: Path, mkbootimg: Path, args: list[str],
+                       import_root: Path | None = None) -> list[str]:
+    """Use an isolated bootstrap with one explicit, pinned Android tool directory."""
+    import_root = MKBOOTIMG_IMPORT_ROOT if import_root is None else Path(import_root)
+    bootstrap = (
+        "import runpy, sys\n"
+        "import_root, script, *script_args = sys.argv[1:]\n"
+        "sys.path.insert(0, import_root)\n"
+        "sys.argv = [script, *script_args]\n"
+        "runpy.run_path(script, run_name='__main__')\n"
+    )
+    return [
+        str(python), "-I", "-S", "-B", "-c", bootstrap,
+        str(import_root), str(mkbootimg), *args,
+    ]
+
+
+def _run_mkbootimg(python: Path, mkbootimg: Path,
+                   args: list[str]) -> subprocess.CompletedProcess:
+    _verify_mkbootimg_sources(mkbootimg)
+    command = _mkbootimg_command(python, mkbootimg, args)
+    return _run(command, "mkbootimg")
 
 
 def _prepare_inputs(args, helpers: dict[str, object]) -> tuple[dict[str, bytes], dict[str, object]]:
     input_bytes = {}
+    mkbootimg_sources = _verify_mkbootimg_sources(args.mkbootimg)
     input_files = [
         ("base_symvers", args.base_symvers, BASE_SYMVERS_SHA256, BASE_SYMVERS_BYTES),
         ("abox_symvers", args.abox_symvers, ABOX_SYMVERS_SHA256, ABOX_SYMVERS_BYTES),
@@ -753,7 +803,8 @@ def _prepare_inputs(args, helpers: dict[str, object]) -> tuple[dict[str, bytes],
         "offloader_symvers": {"path": str(args.offloader_symvers), "bytes": OFFLOADER_SYMVERS_BYTES, "sha256": OFFLOADER_SYMVERS_SHA256},
         "wlan": _verify_file(args.wlan, "selected external Lineage WLAN module", WLAN_MODULE_SHA256, WLAN_MODULE_BYTES),
         "avbtool": _verify_file(args.avbtool, "pinned public avbtool", AVBTOOL_SHA256),
-        "mkbootimg": _verify_file(args.mkbootimg, "pinned mkbootimg.py", MKBOOTIMG_SHA256),
+        "mkbootimg": mkbootimg_sources["mkbootimg"],
+        "mkbootimg_gki_helper": mkbootimg_sources["mkbootimg_gki_helper"],
         "unpack_bootimg": _verify_file(args.unpack_bootimg, "pinned unpack_bootimg.py", UNPACK_BOOTIMG_SHA256),
         "lz4": _verify_executable(args.lz4, LZ4_SHA256, "pinned lz4"),
         "modinfo": _verify_tool_alias(MODINFO, KMOD_REALPATH, KMOD_SHA256, "pinned modinfo/kmod"),
@@ -978,6 +1029,7 @@ def build_candidate(args) -> dict[str, object]:
                 name: input_summary[name]
                 for name in (
                     "base_symvers", "abox_symvers", "offloader_symvers", "wlan",
+                    "mkbootimg_gki_helper",
                     *TARGET_MODULES.keys(),
                 )
             },
@@ -1018,7 +1070,7 @@ def build_candidate(args) -> dict[str, object]:
             },
             "tools": {
                 **{key: value for key, value in input_summary.items()
-                   if key in {"avbtool", "mkbootimg", "unpack_bootimg", "lz4", "modinfo", "modprobe", "readelf", "python"}},
+                   if key in {"avbtool", "mkbootimg", "mkbootimg_gki_helper", "unpack_bootimg", "lz4", "modinfo", "modprobe", "readelf", "python"}},
                 "camera_builder_sha256": CAMERA_BUILDER_SHA256,
                 "cpio_parser_sha256": CPIO_PARSER_SHA256,
                 "boot_image_helper_sha256": IMAGE_HELPER_SHA256,
