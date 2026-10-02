@@ -373,3 +373,87 @@ regression remain untouched. The already-equivalent lifecycle error-unlock
 replacement must be accounted for explicitly, not silently dropped. No new
 profile is yet reviewed, build-ready or deployed; shutdown remains a separate
 unreconciled source candidate, and NPU BOOTUP remains refused.
+
+## Completed refcount-profile and shutdown-quarantine wave
+
+This entry supersedes only the pending status in the preceding historical
+entry. The same explicitly selected Luna/Max implementation workers and two
+independent Luna reviewers completed the bounded source work below. Native
+spawn selection was accepted as `gpt-6-luna` / `max`, with no known fallback;
+this is configuration evidence, not independent backend identity attestation.
+Completed workers and all isolated worktrees remain preserved. Only the
+coordinator accessed the phone, for read-only health evidence.
+
+| Actual worker | Isolated worktree | Frozen author result | Integrated result |
+| --- | --- | --- | --- |
+| `/root/npu_probe_unwind_20261002` (reused selection) | `npu-stack-reconcile-20261002` | `1c36220c47219853d18512723e6c20024a486be5`: new explicit refcount/lifecycle profile, combined-source C tests and note | `d35b0d8` |
+| `/root/npu_shutdown_ownership_20261002` | `npu-shutdown-20261002` | `3c6eaff70f720b682cc8d09e598fcaf2269df0bc`, corrected by `f2d9a09da6aed6fc39013b637fc65ed4ca850d22`: first-error shutdown ownership and six late-quarantine checks with executable regressions | `8a14f10`, `40d589c` |
+| `/root/source_wave_independent_review_20261002` | `source-wave-review-20261002` | `f68f478dd626d61c69118554c21361073e8762ea`: profile review; `519673266a77f66ed5dfb30699c61d6efd3b4339`: bounded CI integration review | `0d1a948`, `0cea5c3` |
+| `/root/npu_shutdown_independent_review_20261002` | `npu-shutdown-review-20261002` | `97cf0f769c303546c71f3aede6661a51ddbe45d4`: blocked the initial lock-wait race; `8adf3f6a08b1de3fd146db7534bebfc5884c0638`: re-reviewed the corrected six paths | `4f951fd`, `21985fa` |
+
+The new four-patch profile applies lifecycle, the explicit refcount C/H
+profile, default-boot callback and probe-unwind patches with ordinary
+`git apply --check --whitespace=error-all` and `git apply`. Historical patches
+and their expected-conflict regression are unchanged. The canonical refcount
+C/H sections are preserved verbatim; its stale vertex unlock hunk is explicitly
+superseded by the lifecycle caller's tracked locking, not silently omitted.
+Eleven actual-C ref-helper scenarios and five final-caller scenarios pass at
+C `-O0`/`-O2` in all three Python modes. The five caller cases check selected
+cleanup counts and lock balance, not every reverse-order cleanup event or all
+STM/HWACG/non-warm branches. Host preflight still exits 2 and refuses BOOTUP.
+Absent firmware fixtures in the test checkout do not establish absent phone
+firmware. This is source composition and extracted-C evidence, not a kernel
+build or hardware result.
+
+Shutdown now retains uncertain ownership and propagates errors instead of
+panicking or pretending success in the reviewed paths. Independent review
+reproduced a quarantine bypass by callers queued on the mutex. The follow-up
+rechecks uncertainty after all four boot-control lock acquisitions and both
+bootup wait-loop reacquisitions. Actual extracted C reproduces all six old
+bypasses and refuses them after the fix, with balanced shim locks and no
+modeled follow-on work. All three Python modes and C `-O0`/`-O2` passed for
+standalone and refcount-plus-PM source profiles. This deterministic injection
+is not Linux concurrency, memory-ordering or lockdep evidence.
+
+The coordinator separately executed the exact **five-patch** application:
+the four profile patches pass, then the frozen shutdown patch fails plain
+`git apply --check` at `drivers/vision/npu/core/npu-vertex.c:313`. Exact loader
+fixtures and frozen patch bytes were checked; no force, fuzz or missing-hunk
+workaround was used. The independent shutdown reviewer records this as
+coordinator evidence rather than claiming to have rerun it. This full-stack
+blocker remains. Further unresolved issues include early-close/protocol-close
+errors masked by the pinned shutdown callback, normal-bootdown count/ref
+ownership after error, session-close failures and retained lifetime through
+VFS/session-manager/device/module teardown. No NPU BOOTUP is authorized or
+safe merely because these host tests pass.
+
+Coordinator commit `33315389d2a9c3373cecf23004ae81b8848b6756` adds only the
+two reviewed hardware-free tests to the explicit CI allowlist and matching
+policy lists, and qualifies shutdown source status. Independent review
+`5196732` checked that exact change and ran seven policy tests in each Python
+mode. The complete suite at `3331538` passes **39 normal and 36 optimized
+scripts**, with the same three documented optimization exclusions. Both new
+NPU scripts execute public pinned fixtures without new fixture skips; existing
+unrelated skips remain distinct. The subsequent review commit changes prose
+only. The sanitized receipt binds exact source/test/log hashes and limits.
+
+Prior portable-fixture publication `3466dcb4294870616b6d52c3635b4af8b981f7f0`
+passed [hosted run 36995251510](https://github.com/corpunum/unumS22linux/actions/runs/36995251510).
+That run does not cover the new NPU commits; their hosted run must be checked
+at the new published SHA. `origin/master` remains at
+`20605dbe623e0909cf219c3cae9ef7bb597b15a6`; local `master` remains separately at
+`fb60a2c1fd69544f525f48de19e1af266880b2ba`, with its original dirty checkout
+unchanged. Neither master ref was moved by this wave.
+
+The 10:26 UTC read-only snapshot still identifies the same native boot/kernel,
+guardian, 325 modules, healthy idle model API, Hyprland, desktop Pi, browser
+terminal and dedicated Pi session. No new session start, inference request,
+flash, reboot, HCI/NPU request or camera/audio stream was made. The available
+kernel ring is truncated, not full-boot or TrustZone liveness proof. Current
+remote reachability is not independent physical rescue.
+
+Next source action: reconcile the shutdown ownership semantics with the final
+lifecycle caller/close paths, then repair and execute callback-error/lifetime
+tests before proposing a full kernel build. Audio instrumentation remains
+disabled by default and hardware acceptance remains separate. No additional
+device authorization is inferred from this source-only wave.
