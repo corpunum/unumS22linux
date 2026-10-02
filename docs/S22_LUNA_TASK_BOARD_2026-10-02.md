@@ -1,5 +1,51 @@
 # S22 continuation — 2026-10-02
 
+## Actual corrected audio package — 2026-10-02 23:51 UTC
+
+The historical failure and checkpoints below are preserved, not relabelled.
+
+- Audio debug-strip author `7a8ffd3d`, integrated `43f5996`, was independently
+  reviewed by Luna/Max worker `/root/bt_candidate_independent_review_20261002`
+  at `e18871d8`, integrated `a9831c7`. All 19 focused tests passed normal,
+  `-O` and effective environment optimization, without local fixture skips.
+  Runtime ELF bytes/relocations, symbol versions and original sources remained
+  protected; all 324 ramdisk modules plus the external WLAN passed static ABI.
+- After that review, `/root/autonomous_driver_review_20261002` ran **one**
+  host-only corrected packaging invocation in the isolated
+  `audio-stripped-package-build-20261003` worktree. It exited zero. The private
+  100,663,296-byte image SHA-256 is
+  `6b788b23f54b9b8e84212187544064949b72af20c167cbb02392cbe53ee5a6ab`.
+  Root independently rehashed it, verified the AVB footer/hash and unpacked
+  the preserved kernel, DTB and DTBO. The original image is 98,222,080 bytes,
+  below the 100,593,664-byte AVB limit. Decoding the actual compressed ramdisk
+  yielded the expected CPIO. The author receipt and independent actual-artifact
+  review are being prepared; no phone installation or audio acceptance follows.
+- Exact hosted run `37078004857` at `43f5996f…` succeeded: 59 normal plus
+  56 optimized script invocations, seven runner-policy tests. Its 24 optional
+  fixture-skip log lines remain explicit. The private complete-log digest is
+  recorded in `s22-hosted-driver-ci-43f5996-20261003.json`; failed local runs
+  remain failed and are not replaced by this hosted result.
+- NPU12 actual module artifact review `8bef1efa`, integrated `92b39d9`, is
+  clear for host compile/static ABI only. The new NPU interface worker
+  `/root/audio_driver_path_next_20261002` reproduced allocation false-success
+  and unowned-IRQ cleanup defects. Its separate patch and actual-C tests now
+  exercise acquisition failures, close-before-open, repeated close and a
+  controlled queue-publication/teardown overlap; freeze and review are pending.
+- `/root/bt_candidate_independent_review_20261002` is reused in separate
+  `camera-sensor-clock-unwind-20261003` for source-confirmed clock-error
+  propagation/unwind implementation and executable regressions. Its ownership
+  is four new patch/harness/test/document paths; no camera device operation,
+  firmware staging or build is authorized by that assignment.
+- Explicit `gpt-6-luna`/`max` selection remains accepted configuration evidence,
+  not backend attestation. Only root accesses the phone. At 23:51 UTC, a fresh
+  bounded read-only capture shows the same boot and GNU kernel `b2dda820…`,
+  325 modules, native guardian, desktop, both Pi sessions and an idle healthy
+  model API. Battery is Full/100%, 26.1 C; maximum thermal zone is 40 C. The
+  captured ring has no fatal/hung/trace indicator, but lacks full-boot coverage.
+  New partition writes, reboots, powered trials, inference and application
+  changes remain zero. Physical rescue and pending hardware acceptance remain
+  unproven; consumed trials are not reused and master remains unchanged.
+
 ## Actual host results — 2026-10-02 23:04 UTC
 
 - The reviewed NPU12 wrapper executed once: the sole module target finished
