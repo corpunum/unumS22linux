@@ -34,6 +34,172 @@ class AudioControlReadinessTests(unittest.TestCase):
             self.assertEqual(readiness.main(), 0)
         return json.loads(output.getvalue())
 
+    def assert_exception_cleanup(
+        self,
+        command: list[str],
+        selector_factory: object,
+        expected_exception: BaseException,
+        *,
+        read_fault: bool = False,
+        cleanup_fault: bool = False,
+    ) -> BaseException:
+        """Inject a post-spawn failure and verify cleanup without losing it."""
+        children: list[object] = []
+        real_popen = readiness.subprocess.Popen
+        real_read = readiness.os.read
+        armed = False
+
+        def capture_popen(*args: object, **kwargs: object) -> object:
+            nonlocal armed
+            process = real_popen(*args, **kwargs)
+            children.append(process)
+            armed = True
+            return process
+
+        def faulting_read(fd: int, size: int) -> bytes:
+            if armed and read_fault:
+                raise expected_exception
+            return real_read(fd, size)
+
+        caught: BaseException | None = None
+        try:
+            with mock.patch.object(readiness.subprocess, "Popen", side_effect=capture_popen), \
+                    mock.patch.object(readiness.selectors, "DefaultSelector", side_effect=selector_factory), \
+                    mock.patch.object(readiness.os, "read", side_effect=faulting_read), \
+                    mock.patch.object(
+                        readiness.os, "killpg",
+                        side_effect=PermissionError("injected group signal refusal"),
+                    ) if cleanup_fault else contextlib.nullcontext():
+                with self.assertRaises(type(expected_exception)) as raised:
+                    readiness.listing(command, timeout=2, cleanup_timeout=0.05)
+                caught = raised.exception
+                self.assertIs(caught, expected_exception)
+                self.assertEqual(len(children), 1)
+                process = children[0]
+                was_unreaped_at_return = process.returncode is None
+                was_alive_at_return = process.poll() is None
+                if was_alive_at_return:
+                    # Keep a failing baseline run from leaving a sleeper behind.
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except OSError:
+                        process.kill()
+                    process.wait(timeout=1)
+                self.assertFalse(was_alive_at_return, "listing leaked its direct child")
+                self.assertFalse(was_unreaped_at_return, "listing did not reap its direct child")
+                if cleanup_fault:
+                    notes = getattr(caught, "__notes__", [])
+                    self.assertTrue(any("injected group signal refusal" in note for note in notes))
+        finally:
+            for process in children:
+                if process.poll() is None:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except OSError:
+                        process.kill()
+                    process.wait(timeout=1)
+        if caught is None:
+            self.fail("fault injection did not reach the listing helper")
+        return caught
+
+    def test_keyboard_interrupt_from_select_terminates_and_reaps_child(self) -> None:
+        real_selector_factory = readiness.selectors.DefaultSelector
+        interrupt = KeyboardInterrupt("injected selector interrupt")
+
+        class InterruptingSelector:
+            def __init__(self) -> None:
+                self.selector = real_selector_factory()
+
+            def register(self, *args: object, **kwargs: object) -> object:
+                return self.selector.register(*args, **kwargs)
+
+            def get_map(self) -> object:
+                return self.selector.get_map()
+
+            def select(self, timeout: float | None = None) -> object:
+                raise interrupt
+
+            def unregister(self, *args: object, **kwargs: object) -> object:
+                return self.selector.unregister(*args, **kwargs)
+
+            def close(self) -> None:
+                self.selector.close()
+
+        self.assert_exception_cleanup(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            InterruptingSelector,
+            interrupt,
+        )
+
+    def test_unexpected_selector_registration_error_terminates_and_reaps_child(self) -> None:
+        real_selector_factory = readiness.selectors.DefaultSelector
+        error = RuntimeError("injected selector registration error")
+
+        class FailingRegisterSelector:
+            def __init__(self) -> None:
+                self.selector = real_selector_factory()
+
+            def register(self, *args: object, **kwargs: object) -> object:
+                raise error
+
+            def get_map(self) -> object:
+                return self.selector.get_map()
+
+            def select(self, timeout: float | None = None) -> object:
+                return self.selector.select(timeout)
+
+            def unregister(self, *args: object, **kwargs: object) -> object:
+                return self.selector.unregister(*args, **kwargs)
+
+            def close(self) -> None:
+                self.selector.close()
+
+        self.assert_exception_cleanup(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            FailingRegisterSelector,
+            error,
+        )
+
+    def test_unexpected_pipe_drain_error_terminates_and_reaps_child(self) -> None:
+        selector_factory = readiness.selectors.DefaultSelector
+        error = RuntimeError("injected pipe drain error")
+        self.assert_exception_cleanup(
+            [sys.executable, "-c", "import os,time; os.write(1,b'x'); time.sleep(30)"],
+            selector_factory,
+            error,
+            read_fault=True,
+        )
+
+    def test_cleanup_failure_is_reported_without_replacing_original_exception(self) -> None:
+        real_selector_factory = readiness.selectors.DefaultSelector
+        error = RuntimeError("injected selector failure")
+
+        class FailingSelectSelector:
+            def __init__(self) -> None:
+                self.selector = real_selector_factory()
+
+            def register(self, *args: object, **kwargs: object) -> object:
+                return self.selector.register(*args, **kwargs)
+
+            def get_map(self) -> object:
+                return self.selector.get_map()
+
+            def select(self, timeout: float | None = None) -> object:
+                raise error
+
+            def unregister(self, *args: object, **kwargs: object) -> object:
+                return self.selector.unregister(*args, **kwargs)
+
+            def close(self) -> None:
+                self.selector.close()
+
+        self.assert_exception_cleanup(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            FailingSelectSelector,
+            error,
+            cleanup_fault=True,
+        )
+
     def test_default_does_not_discover_or_invoke_control_tools(self) -> None:
         empty_read = {
             "available": False,

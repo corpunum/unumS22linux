@@ -114,18 +114,105 @@ def read(path: str, limit: int = DEFAULT_FILE_READ_BYTES) -> dict[str, object]:
     return record
 
 
-def _kill_process_group(process: subprocess.Popen[bytes]) -> None:
+def _kill_process_group(process: subprocess.Popen[bytes]) -> str | None:
     try:
         os.killpg(process.pid, signal.SIGKILL)
+        return None
     except ProcessLookupError:
-        pass
-    except OSError:
-        # The process-group operation can be unavailable under a restrictive
-        # host policy. Still ensure the direct child receives a bounded kill.
+        return None
+    except OSError as group_error:
+        # Still signal the direct child, but report that descendant cleanup is
+        # unconfirmed if the owned process group could not be reached.
         try:
             process.kill()
-        except OSError:
+        except ProcessLookupError:
+            return f"process-group SIGKILL failed ({group_error}); leader had already exited"
+        except OSError as direct_error:
+            return (
+                f"process-group SIGKILL failed ({group_error}); direct-child SIGKILL also failed "
+                f"({direct_error})"
+            )
+        return f"process-group SIGKILL failed ({group_error}); direct-child SIGKILL was sent"
+
+
+def _close_listing_resources(
+    selector: selectors.BaseSelector,
+    process: subprocess.Popen[bytes],
+    *,
+    preserve_primary: bool,
+) -> list[str]:
+    errors: list[str] = []
+    try:
+        selector.close()
+    except BaseException as exc:
+        if not preserve_primary:
+            raise
+        errors.append(f"selector close: {type(exc).__name__}: {exc}")
+    for label, stream in (("stdout", process.stdout), ("stderr", process.stderr)):
+        if stream is None or stream.closed:
+            continue
+        try:
+            stream.close()
+        except BaseException as exc:
+            if not preserve_primary:
+                raise
+            errors.append(f"{label} pipe close: {type(exc).__name__}: {exc}")
+    return errors
+
+
+def _exception_cleanup(
+    process: subprocess.Popen[bytes],
+    selector: selectors.BaseSelector,
+    cleanup_timeout: float,
+) -> list[str]:
+    """Best-effort bounded cleanup that never replaces the active exception."""
+    errors: list[str] = []
+    try:
+        error = _kill_process_group(process)
+        if error:
+            errors.append(error)
+    except BaseException as exc:
+        errors.append(f"process-group termination: {type(exc).__name__}: {exc}")
+    errors.extend(_close_listing_resources(selector, process, preserve_primary=True))
+
+    try:
+        process.wait(timeout=max(float(cleanup_timeout), 0.05))
+    except subprocess.TimeoutExpired:
+        try:
+            error = _kill_process_group(process)
+            if error:
+                errors.append(error)
+        except BaseException as exc:
+            errors.append(f"second process-group termination: {type(exc).__name__}: {exc}")
+        try:
+            process.wait(timeout=0.05)
+        except subprocess.TimeoutExpired:
+            errors.append("direct child remains unreaped after the final bounded wait")
+        except BaseException as exc:
+            errors.append(f"direct-child reap: {type(exc).__name__}: {exc}")
+    except BaseException as exc:
+        errors.append(f"direct-child reap: {type(exc).__name__}: {exc}")
+
+    if process.returncode is None:
+        errors.append("direct child remains unreaped")
+    return errors
+
+
+def _attach_cleanup_errors(original: BaseException, errors: list[str]) -> None:
+    if not errors:
+        return
+    message = "audio-control readiness cleanup was incomplete: " + "; ".join(errors)
+    add_note = getattr(original, "add_note", None)
+    if callable(add_note):
+        try:
+            add_note(message)
+            return
+        except BaseException:
             pass
+    try:
+        setattr(original, "audio_control_cleanup_errors", tuple(errors))
+    except BaseException:
+        pass
 
 
 def listing(
@@ -158,7 +245,16 @@ def listing(
         raise ValueError("command must be a non-empty list of strings")
 
     selector = selectors.DefaultSelector()
+    buffers = {"stdout": bytearray(), "stderr": bytearray()}
+    counts = {"stdout": 0, "stderr": 0}
+    limits = {"stdout": stdout_limit, "stderr": stderr_limit}
+    truncated = {"stdout": False, "stderr": False}
+    capture_error: dict[str, str] | None = None
+    timed_out = False
+    cleanup_errors: list[str] = []
     started = time.monotonic()
+    process: subprocess.Popen[bytes] | None = None
+
     try:
         process = subprocess.Popen(
             list(command),
@@ -168,70 +264,38 @@ def listing(
             close_fds=True,
             start_new_session=True,
         )
-    except OSError as exc:
-        selector.close()
-        return {
-            "available": False,
-            "complete": False,
-            "attempted": True,
-            "returncode": None,
-            "timed_out": False,
-            "process_reaped": True,
-            "elapsed_seconds": round(time.monotonic() - started, 6),
-            "stdout_limit_bytes": stdout_limit,
-            "stderr_limit_bytes": stderr_limit,
-            "stdout_bytes_read": 0,
-            "stderr_bytes_read": 0,
-            "stdout_truncated": False,
-            "stderr_truncated": False,
-            "stdout": "",
-            "stderr": "",
-            "error": _error_record(exc),
-        }
 
-    buffers = {"stdout": bytearray(), "stderr": bytearray()}
-    counts = {"stdout": 0, "stderr": 0}
-    limits = {"stdout": stdout_limit, "stderr": stderr_limit}
-    truncated = {"stdout": False, "stderr": False}
-    streams = {"stdout": process.stdout, "stderr": process.stderr}
-    capture_error: dict[str, str] | None = None
-    timed_out = False
-
-    def unregister_and_close(key: selectors.SelectorKey) -> None:
-        try:
-            selector.unregister(key.fileobj)
-        except (KeyError, ValueError):
-            pass
-        try:
-            key.fileobj.close()
-        except OSError:
-            pass
-
-    def drain(events: list[tuple[selectors.SelectorKey, int]]) -> None:
-        nonlocal capture_error
-        for key, _ in events:
-            label = key.data
+        def unregister_and_close(key: selectors.SelectorKey) -> None:
             try:
-                data = os.read(key.fd, LISTING_READ_CHUNK_BYTES)
-            except BlockingIOError:
-                continue
-            except OSError as exc:
-                capture_error = _error_record(exc)
-                truncated[label] = True
-                unregister_and_close(key)
-                continue
-            if not data:
-                unregister_and_close(key)
-                continue
-            counts[label] += len(data)
-            room = limits[label] - len(buffers[label])
-            if room > 0:
-                buffers[label].extend(data[:room])
-            if len(data) > room:
-                truncated[label] = True
+                selector.unregister(key.fileobj)
+            except (KeyError, ValueError):
+                pass
+            key.fileobj.close()
 
-    try:
-        for label, stream in streams.items():
+        def drain(events: list[tuple[selectors.SelectorKey, int]]) -> None:
+            nonlocal capture_error
+            for key, _ in events:
+                label = key.data
+                try:
+                    data = os.read(key.fd, LISTING_READ_CHUNK_BYTES)
+                except BlockingIOError:
+                    continue
+                except OSError as exc:
+                    capture_error = _error_record(exc)
+                    truncated[label] = True
+                    unregister_and_close(key)
+                    continue
+                if not data:
+                    unregister_and_close(key)
+                    continue
+                counts[label] += len(data)
+                room = limits[label] - len(buffers[label])
+                if room > 0:
+                    buffers[label].extend(data[:room])
+                if len(data) > room:
+                    truncated[label] = True
+
+        for label, stream in (("stdout", process.stdout), ("stderr", process.stderr)):
             if stream is None:
                 continue
             os.set_blocking(stream.fileno(), False)
@@ -250,7 +314,9 @@ def listing(
                 break
 
         if timed_out or capture_error is not None:
-            _kill_process_group(process)
+            group_error = _kill_process_group(process)
+            if group_error:
+                cleanup_errors.append(group_error)
             cleanup_deadline = time.monotonic() + float(cleanup_timeout)
             while selector.get_map() and time.monotonic() < cleanup_deadline:
                 remaining = cleanup_deadline - time.monotonic()
@@ -260,31 +326,53 @@ def listing(
             for key in list(selector.get_map().values()):
                 truncated[key.data] = True
                 unregister_and_close(key)
-    except OSError as exc:
-        capture_error = capture_error or _error_record(exc)
-        _kill_process_group(process)
-        for key in list(selector.get_map().values()):
-            truncated[key.data] = True
-            unregister_and_close(key)
-    finally:
-        selector.close()
-        for stream in streams.values():
-            if stream is not None and not stream.closed:
-                try:
-                    stream.close()
-                except OSError:
-                    pass
+        cleanup_errors.extend(_close_listing_resources(selector, process, preserve_primary=False))
 
-    try:
-        # Once the leader exited, this returns immediately. On timeout or a
-        # capture failure, the finite grace period avoids an unbounded wait.
-        process.wait(timeout=max(float(cleanup_timeout), 0.05))
-    except subprocess.TimeoutExpired:
-        _kill_process_group(process)
         try:
-            process.wait(timeout=0.05)
+            # Once the leader exited, this returns immediately. A process that
+            # closed its pipes and kept running is still bounded here.
+            process.wait(timeout=max(float(cleanup_timeout), 0.05))
         except subprocess.TimeoutExpired:
-            pass
+            group_error = _kill_process_group(process)
+            if group_error:
+                cleanup_errors.append(group_error)
+            try:
+                process.wait(timeout=0.05)
+            except subprocess.TimeoutExpired:
+                cleanup_errors.append("direct child remains unreaped after the final bounded wait")
+    except OSError as exc:
+        if process is None:
+            selector.close()
+            return {
+                "available": False,
+                "complete": False,
+                "attempted": True,
+                "returncode": None,
+                "timed_out": False,
+                "process_reaped": True,
+                "cleanup_complete": True,
+                "cleanup_errors": [],
+                "elapsed_seconds": round(time.monotonic() - started, 6),
+                "stdout_limit_bytes": stdout_limit,
+                "stderr_limit_bytes": stderr_limit,
+                "stdout_bytes_read": 0,
+                "stderr_bytes_read": 0,
+                "stdout_truncated": False,
+                "stderr_truncated": False,
+                "stdout": "",
+                "stderr": "",
+                "error": _error_record(exc),
+            }
+        capture_error = capture_error or _error_record(exc)
+        cleanup_errors.extend(_exception_cleanup(process, selector, float(cleanup_timeout)))
+    except BaseException as original:
+        if process is None:
+            selector.close()
+            raise
+        cleanup_errors.extend(_exception_cleanup(process, selector, float(cleanup_timeout)))
+        _attach_cleanup_errors(original, cleanup_errors)
+        raise
+
     process_reaped = process.returncode is not None
     returncode = process.returncode
     elapsed = time.monotonic() - started
@@ -296,17 +384,21 @@ def listing(
         error = {"type": "ChildNotReaped", "message": "direct child remained unreaped after bounded cleanup"}
     elif error is None and returncode != 0:
         error = {"type": "ProcessExit", "message": f"command exited with status {returncode}"}
+    elif error is None and cleanup_errors:
+        error = {"type": "CleanupIncomplete", "message": "; ".join(cleanup_errors)}
 
     return {
         "available": returncode == 0 and process_reaped and not timed_out and capture_error is None,
         "complete": (
             returncode == 0 and process_reaped and not timed_out and capture_error is None
-            and not truncated["stdout"] and not truncated["stderr"]
+            and not truncated["stdout"] and not truncated["stderr"] and not cleanup_errors
         ),
         "attempted": True,
         "returncode": returncode,
         "timed_out": timed_out,
         "process_reaped": process_reaped,
+        "cleanup_complete": process_reaped and not cleanup_errors,
+        "cleanup_errors": cleanup_errors,
         "elapsed_seconds": round(elapsed, 6),
         "stdout_limit_bytes": stdout_limit,
         "stderr_limit_bytes": stderr_limit,
