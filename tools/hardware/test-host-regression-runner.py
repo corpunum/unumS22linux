@@ -43,6 +43,7 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-audio-log-coverage.py",
     "tools/hardware/test-audio-log-capture-profile.py",
     "tools/hardware/test-audio-ipc-observation.py",
+    "tools/hardware/test-audio-ipc-error-path.py",
     "tools/hardware/test-audio-dma-evidence.py",
     "tools/hardware/test-audio-recovery-observer.py",
     "tools/hardware/test-input-power-readiness.py",
