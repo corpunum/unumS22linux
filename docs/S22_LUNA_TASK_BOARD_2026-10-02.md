@@ -204,3 +204,30 @@ Battery was charging at 80%, 29.4 C; maximum thermal reading 45 C. No serious
 fault was identified in the available ring. Zero partition writes, reboots,
 Pi startups, inference requests, camera opens and NPU BOOTUP operations were
 issued. The short ring and progress sample do not create new driver acceptance.
+
+## Probe, shutdown and audio-observation implementation wave
+
+The next continuation reconciled the clean integration worktree and fetched
+origin at `01cf5a106035e9eab1a67421452baf8699cb6f13`, with no divergence.
+The original checkout's five tracked changes, its history and all existing
+worktrees remain untouched. Host auto-ACK and resident-assistant loop services
+remain in place. This is source/host implementation, not renewed authorization
+for any consumed device trial.
+
+Three workers were actually launched with the supported native interface and
+accepted explicit `gpt-6-luna` selection, `max` reasoning and `fork_turns=none`.
+That evidence is explicit configuration, not backend identity attestation.
+Only the coordinator accesses the phone; no worker may run device commands.
+
+| Actual worker | Separate worktree | Exclusive files and deliverable | State |
+| --- | --- | --- | --- |
+| `/root/npu_probe_unwind_20261002` | `npu-probe-unwind-20261002` | `npu-probe-unwind-fix.patch`, its exact-C test and research note: clock acquisition transaction and pre-registration failure cleanup | Implementing; commit and test receipts pending |
+| `/root/npu_shutdown_ownership_20261002` | `npu-shutdown-20261002` | `npu-shutdown-ownership-fix.patch`, its exact-C test and research note: shutdown error propagation and ownership-safe recovery/close | Implementing; commit and test receipts pending |
+| `/root/audio_ipc_instrument_20261002` | `audio-ipc-instrument-20261002` | `audio-ipc-observation-fix.patch`, its executable test and research note: opt-in, payload-free queue/send/pointer observations | Implementing; commit and test receipts pending |
+
+The NPU workers own separate patch files and separate source-function changes;
+they do not edit the kernel checkout. Combined application and independent
+review are required before integration. The next free slot is reserved for
+independent Luna review. No heavy kernel build or deployment is part of this
+wave; BOOTUP remains refused. Completed negative camera receipts and liveness
+uncertainty remain preserved, not replaced by fresh quiet-ring health checks.
