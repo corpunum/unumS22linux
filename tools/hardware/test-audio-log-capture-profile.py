@@ -67,6 +67,16 @@ class CaptureProfileTests(unittest.TestCase):
         with self.assertRaises(profile.ProfileError):
             profile.validate_trial_summary(summary)
 
+        summary = trial19_summary()
+        summary["capture_coverage"] = "proven"
+        with self.assertRaises(profile.ProfileError):
+            profile.validate_trial_summary(summary)
+
+        summary = trial19_summary()
+        summary["unrecognized_metadata"] = "ignored fields are not accepted"
+        with self.assertRaises(profile.ProfileError):
+            profile.validate_trial_summary(summary)
+
     def test_unlinked_historical_policy_is_not_reported_as_current(self) -> None:
         for linked in (False, True):
             with self.subTest(linked=linked):
@@ -79,16 +89,6 @@ class CaptureProfileTests(unittest.TestCase):
                                  "linked_historical_policy_filters_debug" if linked else
                                  "unlinked_historical_policy_filters_debug")
                 self.assertNotIn("current_abox_mem_debug_policy_filters_level", gap)
-
-        summary = trial19_summary()
-        summary["capture_coverage"] = "proven"
-        with self.assertRaises(profile.ProfileError):
-            profile.validate_trial_summary(summary)
-
-        summary = trial19_summary()
-        summary["unrecognized_metadata"] = "ignored fields are not accepted"
-        with self.assertRaises(profile.ProfileError):
-            profile.validate_trial_summary(summary)
 
     def test_summary_requires_payload_reader_state_and_complete_pairs(self) -> None:
         summary = trial19_summary()
