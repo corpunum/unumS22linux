@@ -694,3 +694,15 @@ for volume and speech; review of protected NV/EFS behavior before any CP
 bootstrap; and separate SIM registration, forced mobile internet, IMS and
 two-way voice acceptance. NPU publication-drain and retained-object lifetime
 remain unresolved. No consumed trial is reopened by this goal or source wave.
+
+Final independent shutdown-error review is now frozen at author
+`93aa6cc375f1fb0d8dfbc2a29e0228afc4f1353d`, integrated `f0dc402`. It
+independently executed local normal/optimized/environment-optimized and one
+public-default run, verified the exact test blob in the three-line CI change,
+and found no blocker in this narrow source/error-contract scope. It preserves
+the boot-ref-zero and wider lifetime limitations. All implementations in this
+publication wave therefore have an independent Luna review receipt. Master
+and the dirty original checkout remain unchanged; only the unmerged review
+branch is selected for publication. Hosted CI at the final published SHA
+still must be checked independently; source review and host passes do not
+grant device acceptance.
