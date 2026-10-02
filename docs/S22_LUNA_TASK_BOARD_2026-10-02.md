@@ -742,3 +742,80 @@ Independent rescue remains unproven, consumed trial authorizations stay
 consumed, and NPU BOOTUP remains refused. Implementations and any real host
 build require independent review before publication; none is permission for
 deployment. Results and frozen commit identities will be appended here.
+
+### Actual build/audio/mailbox results
+
+The fourth actual Luna/Max worker,
+`/root/host_build_audio_review_20261002`, used the isolated
+`host-build-audio-review-20261002` worktree and owned only the review note.
+Accepted explicit model/reasoning configuration is the same evidence level
+as the three implementation workers above. Completed workers were reused
+for follow-up implementation and review; no worker accessed the phone.
+
+- Audio author `eb25aa2` / integrated `5a855f6` makes metadata collection
+  passive by default and bounds files, XML and subprocess capture. Independent
+  review `787f3c5` / integrated `d15658a` reproduced an exception-path child
+  leak. Author fix `6ebc3f6` / integrated `04dc86f` added four fail-before,
+  pass-after cases. Review `ccaf1a6` / integrated `5b0472c` clears the fixed
+  collector's narrow scope: all 12 tests passed in each Python mode. The
+  original negative review remains in history. No mixer/PCM operation or
+  installed phone tool was changed.
+- NPU author `0faa2c2` / integrated `6be90f2` adds the missing-callback
+  message-ID reclamation patch and actual extracted publisher/allocator C
+  tests. Independent review `330a205` / integrated `0a29bc4` clears this
+  source/host scope only. The BOOT_IOCTL guard preserves the distinct legacy
+  POWER_DOWN slot-zero behavior. Callback stalls are released by the host
+  harness; the real publication drain remains unbounded and BOOTUP refused.
+- Build author `9998ea4` / integrated `a1b7da2` supplies a guarded host
+  builder and focused tests. The independent review reproduced a further
+  cleanup defect: reaping the make leader did not prove group descendants
+  were gone. This finding remains blocking for that frozen helper until the
+  separate executable negative-control correction is independently retested.
+
+The single actual `-j1 Image modules` invocation completed successfully. It
+built clean source `e5af0ba1cefc959094d03e1a136b8e33ff938b2a`, the exact ordered
+six-patch NPU stack on pinned base `4e5c5ad7d950e4de0688b5663965f2075654b2ad`.
+The preserved config stayed SHA-256
+`a147841a53f5b10c366a759d0e83525996a0ec5d8227a103b020cf2111400f9e`, including
+ThinLTO, CFI, MODVERSIONS and shadow call stack. Actual build outputs are:
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| ARM64 `Image` | 33513984 | `86e56e2c65e17c9e8df7c826696c9fd143f089bc305393e1b8b9ad1a8c1eabd6` |
+| NPU module | 17323960 | `639e5a3947fe4db360ba21bc3ec3b2f2bc7734fccf24489a4ceeb4b4f05aa2d1` |
+| `vmlinux` | 586724072 | `2fb35d4ac9b023cdc6a83650966fb59e3899b921a6ef3a434674fcb097fc1c34` |
+
+The coordinator independently recomputed these hashes. Kernel GNU build ID is
+`146a0f11148bd8a46514ecee6f1c09622593f79f`; NPU module build ID is
+`8ca6aecea1647a746a27be52b047afd9ea32f844`. The build produced 329 configured
+modules and release `5.10.260-ge5af0ba1cefc`. All 234 NPU imported-symbol CRCs
+match this build's `Module.symvers`, including `module_layout=0x0e3c515c`.
+That is **same-build correspondence**, not compatibility with the phone's
+325 loaded modules. The standalone compile profile does not include the
+working native kernel's other HCI/close-range/camera changes; it is not a
+deploy-ready replacement. No image was packaged, loaded or flashed.
+
+The build actually executed launch-time helper SHA `13cec8b3...`; subsequent
+future-helper corrections did not control or restart that invocation. The
+build-specific note records the full identities and final receipt separately.
+
+The complete host allowlist at `5a2936133425fab9c71778007951ad2f09bd333a`
+attempted 46 normal and 43 optimized scripts, with three existing optimized
+exclusions. It returned failure: 45/41 passed, but three public-source fetches
+returned exit 77. A bounded public rerun passed audio IPC observation and the
+full NPU lifecycle test; optimized shutdown propagation remained unavailable.
+An explicitly selected SHA-verified local fixture passed that remaining test
+separately. There was no hidden fallback or conversion of the initial failed
+public suite into a PASS. Private full/rerun logs are preserved; hosted CI
+for the new final source tree still needs verification.
+
+A second coordinator read-only native snapshot at 14:22:45 UTC verifies the
+same running GNU build ID `b2dda820b18d410d9bf12f1bd2584567d545991d`, 325
+modules, 442934.97 seconds uptime, native guardian/persistent mounts,
+remote-control readiness, healthy idle model API, desktop Pi, browser service
+and the exact dedicated Pi session. Battery is 100%/Full, maximum readable
+thermal zone 42 C. The available ring has no serious indicators but still
+does not cover the full boot. Private receipt hash is
+`cad0e6e810c56b993d0c25382c3a7bea8351314e1bcbf17fd23c0b8ad5e86da2`.
+No fresh RECOVERY partition readback was taken in this host-only wave.
+New device writes, reboots, powered trials and inference requests remain zero.
