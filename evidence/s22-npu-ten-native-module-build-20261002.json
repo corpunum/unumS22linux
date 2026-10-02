@@ -1,0 +1,179 @@
+{
+  "schema": "s22-npu-native-module-build/v1",
+  "build_status": "PASS",
+  "evidence_class": "host_only_single_native_kernel_module_compile",
+  "host_build_go_recorded_at_utc": "2026-10-02T18:49:35Z",
+  "model_provenance": {
+    "model": "gpt-6-luna",
+    "reasoning_effort": "max",
+    "basis": "explicit_task_configuration",
+    "independent_runtime_attestation": false
+  },
+  "source": {
+    "native_eight_parent_commit": "872bffb8ea2ea657f94d10b866dc655b5718d6db",
+    "native_eight_parent_tree": "417e4a55e222b99ecca0f198e081d2d808ef5628",
+    "commit": "709ac38b573d092e300f3787d0d5ba97dd333c0a",
+    "tree": "a1606229eeb84e55175fcd43fd9a6f2faff200ef",
+    "branch": "codex/npu-native-ten-kernel-20261002",
+    "clean_at_build_start": true,
+    "changed_source_files": [
+      "drivers/vision/npu/core/npu-if-protodrv-mbox2.c",
+      "drivers/vision/npu/core/npu-session.c"
+    ],
+    "patches": [
+      {
+        "file": "npu-publication-ownership.patch",
+        "sha256": "2e2e2de8a28c5b408bfa0661535c358070130340318f1d0eaa0efe38edc11078",
+        "changed_source_file": "drivers/vision/npu/core/npu-if-protodrv-mbox2.c"
+      },
+      {
+        "file": "npu-publication-drain-ownership.patch",
+        "sha256": "7137b797c9b4658e1ec7e7829054b11ed684e51552933203d5af45b7a9743709",
+        "changed_source_file": "drivers/vision/npu/core/npu-session.c"
+      }
+    ],
+    "patch_composition_note": "The verified patch inventory changes two files total. The earlier three-file expectation was corrected after checking exact patch hashes and headers; no third source file was added."
+  },
+  "configuration": {
+    "private_export_bytes": 236183,
+    "private_export_sha256": "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16",
+    "output_config_sha256": "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16",
+    "olddefconfig_result": "No change to .config",
+    "kernel_release": "5.10.260-g4e5c5ad7d950",
+    "options": {
+      "CONFIG_EXYNOS_NPU": "m",
+      "CONFIG_NPU_USE_BOOT_IOCTL": "y",
+      "CONFIG_MODVERSIONS": "y",
+      "CONFIG_CFI_CLANG": "y",
+      "CONFIG_LTO_NONE": "y",
+      "CONFIG_SHADOW_CALL_STACK": "y",
+      "CONFIG_LOCALVERSION": "-g4e5c5ad7d950",
+      "CONFIG_LOCALVERSION_AUTO": "n"
+    },
+    "binary_vermagic_edited": false
+  },
+  "commands": {
+    "olddefconfig": "/usr/bin/env -i PATH=/usr/lib/llvm-18/bin:/usr/bin:/bin LC_ALL=C LOCALVERSION= TMPDIR=/tmp /usr/bin/make -C <kernel-source> O=<fresh-module-output> ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig",
+    "symvers_filter": {
+      "helper": "tools/hardware/prepare-camera-modpost-symvers.py",
+      "helper_sha256": "2404fab4a2ed469eab1930a7275c28fd3f5a0bbb1b23c88369338ca23cd26c67",
+      "command": "/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C /usr/bin/python3 -I prepare-camera-modpost-symvers.py --input <native-eight-output>/Module.symvers --output <private-filtered-symvers> --exclude-owner drivers/vision/npu --expected-input-sha256 15fc69e815cb4da6cb3372f4b5141005ab2e770b0414b67f230f1b185bf03df7 --expected-excluded-count 1 --expected-excluded-sha256 d1c251e9556acde53f523b84521ce9d55ce16d531f1e37b54117873852bfc900 --expected-module-layout-crc 0x0e3c515c",
+      "result": "PASS"
+    },
+    "module_build": {
+      "monitor_helper": "tools/hardware/build-npu-six-profile.py:run_monitored_build",
+      "monitor_helper_sha256": "56f39759e4a098562cbafd634a659b007be2a540a4ada6234962711be026e5d5",
+      "command": "/usr/bin/nice -n 10 /usr/bin/env -i PATH=/usr/lib/llvm-18/bin:/usr/bin:/bin LC_ALL=C LOCALVERSION= TMPDIR=/tmp /usr/bin/make -C <kernel-source> O=<fresh-module-output> ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- input-symdump=<private-filtered-symvers> -j1 V=1 drivers/vision/npu.ko",
+      "target": "drivers/vision/npu.ko",
+      "jobs": 1,
+      "verbosity": "V=1",
+      "exit_code": 0,
+      "resource_abort": false,
+      "inherited_environment": "empty; explicit PATH, LC_ALL, LOCALVERSION, and TMPDIR only",
+      "native_overrides_unset": [
+        "GIT_*",
+        "KCONFIG_*",
+        "KBUILD_*",
+        "MAKEFLAGS",
+        "MFLAGS",
+        "GNUMAKEFLAGS",
+        "MAKEOVERRIDES",
+        "CC",
+        "AS",
+        "LD",
+        "LLVM_IAS"
+      ],
+      "resource_thresholds_bytes": {
+        "minimum_mem_available": 8589934592,
+        "minimum_disk_free": 17179869184
+      },
+      "resource_samples": 5,
+      "minimum_observed_mem_available_bytes": 25324449792,
+      "minimum_observed_disk_free_bytes": 50845315072,
+      "private_build_log_sha256": "348ab3c87495627079c75cbd225b39b94ae8a14b6b4c1a050d97890a8c591dc6",
+      "private_resource_monitor_sha256": "45c63ee3cc8303bc07308216f94e9e6d5dc2a75c6fa3135ee4259af82fb04c83"
+    },
+    "actual_modpost": "scripts/mod/modpost -m -E -o modules-only.symvers -i <private-filtered-symvers> -T -"
+  },
+  "symbol_inputs": {
+    "baseline_output_profile": "native-eight full build, inspected read-only",
+    "baseline_full_module_symvers_sha256": "15fc69e815cb4da6cb3372f4b5141005ab2e770b0414b67f230f1b185bf03df7",
+    "baseline_full_module_symvers_rows": 17283,
+    "filtered_owner": "drivers/vision/npu",
+    "excluded_owner_rows": 1,
+    "excluded_owner_rows_sha256": "d1c251e9556acde53f523b84521ce9d55ce16d531f1e37b54117873852bfc900",
+    "filtered_dependency_rows": 17282,
+    "filtered_dependency_sha256": "add620bc3a3732654f23161e4c966c7076b020568683f527402c6253cb59a334",
+    "module_layout_crc": "0x0e3c515c",
+    "new_modules_only_symvers_rows": 1,
+    "new_modules_only_symvers_sha256": "d1c251e9556acde53f523b84521ce9d55ce16d531f1e37b54117873852bfc900"
+  },
+  "toolchain": {
+    "clang_version_first_line": "Ubuntu clang version 18.1.3 (1ubuntu1)",
+    "lld_version_first_line": "Ubuntu LLD 18.1.3 (compatible with GNU linkers)",
+    "tools": [
+      {"name":"clang","path":"/usr/lib/llvm-18/bin/clang","bytes":140592,"sha256":"8ef402d453d1ba4902e4ee0f0f847f6cfa01400c95aa43c24e97818b9c0e3f45"},
+      {"name":"ld.lld","path":"/usr/lib/llvm-18/bin/ld.lld","bytes":5195712,"sha256":"7ad9a0e8fe6d0e79b71172d731e33872c0274e49fceb7b516d774876d5a58ade"},
+      {"name":"llvm-ar","path":"/usr/lib/llvm-18/bin/llvm-ar","bytes":77448,"sha256":"eedd2efbdee80acf60e17e10adeddf31be0347226245f935be95efa3ae00ec79"},
+      {"name":"llvm-ranlib","path":"/usr/lib/llvm-18/bin/llvm-ranlib","bytes":77448,"sha256":"eedd2efbdee80acf60e17e10adeddf31be0347226245f935be95efa3ae00ec79"},
+      {"name":"llvm-nm","path":"/usr/lib/llvm-18/bin/llvm-nm","bytes":151440,"sha256":"3f85dd567c2806f2c031e317871e7145f858072fc9595aba4dc33d2e3a671402"},
+      {"name":"llvm-objcopy","path":"/usr/lib/llvm-18/bin/llvm-objcopy","bytes":187416,"sha256":"f52b9997b3c5019b4b3043e12b1ae2e821df67996ca344921c234c89c4d23e34"},
+      {"name":"llvm-strip","path":"/usr/lib/llvm-18/bin/llvm-strip","bytes":187416,"sha256":"f52b9997b3c5019b4b3043e12b1ae2e821df67996ca344921c234c89c4d23e34"},
+      {"name":"llvm-objdump","path":"/usr/lib/llvm-18/bin/llvm-objdump","bytes":919920,"sha256":"4f98b86448d23bd1f858c50e93fbfc799f1c3640961a95e3b6c89d229a1b91bb"},
+      {"name":"llvm-readelf","path":"/usr/lib/llvm-18/bin/llvm-readelf","bytes":1938720,"sha256":"8ed942a8c33f191480253ff7f236b7e49966c7441d12063d49dce9743aba9a6d"},
+      {"name":"llvm-size","path":"/usr/lib/llvm-18/bin/llvm-size","bytes":68464,"sha256":"401e6835686b116baeaa8b98a5ebee54fbe66148b4a3fcda5436ef243a3653f3"},
+      {"name":"aarch64-linux-gnu-gcc","path":"/usr/bin/aarch64-linux-gnu-gcc","bytes":1723848,"sha256":"cd90adc7801f4595267f61a5d25bd3a0c6beb2f9f1f107ab919a97a12972dc9a"},
+      {"name":"aarch64-linux-gnu-ld","path":"/usr/bin/aarch64-linux-gnu-ld","bytes":1690464,"sha256":"7c903ac277dd1f5c4397277db865f12d8239fe45782f71afbeb3d42180a4b1ae"},
+      {"name":"aarch64-linux-gnu-nm","path":"/usr/bin/aarch64-linux-gnu-nm","bytes":60904,"sha256":"96dbed79b11f6cc13b060dd5ca705a277bb5bdecd714df1c470ffaafb2513727"}
+    ],
+    "compiled_c_flags_observed": [
+      "-fintegrated-as",
+      "-fsanitize=kcfi",
+      "-fsanitize=shadow-call-stack",
+      "-O2",
+      "-Werror"
+    ]
+  },
+  "artifact": {
+    "private_path": "builds/npu-native-ten-module-only-out-20261002/drivers/vision/npu.ko",
+    "internal_name": "npu",
+    "bytes": 14769536,
+    "sha256": "a221c110ca2833b499b1fc7fbd8d34fbef38a60673aa4a70f0e919d818021200",
+    "build_id_sha1": "aee59cd0b95ed49038d0712106ac15bb4c1e9293",
+    "elf_class": "ELF64",
+    "architecture": "AArch64",
+    "vermagic": "5.10.260-g4e5c5ad7d950 SMP preempt mod_unload modversions aarch64",
+    "versions_section_present": true,
+    "import_records": 234,
+    "import_records_sha256": "99aef867af8439d5c5cf1954ff01cd3f70eff870c5e3dbc19c733b386f0aaf55",
+    "baseline_import_records_sha256": "99aef867af8439d5c5cf1954ff01cd3f70eff870c5e3dbc19c733b386f0aaf55",
+    "baseline_import_set_identical": true,
+    "symbol_version_verdict": {
+      "validator": "tools/hardware/s22-hci-candidate-preflight-20260924.py",
+      "validator_sha256": "715383e85d4c5b426f8b6fa43961da2481b57a8fc52dcd54c335faf68d5c4155",
+      "evidence_complete": true,
+      "loader_compatible_against_baseline_symvers": true,
+      "missing_symbol_count": 0,
+      "crc_mismatch_count": 0,
+      "unknown_candidate_crc_count": 0,
+      "ambiguous_candidate_crc_count": 0,
+      "module_layout_module_crc": "0x0e3c515c",
+      "module_layout_candidate_crc": "0x0e3c515c"
+    }
+  },
+  "evidence_boundary": {
+    "fresh_output_contains_module_count": 1,
+    "fresh_output_contains_image": false,
+    "full_image_rebuilt": false,
+    "other_modules_rebuilt": false,
+    "binary_or_config_copied_into_repository": false,
+    "packaged": false,
+    "deployed": false,
+    "module_loaded": false,
+    "phone_access": false,
+    "firmware_or_bootup_attempted": false,
+    "runtime_or_device_acceptance": "NOT_RUN",
+    "bootup_authorized": false,
+    "remaining_publication_drain_limit": "Committed synchronous publication may still wait indefinitely for publish_done; broader close/reopen and firmware/IRQ quiescence are not established."
+  }
+}
