@@ -4,9 +4,10 @@
 
 The fifth, source-only patch moves the observation sequence out of
 `struct abox_ipc`, which is embedded in the ABI-visible `struct abox_data`.
-The sidecar is preallocated once per ABOX owner during probe and holds only
-one sequence value per existing queue slot. It contains no message payload,
-DMA address, firmware pointer, device pointer, or timing data. The pinned
+The sidecar is preallocated once per ABOX owner during probe and holds one
+sequence value per existing queue slot. It stores owner/list pointers for its
+private registry, but no message payload, DMA address, firmware pointer, or
+timing data; those addresses are not emitted in trace events. The pinned
 `struct abox_ipc` and `struct abox_data` declarations are restored byte-for-byte
 to the pinned source declarations; this is source-layout evidence, not a claim
 that native export CRCs have been verified.
@@ -66,10 +67,23 @@ patches in this exact order:
 It extracts the actual pinned queue, scheduler, FE/BE helpers, worker, and new
 registry functions into a pthread host harness. The composed pre-fix baseline
 reproduces the ABI-size change and a forced two-worker cross-owner message/trace
-mismatch. The patched C tests queue-to-send sequence matching, generic slot
-reuse, allocation/action failures, pending-queue retirement, same-address
-owner reuse, RCU-reader retirement wait, and two different owners whose workers
-are deliberately overlapped at send. Both C `-O0` and `-O2` are run.
+mismatch. The prior generic-zero test was insufficient because generic IPC is
+filtered from the PCM-trigger send tracepoint and that scenario did not reuse
+the same physical ring slot. The corrected C test directly asserts the actual
+`abox_ipc_queue_get()` sequence for generic IPC, wraps the real producer and
+consumer back to slot zero, then queues a zero-sequence PCM message with send
+tracing enabled before dequeue. It also checks that dequeue clears the private
+slot. The composed four-patch baseline passes this zero-sequence/reuse case; it
+is not claimed as a baseline failure. Separate patched-source mutations that
+skip the zero overwrite or dequeue clear must fail their dedicated assertion.
+The zero-store mutation case seeds a nonzero test-only stale-slot sentinel after
+the physical wrap; this isolates the overwrite guarantee even though the
+normal clear path has already emptied the slot. The baseline comparison is not
+mutated and passes the actual zero-sequence reuse scenario.
+The patched C tests also cover queue-to-send correlation, allocation/action
+failures, pending-queue retirement, same-address owner reuse, RCU-reader
+retirement wait, and two different owners whose workers are deliberately
+overlapped at send. Both C `-O0` and `-O2` are run for normal and mutation tests.
 
 The source fixture is the capped pinned set at
 `4e5c5ad7d950e4de0688b5663965f2075654b2ad`, or a verified local derived tree at

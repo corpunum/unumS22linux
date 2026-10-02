@@ -25,6 +25,15 @@ BASELINE_FAILURES = (
     "FAIL: baseline struct abox_ipc preserves its exported ABI size",
     "FAIL: baseline concurrent workers preserve both message/trace pairs",
 )
+MUTATION_FAILURES = {
+    "OMIT_ZERO_OVERWRITE": (
+        "FAIL: zero-sequence put overwrites reused private metadata before dequeue",
+        "FAIL: actual get zero-overwrites the reused slot before send tracing is enabled",
+    ),
+    "OMIT_CLEAR": (
+        "FAIL: actual queue_get clears the consumed private sequence slot",
+    ),
+}
 
 
 def require(condition: bool, message: str) -> None:
@@ -337,8 +346,37 @@ def verify_source_contract(source_test, original: dict[str, bytes],
     print("PASS: owner lookup/retirement is keyed per instance and RCU synchronized")
 
 
+def mutate_sidecar_source(sources: dict[str, bytes], mutation: str) -> dict[str, bytes]:
+    relative = "sound/soc/samsung/abox/abox.c"
+    source = sources[relative].decode()
+    if mutation == "OMIT_ZERO_OVERWRITE":
+        old = """\t\tif (trace_owner)
+\t\t\ttrace_owner->trace_seq[data->ipc_queue_end] = *trace_seq;
+"""
+        new = """\t\tif (trace_owner && *trace_seq)
+\t\t\ttrace_owner->trace_seq[data->ipc_queue_end] = *trace_seq;
+"""
+    elif mutation == "OMIT_CLEAR":
+        old = """\t\tif (trace_owner) {
+\t\t\t*trace_seq = trace_owner->trace_seq[data->ipc_queue_start];
+\t\t\ttrace_owner->trace_seq[data->ipc_queue_start] = 0;
+\t\t}
+"""
+        new = """\t\tif (trace_owner)
+\t\t\t*trace_seq = trace_owner->trace_seq[data->ipc_queue_start];
+"""
+    else:
+        raise RuntimeError(f"unknown source mutation: {mutation}")
+    require(source.count(old) == 1,
+            f"mutation target is not unique in actual queue source: {mutation}")
+    mutated = dict(sources)
+    mutated[relative] = source.replace(old, new, 1).encode()
+    return mutated
+
+
 def compile_and_run(cc: str, level: str, source: str, directory: Path,
-                    *, baseline: bool) -> subprocess.CompletedProcess:
+                    *, baseline: bool,
+                    mutation: str | None = None) -> subprocess.CompletedProcess:
     source_file = directory / f"audio-ipc-trace-abi-{level[2:]}.c"
     binary = directory / f"audio-ipc-trace-abi-{level[2:]}"
     source_file.write_text(source)
@@ -349,6 +387,8 @@ def compile_and_run(cc: str, level: str, source: str, directory: Path,
     ]
     if baseline:
         args.append("-DEXPECT_BASELINE_PRIVATE_ABI_BUG=1")
+    if mutation:
+        args.append(f"-DMUTATION_{mutation}=1")
     args.extend([str(source_file), "-o", str(binary)])
     compiled = command(args)
     require(not compiled.stdout,
@@ -422,6 +462,7 @@ def main() -> int:
                         f"composed baseline did not reproduce only ABI/scratch defects at {level}:\n"
                         f"{base.stdout}")
                 print(f"{level}: PASS: composed baseline reproduces ABI and concurrent scratch defects")
+                print(f"{level}: PASS: four-patch baseline direct-get/physical-slot zero case passes")
 
                 fixed = compile_and_run(args.cc, level, patched_harness,
                                         c_root, baseline=False)
@@ -430,6 +471,23 @@ def main() -> int:
                         fixed.stdout.strip() == expected,
                         f"patched actual extracted C failed at {level}:\n{fixed.stdout}")
                 print(f"{level}: {fixed.stdout.strip()}")
+
+                for mutation, expected_failures in MUTATION_FAILURES.items():
+                    mutated_sources = mutate_sidecar_source(after, mutation)
+                    mutated_harness = render_harness(
+                        source_test, mutated_sources, fragments, patched=True)
+                    mutated = compile_and_run(
+                        args.cc, level, mutated_harness, c_root,
+                        baseline=False, mutation=mutation)
+                    failures = tuple(line for line in mutated.stdout.splitlines()
+                                     if line.startswith("FAIL: "))
+                    require(mutated.returncode == 1 and
+                            failures == expected_failures and
+                            mutated.stdout.splitlines()[-1] ==
+                            f"{len(expected_failures)} host assertions failed",
+                            f"{mutation} control did not fail only its dedicated assertion at {level}:\n"
+                            f"{mutated.stdout}")
+                    print(f"{level}: PASS: {mutation} mutation is caught by its dedicated assertion")
 
     print(f"PASS: bounded pinned source fixture {source_identity}")
     print("PASS: extracted queue, scheduler, FE/BE helpers, worker, registry, and teardown C")
