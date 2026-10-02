@@ -63,6 +63,7 @@ static int g_mutex_unlock_calls;
 static int g_wakeup_calls;
 static int g_flush_sleep_calls;
 static int g_actual_gather_calls;
+static int g_actual_report_store_calls;
 static int g_unposted_check_calls;
 static int g_bug_calls;
 static int g_bug_armed;
@@ -221,6 +222,7 @@ static void reset_locks_and_observers(void)
 	g_wakeup_calls = 0;
 	g_flush_sleep_calls = 0;
 	g_actual_gather_calls = 0;
+	g_actual_report_store_calls = 0;
 	g_unposted_check_calls = 0;
 	g_bug_calls = 0;
 	g_bug_armed = 0;
@@ -247,9 +249,17 @@ static void setup_log_ops(void)
 	g_log_ops.npu_check_unposted_mbox = mock_unposted_check;
 }
 
+static int npu_fw_report_store(char *strRep, int nSize);
+
 /* ACTUAL_LOG_FUNCTIONS */
 /* ACTUAL_GATHER_FUNCTION */
 /* ACTUAL_MSGID_FUNCTIONS */
+
+static int npu_fw_report_store(char *strRep, int nSize)
+{
+	++g_actual_report_store_calls;
+	return npu_fw_report_store_body(strRep, nSize);
+}
 
 static void mock_gather_entry(void)
 {
@@ -266,72 +276,86 @@ static void mock_gather_entry(void)
 
 static void test_null_buffer_returns(int baseline)
 {
-	int result;
 	static char report_storage[PAGE_SIZE];
 	static char profile_storage[PAGE_SIZE];
 	int irq_start;
+	int result;
 
-	reset_locks_and_observers();
-	memset(&fw_report, 0, sizeof(fw_report));
-	memset(&fw_profile, 0, sizeof(fw_profile));
-	irq_start = 1;
-	g_irq_enabled = irq_start;
-	result = npu_fw_report_store("x", 1);
-	CHECK(result == -ENOMEM, "report store preserves -ENOMEM for NULL buffer");
-	if (baseline) {
-		CHECK(fw_report_lock.held && g_irq_enabled == 0,
-			"baseline report store reproduces held report lock/disabled IRQs");
-		puts("REPRO: baseline report store returns with fw_report_lock held");
-	} else {
-		CHECK(locks_are_clear(),
-			"patched report store unlocks and restores saved IRQ state");
-	}
+	for (irq_start = 0; irq_start <= 1; ++irq_start) {
+		reset_locks_and_observers();
+		memset(&fw_report, 0, sizeof(fw_report));
+		g_irq_enabled = irq_start;
+		result = npu_fw_report_store("x", 1);
+		CHECK(result == -ENOMEM,
+			"report store preserves -ENOMEM for NULL buffer");
+		if (baseline) {
+			CHECK(fw_report_lock.held && g_irq_enabled == 0,
+				"baseline report store reproduces held report lock/disabled IRQs");
+			puts("REPRO: baseline report store returns with fw_report_lock held");
+		} else {
+			CHECK(!fw_report_lock.held && !fw_profile_lock.held &&
+				g_irq_enabled == irq_start && g_lock_errors == 0,
+				"patched report store restores its entry IRQ state");
+		}
 
-	reset_locks_and_observers();
-	memset(&fw_profile, 0, sizeof(fw_profile));
-	g_irq_enabled = 0;
-	result = npu_fw_profile_store("x", 1);
-	CHECK(result == -ENOMEM, "profile store preserves -ENOMEM for NULL buffer");
-	if (baseline) {
-		CHECK(fw_profile_lock.held && g_irq_enabled == 0,
-			"baseline profile store reproduces held profile lock/disabled IRQs");
-		puts("REPRO: baseline profile store returns with fw_profile_lock held");
-	} else {
-		CHECK(!fw_profile_lock.held && g_irq_enabled == 0 && g_lock_errors == 0,
-			"patched profile store restores originally disabled IRQ state");
-	}
+		reset_locks_and_observers();
+		memset(&fw_profile, 0, sizeof(fw_profile));
+		g_irq_enabled = irq_start;
+		result = npu_fw_profile_store("x", 1);
+		CHECK(result == -ENOMEM,
+			"profile store preserves -ENOMEM for NULL buffer");
+		if (baseline) {
+			CHECK(fw_profile_lock.held && g_irq_enabled == 0,
+				"baseline profile store reproduces held profile lock/disabled IRQs");
+			puts("REPRO: baseline profile store returns with fw_profile_lock held");
+		} else {
+			CHECK(!fw_profile_lock.held && !fw_report_lock.held &&
+				g_irq_enabled == irq_start && g_lock_errors == 0,
+				"patched profile store restores its entry IRQ state");
+		}
 
-	reset_locks_and_observers();
-	memset(&fw_report, 0, sizeof(fw_report));
-	reset_mailbox();
-	g_irq_enabled = 0;
-	result = fw_will_note_to_kernel(8);
-	CHECK(result == -ENOMEM, "kernel report note preserves -ENOMEM for NULL buffer");
-	if (baseline) {
-		CHECK(fw_report_lock.held && g_irq_enabled == 0,
-			"baseline kernel note reproduces held report lock");
-		puts("REPRO: baseline fw_will_note_to_kernel leaks fw_report_lock");
-	} else {
-		CHECK(!fw_report_lock.held && g_irq_enabled == 0 && g_lock_errors == 0,
-			"patched kernel note restores originally disabled IRQ state");
-	}
+		reset_locks_and_observers();
+		memset(&fw_report, 0, sizeof(fw_report));
+		reset_mailbox();
+		g_irq_enabled = irq_start;
+		result = fw_will_note_to_kernel(8);
+		CHECK(result == -ENOMEM,
+			"kernel report note preserves -ENOMEM for NULL buffer");
+		if (baseline) {
+			CHECK(fw_report_lock.held && g_irq_enabled == 0,
+				"baseline kernel note reproduces held report lock");
+			puts("REPRO: baseline fw_will_note_to_kernel leaks fw_report_lock");
+		} else {
+			CHECK(!fw_report_lock.held && g_irq_enabled == irq_start &&
+				g_lock_errors == 0,
+				"patched kernel note restores its entry IRQ state");
+		}
+		CHECK(g_actual_gather_calls == 1 &&
+			g_actual_report_store_calls == 0 && !interface.lock.held &&
+			g_mutex_errors == 0,
+			"empty note gather returns through actual body before NULL report check");
 
-	reset_locks_and_observers();
-	memset(&fw_report, 0, sizeof(fw_report));
-	reset_mailbox();
-	g_irq_enabled = 1;
-	result = fw_will_note(8);
-	CHECK(result == -ENOMEM, "report note preserves -ENOMEM for NULL buffer");
-	if (baseline) {
-		CHECK(fw_report_lock.held && g_irq_enabled == 0,
-			"baseline report note reproduces held report lock");
-		puts("REPRO: baseline fw_will_note leaks fw_report_lock");
-	} else {
-		CHECK(locks_are_clear(),
-			"patched report note unlocks and restores saved IRQ state");
+		reset_locks_and_observers();
+		memset(&fw_report, 0, sizeof(fw_report));
+		reset_mailbox();
+		g_irq_enabled = irq_start;
+		result = fw_will_note(8);
+		CHECK(result == -ENOMEM,
+			"report note preserves -ENOMEM for NULL buffer");
+		if (baseline) {
+			CHECK(fw_report_lock.held && g_irq_enabled == 0,
+				"baseline report note reproduces held report lock");
+			puts("REPRO: baseline fw_will_note leaks fw_report_lock");
+		} else {
+			CHECK(!fw_report_lock.held && g_irq_enabled == irq_start &&
+				g_lock_errors == 0,
+				"patched report note restores its entry IRQ state");
+		}
+		CHECK(g_actual_gather_calls == 1 &&
+			g_actual_report_store_calls == 0 && !interface.lock.held &&
+			g_mutex_errors == 0,
+			"empty note gather returns through actual body before NULL report check");
 	}
-	CHECK(g_actual_gather_calls == 1,
-		"each report-note path invokes the actual gather entry once before the NULL check");
 
 	/* Keep extracted init/deinit compiled and exercise their healthy pair too. */
 	reset_locks_and_observers();
@@ -399,6 +423,8 @@ static void test_gather_store_error(int baseline)
 	fw_rprt_gather();
 	CHECK(ctrl->rptr == 3,
 		"actual gather retains its pinned pointer advance after store error");
+	CHECK(g_actual_report_store_calls == 1,
+		"actual gather error fixture enters the actual report-store body once");
 	CHECK(!interface.lock.held && g_mutex_lock_calls == 1 &&
 		g_mutex_unlock_calls == 1 && g_mutex_errors == 0,
 		"actual gather releases interface.lock after the store error");
@@ -430,6 +456,8 @@ static void test_actual_gather_ring_wrap_and_note(void)
 	fw_rprt_gather();
 	CHECK(ctrl->rptr == 3 && fw_report.wr_pos == 6,
 		"actual gather consumes one wrapped synthetic mailbox segment");
+	CHECK(g_actual_report_store_calls == 2,
+		"wrapped actual gather enters report-store body for both ring segments");
 	CHECK(memcmp(report_storage, "ab\ncd\n", 6) == 0,
 		"actual gather forwards bytes through the actual report-store body");
 	CHECK(g_mutex_lock_calls == 1 && g_mutex_unlock_calls == 1 &&
@@ -446,43 +474,62 @@ static void test_actual_gather_ring_wrap_and_note(void)
 
 static void test_invalid_firmware_id_path(int baseline)
 {
-	int result_type = -99;
-	int jumped;
+	int irq_start;
+	for (irq_start = 0; irq_start <= 1; ++irq_start) {
+		int result_type = -99;
+		int jumped;
+		struct mailbox_ctrl *ctrl;
 
-	reset_locks_and_observers();
-	reset_mailbox();
-	memset(&fw_report, 0, sizeof(fw_report));
-	memset(&g_msgid_pool, 0, sizeof(g_msgid_pool));
-	g_msgid_pool.magic = MSGID_POOL_MAGIC;
-	atomic_set(&g_msgid_pool.pool[0].occupied, 1);
-	g_bug_armed = 1;
-	jumped = setjmp(g_bug_env);
-	if (jumped == 0)
-		result_type = msgid_get_pt_type(&g_msgid_pool,
-			NPU_MAX_MSG_ID_CNT);
-	g_bug_armed = 0;
+		reset_locks_and_observers();
+		reset_mailbox();
+		memset(&fw_report, 0, sizeof(fw_report));
+		memset(&g_msgid_pool, 0, sizeof(g_msgid_pool));
+		g_msgid_pool.magic = MSGID_POOL_MAGIC;
+		atomic_set(&g_msgid_pool.pool[0].occupied, 1);
+		ctrl = &g_mailbox_header.f2hctrl[MAILBOX_F2HCTRL_REPORT];
+		ctrl->sgmt_len = 16;
+		ctrl->rptr = 0;
+		ctrl->wptr = 3;
+		memcpy(g_report_ring, "xyz", 3);
+		g_irq_enabled = irq_start;
+		g_bug_armed = 1;
+		jumped = setjmp(g_bug_env);
+		if (jumped == 0)
+			result_type = msgid_get_pt_type(&g_msgid_pool,
+				NPU_MAX_MSG_ID_CNT);
+		g_bug_armed = 0;
 
-	if (baseline) {
-		CHECK(jumped != 0 && g_bug_calls > 0,
-			"pinned baseline invalid firmware ID still reaches its BUG_ON");
-		CHECK(fw_report_lock.held && g_irq_enabled == 0,
-			"baseline invalid-ID diagnostic reaches and leaks report lock before BUG");
-		CHECK(g_actual_gather_calls == 1,
-			"baseline high-ID validator enters actual fw_will_note and gather once");
-		puts("REPRO: pinned high invalid ID calls fw_will_note, leaks lock, then BUGs");
-	} else {
-		CHECK(jumped == 0 && result_type == -1 && g_bug_calls == 0,
-			"patched invalid firmware ID type lookup returns -1 without BUG_ON");
-		CHECK(!fw_report_lock.held && g_irq_enabled == 1 && g_lock_errors == 0,
-			"actual patched fw_will_note restores lock/IRQ state on NULL storage");
-		CHECK(g_actual_gather_calls == 1,
-			"patched high-ID validation enters actual fw_will_note and actual gather once");
+		if (baseline) {
+			CHECK(jumped != 0 && g_bug_calls > 0,
+				"pinned baseline invalid firmware ID still reaches its BUG_ON");
+			CHECK(fw_report_lock.held && g_irq_enabled == 0,
+				"baseline composed high-ID path leaks report lock before BUG");
+			CHECK(g_actual_gather_calls == 1 &&
+				g_actual_report_store_calls == 1 && ctrl->rptr == 3,
+				"baseline high-ID note gathers a segment through actual store");
+			CHECK(!interface.lock.held && g_mutex_lock_calls == 1 &&
+				g_mutex_unlock_calls == 1 && g_mutex_errors == 0,
+				"baseline composed shim continues past leaked spinlock and balances interface mutex");
+			CHECK(g_lock_errors == 1,
+				"baseline shim records the recursive report-lock attempt before BUG");
+			puts("REPRO: baseline composed high-ID path leaks in actual gather/store; shim records relock then BUGs");
+		} else {
+			CHECK(jumped == 0 && result_type == -1 && g_bug_calls == 0,
+				"patched invalid firmware ID type lookup returns -1 without BUG_ON");
+			CHECK(!fw_report_lock.held && !fw_profile_lock.held &&
+				g_irq_enabled == irq_start && g_lock_errors == 0,
+				"composed actual store and note paths restore entry IRQ state and release locks");
+			CHECK(g_actual_gather_calls == 1 &&
+				g_actual_report_store_calls == 1 && ctrl->rptr == 3,
+				"patched high-ID note gathers one segment through actual NULL report store");
+			CHECK(!interface.lock.held && g_mutex_lock_calls == 1 &&
+				g_mutex_unlock_calls == 1 && g_mutex_errors == 0,
+				"actual gather releases interface mutex on the composed store-error path");
+			puts("PASS: high-ID validator reaches actual gather/store(NULL)/note with balanced locks");
+		}
 		CHECK(atomic_read(&g_msgid_pool.pool[0].occupied) == 1,
 			"invalid high ID leaves an unrelated valid pool slot untouched");
-		puts("PASS: actual high-ID validator diagnostic unwinds report lock on NULL storage");
 	}
-	CHECK(atomic_read(&g_msgid_pool.pool[0].occupied) == 1,
-		"invalid high ID leaves an unrelated valid pool slot untouched");
 }
 
 int main(void)
