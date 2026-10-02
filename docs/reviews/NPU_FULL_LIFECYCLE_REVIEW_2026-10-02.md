@@ -83,3 +83,64 @@ build behavior. The pinned shutdown API still masks errors from early/protocol
 close paths, and the normal-bootdown reference/count mismatch remains open.
 No phone, SSH, ADB, module, package, service, reboot, kernel build, or push
 operation was performed.
+
+## Portability and fixed-CI follow-up review
+
+Reviewed frozen follow-up `204973c6a310f92f2810db129a13a07a2e29d263`
+(parent `2a7b84b3190c65fb58181fccb82a09d6b40fc2d1`) in the clean author
+worktree. It changes only the profile test and its research note; the lifecycle
+patch remains byte-identical at SHA-256
+`b986e1896305fda55f1d702ed6f12dde646e4a84b3ce91009203b9d77b7a00e7`. The
+follow-up test SHA-256 is
+`a4c84821b8d28efc8056c6033645839bda808a79a7bebed13585c52dd6d16a59`, matching
+the test blob at both the author commit and CI commit `5ca727fa3fce12d242749dbbeefb7f8b9f425a23`.
+
+The source selection normalizes either single configured root for both
+loaders; two configured roots must resolve to the same canonical path. Missing
+local roots, mismatched roots, wrong revision, dirty/wrong-hash local sources,
+and bad public-source hashes fail closed rather than falling through to the
+public path or returning the unavailable status. The built-in guardrails
+rejected mismatched roots and deliberately wrong pinned bytes. I also ran the
+test with a nonexistent configured local root and with mismatched environment
+roots; both exited 1, not 77. A local `PYTHONOPTIMIZE=1` run with only
+`S22_NPU_PROBE_SOURCE_TREE` set passed and reported the clean exact-derived
+fixture, confirming one-root normalization.
+
+With both source variables unset, I ran the test in normal and `-O` modes.
+Both fetched pinned base
+`4e5c5ad7d950e4de0688b5663965f2075654b2ad` successfully and exited 0. Each
+reported the 147,641-byte shutdown subset and the same deduplicated union of
+1,214,674 bytes across 19 paths. The stack loader pins each source file by
+SHA-256 and caps each at 512 KiB; the shutdown loader pins each file, caps each
+at 128 KiB, and caps its set at 1 MiB. Both use HTTPS raw-source URLs at the
+fixed commit, reject redirects, read at most limit-plus-one bytes, set a
+five-second timeout per request, and do not retry. The merged union compares
+overlapping bytes before writing and is capped at stack-input bytes plus the
+shutdown 1 MiB cap. These are per-request/per-input limits, not one total
+wall-clock deadline.
+
+Unavailable URL/network errors are converted to the specific
+`SourceFixtureUnavailable` types and `main()` returns 77 with an explicit
+`SKIP`; hash/identity/configuration mismatches are ordinary failures and are
+not caught as unavailable. The actual public-source requests were available
+for both runs, so an exit-77 run was not observed; the review does not count a
+skip as a pass.
+
+The public and local runs confirmed the follow-up preflight now receives the
+actual temporary five-patch tree: the test applies the ordered series into
+`full_root`, reads the final patched source map, then passes that same root and
+map to `STACK.run_preflight`. Both public runs emitted the extracted-C
+regression markers at C `-O0/-O2`, the full five-patch BOOTUP-gate marker,
+preflight status 2, and `artifact_preflight_pass=false`,
+`bootup_ready=false`, `bootup_authorized=false`; the firmware artifacts were
+absent. No source/device files were changed.
+
+Also reviewed the exact CI wiring commit
+`5ca727fa3fce12d242749dbbeefb7f8b9f425a23`: it adds only the same explicit
+test path to `REVIEWED_HOST_TEST_PATHS`, `HOST_TESTS`, and
+`EXPECTED_HOST_TEST_PATHS` (three insertions in two files). No dynamic test
+discovery, skip policy, runner logic, exclusions, or live-device path changed.
+The CI commit's test blob SHA matches the reviewed follow-up SHA above. The
+direct public-source runs provide a CI-default usability proof when the
+pinned source host is reachable; an actual fetch outage remains a visible
+exit-77 skip, not a passing test.
