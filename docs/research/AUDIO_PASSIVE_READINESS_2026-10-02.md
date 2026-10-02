@@ -92,3 +92,33 @@ service, inference, build, firmware, deployment, reboot, push, mixer, PCM, or
 other hardware operation was performed. They do not establish control-node
 permissions, route availability, DMA progress, audible output, or device
 acceptance. The explicit listing option has not been used against hardware.
+
+## Follow-up: exception-safe child teardown
+
+An independent review of frozen commit `eb25aa24171cd8c4efa6ec31935e035bd79f5e06`
+found that `listing()` cleaned up only `OSError`. A `KeyboardInterrupt` or
+another exception from selector registration, selection, or pipe draining
+closed the selector and pipes in `finally` but skipped child termination and
+reaping. This is an additional lifecycle defect; it does not replace the
+earlier output-disk or timeout-descendant reproductions above.
+
+Four executable regressions were run against that frozen helper before the
+fix. Injected selector `KeyboardInterrupt`, selector-registration
+`RuntimeError`, pipe-drain `RuntimeError`, and process-group termination
+failure each left the controlled sleeper alive when the helper propagated the
+exception. The tests killed and reaped those sleepers after recording the
+failure, so the baseline run left no test process behind.
+
+The follow-up keeps selector creation before process launch, then puts every
+post-spawn setup, select/drain, output-close, and reap step inside an exception
+boundary. Any escaping `BaseException` triggers process-group SIGKILL, bounded
+pipe closure and direct-child wait; the original exception object and type are
+re-raised. If termination or reaping is incomplete, cleanup diagnostics are
+attached as exception notes (or an exception attribute on Python versions
+without `add_note`). Ordinary timeout results also expose `cleanup_errors` and
+`cleanup_complete`, and cannot claim complete capture when teardown failed.
+
+The helper suite now has 12 cases. All pass in normal Python, `python3 -O`, and
+`PYTHONOPTIMIZE=1`, including the four exception-path regressions. These are
+controlled host subprocesses only; they do not invoke the mixer utilities or
+contact the S22.
