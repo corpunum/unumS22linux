@@ -1,0 +1,72 @@
+{
+  "schema": "s22-driver-source-wave/v1",
+  "starting_review_branch_sha": "01cf5a106035e9eab1a67421452baf8699cb6f13",
+  "scope": "npu_probe_shutdown_and_opt_in_audio_observation_source_and_host_tests",
+  "worker_configuration": {
+    "interface": "native_collaboration_spawn_agent",
+    "model": "gpt-6-luna",
+    "reasoning_effort": "max",
+    "fork_turns": "none",
+    "evidence_level": "accepted_explicit_configuration_no_known_fallback_not_backend_attestation",
+    "phone_access": "coordinator_only"
+  },
+  "workers": [
+    {
+      "id": "/root/npu_probe_unwind_20261002",
+      "assignment": "transactional_clock_acquisition_and_probe_failure_unwind",
+      "state": "implementing"
+    },
+    {
+      "id": "/root/npu_shutdown_ownership_20261002",
+      "assignment": "shutdown_error_propagation_and_recovery_close_ownership",
+      "state": "implementing"
+    },
+    {
+      "id": "/root/audio_ipc_instrument_20261002",
+      "assignment": "payload_free_opt_in_audio_ipc_observation",
+      "state": "implementing"
+    }
+  ],
+  "read_only_baseline": {
+    "captured_at": "2026-10-02T08:53:03.986543+00:00",
+    "same_boot_as_previous_capture": true,
+    "same_kernel_as_previous_capture": true,
+    "uptime_seconds": 423150.72,
+    "recovery_sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+    "recovery_bytes": 100663296,
+    "kernel_gnu_build_id": "b2dda820b18d410d9bf12f1bd2584567d545991d",
+    "camera_module_gnu_build_id": "59e54c032c545fff3ba52156f226fb6d69aadf64",
+    "loaded_module_count": 325,
+    "usb_ssh_reachable": true,
+    "native_remote_control_ready": true,
+    "model_api_healthy_and_idle": true,
+    "desktop_ready": true,
+    "desktop_pi_status": "ready",
+    "browser_terminal_status": "ready",
+    "dedicated_pi_session_status": "ready",
+    "battery_capacity_percent": 100,
+    "battery_status": "Full",
+    "battery_temperature_celsius": 28.0,
+    "maximum_thermal_temperature_celsius": 42.0,
+    "serious_fault_in_available_ring": false,
+    "full_boot_log_coverage": false
+  },
+  "new_device_operations": {
+    "partition_writes": 0,
+    "reboot_requests": 0,
+    "pi_session_startups": 0,
+    "inference_requests": 0,
+    "camera_device_opens": 0,
+    "npu_bootup_requests": 0,
+    "audio_streams": 0
+  },
+  "acceptance_limits": {
+    "independent_hardware_rescue_demonstrated": false,
+    "historical_camera_not_accepted_preserved": true,
+    "trustzone_request_completion": "unknown_not_measured",
+    "npu_bootup_authorized": false,
+    "kernel_build_performed": false,
+    "device_deployment_performed": false,
+    "new_working_driver_verified": false
+  }
+}
