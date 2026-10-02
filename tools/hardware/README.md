@@ -47,7 +47,7 @@ patches, to their battery-only candidate JSON preimages.
 The fallback input daemon was not deployed; do not run it alongside the
 native Hyprland power binding.
 
-`run-host-regressions.py` runs a fixed allowlist of synthetic host tests. It
+`run-host-regressions.py` runs a fixed allowlist of hardware-free host tests. It
 does not discover tests or accept test paths. The suite covers the NPU
 lifecycle model and preflight gates, audio DMA progress classification, input
 readiness against temporary fixtures, synchronized audio snapshot accounting,
@@ -60,14 +60,22 @@ an SSH response or contact a device. The bridge test needs the Ubuntu runner's
 existing `cc` compiler;
 it attaches the `N_HCI` line discipline to its PTY, registers a synthetic
 kernel HCI device, and reads its `AF_BLUETOOTH` `HCI_GET_DEV_INFO` record. It
-does not access a physical controller, phone, or network. Two small
+does not access a physical controller or phone. Two small
 assertion-based scripts run only normally because Python `-O` would remove
 their checks. Other allowlisted tests also run with `-O`. All child processes
 receive a clean temporary home and an environment without inherited device
 overrides, credentials, or API tokens. The tests make no phone connection,
-physical hardware probe, firmware/model access, or network request; the workflow
+physical hardware probe or firmware/model access; the workflow
 uses no CI secrets and grants only read-only repository permission. Tests that
 require a private kernel tree, firmware/model assets, deployment transport, or
 live device interface are excluded. AVB fixture cases explicitly skip when the
 trusted public `avbtool.py` is unavailable. Review any proposed addition before
 adding its literal path to the runner allowlist.
+
+The source-C suites also retrieve capped, SHA-verified public kernel files at
+an exact pinned commit; they are hardware-free, not universally offline. Their
+explicit local-fixture options avoid that network dependency when the correct
+source objects are available. Public source unavailability exits 77 and is
+recorded as a failed invocation by the complete runner, never silently counted
+as executed coverage. The extracted-C cases use declared kernel-dependency
+shims and are separate from Linux runtime or phone acceptance.
