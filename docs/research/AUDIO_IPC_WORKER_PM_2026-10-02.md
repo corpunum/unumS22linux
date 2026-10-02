@@ -43,6 +43,11 @@ callback can schedule the existing worker again. If PM then succeeds, the
 worker drains the retained entries before the newer entry in FIFO order. Until
 such a later request, the async caller cannot receive the worker's PM error:
 its earlier success meant only that the local queue accepted the message.
+For PCM triggers, this requires a changed direction: a duplicate FE/BE
+request still returns before scheduling and cannot restart this retained
+queue. The tested FE RESUME changes the preceding accepted BE STOP state.
+Generic async IPC can also schedule the worker. This patch does not repair
+the duplicate-direction restart gap.
 
 For unrelated negative `abox_ipc_send()` results after successful resume, the
 existing dequeue, failsafe-report, mark-busy, and autosuspend-put behavior is
