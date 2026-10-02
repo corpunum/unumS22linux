@@ -1,0 +1,44 @@
+diff --git a/drivers/vision/npu/core/npu-device.c b/drivers/vision/npu/core/npu-device.c
+--- a/drivers/vision/npu/core/npu-device.c
++++ b/drivers/vision/npu/core/npu-device.c
+@@ -801,15 +801,15 @@
+ int npu_device_shutdown(struct npu_device *device)
+ {
+-	int ret = 0;
++	int ret = 0, ret2 = 0;
+ 
+ 	BUG_ON(!device);
+ 
+ 	if (!test_bit(NPU_DEVICE_STATE_OPEN, &device->state)) {
+ 		npu_err("already closed of device\n");
+ 		ret = -EINVAL;
+ 		goto ErrorExit;
+ 	}
+ 
+ 	ret = __npu_device_early_close(device);
+ 	if (ret)
+ 		npu_err("fail(%d) in __npu_device_early_close\n", ret);
+@@ -832,13 +832,17 @@
+-	ret = proto_drv_close(device);
+-	if (ret)
+-		npu_err("fail(%d) in proto_drv_close\n", ret);
++	ret2 = proto_drv_close(device);
++	if (ret2)
++		npu_err("fail(%d) in proto_drv_close\n", ret2);
++	if (!ret)
++		ret = ret2;
+ 
+ 	dsp_dhcp_deinit(device->system.dhcp);
+ 
+-	ret = npu_system_suspend(&device->system);
+-	if (ret)
+-		npu_err("fail(%d) in npu_system_suspend\n", ret);
++	ret2 = npu_system_suspend(&device->system);
++	if (ret2)
++		npu_err("fail(%d) in npu_system_suspend\n", ret2);
++	if (!ret)
++		ret = ret2;
+ ErrorExit:
+ 	npu_info("%s():%d\n", __func__, ret);
+ 	return ret;
+ }
