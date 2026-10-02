@@ -523,3 +523,119 @@ result 0. This verifies current IPv4 DNS/TLS/HTTPS through Wi-Fi rather than
 merely interface enumeration. It is an active network observation, not a
 passive sysfs read and not cellular data evidence. No modem, partition,
 service, display, audio, or input control was changed.
+
+### Implemented and independently reviewed button/cellular work
+
+The implementation table above is historical launch state. Subsequent frozen
+results are:
+
+| Actual Luna worker | Author commits | Integrated commits | Evidence / remaining boundary |
+| --- | --- | --- | --- |
+| `/root/physical_buttons_impl_20261002` | `dcfa9754e01d344c2d88b40bcb9471ef92471bd9`, test follow-up `b4a9e021a7b24e1433d946fe4c2817bf15afc09d` | `22cbb36`, `b615b32` | Correct native-word sysfs capability parsing; character-node/sysfs identity rechecked after open; read-only button-only capture; 6 readiness and 16 event tests per Python mode. No physical stimulus or phone installation. |
+| `/root/cellular_readiness_impl_20261002` | `827e2d64bbde2cb22f5133f358205920660b3530`, corrective `4c733d2bd3e8d55cf2cd9ed556b4b5ca7b15a697` | `adf2101`, `66a7ade` | Bounded passive CPIF inventory. Independent review reproduced dangling/out-of-namespace driver false positives and silently omitted per-module errors; both corrected. 12 tests per Python mode. No modem activation. |
+| `/root/portable_assistant_independent_review_20261002` | `937e96a2325af6b77ee487573f4604c9e20ab356`, `de20994788d6df7763cd869e8c0f43e6ab7d9504`, `c22c084c61cef077fbd1bb1eaada91d4aef10ead` | `af4ca31`, `fcee075`, `55d63a9` | Initial blocking review, corrective re-review, button/CI audit, actual collector-failure test review. Dedicated review worktree; no phone access. |
+
+All executions above used the accepted explicit `gpt-6-luna` / `max` worker
+selection; there is no claim of backend attestation. The independent reviewer
+actually reran cellular 12, input readiness 6, button-event 16 and runner-policy
+7 tests under normal Python, `-O`, and `PYTHONOPTIMIZE=1` (earlier button review
+covered the then-current 13-test set).
+
+The new collector-level cases execute controlled `read`/`select`/clock paths
+over temporary host files with verified fake input-node identity. Read errors,
+partial records followed by EOF, and a raw-record budget reached by discarded
+private key input all produce incomplete results and close descriptors. They
+never become physical-origin acceptance. Other dropped/unterminated-frame cases
+remain analyzer-level tests. Default capture is inventory-only; explicit
+capture stores only Power/Volume Up/Volume Down and relevant SYN records.
+Inventory retains capability bitmaps, not private keystrokes. Its kernel sysfs
+reads are PAGE_SIZE-bounded attributes rather than arbitrary-file capped reads;
+the requested event timer starts after inventory and node opens.
+
+The old generic `--events` JSON is intentionally replaced by button-only
+evidence. No committed code consumer of the old JSON was found; this is not
+a claim of external API compatibility or generic touch capture coverage.
+The existing Hyprland Lua Power binding remains the only display action; do
+not install a second Power daemon. Volume actions still need a real audio
+backend. At 12:05 UTC, read-only sysfs `dev` and character-node stat identities
+also matched event0 `13:64` and event1 `13:65`, without opening either node.
+
+`8f74fd80fe4a6b88524350ab48c453ad771cf896` adds precisely the two new
+hardware-free button/cellular scripts to the explicit runner and independently
+pinned policy list. No discovery or live-device path was added. The initial
+full host invocation at that HEAD returned 40 normal and 38 optimized script
+passes, with one normal failure and three documented optimized exclusions.
+A fully instrumented rerun at `b615b32ca3953f86f986ecd6f8881ea838f5410e`
+identified the normal failure: the existing refcount actual-C test returned 77
+when a public pinned source download timed out. All other 40 normal scripts and
+all 38 optimized scripts passed. This full invocation is **not** reported green.
+That exact test subsequently passed both with the verified local derived
+source and on one bounded clean-environment public-source retry; the latter
+actually fetched source `4e5c5ad7d950e4de0688b5663965f2075654b2ad` and executed C.
+The unavailable-source failure was not suppressed or converted to PASS.
+
+### Five-patch NPU composition and next source repair
+
+`/root/npu_full_profile_impl_20261002` froze author commit
+`2a7b84b3190c65fb58181fccb82a09d6b40fc2d1`, integrated as `1008565`.
+Its new derived shutdown/lifecycle profile applies after the exact four-patch
+prefix with ordinary check/application, without editing historical patches.
+The frozen standalone ownership patch still fails independently at vertex
+`:313`; the derived profile explicitly reconciles that overlap. All six
+quarantine checks, lifecycle error propagation and close order are retained.
+Author normal/optimized/environment-optimized runs pass actual extracted
+combined C at C `-O0` and `-O2`; the coordinator independently reran normal
+mode. No kernel or module was built or deployed. The full-five profile SHA-256
+is `b986e1896305fda55f1d702ed6f12dde646e4a84b3ce91009203b9d77b7a00e7`.
+
+Independent frozen-code Luna review is committed at author
+`84947e3382f4512ddf36bd27228002a0d6146e06`, integrated `937add8`. The reviewer
+matched both frozen file hashes before and after three-mode reruns from the
+integration tree. No source-composition blocker was found; hardware/lifetime
+limits remain. A separate public-fixture portability follow-up is frozen at
+author `204973c6a310f92f2810db129a13a07a2e29d263`, integrated `b6042ec`:
+default public pinned-source loaders, exact local-root normalization,
+overlap/size/hash checks, explicit unavailable-input exit 77, and preflight
+against the actual final five-patch temporary tree. The author executed local
+and public paths; the source union contains 19 paths / 1214674 bytes.
+The profile patch did not change. Independent follow-up review is in progress.
+`5ca727fa3fce12d242749dbbeefb7f8b9f425a23` adds only that script to the three
+explicit CI lists; policy tests again pass in all three modes. Hosted coverage
+of this new profile is pending publication, not inherited from the older CI
+result. BOOTUP remains refused; absent local firmware was not fetched,
+manufactured or substituted.
+
+After the button worker completed, the next bounded implementation slot was
+used for `/root/npu_shutdown_error_impl_20261002`, explicitly selected Luna/Max
+in isolated `npu-shutdown-error-20261002` at `1008565`. It exclusively owns a
+new shutdown-error-propagation patch, extracted-C regression and research note.
+The source defect is masked early/protocol-close errors inside
+`npu_device_shutdown()`. The worker must reproduce the false success before
+any fix and preserve cleanup order, caller ownership and quarantine. This is
+source implementation, not permission for NPU firmware or a device trial;
+independent review is required before promotion.
+
+At 12:17 UTC the native phone remains reachable, has GNU kernel build ID
+`b2dda820b18d410d9bf12f1bd2584567d545991d`, PID 1 `native-guardian`,
+435402.90 seconds uptime, persistent mounts ready, idle healthy model API,
+desktop Pi, dedicated Pi session and browser terminal ready. Battery is Full
+at 100%, 27.9 C; observed maximum thermal-zone temperature is 40 C. The
+available 255756-byte kernel ring contains no classified fatal/hung-task
+indicator, but is not full-boot coverage or proof of powered-request liveness.
+No fresh full RECOVERY hash was taken in this source wave. No partition write,
+reboot, Pi task/inference, modem/SIM/call/SMS action, input injection, physical
+press, or audio/camera/HCI/NPU request occurred. Existing desktop/assistant,
+historical trials, original dirty checkout and master were preserved.
+
+At 12:24–12:25 UTC, the coordinator also executed the actual reviewed CPIF
+collector and input inventory in native Python memory through the pinned USB
+SSH route, without installing a phone file or opening event/modem device
+nodes. Source hashes were verified before execution. The corrected CPIF
+collector reports a valid `cp_interface` binding, seven listed expected
+modules without lookup errors, modem `INIT` and eight down rmnet interfaces;
+all SIM/data/IMS/voice acceptance remains unknown. The new input implementation
+parses the actual 64-bit bitmaps over 11 input nodes, selects exactly the two
+button candidates above, and verifies their node/sysfs device identities.
+This establishes real execution of passive tooling, not real-button delivery
+or a cellular connection. Sanitized follow-up timestamps/hashes are appended
+to the existing public baseline receipt without changing its earlier samples.
