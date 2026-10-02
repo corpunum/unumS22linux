@@ -109,3 +109,40 @@ full host suite and hosted CI result for that commit were not run here.
 
 **Evidence boundary:** these are source and host-only findings. No audio
 hardware acceptance is claimed.
+
+## Exception-cleanup follow-up retest
+
+Retested author fix `6ebc3f6a0688a2eece458e4bf7954b0638e5d04b` and integrated
+commit `04dc86fde5ecc252ba2ab03398918cc27e5a8c52`. The audio helper, its test
+file, and its research note are byte-for-byte identical between those two
+commits. Because the integrated commit is not a descendant of this review
+worktree's branch, I tested the frozen author files from a temporary archive;
+the review worktree stayed on its existing history.
+
+The original interrupt reproduction now passes: an injected `KeyboardInterrupt`
+from selector `select()` is re-raised as the same exception object, and the
+captured sleeping child is already reaped with return code `-9` when control
+returns to the caller. No manual cleanup was needed. The implementation also
+handles selector-registration and pipe-drain exceptions, uses bounded
+process-group/direct-child cleanup, and attaches cleanup failures to the
+original exception without replacing it. Four added regression cases cover
+those paths, including failed group signaling.
+
+As a negative-control check, I paired the four new tests from `6ebc3f6` with
+the pre-fix helper from `eb25aa24171cd8c4efa6ec31935e035bd79f5e06`. All four
+failed at the assertion that the direct child was already dead on return;
+each test then manually killed and reaped its controlled child so the
+negative-control run left no process behind.
+
+All 12 helper tests passed from the archived author commit in each mode:
+
+```text
+python3 -I -B tools/hardware/test-audio-control-readiness.py       12 passed
+python3 -O -I -B tools/hardware/test-audio-control-readiness.py     12 passed
+PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-audio-control-readiness.py  12 passed
+```
+
+**Follow-up disposition:** the blocking subprocess exception-cleanup finding
+above is cleared for the reviewed frozen helper and tests. The result remains
+host-only and does not establish phone access, route readiness, or audio
+hardware acceptance.
