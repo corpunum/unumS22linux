@@ -221,9 +221,10 @@ Only the coordinator accesses the phone; no worker may run device commands.
 
 | Actual worker | Separate worktree | Exclusive files and deliverable | State |
 | --- | --- | --- | --- |
-| `/root/npu_probe_unwind_20261002` | `npu-probe-unwind-20261002` | `npu-probe-unwind-fix.patch`, its exact-C test and research note: clock acquisition transaction and pre-registration failure cleanup | Implementing; commit and test receipts pending |
+| `/root/npu_probe_unwind_20261002` | `npu-probe-unwind-20261002` | `npu-probe-unwind-fix.patch`, its exact-C test and research note: clock acquisition transaction and pre-registration failure cleanup | Author `bd3204a`, integrated `de837b8`; 28 scenarios at C `-O0`/`-O2` pass in all three Python modes; independent source/host review cleared |
 | `/root/npu_shutdown_ownership_20261002` | `npu-shutdown-20261002` | `npu-shutdown-ownership-fix.patch`, its exact-C test and research note: shutdown error propagation and ownership-safe recovery/close | Implementing; commit and test receipts pending |
-| `/root/audio_ipc_instrument_20261002` | `audio-ipc-instrument-20261002` | `audio-ipc-observation-fix.patch`, its executable test and research note: opt-in, payload-free queue/send/pointer observations | Implementing; commit and test receipts pending |
+| `/root/audio_ipc_instrument_20261002` | `audio-ipc-instrument-20261002` | `audio-ipc-observation-fix.patch`, its executable test and research note: opt-in, payload-free queue/send/pointer observations | Author `58dd9c8`, integrated `d16a7fd`; nine production-path scenarios at C `-O0`/`-O2` pass in all three Python modes; independent source/host review cleared |
+| `/root/source_wave_independent_review_20261002` | `source-wave-review-20261002` | Separate review document; independently execute frozen source suites and audit ownership, trace semantics, combined patch stack and CI | Author `7c833a1`, `244b9a7`, integrated `2001d51`, `0d7ecb1`; probe/audio scope and corrected stack-detector coverage cleared, mandatory stack still blocked, shutdown excluded |
 
 The NPU workers own separate patch files and separate source-function changes;
 they do not edit the kernel checkout. Combined application and independent
@@ -231,3 +232,89 @@ review are required before integration. The next free slot is reserved for
 independent Luna review. No heavy kernel build or deployment is part of this
 wave; BOOTUP remains refused. Completed negative camera receipts and liveness
 uncertainty remain preserved, not replaced by fresh quiet-ring health checks.
+
+The fresh read-only coordinator baseline at 08:53 UTC verified the same boot,
+installed camera image, kernel and camera-module GNU IDs, with 423150.72 seconds
+uptime and 325 modules. Native remote control, idle model API, desktop, desktop
+Pi, browser terminal and exact dedicated Pi session were ready. Battery was
+Full at 100%, 28 C; maximum thermal reading was 42 C. No fatal indicator was
+seen in the available ring, which does not cover the full boot. No session was
+started and no device mutation or inference request was issued.
+
+Read-only accounting at 09:11 UTC confirmed the same destination split:
+34,844,672 available bytes on `/`, versus 101,570,527,232 bytes and 1,652,475
+available inodes on `/srv/s22` and the desktop/model mounts. The mount namespace
+matches native PID1. The PID-namespace comparison remains unavailable because
+`/proc/self/ns/pid` is absent; two preceding read-only queries failed at that
+comparison and are not represented as successful captures. No backing overlay
+data was altered. The 100,663,296-byte host HCI rollback independently rehashed
+to `42da267f…c49be5`. Both host **user-manager** control services are active;
+checking the system manager instead would incorrectly report them inactive.
+
+Coordinator independently reran the frozen probe suite normally, under `-O`
+and with `PYTHONOPTIMIZE=1`, against the clean hash-verified derived kernel
+fixtures. All three runs executed the poisoned-pointer baseline reproduction
+and 28 patched input scenarios at both C optimization levels, with no fixture
+skip. The shared `npu_clk_get()` keeps its required-property contract; only the
+explicit optional API permits the absent direct-clock lists described by the
+pinned hwdev DT/type contract. Present malformed/no-data properties and real
+provider errors remain fatal. The tests execute production C functions, but
+devres/driver-core behavior is shimmed, not a Linux runtime or hardware test.
+
+Coordinator also reran the frozen audio suite in all three Python modes: nine
+production-path scenarios at C `-O0`/`-O2` passed without fixture skips. It
+executes the actual trace-event payload assignments under host shims. Default
+disabled observations add no timestamps, sequence increments or allocations;
+existing retries, queue/send returns, stale slot handling and pointer selection
+remain tested separately from firmware behavior. The whole ABOX composite must
+be rebuilt for its changed internal queue metadata; no module was built or
+substituted. Local sender success is not a firmware acknowledgement, and the
+pointer event has no fabricated trigger correlation.
+
+After audio completed, the existing explicitly selected probe Luna worker was
+reused in a **new** `npu-stack-20261002` worktree for two exclusively owned
+integration-regression files. This follow-up keeps the prior probe commit and
+worktree intact. It checks the historical session-lifecycle patch plus the new
+ref/PM/probe/shutdown series together, including expected rejection of genuine
+conflicts. Individually passing snippets are not proof that the full series
+applies, compiles or operates safely. Any conflict remains a build/deployment
+blocker; no patch or failing hunk may be silently omitted to obtain a PASS.
+
+That follow-up is committed as author `873894f`, integrated `4c1131b`; the
+independent reviewer identified a missing-input coverage overstatement.
+Author `8c6e4df`, integrated `87bb76a`, now exercises the actual required-patch
+manifest reader with the other exact-hash patches present and the required
+refcount patch absent. The separate nonexistent-path `git apply` check is
+labelled as a CLI diagnostic, not a builder omission test. Coordinator ran all
+three Python modes again after the correction.
+
+The full stack is **not ready to build**: ordinary ordered application accepts
+the lifecycle patch then rejects the refcount patch at
+`drivers/vision/npu/core/npu-vertex.c:1224`. Reversing them fails at `:1188`.
+The lifecycle patch replaces the baseline caller error labels with tracked
+`lock_held`/`out_unlock` cleanup; the refcount hunk still expects those old
+labels. Both original changes are preserved. Later callback/probe hunks and
+shutdown remain untested in this mandatory full stack. No failing hunk was
+omitted, forced or silently recreated. The host preflight remains status 2,
+with BOOTUP unready and unauthorized; unavailable firmware is not synthesized.
+
+`2c28c37` adds only probe, audio-observation and stack-blocker suites to the
+explicit host CI allowlist and matching policy tuple. The complete corrected
+suite at exact tree `87bb76a1a23dc44e833aed8b79464f37ea351f69` exited zero for
+37 normal and 34 optimized scripts, with the same three documented optimization
+exclusions. Existing fixture-availability skips remain visible. All three new
+suites executed without fixture skips; stack-detector success is explicitly
+not a successful stack. Runner policy passes seven tests in each Python mode;
+the environment-driven optimization run was separately verified active without
+`-I`, which would ignore that environment variable. No device operation was
+introduced into CI.
+
+The independent Luna review receipt `7c833a1`, integrated `2001d51`, clears only
+the isolated probe and audio source/test scopes. It leaves the full stack
+blocked and shutdown unreviewed. The missing-input precision follow-up review
+`244b9a7`, integrated `0d7ecb1`, independently executes the corrected actual
+manifest-reader case and closes that coverage finding. It also checks the
+three-path explicit CI allowlist change. The mandatory source stack remains
+blocked. Shutdown implementation continues in its original isolated
+worktree; its unreviewed draft is excluded from the first publication and is
+not discarded or presented as finished.

@@ -14,7 +14,20 @@
     {
       "id": "/root/npu_probe_unwind_20261002",
       "assignment": "transactional_clock_acquisition_and_probe_failure_unwind",
-      "state": "implementing"
+      "state": "independently_reviewed_source_host_only",
+      "author_commit": "bd3204afb92ab43c53138d654b2850b362401781",
+      "integration_commit": "de837b823f6ba7a722056f3103e9d407976e0ea2",
+      "patch_sha256": "d3e2e590d4d3c956b10c724a15db996dacd07def204332f50a1c0513f56b4948",
+      "test_sha256": "961d33af29ba64f2f4e84222cbc73d293441d721c3048ff571973dcd4d62555f",
+      "patched_input_scenarios": 28,
+      "c_optimization_modes": ["-O0", "-O2"],
+      "python_modes_passed": ["normal", "-O", "PYTHONOPTIMIZE=1"],
+      "baseline_defect_reproduced": true,
+      "actual_pinned_c_executed": true,
+      "coordinator_independently_reran": true,
+      "standalone_and_combined_patch_application_verified": true,
+      "fixture_skips": 0,
+      "devres_driver_core_runtime_executed": false
     },
     {
       "id": "/root/npu_shutdown_ownership_20261002",
@@ -22,9 +35,29 @@
       "state": "implementing"
     },
     {
+      "id": "/root/source_wave_independent_review_20261002",
+      "assignment": "independent_frozen_source_tests_ownership_trace_and_ci_review",
+      "state": "probe_audio_and_corrected_stack_detector_review_complete_shutdown_excluded",
+      "initial_review_author_commit": "7c833a1",
+      "coverage_followup_review_author_commit": "244b9a71099dcf226749609bdd42951eb2078b1b",
+      "coverage_followup_review_integration_commit": "0d7ecb125391d1dec5af213ea78ab5e980a04eb2",
+      "kernel_build_or_hardware_acceptance": false
+    },
+    {
       "id": "/root/audio_ipc_instrument_20261002",
       "assignment": "payload_free_opt_in_audio_ipc_observation",
-      "state": "implementing"
+      "state": "independently_reviewed_source_host_only",
+      "author_commit": "58dd9c8370f4f20ac9e7c32c6410ef4a2ceecd21",
+      "integration_commit": "d16a7fd46f9265eb65ace1e849bed558c6dcd447",
+      "production_path_scenarios": 9,
+      "c_optimization_modes": ["-O0", "-O2"],
+      "python_modes_passed": ["normal", "-O", "PYTHONOPTIMIZE=1"],
+      "actual_production_c_and_trace_payload_assignments_executed": true,
+      "coordinator_independently_reran": true,
+      "fixture_skips": 0,
+      "firmware_acknowledgement_verified": false,
+      "whole_abox_composite_rebuild_required": true,
+      "kernel_tracepoint_runtime_tested": false
     }
   ],
   "read_only_baseline": {
@@ -51,6 +84,62 @@
     "serious_fault_in_available_ring": false,
     "full_boot_log_coverage": false
   },
+  "read_only_storage": {
+    "captured_at": "2026-10-02T09:11:06.134521+00:00",
+    "native_root_available_bytes": 34844672,
+    "native_root_available_inodes": 29780,
+    "persistent_available_bytes": 101570527232,
+    "persistent_available_inodes": 1652475,
+    "persistent_and_desktop_model_mounts_same_device": true,
+    "destinations_read_only": false,
+    "mount_namespace_matches_native_pid1": true,
+    "pid_namespace_comparison": "unavailable_proc_self_ns_pid_missing",
+    "memory_available_kib": 2712208,
+    "swap_total_kib": 0,
+    "prior_read_only_queries_failed_on_unavailable_pid_namespace_entry": 2,
+    "backing_overlay_data_changed": false
+  },
+  "rollback_and_host_control": {
+    "host_rollback_rehashed": true,
+    "rollback_sha256": "42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5",
+    "rollback_bytes": 100663296,
+    "host_user_auto_ack_service": "active",
+    "host_user_resident_assistant_loop_service": "active",
+    "services_changed": false,
+    "independent_hardware_rescue_demonstrated": false
+  },
+  "candidate_stack_regression": {
+    "author_commit": "873894f1ad9139429192a6b215be05b06b9b0828",
+    "coverage_correction_author_commit": "8c6e4dfd1d86e1d8778516fb100cd320a8bce76a",
+    "coverage_correction_integration_commit": "87bb76a1a23dc44e833aed8b79464f37ea351f69",
+    "mandatory_ordered_series": "blocked",
+    "first_patch_applied": "npu-session-lifecycle-fix.patch",
+    "rejected_patch": "npu-refcount-transaction-fix.patch",
+    "exact_failure": "drivers/vision/npu/core/npu-vertex.c:1224",
+    "reverse_order_failure_line": 1188,
+    "actual_required_manifest_reader_missing_input_tested": true,
+    "mutated_patch_and_source_rejected_by_actual_git_apply": true,
+    "python_modes_passed_as_blocker_detection": ["normal", "-O", "PYTHONOPTIMIZE=1"],
+    "coordinator_independently_reran": true,
+    "later_ordered_hunks_and_shutdown_integrated": false,
+    "missing_firmware_reported_unavailable_not_synthesized": true,
+    "bootup_ready": false,
+    "bootup_authorized": false,
+    "kernel_candidate_build_ready": false
+  },
+  "host_regressions": {
+    "tested_tree_commit": "87bb76a1a23dc44e833aed8b79464f37ea351f69",
+    "normal_scripts_exit_zero": 37,
+    "optimized_scripts_exit_zero": 34,
+    "optimized_scripts_explicitly_excluded": 3,
+    "runner_policy_tests_per_mode": 7,
+    "runner_policy_passed_all_three_python_modes": true,
+    "environment_optimization_verified_active": true,
+    "existing_fixture_availability_skips_present": true,
+    "new_probe_audio_stack_fixture_skips": 0,
+    "private_host_log_sha256": "ba7844a0785713c7e711827b1abdf6721fe8a12340144e50533043e2a4f184c4",
+    "hardware_acceptance": false
+  },
   "new_device_operations": {
     "partition_writes": 0,
     "reboot_requests": 0,
@@ -58,7 +147,8 @@
     "inference_requests": 0,
     "camera_device_opens": 0,
     "npu_bootup_requests": 0,
-    "audio_streams": 0
+    "audio_streams": 0,
+    "raw_hci_socket_tests": 0
   },
   "acceptance_limits": {
     "independent_hardware_rescue_demonstrated": false,
