@@ -413,6 +413,18 @@ static void baseline_tests(void)
         puts("BASELINE_FAIL negative_pm_put_published_powered_off");
     else
         expect(false, "baseline negative-PM-put reproducer changed");
+
+    fixture_init(&f, NPU_HWDEV_TYPE_PWRCTRL | NPU_HWDEV_TYPE_CLKCTRL);
+    f.hdev.clks.clocks[1] = NULL;
+    ret = npu_hwdev_default_boot(&f.hdev, true);
+    if (ret == 0 && f.hdev.status ==
+            ((NPU_HWDEV_STATUS_ACTIVE << 16) | NPU_HWDEV_STATUS_PWR_CLK_ON) &&
+        f.device.power.usage_count.counter == 1 && pm_idle_calls == 0 &&
+        f.clocks[0].enabled == 0 && f.clocks[0].prepared == 0 &&
+        f.clocks[0].disable_calls == 1 && f.clocks[0].unprepare_calls == 1)
+        puts("BASELINE_FAIL later_null_clock_returned_zero_after_clock_rollback");
+    else
+        expect(false, "baseline later-null-clock reproducer changed");
 }
 
 static void test_negative_pm_error_balances_usage_and_short_circuits_clock(void)
@@ -492,6 +504,60 @@ static void test_clock_failure_pm_cleanup_error_is_recorded_once(void)
     puts("PASS actual patched C: negative clock-failure PM cleanup is logged once without retry");
 }
 
+static void test_first_null_clock_fails_and_balances_pm(void)
+{
+    struct fixture f;
+    int ret;
+    fixture_init(&f, NPU_HWDEV_TYPE_PWRCTRL | NPU_HWDEV_TYPE_CLKCTRL);
+    f.hdev.clks.clocks[0] = NULL;
+    ret = npu_hwdev_default_boot(&f.hdev, true);
+    expect(ret == -EINVAL && f.hdev.status == NPU_HWDEV_STATUS_ERROR,
+        "first null clock entry did not produce deterministic ERROR");
+    expect(pm_resume_calls == 1 && pm_idle_calls == 1 &&
+        f.device.power.usage_count.counter == 0,
+        "first null clock entry did not balance exactly one PM acquisition");
+    expect(f.clocks[0].prepare_calls == 0 && f.clocks[1].prepare_calls == 0 &&
+        f.clocks[0].disable_calls == 0 && f.clocks[1].disable_calls == 0,
+        "clock callbacks ran despite the first entry being null");
+    puts("PASS actual patched C: first null clock is -EINVAL, no enable, one PM balance");
+}
+
+static void test_later_null_clock_rolls_back_and_balances_pm(void)
+{
+    struct fixture f;
+    int ret;
+    fixture_init(&f, NPU_HWDEV_TYPE_PWRCTRL | NPU_HWDEV_TYPE_CLKCTRL);
+    f.hdev.clks.clocks[1] = NULL;
+    ret = npu_hwdev_default_boot(&f.hdev, true);
+    expect(ret == -EINVAL && f.hdev.status == NPU_HWDEV_STATUS_ERROR,
+        "later null clock did not replace stale successful ret with -EINVAL");
+    expect(pm_resume_calls == 1 && pm_idle_calls == 1 &&
+        f.device.power.usage_count.counter == 0,
+        "later null clock did not balance exactly one PM acquisition");
+    expect(f.clocks[0].enabled == 0 && f.clocks[0].prepared == 0 &&
+        f.clocks[0].disable_calls == 1 && f.clocks[0].unprepare_calls == 1,
+        "later null clock did not roll back its earlier successful clock");
+    expect(f.clocks[1].prepare_calls == 0 && f.clocks[1].enable_calls == 0,
+        "null clock entry unexpectedly reached clock operations");
+    puts("PASS actual patched C: later null clock returns -EINVAL after rollback and PM balance");
+}
+
+static void test_empty_clock_list_remains_a_successful_noop(void)
+{
+    struct fixture f;
+    int ret;
+    fixture_init(&f, NPU_HWDEV_TYPE_PWRCTRL | NPU_HWDEV_TYPE_CLKCTRL);
+    f.hdev.clks.clk_count = 0;
+    ret = npu_hwdev_default_boot(&f.hdev, true);
+    expect(ret == 0 && f.hdev.status ==
+            ((NPU_HWDEV_STATUS_ACTIVE << 16) | NPU_HWDEV_STATUS_PWR_CLK_ON),
+        "empty clock list no longer preserves successful no-op behavior");
+    expect(f.device.power.usage_count.counter == 1 && pm_idle_calls == 0 &&
+        f.clocks[0].prepare_calls == 0 && f.clocks[1].prepare_calls == 0,
+        "empty clock list changed PM ownership or attempted clock operations");
+    puts("PASS actual patched C: empty clock list remains a successful no-op");
+}
+
 static void test_clock_only_failure_does_not_put_unowned_pm_ref(void)
 {
     struct fixture f;
@@ -565,6 +631,9 @@ int main(void)
     test_positive_pm_success_is_normalized();
     test_clock_failure_rolls_back_clocks_and_matching_pm_ref();
     test_clock_failure_pm_cleanup_error_is_recorded_once();
+    test_first_null_clock_fails_and_balances_pm();
+    test_later_null_clock_rolls_back_and_balances_pm();
+    test_empty_clock_list_remains_a_successful_noop();
     test_clock_only_failure_does_not_put_unowned_pm_ref();
     test_success_and_powerdown_pairing_remain();
     test_negative_pm_put_keeps_unknown_state_and_is_not_retried();
@@ -595,7 +664,7 @@ def compile_and_run(compiler: str, temp: Path, functions: str,
     )
     if baseline:
         check(executed.returncode == 1 and "BASELINE_FAIL" in executed.stdout,
-              "baseline did not reproduce the three pinned callback defects:\n" +
+              "baseline did not reproduce the pinned callback/helper defects:\n" +
               executed.stdout + executed.stderr)
     else:
         check(executed.returncode == 0,

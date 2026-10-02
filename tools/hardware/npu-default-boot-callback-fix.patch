@@ -60,3 +60,14 @@ diff --git a/drivers/vision/npu/core/npu-hw-device.c b/drivers/vision/npu/core/n
  	npu_log_hwdev_set_data(hdev->id);
  	npu_info("%s %s (%d)\n", __func__, on ? "on" : "off", ret);
  	return ret;
+diff --git a/drivers/vision/npu/core/npu-clock.c b/drivers/vision/npu/core/npu-clock.c
+--- a/drivers/vision/npu/core/npu-clock.c
++++ b/drivers/vision/npu/core/npu-clock.c
+@@ -95,6 +95,7 @@
+ 
+ 	for (i = 0; i < clocks->clk_count; i++) {
+ 		if (!clocks->clocks[i]) {
++			ret = -EINVAL;
+ 			npu_err("invalid clock in [%d]", i);
+ 			goto err;
+ 		}
