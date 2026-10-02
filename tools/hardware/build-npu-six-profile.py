@@ -293,8 +293,10 @@ def verify_patch_inputs(
 def patch_receipt_fields(profile: BuildProfile,
                          patch_info: list[dict[str, str]]) -> dict[str, object]:
     """Keep applied patches distinct from hash-only exclusions in receipts."""
-    if profile.name == "six":
-        return {"patches": patch_info}
+    expected = [{"name": name, "sha256": digest}
+                for name, digest in (*profile.patches, FROZEN_OWNERSHIP_PATCH)]
+    if patch_info != expected:
+        raise BuildError("receipt patch inventory differs from verified profile inputs")
     return {
         "patches": patch_info[:-1],
         "excluded_patch_inputs": [patch_info[-1]],

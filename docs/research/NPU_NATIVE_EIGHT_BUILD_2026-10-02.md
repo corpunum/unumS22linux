@@ -275,7 +275,7 @@ claimed.
 Independent review subsequently reproduced a second escape with actual Git:
 `GIT_DIR` and `GIT_WORK_TREE` made the helper validate the pinned repository
 while accepting a different supplied directory containing only a fake
-Makefile. A self-contained two-repository regression reproduced that
+Makefile. A self-contained trusted-repository/decoy-directory regression reproduced that
 false acceptance before the coordinator fix. Both source and temporary-index
 replay now reject inherited `GIT_*` overrides before querying Git, and verify
 that Git's worktree root equals the directory supplied to make. The sole
@@ -289,3 +289,12 @@ disabling. An initial draft rejected the harmless ambient pager and failed
 four tests; that draft failure is not counted as a pass. The actual build
 process has no routing override, so this correction also did not restart or
 change the ongoing frozen-helper invocation.
+
+The reviewer also caught an older receipt-label defect: the six profile
+listed all seven hash-checked inputs as `patches`, even though replay applies
+six and only checks the frozen standalone ownership patch. A pre-fix test
+reproduced `7 != 6`. Future receipts now distinguish six/eight actually applied
+patches from the one `excluded_patch_inputs` entry and reject wrong-order or
+missing inventory. The completed historical six-build receipt is preserved,
+not rewritten; its seventh item is a checked-but-unapplied input. Native-eight
+already used the correct split and its ongoing launch remains unchanged.
