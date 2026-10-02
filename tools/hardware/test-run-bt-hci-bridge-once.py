@@ -56,6 +56,11 @@ def synthetic_aarch64_elf():
 
 FIXTURE_ARTIFACT, FIXTURE_BUILD_ID = synthetic_aarch64_elf()
 FIXTURE_ARTIFACT_SHA256 = hashlib.sha256(FIXTURE_ARTIFACT).hexdigest()
+# Test-only pin for the source under fixture validation, never the production map.
+TEST_FIXTURE_BUILD_INPUT_SHA256 = {
+    "tools/hardware/bt-h4-ibs-bridge.c":
+        "32bfebfc96864b6f5150195518fc7da996f62b7b21311d79c9bfea2725f9b1a1",
+}
 
 
 @contextlib.contextmanager
@@ -65,6 +70,30 @@ def fixture_artifact_pins():
             EXPECTED_ARTIFACT_SHA256=FIXTURE_ARTIFACT_SHA256,
             EXPECTED_ARTIFACT_SIZE=len(FIXTURE_ARTIFACT),
             EXPECTED_ARTIFACT_BUILD_ID=FIXTURE_BUILD_ID):
+        yield
+
+
+def fixture_source_tree(root):
+    """Copy only reviewed source inputs into an isolated host-test tree."""
+    relative_paths = dict.fromkeys((*adapter.BUILD_INPUT_SHA256,
+                                   *adapter.REVIEWED_RUNNER_SHA256))
+    for relative in relative_paths:
+        source = ROOT / relative
+        destination = root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(source.read_bytes())
+
+
+@contextlib.contextmanager
+def fixture_source_manifest(root):
+    """Use test-only source pins for the copied tree; restore production pins."""
+    fixture_source_tree(root)
+    build_inputs = dict(adapter.BUILD_INPUT_SHA256)
+    build_inputs.update(TEST_FIXTURE_BUILD_INPUT_SHA256)
+    reviewed_runners = dict(adapter.REVIEWED_RUNNER_SHA256)
+    with mock.patch.multiple(adapter,
+                             BUILD_INPUT_SHA256=build_inputs,
+                             REVIEWED_RUNNER_SHA256=reviewed_runners):
         yield
 
 
@@ -482,30 +511,70 @@ static int run_probe(const char *a,const char *b,unsigned c,unsigned d,bool e)
             adapter.run_trial("other-trial", **self.dependencies())
         self.assertEqual(self.events, [])
 
-    def test_actual_provenance_gate_rejects_changed_build_input_and_binary(self):
-        with tempfile.TemporaryDirectory(prefix="bt-build-input-mismatch-") as temporary:
-            root = Path(temporary)
-            first_source = next(iter(adapter.BUILD_INPUT_SHA256))
-            source = root / first_source
-            source.parent.mkdir(parents=True)
-            source.write_bytes(b"not the reviewed source")
-            with self.assertRaisesRegex(adapter.GateError, "source fingerprint changed"):
-                adapter.validate_local_provenance(
-                    root=root, artifact_path=root / "missing-artifact", private_headers=())
+    def test_default_production_provenance_rejects_modified_bridge_before_remote(self):
+        production_build_inputs = adapter.BUILD_INPUT_SHA256
+        artifact = self.root / "must-not-be-read"
 
-        with tempfile.TemporaryDirectory(prefix="bt-artifact-mismatch-") as temporary:
+        def validate_production_sources():
+            return adapter.validate_local_provenance(
+                root=ROOT, artifact_path=artifact, private_headers=())
+
+        with self.assertRaises(adapter.GateError) as failure:
+            self.run_trial(local_validator=validate_production_sources,
+                           operation_lock_factory=lambda *args: contextlib.nullcontext())
+        self.assertEqual(
+            str(failure.exception),
+            "build source fingerprint changed: tools/hardware/bt-h4-ibs-bridge.c",
+        )
+        self.assertFalse(artifact.exists())
+        self.assertEqual(self.events, [])
+        self.assertIs(adapter.BUILD_INPUT_SHA256, production_build_inputs)
+
+    def test_actual_provenance_gate_rejects_fixture_source_tampering_and_artifact_binary(self):
+        production_build_inputs = adapter.BUILD_INPUT_SHA256
+        production_reviewed_runners = adapter.REVIEWED_RUNNER_SHA256
+        production_artifact_sha256 = adapter.EXPECTED_ARTIFACT_SHA256
+
+        with tempfile.TemporaryDirectory(prefix="bt-fixture-source-tamper-") as temporary:
+            root = Path(temporary)
+            artifact = root / "missing-artifact"
+            with fixture_source_manifest(root):
+                self.assertIsNot(adapter.BUILD_INPUT_SHA256, production_build_inputs)
+                self.assertIsNot(adapter.REVIEWED_RUNNER_SHA256,
+                                 production_reviewed_runners)
+                bridge = root / "tools/hardware/bt-h4-ibs-bridge.c"
+                bridge.write_bytes(bridge.read_bytes() + b"\n/* fixture tamper */\n")
+                with self.assertRaisesRegex(
+                        adapter.GateError,
+                        "source fingerprint changed: tools/hardware/bt-h4-ibs-bridge.c"):
+                    adapter.validate_local_provenance(
+                        root=root, artifact_path=artifact, private_headers=())
+            self.assertIs(adapter.BUILD_INPUT_SHA256, production_build_inputs)
+            self.assertIs(adapter.REVIEWED_RUNNER_SHA256,
+                          production_reviewed_runners)
+
+        with tempfile.TemporaryDirectory(prefix="bt-fixture-artifact-mismatch-") as temporary:
+            root = Path(temporary) / "sources"
             artifact = Path(temporary) / "probe"
             changed = bytearray(FIXTURE_ARTIFACT)
             changed[0] ^= 0xff
             artifact.write_bytes(changed)
             os.chmod(artifact, 0o700)
-            with fixture_artifact_pins():
-                with self.assertRaisesRegex(adapter.GateError, "artifact SHA-256 mismatch"):
-                    adapter.validate_local_provenance(
-                        root=ROOT, artifact_path=artifact, private_headers=())
+            with fixture_source_manifest(root):
+                with fixture_artifact_pins():
+                    with self.assertRaisesRegex(adapter.GateError,
+                                                "artifact SHA-256 mismatch"):
+                        adapter.validate_local_provenance(
+                            root=root, artifact_path=artifact, private_headers=())
+                self.assertEqual(adapter.EXPECTED_ARTIFACT_SHA256,
+                                 production_artifact_sha256)
+            self.assertIs(adapter.BUILD_INPUT_SHA256, production_build_inputs)
+            self.assertIs(adapter.REVIEWED_RUNNER_SHA256,
+                          production_reviewed_runners)
 
     def test_replaced_temp_artifact_after_preflight_never_reaches_remote_stage(self):
         with tempfile.TemporaryDirectory(prefix="bt-artifact-toctou-") as temporary:
+            provenance_root = Path(temporary) / "provenance-sources"
             workspace = Path(temporary) / "workspace"
             trusted_root = Path(temporary) / "trusted"
             hardware = workspace / "tools/hardware"
@@ -561,8 +630,9 @@ static int run_probe(const char *a,const char *b,unsigned c,unsigned d,bool e)
             fake_observer = SimpleNamespace(_trusted_deployer=lambda: RemoteCounter())
 
             def validate_then_use_later():
+                self.events.append("fixture_provenance")
                 return adapter.validate_local_provenance(
-                    artifact_path=artifact, private_headers=())
+                    root=provenance_root, artifact_path=artifact, private_headers=())
 
             def board_invoker(board, name):
                 self.assertEqual(name, adapter.TRIAL_ID)
@@ -589,14 +659,23 @@ static int run_probe(const char *a,const char *b,unsigned c,unsigned d,bool e)
                 local_validator=validate_then_use_later,
                 board_invoker=board_invoker,
             )
+            production_build_inputs = adapter.BUILD_INPUT_SHA256
+            production_reviewed_runners = adapter.REVIEWED_RUNNER_SHA256
             with fixture_artifact_pins():
-                with self.assertRaisesRegex(adapter.GateError,
-                                            "staged bridge artifact SHA-256 mismatch"):
-                    adapter.run_trial(adapter.TRIAL_ID, **dependencies)
+                with fixture_source_manifest(provenance_root):
+                    with self.assertRaisesRegex(
+                            adapter.GateError,
+                            "staged bridge artifact SHA-256 mismatch"):
+                        adapter.run_trial(adapter.TRIAL_ID, **dependencies)
+                self.assertIs(adapter.BUILD_INPUT_SHA256, production_build_inputs)
+                self.assertIs(adapter.REVIEWED_RUNNER_SHA256,
+                              production_reviewed_runners)
 
-            self.assertEqual(self.events, ["transport", "snapshot", "candidate_hash",
-                                           "controllers", "target_fs", "reserve",
-                                           "replacement", "board_main"])
+            self.assertEqual(
+                self.events,
+                ["fixture_provenance", "transport", "snapshot", "candidate_hash",
+                 "controllers", "target_fs", "reserve", "replacement", "board_main"],
+            )
             self.assertEqual(stage_calls, [])
             remote_commands = remote_log.read_text(encoding="utf-8").splitlines()
             self.assertEqual(len(remote_commands), 2)
