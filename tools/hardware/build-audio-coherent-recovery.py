@@ -15,9 +15,11 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
+from collections import Counter
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,9 +45,18 @@ TARGET_MODULES = {
         "base_bytes": 1909256,
         "base_sha256": "7d61a65a617e1e0c500b7aa437a21d0cdb9a583d2d1277b5c8a42e2392028975",
         "base_build_id": "34a5354a75980688ee7dbeb6a848e04a7d54558f",
-        "candidate_bytes": 9596112,
-        "candidate_sha256": "55bae9f12135a2134337d7d520ddfadc85cdd049cedefd2a3c41f871fdd329bf",
+        "source_bytes": 9596112,
+        "source_sha256": "55bae9f12135a2134337d7d520ddfadc85cdd049cedefd2a3c41f871fdd329bf",
+        "source_build_id": "26347c3373e155fa6badf7883ff162f1d9f6723f",
+        "candidate_bytes": 1735880,
+        "candidate_sha256": "61d846d2bb13d5ff48261f21efadcd8b378bdc586c28b3e288ddccf145488265",
         "candidate_build_id": "26347c3373e155fa6badf7883ff162f1d9f6723f",
+        "stripped_debug_sections": [
+            ".debug_abbrev", ".debug_frame", ".debug_info", ".debug_line",
+            ".debug_loc", ".debug_ranges", ".debug_str", ".rela.debug_frame",
+            ".rela.debug_info", ".rela.debug_line", ".rela.debug_loc",
+            ".rela.debug_ranges",
+        ],
         "source": S22_ROOT / "builds/audio-native-five-out-20261002/sound/soc/samsung/abox/snd-soc-samsung-abox.ko",
     },
     "lib/modules/rainbow_prince.ko": {
@@ -53,9 +64,18 @@ TARGET_MODULES = {
         "base_bytes": 70400,
         "base_sha256": "7cca3e04a7a414b755a9f8ca01abfb5d3d78d490b2ef2f405be480e2d9f506eb",
         "base_build_id": "510b984887b640ad4ad3c1e9a556ef16c30b38c9",
-        "candidate_bytes": 522472,
-        "candidate_sha256": "6461073beee9e1fdc4f7c92b250bbb773a18cbd766e0c9331e77ec01e5e45170",
+        "source_bytes": 522472,
+        "source_sha256": "6461073beee9e1fdc4f7c92b250bbb773a18cbd766e0c9331e77ec01e5e45170",
+        "source_build_id": "8a7227b58cb7f4faf73ea92974781d34870bbfac",
+        "candidate_bytes": 70792,
+        "candidate_sha256": "b896200b333be6d518b9eb4b218abefe8c115a3162e5fb3b1a7016a6b7175c7a",
         "candidate_build_id": "8a7227b58cb7f4faf73ea92974781d34870bbfac",
+        "stripped_debug_sections": [
+            ".debug_abbrev", ".debug_frame", ".debug_info", ".debug_line",
+            ".debug_loc", ".debug_ranges", ".debug_str", ".rela.debug_frame",
+            ".rela.debug_info", ".rela.debug_line", ".rela.debug_loc",
+            ".rela.debug_ranges",
+        ],
         "source": S22_ROOT / "builds/audio-native-five-consumers-out-20261002/sound/soc/samsung/rainbow_prince.ko",
     },
     "lib/modules/exynos-usb-audio-offloading.ko": {
@@ -63,9 +83,17 @@ TARGET_MODULES = {
         "base_bytes": 47288,
         "base_sha256": "ca62486424aa41961242812e93340b2a4b9d8e8265cfcc1f42b4ce85e2c48466",
         "base_build_id": "4f35c50b0eca0d22b2060f7b8d84f03359feacd1",
-        "candidate_bytes": 401656,
-        "candidate_sha256": "92116d85c21c9c3969e00746fb0299a5cb7725edfe9c344d5645417686416ec2",
+        "source_bytes": 401656,
+        "source_sha256": "92116d85c21c9c3969e00746fb0299a5cb7725edfe9c344d5645417686416ec2",
+        "source_build_id": "8c9b0d4787ea32eae7de0086a4d662b0f351675d",
+        "candidate_bytes": 42704,
+        "candidate_sha256": "3b732ada44c0a6812b6aaeb38d7de8757ad54e7f843c6761b97ff4e5d63e8392",
         "candidate_build_id": "8c9b0d4787ea32eae7de0086a4d662b0f351675d",
+        "stripped_debug_sections": [
+            ".debug_abbrev", ".debug_frame", ".debug_info", ".debug_line",
+            ".debug_loc", ".debug_ranges", ".debug_str", ".rela.debug_frame",
+            ".rela.debug_info", ".rela.debug_line",
+        ],
         "source": S22_ROOT / "builds/audio-native-five-consumers-out-20261002/sound/usb/exynos-usb-audio-offloading.ko",
     },
 }
@@ -131,6 +159,25 @@ KMOD_SHA256 = "5abf732e561c8be9ccd1794940b5d43025b041d4bed1db34782d979e0accc36f"
 READELF = Path("/usr/bin/readelf")
 READELF_REALPATH = Path("/usr/bin/x86_64-linux-gnu-readelf")
 READELF_SHA256 = "64c58e15274bbbb5153f31078e455e9e77ee5f51489e709bba5bb788ce9df2b0"
+OBJCOPY = Path("/usr/bin/llvm-objcopy-18")
+OBJCOPY_REALPATH = Path("/usr/lib/llvm-18/bin/llvm-objcopy")
+OBJCOPY_SHA256 = "f52b9997b3c5019b4b3043e12b1ae2e821df67996ca344921c234c89c4d23e34"
+
+ELF64_HEADER = struct.Struct("<16sHHIQQQIHHHHHH")
+ELF64_SECTION = struct.Struct("<IIQQQQIIQQ")
+ELF64_SYMBOL = struct.Struct("<IBBHQQ")
+ELF64_REL = struct.Struct("<QQ")
+ELF64_RELA = struct.Struct("<QQq")
+ELF_SHT_SYMTAB = 2
+ELF_SHT_STRTAB = 3
+ELF_SHT_RELA = 4
+ELF_SHT_NOBITS = 8
+ELF_SHT_REL = 9
+ELF_SHT_DYNSYM = 11
+ELF_SHF_ALLOC = 0x2
+ELF_SHN_XINDEX = 0xFFFF
+ELF_STT_FILE = 4
+ELF_STB_LOCAL = 0
 
 AVB_SALT = "708474da33de9afafcd1835e6f4cf6f9b6e9451ad37748e95d322678250b69b7"
 FINGERPRINT = "samsung/lineage_r0s/r0s:16/BP4A.251205.006/4a67c928b4:userdebug/release-keys"
@@ -516,6 +563,409 @@ def _module_build_id(readelf: Path, path: Path) -> str:
     return matches[0].lower()
 
 
+def _is_debug_section(name: str) -> bool:
+    return (name.startswith((".debug", ".zdebug", ".rela.debug", ".rela.zdebug"))
+            or name in {".stab", ".stabstr", ".gdb_index"})
+
+
+def _elf_string(data: bytes, offset: int, label: str) -> str:
+    if offset < 0 or offset >= len(data):
+        raise BuildError(f"malformed ELF string offset in {label}")
+    end = data.find(b"\0", offset)
+    if end < 0:
+        raise BuildError(f"unterminated ELF string in {label}")
+    try:
+        return data[offset:end].decode("ascii")
+    except UnicodeDecodeError as error:
+        raise BuildError(f"non-ASCII ELF identifier in {label}") from error
+
+
+def _parse_elf64(data: bytes, label: str) -> dict[str, object]:
+    if len(data) < ELF64_HEADER.size:
+        raise BuildError(f"truncated ELF header: {label}")
+    header = ELF64_HEADER.unpack_from(data)
+    ident = header[0]
+    if (ident[:4] != b"\x7fELF" or ident[4] != 2 or ident[5] != 1
+            or ident[6] != 1 or header[11] != ELF64_SECTION.size):
+        raise BuildError(f"unsupported or malformed ELF64 little-endian input: {label}")
+    shoff, shentsize, shnum, shstrndx = header[6], header[11], header[12], header[13]
+    if (shnum == 0 or shstrndx == 0xFFFF or shstrndx >= shnum
+            or shoff < ELF64_HEADER.size
+            or shoff + shentsize * shnum > len(data)):
+        raise BuildError(f"unsupported extended or out-of-bounds ELF section table: {label}")
+    raw_sections = [
+        ELF64_SECTION.unpack_from(data, shoff + index * shentsize)
+        for index in range(shnum)
+    ]
+    name_header = raw_sections[shstrndx]
+    if name_header[1] != ELF_SHT_STRTAB:
+        raise BuildError(f"ELF section-name table is not a string table: {label}")
+    name_offset, name_size = name_header[4], name_header[5]
+    if name_offset + name_size > len(data):
+        raise BuildError(f"ELF section-name table exceeds file bounds: {label}")
+    name_table = data[name_offset:name_offset + name_size]
+    sections = []
+    names_seen = set()
+    for index, raw in enumerate(raw_sections):
+        name = _elf_string(name_table, raw[0], label)
+        section_type, flags, address, offset, size = raw[1:6]
+        link, info, alignment, entry_size = raw[6:10]
+        if section_type != ELF_SHT_NOBITS and offset + size > len(data):
+            raise BuildError(f"ELF section exceeds file bounds: {label}:{name}")
+        if name and name in names_seen:
+            raise BuildError(f"duplicate ELF section name: {label}:{name}")
+        if name:
+            names_seen.add(name)
+        content = b"" if section_type == ELF_SHT_NOBITS else data[offset:offset + size]
+        sections.append({
+            "index": index, "name": name, "type": section_type, "flags": flags,
+            "address": address, "offset": offset, "size": size, "link": link,
+            "info": info, "alignment": alignment, "entry_size": entry_size,
+            "content": content,
+        })
+    return {"data": data, "header": header, "sections": sections}
+
+
+def _elf_section_reference(sections: list[dict[str, object]], index: int,
+                           label: str) -> str | None:
+    if index == 0:
+        return None
+    if index < 0 or index >= len(sections):
+        raise BuildError(f"ELF section reference is out of range: {label}")
+    return str(sections[index]["name"])
+
+
+def _elf_symbol_section(sections: list[dict[str, object]], index: int,
+                        label: str) -> str:
+    if index == 0:
+        return "UND"
+    if index == 0xFFF1:
+        return "ABS"
+    if index == 0xFFF2:
+        return "COMMON"
+    if index == ELF_SHN_XINDEX:
+        raise BuildError(f"extended ELF symbol section index is unsupported: {label}")
+    if index >= 0xFF00:
+        return f"SPECIAL:{index:#x}"
+    if index >= len(sections):
+        raise BuildError(f"ELF symbol section index is out of range: {label}")
+    return str(sections[index]["name"])
+
+
+def _parse_elf_symbols(parsed: dict[str, object], label: str) -> dict[int, list[tuple]]:
+    sections = parsed["sections"]
+    data = parsed["data"]
+    symbols_by_section = {}
+    for section in sections:
+        if section["type"] not in (ELF_SHT_SYMTAB, ELF_SHT_DYNSYM):
+            continue
+        if section["entry_size"] != ELF64_SYMBOL.size or section["size"] % ELF64_SYMBOL.size:
+            raise BuildError(f"malformed ELF symbol table: {label}:{section['name']}")
+        string_index = section["link"]
+        if string_index >= len(sections) or sections[string_index]["type"] != ELF_SHT_STRTAB:
+            raise BuildError(f"ELF symbol table has an invalid string-table link: {label}")
+        string_table = sections[string_index]["content"]
+        records = []
+        count = section["size"] // ELF64_SYMBOL.size
+        first_nonlocal = section["info"]
+        if first_nonlocal > count:
+            raise BuildError(f"ELF symbol-table local boundary is out of range: {label}")
+        for index in range(count):
+            offset = section["offset"] + index * ELF64_SYMBOL.size
+            name_offset, info, other, shndx, value, size = ELF64_SYMBOL.unpack_from(data, offset)
+            name = _elf_string(string_table, name_offset, label) if name_offset else ""
+            section_name = _elf_symbol_section(sections, shndx, label)
+            binding = info >> 4
+            if (index < first_nonlocal) != (binding == ELF_STB_LOCAL):
+                raise BuildError(f"ELF symbol-table local boundary is malformed: {label}")
+            records.append((name, info, other, section_name, value, size))
+        symbols_by_section[section["index"]] = records
+    return symbols_by_section
+
+
+def _canonical_runtime_symbols(parsed: dict[str, object], label: str) -> dict[str, list[tuple]]:
+    sections = parsed["sections"]
+    tables = _parse_elf_symbols(parsed, label)
+    result = {}
+    for index, records in tables.items():
+        table_name = str(sections[index]["name"])
+        retained = [
+            record for record in records
+            if ((record[1] & 0xF) != ELF_STT_FILE and not _is_debug_section(record[3]))
+        ]
+        result[table_name] = sorted(Counter(retained).items())
+    return result
+
+
+def _canonical_runtime_relocations(parsed: dict[str, object], label: str) -> dict[str, list[tuple]]:
+    sections = parsed["sections"]
+    data = parsed["data"]
+    symbol_tables = _parse_elf_symbols(parsed, label)
+    result = {}
+    for section in sections:
+        section_type = section["type"]
+        if section_type not in (ELF_SHT_REL, ELF_SHT_RELA):
+            continue
+        name = str(section["name"])
+        if _is_debug_section(name):
+            continue
+        table_index = section["link"]
+        if table_index not in symbol_tables:
+            raise BuildError(f"runtime relocation has no linked symbol table: {label}:{name}")
+        target = _elf_section_reference(sections, section["info"], f"{label}:{name}")
+        if target is None or _is_debug_section(target):
+            raise BuildError(f"unexpected non-debug relocation against a debug section: {label}:{name}")
+        entry_struct = ELF64_RELA if section_type == ELF_SHT_RELA else ELF64_REL
+        if section["entry_size"] != entry_struct.size or section["size"] % entry_struct.size:
+            raise BuildError(f"malformed runtime relocation section: {label}:{name}")
+        symbols = symbol_tables[table_index]
+        records = []
+        count = section["size"] // entry_struct.size
+        for entry_index in range(count):
+            offset = section["offset"] + entry_index * entry_struct.size
+            fields = entry_struct.unpack_from(data, offset)
+            relocation_offset, info = fields[:2]
+            symbol_index, relocation_type = info >> 32, info & 0xFFFFFFFF
+            if symbol_index >= len(symbols):
+                raise BuildError(f"runtime relocation symbol index is out of range: {label}:{name}")
+            canonical = (relocation_offset, relocation_type, symbols[symbol_index])
+            if section_type == ELF_SHT_RELA:
+                canonical += (fields[2],)
+            records.append(canonical)
+        result[name] = records
+    return result
+
+
+def _section_link_name(sections: list[dict[str, object]], section: dict[str, object],
+                       label: str) -> str | None:
+    link = section["link"]
+    if link == 0:
+        return None
+    return _elf_section_reference(sections, link, label)
+
+
+def _section_metadata(parsed: dict[str, object], section: dict[str, object],
+                      label: str) -> tuple:
+    sections = parsed["sections"]
+    section_type = section["type"]
+    name = str(section["name"])
+    if section_type in (ELF_SHT_REL, ELF_SHT_RELA):
+        info_value = _elf_section_reference(sections, section["info"], label)
+    elif section_type in (ELF_SHT_SYMTAB, ELF_SHT_DYNSYM):
+        # sh_info is the first non-local symbol index, which may shift when
+        # debug-only local symbols are stripped; symbol semantics are checked
+        # separately by canonical identity.
+        info_value = "symbol-table-local-boundary"
+    else:
+        info_value = section["info"]
+    return (
+        section_type, section["flags"], section["address"], section["alignment"],
+        section["entry_size"], _section_link_name(sections, section, f"{label}:{name}"),
+        info_value,
+    )
+
+
+def validate_debug_strip_transform(source: bytes, stripped: bytes,
+                                   expected_removed_sections: list[str], *,
+                                   require_aarch64_module: bool = False) -> dict[str, object]:
+    """Prove --strip-debug removed only pinned debug sections and preserved runtime ELF semantics."""
+    signature_trailer = b"~Module signature appended~\n"
+    if source.endswith(signature_trailer) or stripped.endswith(signature_trailer):
+        raise BuildError("signed module signature trailer is unsupported; refusing to invalidate it")
+    original = _parse_elf64(source, "unstripped module")
+    output = _parse_elf64(stripped, "stripped module")
+    old_header, new_header = original["header"], output["header"]
+    if require_aarch64_module and (old_header[1] != 1 or old_header[2] != 183):
+        raise BuildError("candidate module must be an AArch64 ELF relocatable object")
+    stable_header_fields = (0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11)
+    if any(old_header[index] != new_header[index] for index in stable_header_fields):
+        raise BuildError("ELF identity or load header changed during debug stripping")
+
+    old_sections, new_sections = original["sections"], output["sections"]
+    old_by_name = {str(section["name"]): section for section in old_sections if section["name"]}
+    new_by_name = {str(section["name"]): section for section in new_sections if section["name"]}
+    removed = sorted(set(old_by_name) - set(new_by_name))
+    added = sorted(set(new_by_name) - set(old_by_name))
+    expected_removed = sorted(expected_removed_sections)
+    if removed != expected_removed:
+        raise BuildError(f"debug strip removed an unexpected section set: {removed}")
+    if added:
+        raise BuildError(f"debug strip added unexpected section(s): {added}")
+    if not removed or any(not _is_debug_section(name) for name in removed):
+        raise BuildError("debug strip did not remove only the pinned debug sections")
+    old_order = [str(section["name"]) for section in old_sections if section["name"] and not _is_debug_section(str(section["name"]))]
+    new_order = [str(section["name"]) for section in new_sections if section["name"]]
+    if old_order != new_order:
+        raise BuildError("non-debug ELF section inventory or order changed")
+
+    old_symbol_tables = _canonical_runtime_symbols(original, "unstripped module")
+    new_symbol_tables = _canonical_runtime_symbols(output, "stripped module")
+    if old_symbol_tables != new_symbol_tables:
+        raise BuildError("runtime ELF symbol inventory changed during debug stripping")
+    old_relocations = _canonical_runtime_relocations(original, "unstripped module")
+    new_relocations = _canonical_runtime_relocations(output, "stripped module")
+    if old_relocations != new_relocations:
+        raise BuildError("runtime relocation semantics changed during debug stripping")
+
+    allowed_variable_sections = {".symtab", ".strtab", ".shstrtab"}
+    old_alloc_digest = hashlib.sha256()
+    alloc_count = 0
+    protected_names = []
+    for name in old_order:
+        before, after = old_by_name[name], new_by_name[name]
+        old_metadata = _section_metadata(original, before, f"unstripped:{name}")
+        new_metadata = _section_metadata(output, after, f"stripped:{name}")
+        if old_metadata != new_metadata:
+            raise BuildError(f"non-debug ELF section metadata changed: {name}")
+        if before["flags"] & ELF_SHF_ALLOC:
+            if before["size"] != after["size"] or before["content"] != after["content"]:
+                raise BuildError(f"SHF_ALLOC section contents changed: {name}")
+            alloc_count += 1
+            record = {
+                "name": name, "metadata": old_metadata,
+                "size": before["size"],
+                "content_sha256": hashlib.sha256(before["content"]).hexdigest(),
+            }
+            old_alloc_digest.update(json.dumps(record, sort_keys=True, separators=(",", ":")).encode())
+            old_alloc_digest.update(b"\n")
+        if name not in allowed_variable_sections and before["type"] not in (ELF_SHT_REL, ELF_SHT_RELA):
+            if before["size"] != after["size"] or before["content"] != after["content"]:
+                raise BuildError(f"non-debug ELF section contents changed: {name}")
+        if any(token in name.lower() for token in (
+                "kcfi", "shadow", "sks", "__versions", "__ksymtab", "__kcrctab", ".modinfo")):
+            if (before["type"] not in (ELF_SHT_REL, ELF_SHT_RELA)
+                    and (before["size"] != after["size"]
+                         or before["content"] != after["content"])):
+                raise BuildError(f"protected module metadata section changed: {name}")
+            protected_names.append(name)
+
+    old_crc_symbols = []
+    for records in _parse_elf_symbols(original, "unstripped module").values():
+        old_crc_symbols.extend(record for record in records if record[0].startswith("__crc_"))
+    old_crc_symbols.sort()
+    crc_digest = hashlib.sha256(json.dumps(old_crc_symbols, separators=(",", ":")).encode()).hexdigest()
+    old_relocation_entries = sum(len(entries) for entries in old_relocations.values())
+    relocation_digest = hashlib.sha256(json.dumps(old_relocations, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    symbol_digest = hashlib.sha256(json.dumps(old_symbol_tables, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    runtime_symbol_count = sum(
+        multiplicity
+        for records in old_symbol_tables.values()
+        for _record, multiplicity in records
+    )
+    return {
+        "removed_debug_sections": removed,
+        "added_sections": added,
+        "non_debug_section_count": len(old_order),
+        "allocated_section_count": alloc_count,
+        "allocated_section_inventory_sha256": old_alloc_digest.hexdigest(),
+        "runtime_relocation_section_count": len(old_relocations),
+        "runtime_relocation_entry_count": old_relocation_entries,
+        "runtime_relocation_semantics_sha256": relocation_digest,
+        "runtime_symbol_table_count": len(old_symbol_tables),
+        "runtime_symbol_count": runtime_symbol_count,
+        "runtime_symbol_inventory_sha256": symbol_digest,
+        "export_crc_symbol_count": len(old_crc_symbols),
+        "export_crc_symbols_sha256": crc_digest,
+        "protected_module_sections": sorted(protected_names),
+        "source_bytes": len(source),
+        "stripped_bytes": len(stripped),
+        "source_sha256": sha256_bytes(source),
+        "stripped_sha256": sha256_bytes(stripped),
+    }
+
+
+def _modinfo_metadata(modinfo: Path, module_path: Path) -> list[tuple[str, str]]:
+    output = _run([str(modinfo), "-0", str(module_path)], "modinfo metadata").stdout
+    fields = []
+    for record in output.split("\0"):
+        if not record:
+            continue
+        key, separator, value = record.partition("=")
+        if not separator:
+            key, separator, value = record.partition(":")
+        if not separator:
+            raise BuildError(f"malformed modinfo metadata record: {record[:80]!r}")
+        key = key.strip()
+        if key != "filename":
+            fields.append((key, value.lstrip()))
+    return fields
+
+
+def _modprobe_versions(modprobe: Path, module_path: Path) -> list[str]:
+    output = _run([str(modprobe), "--dump-modversions", str(module_path)], "modprobe module versions").stdout
+    return output.splitlines()
+
+
+def strip_debug_candidate(source_path: Path, output_path: Path,
+                          identity: dict[str, object],
+                          source_bytes: bytes | None = None) -> tuple[bytes, dict[str, object]]:
+    """Create and verify an isolated --strip-debug derivative of one pinned source module."""
+    if source_bytes is None:
+        source_bytes = _safe_read(
+            source_path, "unstripped candidate module source",
+            identity["source_sha256"], identity["source_bytes"],
+        )
+    elif (len(source_bytes) != identity["source_bytes"]
+          or sha256_bytes(source_bytes) != identity["source_sha256"]):
+        raise BuildError(f"in-memory unstripped candidate differs from its pin: {source_path.name}")
+    _verify_file(source_path, "unstripped candidate module source",
+                 identity["source_sha256"], identity["source_bytes"])
+    source_build_id = _module_build_id(READELF, source_path)
+    if source_build_id != identity["source_build_id"]:
+        raise BuildError(f"unstripped candidate build ID differs from its pin: {source_path.name}")
+    source_elf = _parse_elf64(source_bytes, "unstripped candidate module")
+    if source_elf["header"][1] != 1 or source_elf["header"][2] != 183:
+        raise BuildError(f"candidate module is not AArch64 ELF relocatable input: {source_path.name}")
+    _verify_tool_alias(OBJCOPY, OBJCOPY_REALPATH, OBJCOPY_SHA256, "pinned llvm-objcopy-18")
+    output_path = Path(output_path)
+    if output_path.exists() or output_path.is_symlink():
+        raise BuildError(f"refusing existing temporary stripped module: {output_path.name}")
+    try:
+        with output_path.open("xb") as stream:
+            stream.write(source_bytes)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except OSError as error:
+        raise BuildError(f"cannot create isolated stripped module: {error}") from error
+    _run([str(OBJCOPY), "--strip-debug", str(output_path)], "llvm-objcopy --strip-debug")
+    stripped_bytes = _safe_read(
+        output_path, "stripped candidate module",
+        identity["candidate_sha256"], identity["candidate_bytes"],
+    )
+    transform = validate_debug_strip_transform(
+        source_bytes, stripped_bytes, identity["stripped_debug_sections"],
+        require_aarch64_module=True,
+    )
+    source_fields = _modinfo_metadata(MODINFO, source_path)
+    stripped_fields = _modinfo_metadata(MODINFO, output_path)
+    if source_fields != stripped_fields:
+        raise BuildError(f"modinfo metadata changed during debug stripping: {source_path.name}")
+    source_versions = _modprobe_versions(MODPROBE, source_path)
+    stripped_versions = _modprobe_versions(MODPROBE, output_path)
+    if source_versions != stripped_versions:
+        raise BuildError(f"imported symbol CRCs changed during debug stripping: {source_path.name}")
+    stripped_build_id = _module_build_id(READELF, output_path)
+    if stripped_build_id != identity["candidate_build_id"] or stripped_build_id != source_build_id:
+        raise BuildError(f"stripped candidate GNU build ID changed: {source_path.name}")
+    _verify_file(
+        source_path, "unchanged unstripped candidate source",
+        identity["source_sha256"], identity["source_bytes"],
+    )
+    transform.update({
+        "source_build_id_sha1": source_build_id,
+        "stripped_build_id_sha1": stripped_build_id,
+        "modinfo_field_count": len(source_fields),
+        "modinfo_metadata_sha256": hashlib.sha256(
+            json.dumps(source_fields, separators=(",", ":")).encode()
+        ).hexdigest(),
+        "imported_crc_record_count": len(source_versions),
+        "imported_crc_records_sha256": hashlib.sha256(
+            ("\n".join(source_versions) + "\n").encode()
+        ).hexdigest() if source_versions else hashlib.sha256(b"").hexdigest(),
+    })
+    return stripped_bytes, transform
+
+
 def validate_internal_module_name(modinfo: Path, module_path: Path,
                                   expected_name: str, label: str) -> str:
     """Read the module's internal ELF name; an inspection label is not identity."""
@@ -806,6 +1256,9 @@ def _prepare_inputs(args, helpers: dict[str, object]) -> tuple[dict[str, bytes],
         "mkbootimg": mkbootimg_sources["mkbootimg"],
         "mkbootimg_gki_helper": mkbootimg_sources["mkbootimg_gki_helper"],
         "unpack_bootimg": _verify_file(args.unpack_bootimg, "pinned unpack_bootimg.py", UNPACK_BOOTIMG_SHA256),
+        "llvm_objcopy": _verify_tool_alias(
+            OBJCOPY, OBJCOPY_REALPATH, OBJCOPY_SHA256, "pinned llvm-objcopy-18",
+        ),
         "lz4": _verify_executable(args.lz4, LZ4_SHA256, "pinned lz4"),
         "modinfo": _verify_tool_alias(MODINFO, KMOD_REALPATH, KMOD_SHA256, "pinned modinfo/kmod"),
         "modprobe": _verify_tool_alias(MODPROBE, KMOD_REALPATH, KMOD_SHA256, "pinned modprobe/kmod"),
@@ -824,12 +1277,14 @@ def _prepare_inputs(args, helpers: dict[str, object]) -> tuple[dict[str, bytes],
     })
     for path, identity in TARGET_MODULES.items():
         source = Path(candidate_paths[path])
-        data = _safe_read(source, f"candidate {path}", identity["candidate_sha256"], identity["candidate_bytes"])
-        _verify_file(source, f"candidate {path}", identity["candidate_sha256"], identity["candidate_bytes"])
+        data = _safe_read(source, f"unstripped candidate source {path}",
+                          identity["source_sha256"], identity["source_bytes"])
+        _verify_file(source, f"unstripped candidate source {path}",
+                     identity["source_sha256"], identity["source_bytes"])
         input_bytes[path] = data
         summary_bytes[path] = {
-            "path": str(source), "bytes": identity["candidate_bytes"],
-            "sha256": identity["candidate_sha256"], "build_id_sha1": identity["candidate_build_id"],
+            "path": str(source), "bytes": identity["source_bytes"],
+            "sha256": identity["source_sha256"], "build_id_sha1": identity["source_build_id"],
         }
     summary_bytes["base_cpio"] = {"sha256": BASE_CPIO_SHA256, "record_count": BASE_CPIO_RECORDS}
     summary_bytes["updated_provider_map_sha256"] = UPDATED_SYMVERS_SHA256
@@ -851,8 +1306,8 @@ def build_candidate(args) -> dict[str, object]:
         path: identity["source"] for path, identity in TARGET_MODULES.items()
     })
     for path, identity in TARGET_MODULES.items():
-        if _module_build_id(READELF, candidate_paths[path]) != identity["candidate_build_id"]:
-            raise BuildError(f"candidate GNU build ID differs from the pin: {path}")
+        if _module_build_id(READELF, candidate_paths[path]) != identity["source_build_id"]:
+            raise BuildError(f"unstripped candidate GNU build ID differs from the source pin: {path}")
 
     canonical_symvers, provider_summary, exports = build_updated_provider_map(
         input_bytes["base_symvers"], input_bytes["abox_symvers"], input_bytes["offloader_symvers"],
@@ -869,6 +1324,19 @@ def build_candidate(args) -> dict[str, object]:
     python_path = Path(sys.executable).resolve(strict=True)
     with tempfile.TemporaryDirectory(prefix="audio-coherent-recovery-") as temporary:
         work = Path(temporary)
+        stripped_dir = work / "stripped-modules"
+        stripped_dir.mkdir()
+        stripped_paths = {}
+        replacement_bytes = {}
+        debug_strip_summaries = {}
+        for path, identity in TARGET_MODULES.items():
+            stripped_path = stripped_dir / PurePosixPath(path).name
+            stripped_bytes, strip_summary = strip_debug_candidate(
+                Path(candidate_paths[path]), stripped_path, identity, input_bytes[path],
+            )
+            stripped_paths[path] = stripped_path
+            replacement_bytes[path] = stripped_bytes
+            debug_strip_summaries[path] = strip_summary
         base_dir = work / "base"
         unpacker = _load_pinned_source(
             args.unpack_bootimg, "audio_coherent_unpack_bootimg", UNPACK_BOOTIMG_SHA256,
@@ -896,8 +1364,7 @@ def build_candidate(args) -> dict[str, object]:
             raise BuildError("decompressed base ramdisk differs from pinned 963-record CPIO")
         preserved_metadata = _verify_base_metadata_records(cpio_api, base_cpio)
 
-        replacement_bytes = {path: input_bytes[path] for path in TARGET_MODULES}
-        replacement_paths = {path: candidate_paths[path] for path in TARGET_MODULES}
+        replacement_paths = stripped_paths
         (work / "old-targets").mkdir()
         target_metadata = _validate_target_metadata(
             camera, cpio_api, base_cpio, replacement_paths, replacement_bytes,
@@ -990,7 +1457,14 @@ def build_candidate(args) -> dict[str, object]:
         }
         for relative, identity in TARGET_MODULES.items():
             output_files[PurePosixPath(relative).name] = (
-                candidate_paths[relative], identity["candidate_sha256"],
+                stripped_paths[relative], identity["candidate_sha256"],
+            )
+
+        for relative, identity in TARGET_MODULES.items():
+            _verify_file(
+                Path(candidate_paths[relative]),
+                f"unchanged unstripped candidate source {relative}",
+                identity["source_sha256"], identity["source_bytes"],
             )
 
         output = camera.validate_new_output_directory(args.out_dir)
@@ -1057,12 +1531,21 @@ def build_candidate(args) -> dict[str, object]:
             "preserved_module_metadata_record_sha256": preserved_metadata,
             "updated_provider_map": provider_summary,
             "static_abi": candidate_abi,
+            "debug_stripping": {
+                "operation": "pinned llvm-objcopy-18 --strip-debug",
+                "tool": input_summary["llvm_objcopy"],
+                "original_sources_preserved": True,
+                "per_module": debug_strip_summaries,
+            },
             "artifacts": {
                 "candidates": {
                     name: {
-                        "bytes": TARGET_MODULES[path]["candidate_bytes"],
-                        "sha256": TARGET_MODULES[path]["candidate_sha256"],
-                        "build_id_sha1": TARGET_MODULES[path]["candidate_build_id"],
+                        "source_bytes": TARGET_MODULES[path]["source_bytes"],
+                        "source_sha256": TARGET_MODULES[path]["source_sha256"],
+                        "source_build_id_sha1": TARGET_MODULES[path]["source_build_id"],
+                        "packaged_bytes": TARGET_MODULES[path]["candidate_bytes"],
+                        "packaged_sha256": TARGET_MODULES[path]["candidate_sha256"],
+                        "packaged_build_id_sha1": TARGET_MODULES[path]["candidate_build_id"],
                     }
                     for path, name in ((path, TARGET_MODULES[path]["name"]) for path in TARGET_MODULES)
                 },
@@ -1070,7 +1553,7 @@ def build_candidate(args) -> dict[str, object]:
             },
             "tools": {
                 **{key: value for key, value in input_summary.items()
-                   if key in {"avbtool", "mkbootimg", "mkbootimg_gki_helper", "unpack_bootimg", "lz4", "modinfo", "modprobe", "readelf", "python"}},
+                   if key in {"avbtool", "mkbootimg", "mkbootimg_gki_helper", "unpack_bootimg", "llvm_objcopy", "lz4", "modinfo", "modprobe", "readelf", "python"}},
                 "camera_builder_sha256": CAMERA_BUILDER_SHA256,
                 "cpio_parser_sha256": CPIO_PARSER_SHA256,
                 "boot_image_helper_sha256": IMAGE_HELPER_SHA256,

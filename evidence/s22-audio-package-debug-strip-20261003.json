@@ -1,0 +1,194 @@
+{
+  "schema": "s22-audio-package-debug-strip/v1",
+  "scope": "verify exact debug-only derivatives for three pinned audio modules; no recovery packaging",
+  "selection": {
+    "model": "gpt-6-luna",
+    "reasoning": "max",
+    "basis": "explicitly configured worker selection; not a backend-attestation claim"
+  },
+  "implementation": {
+    "worktree_base_commit": "1edf236f266433e42a3d2e56500dcbafa25c9d78",
+    "builder_sha256": "3b7e031974fb60930629d14dff2df62c01aea27c89383f3240cfb4921fa4e462",
+    "test_sha256": "21d00edce1ae0fa96e256b5d1cbbc4d78f9af8881047ab2a119d8b32de597616",
+    "package_builder_invoked": false,
+    "recovery_image_created": false,
+    "candidate_cpio_persisted": false,
+    "output_manifest_published": false
+  },
+  "source_artifacts": {
+    "kernel_source_commit": "7363ab97d917a20f2c96632c94efd9ab7df7729e",
+    "kernel_source_tree": "84325be79eab0244dd9a130e51d0974f6eadd4f5",
+    "modules_are_original_unstripped_build_outputs": true,
+    "kernel_source_tree_modified": false,
+    "original_module_source_artifacts_overwritten": false
+  },
+  "transform": {
+    "operation": "llvm-objcopy-18 --strip-debug",
+    "tool_invocation": "/usr/bin/llvm-objcopy-18",
+    "tool_resolved_path": "/usr/lib/llvm-18/bin/llvm-objcopy",
+    "tool_sha256": "f52b9997b3c5019b4b3043e12b1ae2e821df67996ca344921c234c89c4d23e34",
+    "tool_version_line": "llvm-objcopy, compatible with GNU objcopy",
+    "source_and_packaged_pins_are_distinct": true,
+    "source_modules_preserved_and_rehashed_after_transform": true,
+    "signed_module_signature_trailers": "refused"
+  },
+  "modules": [
+    {
+      "cpio_path": "lib/modules/snd-soc-samsung-abox.ko",
+      "module_name": "snd_soc_samsung_abox",
+      "source_bytes": 9596112,
+      "source_sha256": "55bae9f12135a2134337d7d520ddfadc85cdd049cedefd2a3c41f871fdd329bf",
+      "source_build_id_sha1": "26347c3373e155fa6badf7883ff162f1d9f6723f",
+      "packaged_bytes": 1735880,
+      "packaged_sha256": "61d846d2bb13d5ff48261f21efadcd8b378bdc586c28b3e288ddccf145488265",
+      "packaged_build_id_sha1": "26347c3373e155fa6badf7883ff162f1d9f6723f",
+      "removed_debug_sections": [
+        ".debug_abbrev", ".debug_frame", ".debug_info", ".debug_line", ".debug_loc", ".debug_ranges", ".debug_str",
+        ".rela.debug_frame", ".rela.debug_info", ".rela.debug_line", ".rela.debug_loc", ".rela.debug_ranges"
+      ],
+      "added_sections": [],
+      "non_debug_section_count": 59,
+      "allocated_section_count": 35,
+      "allocated_section_inventory_sha256": "86c3531fa6b35c5c5d909a3156d97a0116e37ac380c6dd940213435663ef13d9",
+      "runtime_symbol_table_count": 1,
+      "runtime_symbol_count": 5588,
+      "runtime_symbol_inventory_sha256": "fe8502b4b5ba14ca2bc8038d015ef7a679c90f10669310f35a0ce1e54c855e8d",
+      "runtime_relocation_section_count": 18,
+      "runtime_relocation_entry_count": 25567,
+      "runtime_relocation_semantics_sha256": "39fc21318b9f6076da6b63bf4d2d99cad42db5fa0f63069c8516315e29f4cc96",
+      "export_crc_symbol_count": 28,
+      "export_crc_symbols_sha256": "46b823ffd77af56b65e005e13a19f199a696f167cdbcfcec184cd52f9a0b58a6",
+      "modinfo_field_count_excluding_filename": 48,
+      "modinfo_metadata_sha256": "1e53a76d1b6eb99925dbcf35094589f30d807acda21becad891bdc31159245d8",
+      "imported_crc_record_count": 363,
+      "imported_crc_records_sha256": "ecbd75ecbda830e818787dfc36f81f99ebb4a2549f107c0e15f2b71583da1e5b",
+      "protected_module_sections": [".modinfo", ".rela__kcrctab", ".rela__ksymtab", "__kcrctab", "__ksymtab", "__ksymtab_strings", "__versions"]
+    },
+    {
+      "cpio_path": "lib/modules/rainbow_prince.ko",
+      "module_name": "rainbow_prince",
+      "source_bytes": 522472,
+      "source_sha256": "6461073beee9e1fdc4f7c92b250bbb773a18cbd766e0c9331e77ec01e5e45170",
+      "source_build_id_sha1": "8a7227b58cb7f4faf73ea92974781d34870bbfac",
+      "packaged_bytes": 70792,
+      "packaged_sha256": "b896200b333be6d518b9eb4b218abefe8c115a3162e5fb3b1a7016a6b7175c7a",
+      "packaged_build_id_sha1": "8a7227b58cb7f4faf73ea92974781d34870bbfac",
+      "removed_debug_sections": [
+        ".debug_abbrev", ".debug_frame", ".debug_info", ".debug_line", ".debug_loc", ".debug_ranges", ".debug_str",
+        ".rela.debug_frame", ".rela.debug_info", ".rela.debug_line", ".rela.debug_loc", ".rela.debug_ranges"
+      ],
+      "added_sections": [],
+      "non_debug_section_count": 32,
+      "allocated_section_count": 18,
+      "allocated_section_inventory_sha256": "ced4ea3b413c415b81f53ca36c066c22f849beba7e98123760b8f0385f0f2dd5",
+      "runtime_symbol_table_count": 1,
+      "runtime_symbol_count": 213,
+      "runtime_symbol_inventory_sha256": "594f83cbedd8db750754d6e8b011a466f82f0626e51fc2a4ad3fc77c83d7de55",
+      "runtime_relocation_section_count": 8,
+      "runtime_relocation_entry_count": 718,
+      "runtime_relocation_semantics_sha256": "8ae6e0d7da1a2421585817cc42d870cbfda80626130b249d064a6629cbdd8c97",
+      "export_crc_symbol_count": 0,
+      "export_crc_symbols_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "modinfo_field_count_excluding_filename": 9,
+      "modinfo_metadata_sha256": "d67e31e558e6e973023331b1162452d3bcfc5b73dc248d87aad0cb9eafd9a771",
+      "imported_crc_record_count": 54,
+      "imported_crc_records_sha256": "a8b6514bee6098279a0a077ce7e66470be3400a17e646fe0f2eb643d5e905d44",
+      "protected_module_sections": [".modinfo", "__versions"]
+    },
+    {
+      "cpio_path": "lib/modules/exynos-usb-audio-offloading.ko",
+      "module_name": "exynos_usb_audio_offloading",
+      "source_bytes": 401656,
+      "source_sha256": "92116d85c21c9c3969e00746fb0299a5cb7725edfe9c344d5645417686416ec2",
+      "source_build_id_sha1": "8c9b0d4787ea32eae7de0086a4d662b0f351675d",
+      "packaged_bytes": 42704,
+      "packaged_sha256": "3b732ada44c0a6812b6aaeb38d7de8757ad54e7f843c6761b97ff4e5d63e8392",
+      "packaged_build_id_sha1": "8c9b0d4787ea32eae7de0086a4d662b0f351675d",
+      "removed_debug_sections": [
+        ".debug_abbrev", ".debug_frame", ".debug_info", ".debug_line", ".debug_loc", ".debug_ranges", ".debug_str",
+        ".rela.debug_frame", ".rela.debug_info", ".rela.debug_line"
+      ],
+      "added_sections": [],
+      "non_debug_section_count": 28,
+      "allocated_section_count": 17,
+      "allocated_section_inventory_sha256": "4f0f8a55c023697a91ef4161e25a32c12091aa31ae027a47310d0a85af14a413",
+      "runtime_symbol_table_count": 1,
+      "runtime_symbol_count": 160,
+      "runtime_symbol_inventory_sha256": "edbe6c405ea653a8efa251e128c0b83615c150b9b9725951acb92f1491139145",
+      "runtime_relocation_section_count": 5,
+      "runtime_relocation_entry_count": 734,
+      "runtime_relocation_semantics_sha256": "6329911f80d2f0ddf6d4af7b6f768e0798495aeb40bc4c15583afd6f8aa1fa1e",
+      "export_crc_symbol_count": 5,
+      "export_crc_symbols_sha256": "db9fa9814842a620e137661161c065292df33b085cd88a6fe1df6708ea239c4f",
+      "modinfo_field_count_excluding_filename": 7,
+      "modinfo_metadata_sha256": "9d9a17533c2d6e5e6798b47fd04d9c0c3e3a85a811824ef132218dbea80fa167",
+      "imported_crc_record_count": 35,
+      "imported_crc_records_sha256": "631decaea384487ccc7d00d3ba6a6dc84a3ec26067338343e24c68d5495e86a7",
+      "protected_module_sections": [".modinfo", ".rela__kcrctab_gpl", ".rela__ksymtab_gpl", "__kcrctab_gpl", "__ksymtab_gpl", "__ksymtab_strings", "__versions"]
+    }
+  ],
+  "temporary_in_memory_static_check": {
+    "base_cpio_records": 963,
+    "changed_cpio_payload_paths": [
+      "lib/modules/exynos-usb-audio-offloading.ko",
+      "lib/modules/rainbow_prince.ko",
+      "lib/modules/snd-soc-samsung-abox.ko"
+    ],
+    "non_target_raw_records_preserved": true,
+    "ramdisk_modules_checked": 324,
+    "ramdisk_imports_checked": 16569,
+    "ramdisk_missing_imports": 0,
+    "ramdisk_crc_mismatches": 0,
+    "ramdisk_unknown_crcs": 0,
+    "ramdisk_ambiguous_crcs": 0,
+    "ramdisk_module_layout_crc": "0x0e3c515c",
+    "external_wlan_bytes": 15466952,
+    "external_wlan_sha256": "cbf8932d079e97006a5b7aae0e1b5acfe65b3e8b5113ab8fa095daa36796738d",
+    "external_wlan_imports_checked": 495,
+    "external_wlan_module_layout_crc": "0x0e3c515c",
+    "static_only_no_loader_execution": true
+  },
+  "tests": {
+    "test_script_sha256": "21d00edce1ae0fa96e256b5d1cbbc4d78f9af8881047ab2a119d8b32de597616",
+    "python": {
+      "version": "3.12.3",
+      "executable_sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f"
+    },
+    "runs": [
+      {"command": "python3 tools/hardware/test-build-audio-coherent-recovery.py", "optimization": 0, "tests": 19, "passed": 19, "failed": 0},
+      {"command": "python3 -O tools/hardware/test-build-audio-coherent-recovery.py", "optimization": 1, "tests": 19, "passed": 19, "failed": 0},
+      {"command": "PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-build-audio-coherent-recovery.py", "optimization": 1, "tests": 19, "passed": 19, "failed": 0}
+    ],
+    "private_module_fixtures": "present_and_hash_verified; no skips",
+    "synthetic_negatives": [
+      "allocated section byte mutation",
+      "runtime relocation addend mutation",
+      "symbol table sh_info local-boundary corruption",
+      "appended module-signature trailer"
+    ]
+  },
+  "prior_failed_package_attempt": {
+    "receipt_commit": "1edf236f266433e42a3d2e56500dcbafa25c9d78",
+    "attempt_retried": false,
+    "pre_footer_image_bytes": 101259264,
+    "avb_max_pre_footer_bytes": 100593664,
+    "partition_bytes": 100663296,
+    "this_change_proven_to_fit": false
+  },
+  "safety_boundaries": {
+    "phone_or_device_access": false,
+    "ssh_or_adb": false,
+    "module_load_or_install": false,
+    "firmware_or_weights_access": false,
+    "image_or_ramdisk_packaging": false,
+    "publish_or_deploy": false,
+    "boot_or_reboot_authorized": false,
+    "runtime_audio_accepted": false
+  },
+  "limitations": [
+    "The derivative bytes are host-only transformations; no actual recovery package or AVB footer was generated after the failed attempt.",
+    "A smaller uncompressed module size does not determine final LZ4-compressed ramdisk size; the AVB partition-size gate remains untested.",
+    "Static ABI checks do not prove kernel loading, current-phone module membership, runtime PM/IPC/DMA/PCM progress, or physical audio.",
+    "Independent source review and separate coordinator authorization are required before a new packaging invocation."
+  ]
+}
