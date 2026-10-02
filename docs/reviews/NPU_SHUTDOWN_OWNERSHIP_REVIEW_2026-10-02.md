@@ -124,3 +124,73 @@ identified above.
 No device access, SSH/ADB, firmware action, service or inference run, kernel
 build, module load, or push was performed. Nothing in this review is NPU
 BOOTUP, hardware, runtime, or deployment acceptance.
+
+## Follow-up review — `f2d9a09da6aed6fc39013b637fc65ed4ca850d22`
+
+**The post-lock quarantine bypass identified at `3c6eaff` is cleared in the
+two tested application profiles: standalone on the pinned source, and atop
+the refcount-transaction + PM-callback patches.** I found no new source-logic
+blocker in the four boot-control lock-entry checks and two wait-loop
+reacquisition checks reviewed here. The exact five-patch integration profile
+has a separate application blocker noted below. This is not deployment
+clearance and does not permit NPU BOOTUP.
+
+The frozen follow-up commit was archived to
+`/tmp/s22-npu-shutdown-followup-review-20261002.WjvGrj`. The ownership patch
+SHA-256 is
+`a8af77122b4049fd38e21adfd01a8577d3e8f9bef1f68d0cfa091a5884a4d9f3`; the
+updated harness SHA-256 is
+`e556600c1cf087b82d3bd9a067161d752a82a734bce57ec8304e535dacdba570`. Against
+the pinned LineageOS source and the clean derived source fixture recorded
+above, the combined source places `check_emergency_vctx()` after lock
+acquisition in secure bootup (`npu-vertex.c:1056`), secure bootdown (`1172`),
+normal bootup (`1228`), and normal bootdown (`1336`). Secure bootup's wait-loop
+reacquisition checks at `1069`, and normal bootup's checks at `1241`; each
+error path unlocks before returning.
+
+The revised harness extracts the actual `npu_hwdev_normal_bootup()` body as
+well as the other three functions. Its lock hook deterministically latches
+shutdown uncertainty immediately after the selected lock acquisition. For
+the two wait-loop cases, that hook also simulates the relevant opposing count
+reaching zero, so execution reaches the reacquisition check. On the unpatched
+pinned bodies, all six exact bypasses reproduce: four post-entry-lock paths
+and both wait reacquisitions. With the follow-up patch, each path refuses
+further work, releases every acquired shim lock, and records no modeled
+hardware, reference, session, power, allocation/free, or device/session-state
+change beyond the explicit uncertainty/count changes made by the test hook.
+Normal and secure ownership/count state, secure-buffer ownership, and the
+normal boot ref are checked on the applicable cases.
+
+The local-source harness passed under `python3`, `python3 -O`, and
+`PYTHONOPTIMIZE=1 python3`; each run compiled baseline and patched extracted C
+at host C `-O0` and `-O2`. The public pinned-source fixture also passed and
+reported 147,641 bounded bytes. The harness applies the ownership patch alone
+and the refcount-transaction + PM-callback + ownership stack with
+`git apply --check` followed by plain `git apply`; I independently repeated
+those applications against an isolated archive of the clean derived source.
+These are deterministic extracted-C host-shim/control-flow results. The
+injection is not actual concurrent scheduling and says nothing about Linux
+memory ordering, lockdep, or kernel runtime behavior.
+
+A separate coordinator cross-check of the exact five-patch profile reports
+that the frozen ownership patch fails `git apply --check` at
+`drivers/vision/npu/core/npu-vertex.c:313`, after the preceding four patches.
+The coordinator reports byte-equality checks on the merged loader sources and
+the ownership patch against the frozen Git object. I did not independently
+rerun that five-patch profile; this is an integration-context blocker, not a
+new regression in the six corrected paths above. No fuzzing, forced
+application, or hunk omission was used. Accordingly, the source-candidate/WIP
+clearance here is limited to the standalone and refcount-transaction +
+PM-callback profiles; the five-patch stack remains blocked and unreconciled.
+
+All prior limitations remain in force and exclude deployment: the historical
+session-lifecycle patch and full integration stack remain unreconciled;
+retained object lifetime across VFS `.release`, session-manager teardown, and
+device/module removal is unproven; normal bootdown can leave the ref/count
+mismatch after a hardware-shutdown error; failures inside
+`npu_session_close()` are not covered; and `npu_device_shutdown()` still masks
+the early-close/protocol-close callback errors described above. No full Linux,
+lockdep, firmware, or hardware validation was done. Therefore this follow-up
+supports only a bounded source-candidate/WIP publication claim—not a working
+NPU, safe deployment, runtime acceptance, or permission to attempt NPU
+BOOTUP.
