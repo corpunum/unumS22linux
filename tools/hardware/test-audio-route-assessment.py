@@ -556,9 +556,20 @@ class Assessment(unittest.TestCase):
             original=trace.with_name('retained-original-trace')
             trace.rename(original)
             trace.write_bytes(b'replacement')
+            trace.chmod(0o600)
             self.assertNotEqual(original.stat().st_ino,trace.stat().st_ino)
             replaced=isolated_python(route.REMOTE_TRACE_READ,*read_args)
             self.assertNotEqual(replaced.returncode,0)
+            self.assertIn('trace_reservation_identity_changed',replaced.stderr)
+            # Isolate the inode predicate: identical replacement metadata must
+            # pass when only that check is removed from the actual template.
+            inode_check=' and trace.st_ino==expected_ino'
+            self.assertEqual(route.REMOTE_TRACE_READ.count(inode_check),1)
+            mutation=route.REMOTE_TRACE_READ.replace(inode_check,'')
+            unpinned=isolated_python(mutation,*read_args)
+            self.assertEqual(unpinned.returncode,0,unpinned.stderr)
+            self.assertEqual(base64.b64decode(json.loads(unpinned.stdout)['data_base64']),
+                             b'replacement')
 
     def test_fake_filesystem_trace_stage_rejects_symlink_ancestry(self):
         with tempfile.TemporaryDirectory() as temp:
