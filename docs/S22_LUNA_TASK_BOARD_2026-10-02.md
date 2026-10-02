@@ -457,3 +457,69 @@ lifecycle caller/close paths, then repair and execute callback-error/lifetime
 tests before proposing a full kernel build. Audio instrumentation remains
 disabled by default and hardware acceptance remains separate. No additional
 device authorization is inferred from this source-only wave.
+
+## Portable-assistant and physical-buttons continuation
+
+The owner explicitly reaffirmed the target: native Linux on r0s, with working
+physical controls and hardware for a future owner-supplied agent framework.
+The device should provide its own SIM internet and phone number, usable
+Bluetooth/Wi-Fi, and two-way audio for speaking and calling. This does not
+mean enumeration, a web terminal, or hosted model access satisfies telephony.
+It does not authorize restoring Android, writing unrelated partitions,
+replaying consumed trials, placing calls to arbitrary recipients, or removing
+remaining kernel-safety gates. The existing goal tracker has the same hardware
+mission but reports `usageLimited`; creating a replacement goal was rejected.
+This is an explicitly requested manual continuation, not a claim that the
+tracker was reset or an automatic wake mechanism was installed.
+
+Starting review HEAD is `2524ff036a6190bb4a22dc94606a2da5a739ebe4`. Fetch found
+no divergence. Original dirty work and master refs remain separate and intact.
+Three new workers were actually launched through native `spawn_agent`, each
+with accepted explicit `model=gpt-6-luna`, `reasoning_effort=max`,
+`fork_turns=none`. Selection is configuration evidence, not backend attestation.
+
+| Actual worker | Separate worktree | Exclusive implementation scope | Status |
+| --- | --- | --- | --- |
+| `/root/physical_buttons_impl_20261002` | `buttons-assistant-20261002` | Existing input inventory/test; new bounded button-event evidence/test and research note | Implementing; receives coordinator-only live evidence |
+| `/root/npu_full_profile_impl_20261002` | `npu-full-profile-20261002` | New shutdown/lifecycle profile, final-combined-C test and note; historical patches untouched | Reconciling the exact vertex `:313` blocker |
+| `/root/cellular_readiness_impl_20261002` | `cellular-assistant-20261002` | New bounded passive CPIF readiness collector/classifier, fake-filesystem tests and note | Implementing; no modem/device access |
+
+Only the coordinator accesses the phone. Independent Luna review follows the
+frozen implementations in the next available slot; heavy builds and all
+hardware operations remain serialized. None of these workers may boot the
+modem, load NPU firmware, inject input, flash/reboot, open audio/camera streams,
+place calls/SMS, alter the desktop or start another agent session.
+
+Fresh bounded native reads at 11:32–11:36 UTC establish:
+
+- The 64-bit Linux input capability bitmap maps `gpio_keys` event0 to
+  `KEY_VOLUMEUP` (115), and `sec-pmic-key` event1 to `KEY_VOLUMEDOWN` (114)
+  plus `KEY_POWER` (116). Both are existing character nodes with wake enabled.
+- Actual Hyprland 0.56.2 enumerates both physical devices. Its live bindings
+  contain the existing locked `XF86PowerOff` display-DPMS Lua action, not a
+  shutdown/reboot/suspend action. DSI-1 is enabled. No volume bindings were
+  observed; no key was pressed or injected.
+- `pactl` exists in checked Arch tool paths, but `wpctl`/`amixer` and expected
+  Omarchy volume helpers do not. No PipeWire, WirePlumber or PulseAudio daemon
+  was observed in native procfs. Binding buttons to nonexistent tools would
+  not establish working volume or speakers.
+- The exact pinned CPIF `modem_state_show()` only formats the in-memory state.
+  A bounded read reports `INIT`; `cp_interface` is bound, `rmnet0..7` are down
+  and `wlan0` is up. This is not SIM detection, registration, mobile internet,
+  IMS/VoLTE or voice evidence. No radio activation or identity query occurred.
+
+Button-driver capability and compositor registration are now live-observed;
+physical press/release delivery, display wake by a real short press and actual
+volume/speech remain unaccepted. The next owner-assisted input session should
+correlate short Power, Volume Up and Volume Down events with compositor/audio
+state, without long holds or kernel long-press changes. A working audio backend
+must precede volume/speech acceptance, and a booted modem plus supported radio
+userspace must precede SIM/data/calls. These independent tasks do not wait for
+NPU inference, but no host test alone grants a powered hardware trial.
+
+At 11:49 UTC, a separate bounded HTTPS HEAD request explicitly bound to
+`wlan0` completed on the native phone: curl exit 0, HTTP 200, TLS verification
+result 0. This verifies current IPv4 DNS/TLS/HTTPS through Wi-Fi rather than
+merely interface enumeration. It is an active network observation, not a
+passive sysfs read and not cellular data evidence. No modem, partition,
+service, display, audio, or input control was changed.
