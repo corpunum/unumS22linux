@@ -129,7 +129,7 @@ def fetch_pinned_source(
                 declared_size = int(content_length)
                 require(
                     declared_size <= max_bytes,
-                    f"pinned source too large: {relative} ({declared_size} bytes)",
+                    f"pinned source Content-Length exceeds cap: {relative} ({declared_size} bytes)",
                 )
             else:
                 declared_size = None
@@ -145,7 +145,7 @@ def fetch_pinned_source(
     except (urllib.error.URLError, TimeoutError, OSError) as error:
         raise SourceFixtureUnavailable(f"pinned source fetch unavailable: {error}") from error
 
-    require(len(data) <= max_bytes, f"pinned source too large: {relative}")
+    require(len(data) <= max_bytes, f"pinned source response body exceeds cap: {relative}")
     if declared_size is not None:
         require(
             len(data) == declared_size,
@@ -171,7 +171,8 @@ class _FakeResponse:
     def __init__(self, url: str, body: bytes, headers: dict[str, str] | None = None):
         self._url = url
         self._body = body
-        self.headers = headers or {"Content-Length": str(len(body))}
+        self.headers = {"Content-Length": str(len(body))} if headers is None else headers
+        self.read_sizes: list[int] = []
 
     def __enter__(self):
         return self
@@ -183,6 +184,7 @@ class _FakeResponse:
         return self._url
 
     def read(self, size: int = -1) -> bytes:
+        self.read_sizes.append(size)
         return self._body if size < 0 else self._body[:size]
 
 
@@ -208,33 +210,50 @@ def run_loader_regressions() -> int:
     )
     require(fetched == payload and calls == 1, "exact fetched fixture was not preserved")
 
-    def must_reject(label: str, response, expected_hash: str = digest,
-                    max_bytes: int = MAX_SOURCE_BYTES) -> None:
+    def must_reject(label: str, response, expected_diagnostic: str,
+                    expected_hash: str = digest,
+                    max_bytes: int = MAX_SOURCE_BYTES):
         try:
             fetch_pinned_source(
                 relative, expected_hash,
                 opener=response_opener(response), max_bytes=max_bytes,
             )
-        except RuntimeError:
-            return
+        except RuntimeError as error:
+            require(
+                expected_diagnostic in str(error),
+                f"{label} rejected through wrong branch: {error}",
+            )
+            return response
         raise RuntimeError(f"offline loader regression accepted {label}")
 
-    must_reject("tampered hash", _FakeResponse(url, payload + b"tampered"))
     must_reject(
+        "tampered hash", _FakeResponse(url, payload + b"tampered"),
+        "pinned-source hash mismatch",
+    )
+    header_oversize = must_reject(
         "oversized Content-Length",
         _FakeResponse(url, payload, {"Content-Length": str(MAX_SOURCE_BYTES + 1)}),
+        "Content-Length exceeds cap",
     )
-    must_reject(
+    require(not header_oversize.read_sizes, "header cap rejection read the response body")
+    body_oversize = must_reject(
         "oversized body without length",
         _FakeResponse(url, b"x" * (MAX_SOURCE_BYTES + 1), {}),
+        "response body exceeds cap",
     )
+    require("Content-Length" not in body_oversize.headers,
+            "body cap regression unexpectedly supplied Content-Length")
+    require(body_oversize.read_sizes == [MAX_SOURCE_BYTES + 1],
+            "body cap regression did not exercise the bounded max_bytes+1 read")
     must_reject(
         "malformed Content-Length",
         _FakeResponse(url, payload, {"Content-Length": "unknown"}),
+        "malformed Content-Length",
     )
     must_reject(
         "unexpected redirect",
         _FakeResponse(url + "/redirected", payload),
+        "redirected unexpectedly",
     )
 
     try:
@@ -266,7 +285,7 @@ def run_loader_regressions() -> int:
             raise RuntimeError("offline loader regression accepted a missing explicit source tree")
     require(fetch_calls == 0, "missing explicit tree silently fell back to public fetch")
 
-    print("PASS: 8 offline source-loader regressions (exact, tamper, cap, malformed length, redirect, unavailable, explicit missing/no fallback)")
+    print("PASS: 8 offline source-loader regressions (exact, tamper, Content-Length cap, body cap without length, malformed length, redirect, unavailable, explicit missing/no fallback)")
     return 8
 
 

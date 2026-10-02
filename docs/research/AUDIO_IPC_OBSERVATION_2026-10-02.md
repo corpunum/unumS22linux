@@ -78,7 +78,10 @@ correlation counter, or allocate; host compilation is performed at `-O0` and
 fixture acceptance, tampered hashes, both declared and actual size caps,
 malformed lengths, unexpected redirects, network-unavailable classification,
 and rejection of a missing configured tree without fallback. These checks use
-controlled local response shims, not SSH or successful network mocks.
+controlled local response shims, not SSH or successful network mocks. The
+body-cap case explicitly has no `Content-Length`, verifies the bounded
+`read(max_bytes + 1)` call, and expects the response-body cap rejection; the
+declared-size case separately expects rejection before reading the body.
 
 Run from this worktree without a source-tree argument to exercise the portable
 public pinned-fixture path:
