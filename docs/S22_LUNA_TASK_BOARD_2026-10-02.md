@@ -318,3 +318,58 @@ three-path explicit CI allowlist change. The mandatory source stack remains
 blocked. Shutdown implementation continues in its original isolated
 worktree; its unreviewed draft is excluded from the first publication and is
 not discarded or presented as finished.
+
+## Hosted portability follow-up
+
+Publication `a5baa605f56d7287c39ccfd5c00336f5311367ac` did **not** pass
+[hosted CI run 36992416493](https://github.com/corpunum/unumS22linux/actions/runs/36992416493).
+The two failures are the normal and optimized audio-observation test: its
+default source-tree path exists only on the rig. This is distinct from the
+successful local full suite and the deliberately detected NPU integration
+blocker. A green local result was not substituted for hosted acceptance.
+
+The explicitly selected Luna/Max probe worker is reused in another isolated
+worktree, `audio-ci-portability-20261002`, owning only the audio test and its
+research note. The deliverable is a bounded, exact-hash public-fixture default,
+retaining strict checks for an explicitly configured local tree and executable
+loader negative tests. Author `c89e208` fixes the rig-only path, and `8e673c5`
+corrects a subsequently reproduced negative-test gap: explicitly empty fake
+headers had been replaced by a Content-Length header. The corrected body-cap
+case proves the header is absent, the bounded read occurs, and the body-cap
+diagnostic is reached; the header-cap case separately proves no read occurs.
+Integrated commits are `92c561a` and `1a2eb02`.
+
+Independent Luna review `f8ccf00`, integrated `449cbdb`, clears the corrected
+portable test. Both public-default and explicit derived-source paths execute
+eight loader checks and nine actual-C cases at `-O0`/`-O2`, in all three Python
+modes, without fixture skips. Invalid configured paths, wrong HEAD and modified
+worktree fixtures fail rather than falling back. The coordinator independently
+ran the complete suite at exact author tree `8e673c5`: 37 normal and 34 optimized
+scripts exit zero, with three explicit optimization exclusions. The separate
+environment-driven optimized audio run also executes public fixtures and C.
+The five-second urllib timeout is per blocking operation, not a total fetch
+deadline; the host runner independently limits each script to 180 seconds.
+Environmental fixture unavailability exits 77, which the runner treats as
+nonzero, not successful execution. Existing unrelated fixture skips remain
+distinct. No phone operation, kernel build, module replacement or hardware
+acceptance is part of this corrective follow-up.
+
+## Continuing isolated NPU source work
+
+Shutdown author `3c6eaff70f720b682cc8d09e598fcaf2269df0bc` is frozen in its
+original worktree, not integrated or deployed. A newly spawned, explicitly
+selected `gpt-6-luna`/`max` worker,
+`/root/npu_shutdown_independent_review_20261002`, uses separate worktree
+`npu-shutdown-review-20261002` and owns only its new independent review document.
+It reviews actual shutdown/ref-put C, the unequal multi-leaf regression and
+retained-session lifetime limits. Source testing is not proof that VFS release,
+session-manager/device/module removal or firmware lifetime is safe.
+
+The probe/portability Luna worker is now implementing a transparent reconciled
+refcount profile and actual combined-source C tests in another separate
+worktree, `npu-stack-reconcile-20261002`. It owns only the new profile, test and
+research note. Historical lifecycle/refcount patches and the expected-conflict
+regression remain untouched. The already-equivalent lifecycle error-unlock
+replacement must be accounted for explicitly, not silently dropped. No new
+profile is yet reviewed, build-ready or deployed; shutdown remains a separate
+unreconciled source candidate, and NPU BOOTUP remains refused.
