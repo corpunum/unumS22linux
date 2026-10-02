@@ -69,7 +69,7 @@ BUILD_INPUT_SHA256 = {
 }
 REVIEWED_RUNNER_SHA256 = {
     'tools/hardware/audio-recovery-reboot-once.py':
-        'ffc4fc5a8d24f3f5b903f2c0009035e127d90dda402d775e160868304ceff6aa',
+        '5ec8fec300d514ef9e586dfe5635ca38995718acd0437caefe50c34358bd1ac4',
     'tools/hardware/deploy-audio-recovery.py':
         EXPECTED_TRUSTED_DEPLOYER_SHA256,
     'tools/hardware/run-bt-board-once.py':
