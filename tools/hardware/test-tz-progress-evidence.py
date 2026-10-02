@@ -362,7 +362,6 @@ class CaptureValidation(unittest.TestCase):
         self.assertEqual(observed["command"], "read-only-fixture")
         self.assertEqual(observed["timeout"], 9)
         self.assertEqual(observed["project_root"], EVIDENCE.ARTIFACT_ROOT)
-        self.assertNotEqual(observed["project_root"], EVIDENCE.ROOT)
 
     def test_source_helper_and_recovery_artifact_roots_are_separate(self):
         observed = {}
@@ -377,16 +376,42 @@ class CaptureValidation(unittest.TestCase):
             observed["helper_source"] = path
             return Audio
 
-        worktree_known_hosts = (
-            EVIDENCE.ROOT / "evidence/native-linux-20260919/native-v2-known-hosts")
-        self.assertFalse(worktree_known_hosts.exists())
-        with mock.patch.object(EVIDENCE, "_load_module", side_effect=load_helper):
-            EVIDENCE._default_remote("read-only-fixture", 9)
+        with tempfile.TemporaryDirectory(prefix="tz-progress-roots-") as temporary:
+            source_root = Path(temporary) / "source-worktree"
+            artifact_root = Path(temporary) / "recovery-root"
+            with mock.patch.object(EVIDENCE, "ROOT", source_root), \
+                    mock.patch.object(EVIDENCE, "ARTIFACT_ROOT", artifact_root), \
+                    mock.patch.object(EVIDENCE, "_load_module", side_effect=load_helper):
+                EVIDENCE._default_remote("read-only-fixture", 9)
 
-        self.assertEqual(observed["helper_source"],
-                         EVIDENCE.ROOT / "tools/hardware/audio-recovery-reboot-once.py")
-        self.assertEqual(observed["project_root"], Path("/home/corpunum/s22-linux"))
-        self.assertEqual(observed["project_root"], EVIDENCE.ARTIFACT_ROOT)
+            self.assertNotEqual(source_root, artifact_root)
+            self.assertEqual(observed["helper_source"],
+                             source_root / "tools/hardware/audio-recovery-reboot-once.py")
+            self.assertEqual(observed["project_root"], artifact_root)
+
+    def test_source_and_artifact_roots_may_be_identical(self):
+        observed = {}
+
+        class Audio:
+            @staticmethod
+            def run_trusted_remote(transport, host, command, **kwargs):
+                observed.update(transport=transport, host=host, command=command, **kwargs)
+                return "fixture-result"
+
+        def load_helper(name, path):
+            observed["helper_source"] = path
+            return Audio
+
+        with tempfile.TemporaryDirectory(prefix="tz-progress-same-root-") as temporary:
+            shared_root = Path(temporary) / "checkout"
+            with mock.patch.object(EVIDENCE, "ROOT", shared_root), \
+                    mock.patch.object(EVIDENCE, "ARTIFACT_ROOT", shared_root), \
+                    mock.patch.object(EVIDENCE, "_load_module", side_effect=load_helper):
+                EVIDENCE._default_remote("read-only-fixture", 9)
+
+            self.assertEqual(observed["helper_source"],
+                             shared_root / "tools/hardware/audio-recovery-reboot-once.py")
+            self.assertEqual(observed["project_root"], shared_root)
 
     def test_missing_artifact_root_fails_in_wrapper_before_any_ssh_call(self):
         with tempfile.TemporaryDirectory(prefix="tz-progress-route-") as temporary:
