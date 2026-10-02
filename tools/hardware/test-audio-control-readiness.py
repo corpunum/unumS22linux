@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import errno
 import hashlib
 import importlib.util
 import io
@@ -379,7 +380,7 @@ class AudioControlReadinessTests(unittest.TestCase):
                 proc_stat = Path(f"/proc/{child_pid}/stat")
                 try:
                     fields = proc_stat.read_text().split()
-                except FileNotFoundError:
+                except (FileNotFoundError, ProcessLookupError):
                     break
                 if len(fields) > 2 and fields[2] == "Z":
                     break
@@ -392,6 +393,20 @@ class AudioControlReadinessTests(unittest.TestCase):
                 else:
                     os.kill(child_pid, signal.SIGKILL)
                     self.fail("listing left a descendant process running")
+
+    def test_descendant_disappearing_during_proc_read_is_already_reaped(self) -> None:
+        original_read = Path.read_text
+        injected = []
+
+        def disappearing_read(path, *args, **kwargs):
+            if str(path).startswith("/proc/") and path.name == "stat":
+                injected.append(path)
+                raise ProcessLookupError(errno.ESRCH, "injected process disappearance")
+            return original_read(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "read_text", disappearing_read):
+            self.test_listing_timeout_kills_and_reaps_the_command_group()
+        self.assertEqual(len(injected), 1)
 
 
 if __name__ == "__main__":
