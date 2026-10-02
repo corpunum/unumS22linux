@@ -181,6 +181,27 @@ static int abi_queue_trigger(struct device *dev, int channel,
 	return abox_request_pcm_trigger_ipc(dev, channel, false, enabled, start);
 }
 
+static void abi_reset_world_preserving_failures(void)
+{
+	int previous_failures = g_failures;
+
+	reset_world();
+	g_failures += previous_failures;
+}
+
+static int abi_queue_get_with_sequence(struct abox_data *data,
+		struct abox_ipc *ipc, u64 *trace_sequence)
+{
+#ifdef EXPECT_BASELINE_PRIVATE_ABI_BUG
+	int ret = abox_ipc_queue_get(data, ipc);
+
+	*trace_sequence = ipc->trace_seq;
+	return ret;
+#else
+	return abox_ipc_queue_get(data, ipc, trace_sequence);
+#endif
+}
+
 static void test_abi_visible_layout(void)
 {
 #ifdef EXPECT_BASELINE_PRIVATE_ABI_BUG
@@ -274,6 +295,122 @@ static void test_two_owner_worker_correlation(void)
 }
 
 #ifndef EXPECT_BASELINE_PRIVATE_ABI_BUG
+static u64 abi_read_private_slot(struct abox_data *data, size_t slot)
+{
+	struct abox_ipc_trace_owner *owner;
+	unsigned long flags;
+	u64 sequence = 0;
+
+	rcu_read_lock();
+	owner = abox_ipc_trace_owner_find(data);
+	if (owner) {
+		spin_lock_irqsave(&data->ipc_queue_lock, flags);
+		sequence = owner->trace_seq[slot];
+		spin_unlock_irqrestore(&data->ipc_queue_lock, flags);
+	}
+	rcu_read_unlock();
+	return sequence;
+}
+
+#ifdef MUTATION_OMIT_ZERO_OVERWRITE
+static void abi_seed_private_slot(struct abox_data *data, size_t slot,
+		u64 sequence)
+{
+	struct abox_ipc_trace_owner *owner;
+	unsigned long flags;
+
+	rcu_read_lock();
+	owner = abox_ipc_trace_owner_find(data);
+	if (owner) {
+		spin_lock_irqsave(&data->ipc_queue_lock, flags);
+		owner->trace_seq[slot] = sequence;
+		spin_unlock_irqrestore(&data->ipc_queue_lock, flags);
+	}
+	rcu_read_unlock();
+}
+#endif
+#endif
+
+static void test_actual_queue_get_zero_and_physical_slot_reuse(void)
+{
+	struct abox_ipc dequeued = {0};
+	ABOX_IPC_MSG generic = {0};
+	bool enabled = false;
+	u64 first_sequence;
+	u64 dequeued_sequence;
+	int get_result;
+	int index;
+	int send_before;
+
+	abi_reset_world_preserving_failures();
+	abi_reset_trace_events();
+#ifndef EXPECT_BASELINE_PRIVATE_ABI_BUG
+	CHECK(abox_ipc_trace_owner_register(&g_abox_dev, &g_abox) == 0,
+		"physical-slot test registers its private owner");
+#endif
+	g_abi_queue_enabled = true;
+	g_abi_send_enabled = true;
+	g_resume_result = 1;
+	CHECK(abi_queue_trigger(&g_abox_dev, 61, &enabled, true) == 0,
+		"first trigger occupies physical IPC ring slot zero");
+	first_sequence = g_abi_queue_events[0].sequence;
+	get_result = abi_queue_get_with_sequence(&g_abox, &dequeued,
+			&dequeued_sequence);
+	CHECK(get_result == 0 && dequeued_sequence == first_sequence &&
+			dequeued.msg.ipcid == IPC_PCMPLAYBACK &&
+			dequeued.msg.msg.pcmtask.channel_id == 61,
+		"actual queue_get returns the first trigger sequence and message");
+#ifndef EXPECT_BASELINE_PRIVATE_ABI_BUG
+	CHECK(abi_read_private_slot(&g_abox, 0) == 0,
+		"actual queue_get clears the consumed private sequence slot");
+#endif
+
+	/* Drain entries through the actual ring until producer/consumer wrap to 0. */
+	g_abi_queue_enabled = false;
+	g_abi_send_enabled = false;
+	generic.ipcid = IPC_SYSTEM;
+	for (index = 0; index < ABOX_IPC_QUEUE_SIZE - 1; ++index) {
+		dequeued = (struct abox_ipc){0};
+		dequeued_sequence = UINT64_MAX;
+		CHECK(abox_request_ipc(&g_abox_dev, generic.ipcid, &generic,
+				sizeof(generic), 0, 0) == 0,
+			"generic FIFO advance is accepted while wrapping the ring");
+		get_result = abi_queue_get_with_sequence(&g_abox, &dequeued,
+				&dequeued_sequence);
+		CHECK(get_result == 0 && dequeued_sequence == 0 &&
+				dequeued.msg.ipcid == IPC_SYSTEM,
+			"actual queue_get returns zero for generic IPC");
+	}
+	CHECK(g_abox.ipc_queue_start == 0 && g_abox.ipc_queue_end == 0,
+		"actual producer and consumer wrap back to physical slot zero");
+
+#ifdef MUTATION_OMIT_ZERO_OVERWRITE
+	abi_seed_private_slot(&g_abox, 0, UINT64_C(0x5a5a));
+#endif
+	/* Both tracepoints are off at enqueue; this PCM message's seq is zero. */
+	CHECK(abi_queue_trigger(&g_abox_dev, 62, &enabled, false) == 0,
+		"zero-sequence PCM STOP reuses slot zero after a full ring wrap");
+#ifndef EXPECT_BASELINE_PRIVATE_ABI_BUG
+	CHECK(abi_read_private_slot(&g_abox, 0) == 0,
+		"zero-sequence put overwrites reused private metadata before dequeue");
+#endif
+	g_abi_send_enabled = true;
+	send_before = g_abi_send_event_count;
+	dequeued = (struct abox_ipc){0};
+	dequeued_sequence = UINT64_MAX;
+	get_result = abi_queue_get_with_sequence(&g_abox, &dequeued,
+			&dequeued_sequence);
+	if (get_result == 0)
+		__abox_process_ipc(dequeued.dev, &g_abox, dequeued.hw_irq,
+				&dequeued.msg, dequeued.size, dequeued_sequence);
+	CHECK(get_result == 0 && dequeued_sequence == 0 &&
+			g_abi_send_event_count == send_before &&
+			dequeued.msg.msg.pcmtask.channel_id == 62,
+		"actual get zero-overwrites the reused slot before send tracing is enabled");
+	abi_destroy_data(&g_abox, &g_abox_dev);
+}
+
+#ifndef EXPECT_BASELINE_PRIVATE_ABI_BUG
 static void test_queue_send_trace_and_slot_clear(void)
 {
 	bool enabled = false;
@@ -281,7 +418,7 @@ static void test_queue_send_trace_and_slot_clear(void)
 	u64 first_sequence;
 	int send_before;
 
-	reset_world();
+	abi_reset_world_preserving_failures();
 	abi_reset_trace_events();
 	CHECK(abox_ipc_trace_owner_register(&g_abox_dev, &g_abox) == 0,
 		"probe-equivalent registration creates private trace metadata");
@@ -306,10 +443,10 @@ static void test_queue_send_trace_and_slot_clear(void)
 	send_before = g_abi_send_event_count;
 	CHECK(abox_request_ipc(&g_abox_dev, generic.ipcid, &generic,
 			sizeof(generic), 0, 0) == 0,
-		"generic IPC reuses a drained ring slot without trace metadata");
+		"generic IPC is enqueued through the actual scheduling helper");
 	abox_process_ipc(&g_abox.ipc_work);
 	CHECK(g_abi_send_event_count == send_before && queue_depth() == 0,
-		"generic IPC cannot inherit a stale PCM trace ID from a reused slot");
+		"generic IPC worker send is not treated as a PCM tracepoint");
 
 	g_abi_queue_enabled = false;
 	g_abi_send_enabled = true;
@@ -349,7 +486,7 @@ static void test_missing_sidecar_degrades_only_diagnostics(bool fail_action)
 	bool enabled = false;
 	int ret;
 
-	reset_world();
+	abi_reset_world_preserving_failures();
 	abi_reset_trace_events();
 	g_abox_dev.fail_devm_allocation = !fail_action;
 	g_abox_dev.fail_devm_action = fail_action;
@@ -380,7 +517,7 @@ static void test_retirement_and_same_address_reuse(void)
 	int sends_before;
 	ABOX_IPC_MSG generic = {0};
 
-	reset_world();
+	abi_reset_world_preserving_failures();
 	abi_reset_trace_events();
 	CHECK(abox_ipc_trace_owner_register(&g_abox_dev, &g_abox) == 0,
 		"initial owner registration succeeds before retirement test");
@@ -496,14 +633,19 @@ static void test_rcu_retirement_waits_for_lookup(void)
 
 static void test_private_abi_scenarios(void)
 {
-	test_abi_visible_layout();
-	test_two_owner_worker_correlation();
+#if defined(MUTATION_OMIT_ZERO_OVERWRITE) || defined(MUTATION_OMIT_CLEAR)
+	test_actual_queue_get_zero_and_physical_slot_reuse();
+#else
 #ifndef EXPECT_BASELINE_PRIVATE_ABI_BUG
-	test_queue_send_trace_and_slot_clear();
 	test_missing_sidecar_degrades_only_diagnostics(false);
 	test_missing_sidecar_degrades_only_diagnostics(true);
 	test_retirement_and_same_address_reuse();
 	test_rcu_retirement_waits_for_lookup();
+	test_queue_send_trace_and_slot_clear();
+#endif
+	test_actual_queue_get_zero_and_physical_slot_reuse();
+	test_abi_visible_layout();
+	test_two_owner_worker_correlation();
 #endif
 }
 /* ABI_SCENARIOS_END */
