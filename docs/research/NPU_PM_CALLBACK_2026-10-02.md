@@ -47,11 +47,14 @@ PM get after a clock-enable failure only after this known clock rollback. It
 does not invent a generic inverse for the partially transitioned leaf device
 or unwind parent ownership here.
 
-One existing lower-level edge is outside this patch: in the pinned
-`npu_clk_prepare_enable()`, the null-clock branch jumps to its error return
-before assigning the local `ret`. This candidate's exact-C tests cover an
-actual clock-enable error, not that unrelated uninitialized-return defect; no
-claim is made for it.
+The callback patch also sets `ret = -EINVAL` in the exact null-clock-entry
+branch of `npu_clk_prepare_enable()`. This assignment is inside the branch,
+not just an initializer: after an earlier clock succeeds, a later null entry
+must not return the stale zero after rolling that earlier clock back. An empty
+clock list still returns success as before. With a null first entry, the old
+function's returned `ret` was uninitialized; the baseline does not assert a
+particular value for that undefined case, while patched exact-C tests verify a
+deterministic `-EINVAL`.
 
 The host regression fetches six public files at the immutable pinned commit,
 caps each response at 128 KiB (768 KiB maximum total), uses a five-second
@@ -92,7 +95,10 @@ host PM/clock shims at `-O0` and `-O2`. Baseline execution emits expected
 - clock-enable error followed by ACTIVE status publication and retained PM
   usage;
 - positive PM put success returned as nonzero;
-- negative PM put followed by false PWR_CLK_OFF publication.
+- negative PM put followed by false PWR_CLK_OFF publication;
+- a later null clock entry returning stale zero after rolling back an earlier
+  successful clock, causing false ACTIVE publication and retaining the PM
+  reference.
 
 The patched exact C passes checks for:
 
@@ -107,6 +113,10 @@ The patched exact C passes checks for:
 - successful mixed PM/clock startup and positive-success powerdown pairing;
 - negative PM put preserving its error, honoring decrement-on-error, and
   publishing ERROR instead of claiming off, with no second put.
+- first-null and later-null clock entries returning `-EINVAL`, avoiding ACTIVE
+  publication and balancing exactly one PM acquisition; the later-null case
+  also rolls back the earlier clock;
+- an empty clock list remaining a successful no-op.
 
 The harness models helper dependencies, PM usage counts, and clocks with host
 shims. It is an exact-C regression test, not Linux runtime-PM, clock framework,
