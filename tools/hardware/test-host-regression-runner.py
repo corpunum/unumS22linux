@@ -26,6 +26,8 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-npu-default-boot-callback.py",
     "tools/hardware/test-npu-probe-unwind.py",
     "tools/hardware/test-npu-candidate-stack.py",
+    "tools/hardware/test-npu-reconciled-stack.py",
+    "tools/hardware/test-npu-shutdown-ownership.py",
     "tools/hardware/test-device-trial-guard.py",
     "tools/hardware/test-audio-progress-snapshot.py",
     "tools/hardware/test-audio-route-assessment.py",

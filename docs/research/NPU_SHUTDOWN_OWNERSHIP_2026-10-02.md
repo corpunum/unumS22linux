@@ -1,9 +1,11 @@
 # S22 NPU shutdown/recovery ownership repair
 
-Status: host-tested source candidate pending independent review. NPU BOOTUP
-remains refused. This work does not establish kernel-build, module-load, device,
-runtime, or deployment acceptance. Independent Luna re-review and full-stack
-reconciliation are required before promotion.
+Status: independently re-reviewed source-WIP candidate, limited to the standalone
+and refcount-plus-PM profiles. Complete five-patch composition is blocked at
+`npu-vertex.c:313`; see the independent review receipt. NPU BOOTUP remains refused.
+This work does not establish kernel-build, module-load, device, runtime or
+deployment acceptance. Full-stack reconciliation and the documented callback
+and lifetime investigations remain required before any promotion.
 
 ## Scope and source
 
