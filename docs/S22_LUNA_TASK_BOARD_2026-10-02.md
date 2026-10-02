@@ -1,5 +1,69 @@
 # S22 continuation — 2026-10-02
 
+## Actual artifact results and ABI repair wave — 19:28 UTC
+
+These entries supersede the earlier in-progress descriptions without erasing
+their receipts. No earlier device trial is being replayed.
+
+- The native NPU9+NPU10 module build finished once with exit zero and no
+  resource abort. Author `9bdd0bc5`, integrated `05267e6`, records the exact
+  clean two-file source delta, native config, Clang18 tools and artifact.
+  Independent Luna artifact review `6c8f6464`, integrated `79c539e`, confirms
+  234 matching ordered import CRCs, `module_layout`, vermagic and the unchanged
+  self-export against the native-eight host output. The final config and
+  unchanged-config guard are verified; the absent raw olddefconfig log is an
+  explicit evidence limitation. Runtime loading and the current 325-module
+  inventory are not validated. Committed-publication drain/close remains
+  unbounded and **BOOTUP stays refused**.
+- The native three-patch ABOX module compiled once with exit zero. Author
+  `492fcf07`, integrated `f89c7fc`, records 359 matching imports but a genuine
+  integration failure: **10 of 28 exported CRCs changed**, with six stale
+  import instances in two of the 329 preserved baseline modules. An earlier
+  informal count of 12 was wrong and is explicitly corrected to 10.
+  Neither compiling nor matching the target's own imports clears its changed
+  exports. No module was installed or force-loaded.
+- Audio fourth-patch author `c3f2f079`, integrated `fc2b498`, re-kicks queued
+  IPC on an explicit duplicate trigger without republishing or changing the
+  accepted trigger state. Independent Luna review `4fde9aa0`, integrated
+  `0a194fe`, clears this source scope, retaining workqueue/race/hardware and
+  source-only invalid-size/non-atomic-full-ring qualifications.
+- The immutable clean host-suite worktree at `332b388d` ran all 53 normal and
+  50 optimized script invocations: **103 passed, zero failures**. Log hash:
+  `395f8cff2e1ec209d3e3818f5ca2dabe9c9fc12ffab8b02e2747839a56f06501`.
+  Published `04a256d2` also has successful hosted CI:
+  [run 37049879589](https://github.com/corpunum/unumS22linux/actions/runs/37049879589),
+  with its then-current 101-invocation inventory. This is not hosted CI for
+  the newer unpublished commits. The three normal-only exclusions and explicit
+  unavailable-AVB fixture skips are unchanged.
+
+The next workers are actually executing with accepted explicit selection
+`gpt-6-luna` / `max`, not merely instructed to identify themselves as Luna:
+
+| Actual worker | Separate worktree | Owned host deliverable |
+| --- | --- | --- |
+| `/root/audio_driver_path_next_20261002` | `audio-trace-abi-20261002` | Fifth separate audio patch: private per-device trace metadata without changing the exported ABOX layout; executable lifecycle, FIFO, slot-reuse and concurrency tests |
+| `/root/npu_drain_independent_review_20261002` | `audio-three-artifact-review-20261002` | Independent review of the actual three-patch artifact and six incompatible baseline imports; no rebuild |
+| `/root/autonomous_driver_review_20261002` | `bt-native-transport-build-20261002` | Distinct reproducible AArch64 userspace bridge candidate and build/input negative tests; production runner pins and consumed trials unchanged |
+
+Explicit selection is runtime-accepted configuration evidence, not independent
+backend attestation. File ownership is disjoint. Only the coordinator accesses
+the phone. Heavy builds are serialized; no heavy build is currently running.
+Any fifth-patch native audio compile requires frozen source, independent review
+and a new host-only GO. No GENKSYMS disguise, binary vermagic editing, force-load
+or CRC-suppression route is permitted.
+
+The fresh bounded read-only phone snapshot at 19:15:51 UTC confirms GNU build
+ID `b2dda820b18d410d9bf12f1bd2584567d545991d`, stable uptime, 325 loaded modules,
+native control, persistent mounts, desktop Pi, browser/dedicated Pi and idle
+model service readiness. Battery is 100%/Full, 26.2 C; maximum sampled thermal
+reading is 39 C. Available-ring serious indicators are absent, but full-boot
+coverage and measured TrustZone progress are **not** established. No fresh full
+RECOVERY hash is claimed by this snapshot. This turn still has **zero partition
+writes, reboots, powered driver tests, inference requests or service changes**.
+Independent hardware rescue remains unproven. Actual audio, cameras, physical
+button presses, SIM/data/IMS/calls and Bluetooth radio operation remain separate
+acceptance milestones, not inferred from host tests.
+
 ## Completed native host build and next implementation wave — 18:45 UTC
 
 The earlier records below remain historical. The exact native-eight build
