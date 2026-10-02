@@ -1,5 +1,49 @@
 # S22 continuation — 2026-10-02
 
+## Continued host implementation — 2026-10-02 22:10 UTC (Oct 3 local)
+
+The older entries remain immutable historical checkpoints. No completed
+hardware authorization or receipt is replayed by this wave.
+
+- Paired NPU11 message-ID validation plus NPU12 firmware-report/profile
+  error unwind is independently cleared **for host source/tests only** by
+  review `74059b4d`, integrated `b62aedb`. Test follow-up `bedc49af`, integrated
+  `9dc49c0`, executes the nonempty composed gather/store failure and all four
+  NULL-buffer exits under both incoming IRQ states. The prior standalone
+  NPU11 block remains valid without its companion. BOOTUP remains refused.
+- Audio packager author `291a892d`, integrated `d398e92`, is implemented,
+  with eight focused tests passing normal, `-O` and effective environment
+  optimization. It has **not** created a recovery image. It pins the distinct
+  current camera image `b1041271…`, replaces only the matched ABOX/Rainbow/
+  USB-offloader set, and preserves the installed camera module and metadata.
+  Independent review and host packaging GO are still pending.
+- Actual native NPU12 source is clean/committed at `e9c30162`, tree
+  `f917408e`; only two NPU source paths differ from native ten. Preparation
+  `7753fd35` is plan-only; no olddefconfig or compile has run. HOST build disk
+  is about 30 GiB free, unlike PHONE `/srv/s22` at about 94.6 GiB free.
+  A separately explicit module-only start policy is under independent
+  review, justified against the predecessor's 76,173,312-byte output.
+  The global full-profile 32-GiB start gate and monitor's 16-GiB disk /
+  8-GiB memory thresholds are not changed; no owner files are deleted.
+- The fixed CI inventory now has 58 normal / 55 optimization-safe scripts.
+  Policy tests passed seven cases per mode. A full 113-invocation result is
+  **not yet claimed**. Exact published `5bbb4e9` hosted run `37066851495`
+  succeeded with its prior 109-invocation inventory; new code is not silently
+  attributed to that run.
+
+| Actual reused Luna/Max worker | Current isolated worktree | Current deliverable |
+| --- | --- | --- |
+| `/root/audio_driver_path_next_20261002` | `npu-twelve-native-build-20261003` | Pinned module-only wrapper/preparation; no build GO yet |
+| `/root/autonomous_driver_review_20261002` | `audio-package-review-20261003` | Independent exact audio packager and focused/CI test review |
+| `/root/bt_candidate_independent_review_20261002` | `npu-twelve-build-review-20261003` | Independent frozen NPU module-build wrapper/resource-policy review |
+
+All selections inherit accepted explicit `gpt-6-luna` / `max` configuration;
+this is not independent backend attestation. Only the coordinator accesses
+the phone. This turn still has zero device writes, reboots, powered trials,
+service changes or inference requests. The full RECOVERY readback and all
+325 module build notes match the preserved native baseline; physical rescue
+and untested audio/camera/buttons/cellular/radio functionality remain open.
+
 ## Actual review/test checkpoint — 2026-10-02 21:25 UTC
 
 - Immutable `db23c885fd8f1825aa77117b387d8cee40bdcd4e` completed with
