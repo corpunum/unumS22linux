@@ -1,5 +1,39 @@
 # S22 continuation — 2026-10-02
 
+## Actual host results — 2026-10-02 23:04 UTC
+
+- The reviewed NPU12 wrapper executed once: the sole module target finished
+  at 22:54:57 UTC with exit 0 and no resource abort. Source `e9c30162` stayed
+  clean; the preserved `d762d5fc…cd16` configuration survived `olddefconfig`
+  and build unchanged. The only `.ko` is 14,796,512 bytes, SHA-256
+  `03e1ad6403265d39e1d6c48d31c1defad3aad984cd972f8fe80f8ee0c4eaa621`,
+  GNU build ID `59da71800d33e0c7dac1936908ffab47ec99584c`; no Image was built.
+  Root's static scan verified all 234 import CRCs and `module_layout`.
+  Independent actual-artifact review is running; no load or BOOTUP occurred.
+- The single actual audio packaging attempt failed safely before publication:
+  the pre-footer image was 101,259,264 bytes versus the AVB allowance of
+  100,593,664. There is no final image, manifest or output directory.
+  Immutable failure receipt `7fb22761`, integrated `1edf236`, is preserved.
+  A fresh Luna worktree is implementing a transparent debug-only transform
+  of the three replacement modules, with runtime ELF semantics and ABI
+  preservation tests. There is no corrected-package execution GO yet.
+- Remote review SHA `1edf236f266433e42a3d2e56500dcbafa25c9d78` was verified;
+  master remains `20605dbe…`. Exact hosted run `37075233538` succeeded with
+  59 normal and 56 optimized script invocations; optional fixture skips are
+  explicit. Receipt: `s22-hosted-driver-ci-1edf236-20261003.json`.
+- The separate local frozen `4f9e776` full run exited 1 with three observed
+  optimized pinned-source download failures. Its first raw stdout was not
+  persisted, so complete per-mode/skip aggregates are not claimed. Three
+  supported local-fixture supplements passed separately. A redundant capture
+  rerun was stopped at exit 130, preserved, and not counted as a full result.
+  Receipt: `s22-driver-host-tests-eleventh-frozen-20261003.json`.
+- Fresh root-only read-only phone capture at 23:04:01 UTC shows the same boot,
+  GNU kernel `b2dda820…`, 325 loaded modules, ready native control, desktop,
+  both Pi sessions and idle model API. Battery is Full/100%, 26.2 C; maximum
+  reported thermal zone is 39 C. No serious indicator appears in the captured
+  ring; full-boot log coverage and physical acceptance remain unproven.
+  Device writes/reboots/powered trials/service changes/inference remain zero.
+
 ## Reviewed host execution — 2026-10-02 22:51 UTC
 
 - Independent corrective reviews `b26e00e9` (audio packaging) and `7013326d`
