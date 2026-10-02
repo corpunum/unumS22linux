@@ -123,15 +123,20 @@ The actual launched helper source SHA-256 was
 `13cec8b3b0cbb28f45856a374d843702c8e79cc7c80c286b3b19525b19aa3de1`; it alone
 controlled the active build. The initial post-launch helper version
 `5eb0900960fa687be99ca2e4fdc617d1ea2ecec6859c02780c06086973de46cd` was
-reviewed but not executed; review found that it could return after the direct
+source/host reviewed but did not control the kernel build; review found that
+it could return after the direct
 make leader exited while a same-group descendant survived. Two new isolated,
 real-subprocess regressions reproduced that failure before the fix: one with
 the leader exiting on SIGINT and one with the leader already reaped. The final
-future-run helper hashes group presence through bounded SIGINT/SIGTERM/SIGKILL
+future-run helper checks group presence through bounded SIGINT/SIGTERM/SIGKILL
 stages, reports false if disappearance is not confirmed, and preserves the
 original monitor exception. Its reviewed source SHA-256 is
-`c9122938aba78a7ce9a8af0242de7666aa69d81dc42f0d7d04e6bf8472e72998`. All 17
-focused safety tests pass both normally and under `python -O`; the two real
+`c9122938aba78a7ce9a8af0242de7666aa69d81dc42f0d7d04e6bf8472e72998`. The
+intermediate whole-group correction was
+`45bec3c9b0f7632d40d89c869f256e38aa4796eb391e0141bee022a1181991bf`;
+the final version also preserves the original monitor exception if cleanup
+itself raises. All 17 focused safety tests pass normally, under `python -O`
+and with `PYTHONOPTIMIZE=1`; the two real
 process-group regressions pass after the fix. This helper change did not
 restart or rerun Kbuild. The raw generated build receipt contains no helper
 SHA, so the separate launch phase record is the evidence for the executed
