@@ -6,10 +6,14 @@ import contextlib
 import hashlib
 import importlib.util
 import io
+import os
 from pathlib import Path
+import selectors
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -52,6 +56,73 @@ class NpuSixBuildSafetyTests(unittest.TestCase):
             raise RuntimeError(result.stderr)
         return result.stdout.strip()
 
+    @staticmethod
+    def group_exists(pgid: int) -> bool:
+        try:
+            os.killpg(pgid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+
+    def spawn_group_with_sig_ignoring_descendant(
+            self, *, leader_exits: bool) -> tuple[subprocess.Popen[str], int]:
+        descendant_code = (
+            "import signal,time; "
+            "signal.signal(signal.SIGINT, signal.SIG_IGN); "
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+            "print('DESCENDANT_READY', flush=True); time.sleep(120)"
+        )
+        leader_code = (
+            "import subprocess,sys,time\n"
+            "descendant = subprocess.Popen([sys.executable, '-c', sys.argv[1]], "
+            "stdout=subprocess.PIPE, text=True)\n"
+            "ready = descendant.stdout.readline()\n"
+            "print(f'DESCENDANT_PID={descendant.pid}', flush=True)\n"
+            "if sys.argv[2] == 'exit': raise SystemExit(0)\n"
+            "time.sleep(120)\n"
+        )
+        process = subprocess.Popen(
+            [sys.executable, "-c", leader_code, descendant_code,
+             "exit" if leader_exits else "wait"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, start_new_session=True,
+        )
+        try:
+            assert process.stdout is not None
+            with selectors.DefaultSelector() as selector:
+                selector.register(process.stdout, selectors.EVENT_READ)
+                if not selector.select(timeout=5):
+                    raise AssertionError("controlled process group did not become ready")
+                line = process.stdout.readline().strip()
+            if not line.startswith("DESCENDANT_PID="):
+                raise AssertionError(f"unexpected controlled leader output: {line!r}")
+            return process, int(line.split("=", 1)[1])
+        except BaseException:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                pass
+            if process.stdout is not None:
+                process.stdout.close()
+            raise
+
+    @staticmethod
+    def kill_and_bounded_wait(process: subprocess.Popen[str]) -> None:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            pass
+
     def test_monitor_error_interrupts_and_reaps_owned_process_group(self) -> None:
         process = FakeProcess(wait_results=[0])
         with tempfile.TemporaryDirectory() as directory:
@@ -61,39 +132,96 @@ class NpuSixBuildSafetyTests(unittest.TestCase):
                 mock.patch.object(BUILDER.subprocess, "Popen", return_value=process),
                 mock.patch.object(BUILDER, "resource_sample", side_effect=OSError("disk sample failed")),
                 mock.patch.object(BUILDER.time, "sleep", return_value=None),
+                mock.patch.object(BUILDER, "process_group_exists", side_effect=[True, False]),
                 mock.patch.object(BUILDER.os, "killpg") as killpg,
                 self.assertRaisesRegex(OSError, "disk sample failed"),
             ):
                 BUILDER.run_monitored_build(["make"], Path(directory), output, {}, phase)
             killpg.assert_called_once_with(process.pid, BUILDER.signal.SIGINT)
-            self.assertEqual(process.wait_timeouts, [30])
+            self.assertEqual(process.wait_timeouts, [0])
             self.assertEqual(phase["phase"], "build_running")
             self.assertEqual(phase["make_pid"], process.pid)
             self.assertTrue((output / "build-phase.json").is_file())
 
+    def test_monitor_error_is_preserved_when_group_cleanup_is_unconfirmed(self) -> None:
+        process = FakeProcess()
+        original_error = OSError("resource sample failed")
+        stderr = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            with (
+                mock.patch.object(BUILDER.subprocess, "Popen", return_value=process),
+                mock.patch.object(BUILDER, "resource_sample", side_effect=original_error),
+                mock.patch.object(BUILDER.time, "sleep", return_value=None),
+                mock.patch.object(BUILDER, "process_group_exists", return_value=True),
+                mock.patch.object(BUILDER, "CLEANUP_STAGE_TIMEOUTS", (0, 0, 0)),
+                mock.patch.object(BUILDER.os, "killpg"),
+                contextlib.redirect_stderr(stderr),
+                self.assertRaises(OSError) as raised,
+            ):
+                BUILDER.run_monitored_build(["make"], Path(directory), output, {})
+        self.assertIs(raised.exception, original_error)
+        self.assertIn("process group remained or its disappearance could not be confirmed", stderr.getvalue())
+
     def test_process_group_escalation_uses_only_bounded_waits(self) -> None:
-        process = FakeProcess(wait_results=[
-            subprocess.TimeoutExpired("make", 30),
-            subprocess.TimeoutExpired("make", 15),
-            -9,
-        ])
-        with mock.patch.object(BUILDER.os, "killpg") as killpg:
+        process = FakeProcess(wait_results=[-9])
+        with (
+            mock.patch.object(BUILDER.os, "killpg") as killpg,
+            mock.patch.object(BUILDER, "process_group_exists", side_effect=[True, True, True, False]),
+            mock.patch.object(BUILDER, "CLEANUP_STAGE_TIMEOUTS", (0, 0, 0)),
+            mock.patch.object(BUILDER.time, "sleep", return_value=None),
+        ):
             self.assertTrue(BUILDER.stop_own_process_group(process))
         self.assertEqual(
             [call.args[1] for call in killpg.call_args_list],
             [BUILDER.signal.SIGINT, BUILDER.signal.SIGTERM, BUILDER.signal.SIGKILL],
         )
-        self.assertEqual(process.wait_timeouts, [30, 15, 5])
+        self.assertEqual(process.wait_timeouts, [0])
 
     def test_unreaped_group_is_reported_after_bounded_sigkill_wait(self) -> None:
-        process = FakeProcess(wait_results=[
-            subprocess.TimeoutExpired("make", 30),
-            subprocess.TimeoutExpired("make", 15),
-            subprocess.TimeoutExpired("make", 5),
-        ])
-        with mock.patch.object(BUILDER.os, "killpg"):
+        process = FakeProcess()
+        with (
+            mock.patch.object(BUILDER.os, "killpg") as killpg,
+            mock.patch.object(BUILDER, "process_group_exists", return_value=True),
+            mock.patch.object(BUILDER, "CLEANUP_STAGE_TIMEOUTS", (0, 0, 0)),
+        ):
             self.assertFalse(BUILDER.stop_own_process_group(process))
-        self.assertEqual(process.wait_timeouts, [30, 15, 5])
+        self.assertEqual(
+            [call.args[1] for call in killpg.call_args_list],
+            [BUILDER.signal.SIGINT, BUILDER.signal.SIGTERM, BUILDER.signal.SIGKILL],
+        )
+        self.assertEqual(process.wait_timeouts, [])
+
+    def test_real_group_cleanup_continues_after_leader_exits_first(self) -> None:
+        process, descendant_pid = self.spawn_group_with_sig_ignoring_descendant(
+            leader_exits=False)
+        try:
+            self.assertEqual(os.getpgid(descendant_pid), process.pid)
+            with mock.patch.object(
+                    BUILDER, "CLEANUP_STAGE_TIMEOUTS", (0.5, 0.5, 2.0), create=True):
+                self.assertTrue(BUILDER.stop_own_process_group(process))
+            self.assertIsNotNone(process.poll())
+            self.assertFalse(self.group_exists(process.pid))
+        finally:
+            self.kill_and_bounded_wait(process)
+            if process.stdout is not None:
+                process.stdout.close()
+
+    def test_real_cleanup_checks_residual_group_after_leader_was_reaped(self) -> None:
+        process, descendant_pid = self.spawn_group_with_sig_ignoring_descendant(
+            leader_exits=True)
+        try:
+            self.assertEqual(os.getpgid(descendant_pid), process.pid)
+            process.wait(timeout=3)
+            self.assertTrue(self.group_exists(process.pid))
+            with mock.patch.object(
+                    BUILDER, "CLEANUP_STAGE_TIMEOUTS", (0.5, 0.5, 2.0), create=True):
+                self.assertTrue(BUILDER.stop_own_process_group(process))
+            self.assertFalse(self.group_exists(process.pid))
+        finally:
+            self.kill_and_bounded_wait(process)
+            if process.stdout is not None:
+                process.stdout.close()
 
     def test_resource_abort_stops_only_the_owned_build(self) -> None:
         process = FakeProcess(wait_results=[-2])
@@ -109,6 +237,7 @@ class NpuSixBuildSafetyTests(unittest.TestCase):
                 mock.patch.object(BUILDER.subprocess, "Popen", return_value=process),
                 mock.patch.object(BUILDER, "resource_sample", return_value=low),
                 mock.patch.object(BUILDER.time, "sleep", return_value=None),
+                mock.patch.object(BUILDER, "process_group_exists", side_effect=[True, False]),
                 mock.patch.object(BUILDER.os, "killpg") as killpg,
                 contextlib.redirect_stdout(io.StringIO()),
             ):
@@ -122,6 +251,16 @@ class NpuSixBuildSafetyTests(unittest.TestCase):
             path.write_text("".join(f"line-{index}\n" for index in range(20000)))
             with mock.patch.object(Path, "read_text", side_effect=AssertionError("whole-file read")):
                 self.assertEqual(BUILDER.tail(path, 2), "line-19998\nline-19999")
+
+    def test_builder_receipt_uses_captured_launch_bytes(self) -> None:
+        launch_digest = "a" * 64
+        phase = {"executed_builder_sha256": launch_digest}
+        with mock.patch.object(BUILDER, "sha256", side_effect=AssertionError("late file read")):
+            self.assertEqual(BUILDER.builder_hash_from_launch(phase), launch_digest)
+        with self.assertRaisesRegex(BUILDER.BuildError, "lacks the builder SHA-256"):
+            BUILDER.builder_hash_from_launch({})
+        with self.assertRaisesRegex(BUILDER.BuildError, "lacks the builder SHA-256"):
+            BUILDER.builder_hash_from_launch({"executed_builder_sha256": "_" * 64})
 
     def test_source_preflight_rejects_dirty_tree(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

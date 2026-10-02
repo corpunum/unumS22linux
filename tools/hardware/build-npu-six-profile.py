@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from collections import deque
 from datetime import datetime, timezone
+import errno
 import hashlib
 import json
 import os
@@ -60,6 +61,8 @@ MIN_START_MEM = 12 * GIB
 MIN_REMAINING_MEM = 8 * GIB
 MIN_START_DISK = 32 * GIB
 MIN_REMAINING_DISK = 16 * GIB
+CLEANUP_STAGE_TIMEOUTS = (30.0, 15.0, 5.0)
+CLEANUP_POLL_INTERVAL = 0.1
 REQUIRED_CONFIG = (
     "CONFIG_EXYNOS_NPU=m",
     "CONFIG_NPU_USE_HW_DEVICE=y",
@@ -218,40 +221,68 @@ def resource_sample(output: Path, started: float) -> dict[str, int | float | str
     return sample
 
 
-def stop_own_process_group(process: subprocess.Popen[bytes]) -> bool:
-    if process.poll() is not None:
-        return True
+def process_group_exists(process_group_id: int) -> bool | None:
+    """Check whole-group presence; None means presence could not be checked."""
     try:
-        os.killpg(process.pid, signal.SIGINT)
+        os.killpg(process_group_id, 0)
     except ProcessLookupError:
-        return process.poll() is not None
-    except OSError:
         return False
-    try:
-        process.wait(timeout=30)
+    except PermissionError:
         return True
-    except subprocess.TimeoutExpired:
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            return process.poll() is not None
-        except OSError:
-            return False
-        try:
-            process.wait(timeout=15)
-            return True
-        except subprocess.TimeoutExpired:
+    except OSError as error:
+        return False if error.errno == errno.ESRCH else None
+    return True
+
+
+def wait_for_process_group_exit(process: subprocess.Popen[bytes], timeout: float) -> bool:
+    """Boundedly wait for the owned group to disappear, not merely its leader."""
+    deadline = time.monotonic() + timeout
+    while True:
+        group_state = process_group_exists(process.pid)
+        if group_state is False:
             try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                return process.poll() is not None
-            except OSError:
-                return False
-            try:
-                process.wait(timeout=5)
-                return True
+                process.wait(timeout=0)
             except subprocess.TimeoutExpired:
                 return False
+            return True
+        if group_state is None:
+            return False
+        process.poll()
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(CLEANUP_POLL_INTERVAL, remaining))
+
+
+def stop_own_process_group(process: subprocess.Popen[bytes]) -> bool:
+    """Stop only the session-created build group; True requires group absence.
+
+    The direct child may already have exited or been reaped while descendants
+    remain in the original process group, so every stage checks that group.
+    False means group disappearance was not confirmed within bounded waits.
+    """
+    group_state = process_group_exists(process.pid)
+    if group_state is False:
+        try:
+            process.wait(timeout=0)
+        except subprocess.TimeoutExpired:
+            return False
+        return True
+    if group_state is None:
+        return False
+
+    for sig, timeout in zip(
+            (signal.SIGINT, signal.SIGTERM, signal.SIGKILL),
+            CLEANUP_STAGE_TIMEOUTS):
+        try:
+            os.killpg(process.pid, sig)
+        except ProcessLookupError:
+            pass
+        except OSError:
+            return False
+        if wait_for_process_group_exit(process, timeout):
+            return True
+    return False
 
 
 def run_monitored_build(command: list[str], source: Path, output: Path,
@@ -300,7 +331,8 @@ def run_monitored_build(command: list[str], source: Path, output: Path,
                     print("BUILD_ABORT resource threshold reached; stopping this build", flush=True)
                     stopped = stop_own_process_group(process)
                     if not stopped:
-                        print("BUILD_ABORT process group did not reap within bounded SIGKILL wait",
+                        print("BUILD_ABORT process group remained or its disappearance could not "
+                              "be confirmed after bounded SIGKILL wait",
                               flush=True)
                         return -signal.SIGKILL, True
                     break
@@ -308,7 +340,8 @@ def run_monitored_build(command: list[str], source: Path, output: Path,
         except BaseException:
             stopped = stop_own_process_group(process)
             if not stopped:
-                print("BUILD_ABORT monitor failed; process group did not reap after SIGKILL",
+                print("BUILD_ABORT monitor failed; process group remained or its disappearance "
+                      "could not be confirmed after bounded SIGKILL wait",
                       file=sys.stderr, flush=True)
             raise
 
@@ -329,6 +362,15 @@ def artifact_info(path: Path) -> dict[str, int | str]:
         raise BuildError(f"expected build artifact is missing: {path}")
     return {"path": str(path), "bytes": path.stat().st_size,
             "sha256": sha256(path)}
+
+
+def builder_hash_from_launch(phase_info: dict[str, object]) -> str:
+    """Return the helper bytes captured before the build subprocess launched."""
+    digest = phase_info.get("executed_builder_sha256")
+    if (not isinstance(digest, str) or len(digest) != 64 or
+            any(character not in "0123456789abcdef" for character in digest)):
+        raise BuildError("launch phase receipt lacks the builder SHA-256")
+    return digest
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -477,7 +519,7 @@ def main() -> int:
             "ld_lld_sha256": LD_LLD_SHA256, "bin": str(TOOLCHAIN_BIN),
             "llvm_tools": toolchain_tools,
         },
-        "builder_sha256": sha256(Path(__file__).resolve()),
+        "builder_sha256": builder_hash_from_launch(phase_info),
         "command": build,
         "jobs": args.jobs,
         "kernel_release": kernel_release,

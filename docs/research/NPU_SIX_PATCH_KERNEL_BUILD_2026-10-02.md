@@ -6,8 +6,11 @@ This receipt records a host-only kernel build of the reviewed six-patch NPU
 profile. It starts from the exact pinned Lineage source commit and commits the
 six ordered patch inputs in a separate clean kernel worktree. The output is a
 local build artifact; it is not a recovery image and was not staged or
-deployed. No camera, audio, Bluetooth, firmware, phone, SSH, ADB, reboot, or
-service operation is part of this task.
+deployed. This clean profile is the pinned base plus the six NPU patches only.
+It deliberately does not include HCI, close-range, camera, or audio kernel
+changes from other profiles and is not a replacement for the working native
+image. No phone, SSH, ADB, firmware, service, reboot, recovery, or deployment
+operation is part of this task; boot and ramdisk packaging were not changed.
 
 The frozen shutdown-ownership patch is recorded as an input identity check but
 is not in the six-patch series. Its reviewed ordinary-apply overlap at
@@ -84,27 +87,62 @@ make -C "$KERNEL_BUILD_ROOT/npu-six-patch-kernel-20261002" \
   -j1 Image modules
 ```
 
-At this receipt snapshot, the build was still running. The actual launched
-builder source SHA-256 was
-`13cec8b3b0cbb28f45856a374d843702c8e79cc7c80c286b3b19525b19aa3de1`. After
-launch, future-run monitor cleanup, bounded-tail, and provenance fixes were
-made and tested; the frozen reviewed builder source has SHA-256
-`5eb0900960fa687be99ca2e4fdc617d1ea2ecec6859c02780c06086973de46cd`. That
-reviewed version did not control or restart the active build. The private
-phase record stores process/session IDs, exact local paths, command, tool
-identities, and resource samples; only sanitized source/config/toolchain
-hashes and commands are included here. Both normal and optimized (`python -O`)
-hardware-free runs of the new focused safety suite passed all 12 tests.
+The command exited 0 after about 3340 seconds. Fresh-output `olddefconfig`
+preserved the exact input `.config` SHA; resource-monitor samples ranged from
+13.1 to 24.7 GiB `MemAvailable` and 64.2 to 76.0 GiB free disk. The generated
+kernel release is `5.10.260-ge5af0ba1cefc`; `modules.order` contains 329
+entries. The raw output tree remains private under
+`$KERNEL_BUILD_ROOT/npu-six-patch-out-20261002`.
 
-The private build output, log, and resource samples remain under
-`$KERNEL_BUILD_ROOT/npu-six-patch-out-20261002`. Final exit status, kernel
-release, module count, Module.symvers identity, NPU module metadata, generated
-build identity, and artifact hashes will be added after the command completes.
+| Artifact | Bytes | SHA-256 |
+|---|---:|---|
+| `Image` | 33,513,984 | `86e56e2c65e17c9e8df7c826696c9fd143f089bc305393e1b8b9ad1a8c1eabd6` |
+| `vmlinux` | 586,724,072 | `2fb35d4ac9b023cdc6a83650966fb59e3899b921a6ef3a434674fcb097fc1c34` |
+| `drivers/vision/npu.ko` | 17,323,960 | `639e5a3947fe4db360ba21bc3ec3b2f2bc7734fccf24489a4ceeb4b4f05aa2d1` |
+| `Module.symvers` | 1,108,525 | `979104ac6a1c4e6279ea0597ef3bdccb1118d730b0c085302e90bc558b53689d` |
+
+The NPU module reports vermagic
+`5.10.260-ge5af0ba1cefc SMP preempt mod_unload modversions aarch64` and has
+`.modinfo` and `__versions` sections. Its GNU build ID is
+`8ca6aecea1647a746a27be52b047afd9ea32f844`; `vmlinux` build ID is
+`146a0f11148bd8a46514ecee6f1c09622593f79f`. The module's 234 imported-symbol
+CRC rows all match this build's `Module.symvers` (zero missing/mismatched); in
+particular, `module_layout` is `0x0e3c515c` in both. This establishes only
+same-build MODVERSIONS correspondence. It does not establish compatibility
+with the phone's loaded modules.
+
+Generated `include/generated/compile.h` SHA-256 is
+`d8d72714c870b8665f01635e561a4713f415ba8d17e2894a9293515fa837b344`; generated
+`include/generated/utsrelease.h` SHA-256 is
+`5037e4822a36260976b1248b3173f67ccc0eb011b42d7106232e753ad6f5aac2`. Host and
+user text embedded by the generated compile header is intentionally omitted.
+The Kbuild timestamp was not normalized or pinned, so generated identities
+and hashes are timestamp-sensitive; no reproducibility claim is made.
+
+The actual launched helper source SHA-256 was
+`13cec8b3b0cbb28f45856a374d843702c8e79cc7c80c286b3b19525b19aa3de1`; it alone
+controlled the active build. The initial post-launch helper version
+`5eb0900960fa687be99ca2e4fdc617d1ea2ecec6859c02780c06086973de46cd` was
+reviewed but not executed; review found that it could return after the direct
+make leader exited while a same-group descendant survived. Two new isolated,
+real-subprocess regressions reproduced that failure before the fix: one with
+the leader exiting on SIGINT and one with the leader already reaped. The final
+future-run helper hashes group presence through bounded SIGINT/SIGTERM/SIGKILL
+stages, reports false if disappearance is not confirmed, and preserves the
+original monitor exception. Its reviewed source SHA-256 is
+`45bec3c9b0f7632d40d89c869f256e38aa4796eb391e0141bee022a1181991bf`. All 16
+focused safety tests pass both normally and under `python -O`; the two real
+process-group regressions pass after the fix. This helper change did not
+restart or rerun Kbuild. The raw generated build receipt contains no helper
+SHA, so the separate launch phase record is the evidence for the executed
+`13cec8b3…` bytes; no completion-time file hash is presented as executed code.
 
 ## Evidence boundary
 
-Even a successful `Image modules` result is host build evidence only. It does
+This successful `Image modules` result is host build evidence only. It does
 not establish module loading, firmware readiness, NPU BOOTUP, shutdown safety
-on hardware, a usable runtime, or device acceptance. `bootup_ready=false` and
-`bootup_authorized=false`; no deployment or phone action is authorized by this
-build.
+on hardware, a usable runtime, device acceptance, or compatibility with the
+phone's loaded modules. These standalone profile artifacts are not authorized
+to replace or be installed over the working native image. `bootup_ready=false`
+and `bootup_authorized=false`; no deployment or phone action is authorized by
+this build.
