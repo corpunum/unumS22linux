@@ -30,6 +30,8 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-npu-shutdown-ownership.py",
     "tools/hardware/test-npu-full-lifecycle-profile.py",
     "tools/hardware/test-npu-shutdown-error-propagation.py",
+    "tools/hardware/test-npu-publication-liveness-c.py",
+    "tools/hardware/test-build-npu-six-profile.py",
     "tools/hardware/test-device-trial-guard.py",
     "tools/hardware/test-audio-control-readiness.py",
     "tools/hardware/test-audio-progress-snapshot.py",
