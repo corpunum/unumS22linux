@@ -1,0 +1,76 @@
+# Independent S22 profile, queue, and lifecycle review — 2026-10-02
+
+## Verdict
+
+The reviewed host-source changes are scoped and testable, with explicit limits:
+
+- The HCI lifecycle regression passes source-scope review. The suspected negative-ID cookie failure is disproved by the pinned `ida_free()` guard; no cookie patch is warranted.
+- The audio queue-state fix is now linearized with queue publication. This resolves the earlier sequential and concurrent state-publication findings in the host-source model. ASoC callers can still swallow some backend errors, and later asynchronous sender failures are not reported back to the cache; this is not driver or audio-runtime acceptance.
+- The native-eight builder profile is correctly tied to the exact exported config and pinned source/tool inputs after the independently reproduced redirection, Git-context, and receipt-label defects were fixed. This is a builder/source review, not a kernel-build, artifact-publication, or deployment result.
+- NPU patch 9 correctly retains ownership when the exact POWER_CTL publication path commits the mailbox record and then returns `-EWOULDBLOCK`. Baseline misattribution is reproduced and the patched extracted C passes. The NPU publication regression is included in the fixed host runner at the reviewed CI-wiring commit. Unbounded waiter drain and absent close/reopen firmware/IRQ quiescence remain explicit blockers; the patch does not clear NPU shutdown, device, or deployment behavior.
+
+No phone, SSH, ADB, hardware, module load, full kernel build, artifact publication, or deployment was performed by this review.
+
+## Reviewed identities
+
+The isolated worktree contained the native profile series `b34901c347fa73f6e5f739618cfa07453f4d6ca5`, `f76f5593cf903c41f1d7ef1f8c783e3d4bc27703`, `9eed440248ea5ecf0be62421238182977227e15e`, and `6544416c81e86b9a32dc2e8d1844b77b4134f09d`, followed by guard/receipt fixes `04c5c94c8fbb666dfe94a981610404fa0f8f60bf`, `1d83d4e131049cd2a42f62ebb087d54fd558363e`, and `7a56cfdcb70f23af263beaa9f6d053868010e650`.
+
+The reviewed HCI source-test commit is `0f643f74bd1fec357b8ff732be9c88417e076c40`. The initial audio reproduction is preserved at `87096f827d78090236767fc0953ac0fcbbce0e72`; the concurrency/publication repair is author commit `f788f87f96f166e6c76a0104d79f976429d06419`, locally integrated for review as `6efbeebb763f13127225ccc4ae3a88651c48c878`. The NPU ownership candidate is author commit `d50a90464d66c5371de17076ba84402316820123`, locally integrated as `15210cf14dbb46c22651eff19d925b65417f31b6`. The explicit NPU host-runner wiring is author commit `39aa98585fabda76f0059d2a70c9c6b5c493b51b`, locally integrated as `a18a487586f05f39d146c41a28341c245e0e3f2a`.
+
+## HCI lifecycle regression
+
+The test pins `net/bluetooth/hci_sock.c`, `lib/idr.c`, and `include/linux/idr.h` by commit and SHA-256, caps each fixture at 128 KiB, bounds public fetches, and accepts an explicit local tree only when the exact source blobs match. Its extracted C includes actual socket create/release/destructor, cookie allocation/free, init/cleanup, and `ida_free()` bodies; socket, lock, XArray, SKB, and registration operations are host shims.
+
+The pinned baseline is intentionally unusual: `hci_sock_create()` returns success without allocating because its implementation is under `#if 0`, while `hci_sock_init()` remains live and registers the protocol, family, and proc entry. The sentinel concern is disproved by the actual signed-negative guard in `ida_free()` before XArray locking. The test covers the stated sequential lifecycle, cleanup/unwind, and sentinel cases; it does not establish actual bind/ioctl, privilege, concurrent kernel locking, controller, radio, or device behavior. The HCI test is present in the explicit host allowlist and the workflow runs the policy test then the fixed suite in normal and optimized modes.
+
+In the prior review environment, the three local-fixture Python modes passed; all six no-local-fixture HCI invocations exited 77 due DNS resolution failure. Those public-route attempts are unavailable evidence, not passes. The repository statement that the host suite makes no network request should be revisited because pinned-source tests do fetch public source by default.
+
+## Audio queue-state repair
+
+The first review of `87096f8` found a real sequential defect: cached `enabled` state changed before queue acceptance, so a failed START/STOP could suppress a later explicit retry. That negative finding remains part of the history; the sequential patch repaired it. Review then found a separate concurrency defect: PCM-trigger and backend-mute paths could observe the same old state and race their queue publications. The frozen repair now places trigger deduplication, queue insertion, ring-index advancement, and cached-state commit in the existing `ipc_queue_lock` critical section. Failure to enqueue leaves the cache unchanged; accepted queue insertion commits the state. The lock is not held across `queue_work()`, delay, or flush operations.
+
+The pinned queue API returns 0 for insertion, `-EBUSY` when full, and `-EINVAL` for oversized messages. The reviewed `atomic=true, sync=false` call returns the final queue-insertion result, so no successful-insert/negative-return ambiguity was found. This result does not include subsequent asynchronous sender success or firmware acknowledgement.
+
+The extracted-C regression exercises FE and BE callers, a controlled two-caller interleaving, full-queue failures/retries, duplicate requests, unchanged generic API behavior, and caller return behavior. Actual FE trigger errors propagate through the component path. The BE helper returns its error, but pinned `soc_pcm_prepare()`/`soc_pcm_hw_free()` ignore digital-mute results and the DAPM event logs then clears the error. An accepted asynchronous message that later fails in the sender remains outside the state model and is not retried by this patch. Therefore the queue/cache linearization defect is cleared at host-source scope; swallowed backend errors and asynchronous transport semantics remain limitations, and no integrated audio or runtime acceptance follows.
+
+Reviewed audio patch SHA-256: `676735886d88441232d3e56aa07c77e38f63f823ffa09b90addc51918ef9fc9d`; current test and harness SHA-256 values are `6e2b28ca2ee91bb8ba97121f4d7ca7c70651cc931c1aa7121aac4de15401f20e` and `5305c50ae2474bab82f8480a223ddc1a9e0340178d952cc73cedea6bf63123a6`. Pinned ABOX base is `4e5c5ad7d950e4de0688b5663965f2075654b2ad`; the explicit clean derived fixture is `3fca50941422439b2019db2e4a3dc1016b2138a1`.
+
+## Native-eight build profile
+
+The reviewed kernel source is the clean tree `/home/corpunum/s22-linux/builds/npu-native-eight-kernel-20261002` at commit `872bffb8ea2ea657f94d10b866dc655b5718d6db`, tree `417e4a55e222b99ecca0f198e081d2d808ef5628`, derived from base `3fca50941422439b2019db2e4a3dc1016b2138a1`. It contains only the eight intended NPU patches. Patch 9 is excluded from this build profile. The exact coordinator-exported config is `/home/corpunum/s22-linux/builds/native-config-export-20261002.config`, SHA-256 `d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16`; it selects `CONFIG_LTO_NONE=y` (not ThinLTO), and retains the intended CFI, SCS, MODVERSIONS, Bluetooth/QCA, camera-module, and NPU settings. The pinned LLVM/LLD 18.1.3 and helper-tool hashes are documented by the profile receipt.
+
+Three independent failures were reproduced before the final builder fixes:
+
+1. `KCONFIG_CONFIG`, `KCONFIG_AUTOCONFIG`, `KCONFIG_AUTOHEADER`, and `KBUILD_EXTMOD` could redirect Kconfig inputs/outputs or alter the build mode while preserving a misleading config receipt. The final gates reject all four for both profiles before output creation, with literal negative tests.
+2. Inherited Git routing variables allowed the helper to validate the pinned repository while a decoy directory was passed to `make -C`. The final source gate refuses inherited `GIT_*` routing variables except benign `GIT_PAGER`, invokes Git with `--no-pager`, and requires `git --show-toplevel` to equal the build source directory. An actual two-repository decoy regression exercises this path.
+3. The six-profile receipt could mislabel a hash-only excluded patch as applied. The final receipt separates the applied list from excluded inputs and validates both lists exactly; the old receipt is preserved rather than rewritten.
+
+After those fixes, the full profile-builder suite passed 29/29 in each of normal Python, `python3 -O`, and `PYTHONOPTIMIZE=1`; the host-runner policy suite passed 7/7. The builder test is in both explicit runner allowlists; the workflow runs the policy check and fixed suite with normal and optimized passes. The reviewed builder/test/doc SHAs are `56f39759e4a098562cbafd634a659b007be2a540a4ada6234962711be026e5d5`, `7325b70c69dfe76297d02ebe54fc938ce9f7f74f7c1c217cadcae0d917fe7e3f`, and `b9cb563c2dc62de6110adff2528e79f99b2d7a59df985e5869fb7e8d97cfa965`.
+
+This is source/profile and host-test evidence only. I did not run a full kernel build or inspect a resulting artifact. Nothing here is publication, deployment, BOOTUP, or device authorization; earlier preparation refusals remain in force.
+
+## NPU patch 9: ambiguous POWER_CTL publication ownership
+
+The candidate patch SHA-256 is `2e2e2de8a28c5b408bfa0661535c358070130340318f1d0eaa0efe38edc11078`; it changes only `npu-if-protodrv-mbox2.c`. The test and harness SHA-256 values are `d7576dff03d48db006eca7fceef6ea242de69462b0bc6df23906b960d6f09338` and `2fe97059a87fa6f87b1ea2bf8f2d84a623b86870a03f17d3cd0c4f7ec6b3dda0`. The source fixture is pinned to base `4e5c5ad7d950e4de0688b5663965f2075654b2ad`; local derived source `3fca50941422439b2019db2e4a3dc1016b2138a1` is verified clean and byte-compatible for the tested paths.
+
+The source provenance supports the narrow guard. In the composed BOOT_IOCTL/mailbox-v9/command-v10 path, `nw_req_manager()` handles `NPU_NW_CMD_POWER_CTL`, calls `npu_set_cmd()`, and propagates its result. `npu_set_cmd()` calls `mbx_ipc_put()` before `__send_interrupt()`. The actual producer copies message/command bytes and advances `ctrl->wptr` before the interrupt wait; the exact POWER_CTL poll can then return `-EWOULDBLOCK`. Its finite poll and bounded diagnostic walk are a source-level bound, not a real-time or whole-callback guarantee. Pre-commit producer errors are distinct (`-EPARAM`, `-EALIGN`, `-EINVAL`, `-ERESOURCE`).
+
+The patch retains the message ID only when all three identities match: `-EWOULDBLOCK`, POWER_CTL plus `npu_session_save_power_result`, and the registered hardware callback `nw_req_manager`. That distinction matters because host Linux aliases `EWOULDBLOCK` and `EAGAIN`, and errno alone does not prove ring commitment. The positive retained-ownership result reaches the actual requested-handler success branch, moving the entry to `PROCESSING` rather than automatically republishing it. The single AST processes responses before requested work; a response available at `wptr` commit is consumed on the next serialized pass. A late reply releases its retained ID. If the request times out into `STUCKED`, the actual completion decision keeps the entry there; the late-reply path releases the ID without freeing/reusing that entry. Unresolved IDs exhaust the fixed 64-ID pool and cause later posts to be refused, which is the explicit liveness cost of avoiding ambiguous reuse.
+
+The host test applies the eight-patch order to SHA-verified pinned source and compiles/runs extracted production C at C `-O0` and `-O2`. Its pre-patch executable reproduces late-response misattribution, loss of a response available at commit, and retryable/unowned lifetime. Patched C checks late and immediate replies, no automatic republish, pre-commit `-ERESOURCE` retry, a non-hardware callback returning `-EWOULDBLOCK`, canceled waiter handling, STUCKED retention, and pool exhaustion. The test uses bounded host shims for MMIO, mailbox bytes, LSM storage, waiter state, and scheduler-facing hooks; it does not model real kernel locks/barriers, IRQ scheduling, firmware, close/reopen, or device references. The callback-negative is executed; the remaining guard elements are checked in the exact candidate-effect/source audit.
+
+All six explicit runs passed: public pinned fixtures and explicit local clean-derived fixtures, each under normal Python, `-O`, and `PYTHONOPTIMIZE=1`. Each run reproduced the baseline negatives and compiled/ran both C optimization levels. The source union was 1,334,141 bytes under per-file and aggregate caps. The regression is now included in the explicit host runner and runner-policy expected list by `39aa98585fabda76f0059d2a70c9c6b5c493b51b`; the policy test passed 7/7 here. Coordinator-reported full-suite results at that wiring commit were 95/97 invocations passing, including NPU9 public-source normal and `-O`; the two failures were in unrelated Bluetooth adapter test-only fixtures, which hit an earlier preserved source gate. They are outside this NPU/profile source verdict and were not independently reproduced here.
+
+The patch is not a solution to waiter-drain or lifecycle liveness. `npu_power_wait_cancel_and_drain()` still performs an unbounded wait for synchronous publication completion; inventing a timeout could free memory while the publisher still references it. `proto_drv_close()` joins the AST before destroying its LSM but does not invalidate message IDs; reopen reinitializes the pool and mailbox pointers. No firmware/IRQ quiescence fence across close/reopen was established. Keep the refusal for unbounded drain, close/reopen safety, and firmware/IRQ quiescence; do not treat NPU9 as hardware or shutdown clearance.
+
+## Verification commands and boundary
+
+NPU9 commands used (all exit 0):
+
+- `env CC=cc python3 -I -B tools/hardware/test-npu-publication-ownership.py`
+- `env CC=cc python3 -O -I -B tools/hardware/test-npu-publication-ownership.py`
+- `env CC=cc PYTHONOPTIMIZE=1 python3 -I -B tools/hardware/test-npu-publication-ownership.py`
+- The same three commands with `S22_NPU_PROBE_SOURCE_TREE=/home/corpunum/s22-workers/camera-kernel-build-20260927` and `S22_NPU_SHUTDOWN_SOURCE_TREE` set to the same exact tree.
+- `python3 -I -B tools/hardware/test-host-regression-runner.py` — 7/7 policy tests passed after NPU9 was added to both explicit lists.
+
+Audio and HCI fixture-mode results above are preserved from the first independent review. Native-builder testing was host-only. These results establish pinned-source/extracted-C and builder-guard behavior only, not compiled kernel behavior or runtime, firmware, device, or deployment acceptance.
