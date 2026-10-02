@@ -9,6 +9,24 @@ deployment, module load, phone/SSH/ADB access, or BOOTUP/runtime action has
 been performed. The coordinator has not issued the one-module-build GO; stop
 here until that explicit authorization.
 
+The initially frozen wrapper at `98b1d0a` (wrapper SHA-256
+`c4a25c93696217c1ae905df51bb57ece4ca652291b6f001a47c2ab23e8aca842`) was
+not executed. Review found that it verified but failed to return the toolchain
+mapping consumed by the build-phase receipt, and checked for generated
+`kernel.release` immediately after `olddefconfig`. This follow-up preserves
+that original commit, fixes both orchestration defects, and adds a
+hardware-free test of the real `collect_plan()` and `execute_build()` paths.
+It does not alter the pinned kernel source, config, toolchain, or build target.
+
+The pinned kernel Makefile shows the direct dependency chain
+`drivers/vision/npu.ko → single_modpost → modules_prepare → prepare → archprepare
+→ include/config/kernel.release`; `olddefconfig` is a separate
+configuration-only target. Absence of the generated release file after
+`olddefconfig` is therefore expected. The wrapper now checks for a non-symlink
+file with the exact pinned release only after the monitored NPU target exits
+zero without a resource abort. This verifies generated output without
+weakening release identity checks.
+
 The exact new output directory, filtered Symvers output, and raw
 `olddefconfig` log are absent. The private wrapper at
 `tools/hardware/build-npu-twelve-module-only.py` defaults to read-only plan
@@ -58,10 +76,13 @@ existing native-ten output `.config` has the same hash. Required pinned values
 include `CONFIG_EXYNOS_NPU=m`, `CONFIG_NPU_USE_BOOT_IOCTL=y`,
 `CONFIG_MODVERSIONS=y`, `CONFIG_CFI_CLANG=y`, `CONFIG_LTO_NONE=y`,
 `CONFIG_SHADOW_CALL_STACK=y`, `CONFIG_LOCALVERSION="-g4e5c5ad7d950"`, and
-`CONFIG_LOCALVERSION_AUTO=n`. The expected release is
+`CONFIG_LOCALVERSION_AUTO=n`. The expected generated release is
 `5.10.260-g4e5c5ad7d950`. The new output `.config` does not yet exist; before
 `olddefconfig`, its copied input must match the pinned export hash, and after
-`olddefconfig` it must still match exactly or compilation is refused.
+`olddefconfig` it must still match exactly or compilation is refused. The
+generated `include/config/kernel.release` is checked only after successful
+module preparation/build, because `olddefconfig` does not promise to create
+that file.
 
 The matching native-eight full `Module.symvers` is
 `/home/corpunum/s22-linux/builds/npu-native-eight-out-clang18-recipe-20261002/Module.symvers`,
@@ -84,16 +105,33 @@ not be substituted for re-deriving the twelve build's pinned input.
 
 ## Pinned module-only wrapper (not executed)
 
-The wrapper SHA-256 is
-`c4a25c93696217c1ae905df51bb57ece4ca652291b6f001a47c2ab23e8aca842`. Its
+The corrected wrapper SHA-256 is
+`8dab1a2c0ea2b01555645717b46c0f1506ff951a60a9256669d90bae6859d61d`. Its
 plan-only path verifies the exact source HEAD/tree/parent and clean state,
 config, both patch digests, the 13 native LLVM/GNU tools, Python/make/env/nice,
 both helper hashes and versions, fresh output paths, and current operation
-resource gate. It does not create output files. It was read-only exercised in
-normal Python, `-O`, and `PYTHONOPTIMIZE=1` modes; all reported the same source
-and helper identities, gate met, and output paths absent. A negative execution
-check with the correct wrapper SHA but no coordinator token exited 2 before
-creating either reserved output.
+resource gate. The returned plan now carries the verified toolchain mapping
+used in the build-phase receipt. It does not create output files. It was
+read-only exercised in normal Python (optimization level 0), `-O` (level 1),
+and `PYTHONOPTIMIZE=1` (level 1); all reported the same source, helper, and
+17 tool identities, gate met, and output paths absent.
+With the corrected wrapper SHA but no coordinator token, `--execute` returned
+2 with `--execute requires the exact coordinator GO token`; both reserved
+output paths remained absent.
+
+`tools/hardware/test-build-npu-twelve-module-only.py` imports and executes the
+actual `collect_plan()` and `execute_build()` implementations against
+temporary paths. It controls `subprocess.Popen` and the pinned monitor seam;
+any unexpected subprocess command fails the test, so no real `make` or Kbuild
+can start. The suite passes in normal, `-O`, and effective `PYTHONOPTIMIZE=1`
+modes. It covers toolchain propagation, the successful single-target path,
+config and `olddefconfig` failures, initial and pre-build resource gates,
+resource-abort with zero exit, `SystemExit(0)`, existing-output refusal, and
+missing/wrong post-target `kernel.release`. In particular the fake
+`olddefconfig` verifies that `kernel.release` is still absent and the fake
+module-prepare boundary creates it only after the exact module target has been
+handed to the monitor. These are orchestration tests, not Kbuild or module
+compile evidence.
 
 ```sh
 # Read-only identity, command, and resource plan; no files are created.
@@ -106,8 +144,8 @@ creating either reserved output.
 /usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C /usr/bin/python3 -I -B \
   /home/corpunum/s22-workers/npu-twelve-native-build-20261003/tools/hardware/build-npu-twelve-module-only.py \
   --execute \
-  --expect-wrapper-sha256 c4a25c93696217c1ae905df51bb57ece4ca652291b6f001a47c2ab23e8aca842 \
-  --coordinator-go-token GO:NPU12-MODULE-ONLY:e9c3016233a72ceccb13e537f0b7ef72426582b9:c4a25c93696217c1ae905df51bb57ece4ca652291b6f001a47c2ab23e8aca842
+  --expect-wrapper-sha256 8dab1a2c0ea2b01555645717b46c0f1506ff951a60a9256669d90bae6859d61d \
+  --coordinator-go-token GO:NPU12-MODULE-ONLY:e9c3016233a72ceccb13e537f0b7ef72426582b9:8dab1a2c0ea2b01555645717b46c0f1506ff951a60a9256669d90bae6859d61d
 ```
 
 On explicit GO, the wrapper rechecks all identities, paths, and the 12/24 GiB
@@ -116,9 +154,10 @@ exclusive fresh output transaction, verifies the expected 17,282-row filtered
 hash, then copies the preserved config exclusively and invokes only
 `olddefconfig`. Its stdout/stderr is retained verbatim at
 `.../olddefconfig.log`; the before/after config SHA must match or module
-compilation is refused. It also records filter output and each phase in a
-private append-only `module-only-phase.jsonl` journal. There is no retry or
-cleanup of partial outputs.
+compilation is refused. It does not expect `olddefconfig` to create
+`kernel.release`. It also records filter output and each phase in a private
+append-only `module-only-phase.jsonl` journal. There is no retry or cleanup of
+partial outputs.
 
 The only compilation argv is
 `/usr/bin/nice -n 10 /usr/bin/env -i PATH=/usr/lib/llvm-18/bin:/usr/bin:/bin
@@ -137,9 +176,9 @@ fails closed if `resource_abort` is true even when the helper reports a zero
 child exit, and converts any helper `SystemExit(0)` into nonzero failure. Both
 olddefconfig and monitor-run build process groups use the pinned bounded
 SIGINT/SIGTERM/SIGKILL cleanup helper; its confirmation is journaled. Success
-is accepted only for a zero make exit without resource abort, a stable config
-and source identity, exactly one `*.ko` at `drivers/vision/npu.ko`, and no
-`Image`.
+is accepted only for a zero make exit without resource abort, the post-target
+exact `kernel.release`, a stable config and source identity, exactly one
+`*.ko` at `drivers/vision/npu.ko`, and no `Image`.
 
 At the later authorized run, record actual prelaunch UTC time/resources,
 source HEAD/tree and cleanliness immediately before and after, config SHA
@@ -153,9 +192,9 @@ are expectations to check, not claims about this source.
 
 ## Current preflight snapshot and evidence boundary
 
-The wrapper's latest read-only point-in-time sample was
-`2026-10-02T22:23:30Z`: 28,263,329,792 bytes available memory and
-31,187,976,192 bytes free at `/home/corpunum/s22-linux/builds`. Both operation
+The corrected wrapper's latest read-only point-in-time sample was
+`2026-10-02T22:34:28Z`: 27,276,898,304 bytes available memory and
+31,029,047,296 bytes free at `/home/corpunum/s22-linux/builds`. Both operation
 start thresholds (12 GiB / 24 GiB) passed at that instant. An earlier host
 sample at `22:01:44Z` also saw this build filesystem as the root ext4 mount;
 it was below the *full Image-profile* 32 GiB initial-disk gate but above this

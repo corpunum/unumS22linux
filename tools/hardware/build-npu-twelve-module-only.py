@@ -367,6 +367,7 @@ def collect_plan() -> dict[str, Any]:
             "minimum_remaining_disk_bytes": monitor.MIN_REMAINING_DISK,
             "cleanup_stage_timeouts_seconds": list(monitor.CLEANUP_STAGE_TIMEOUTS),
         },
+        "toolchain": toolchain,
         "resources": resources,
         "output": {"path": str(OUTPUT), "status": "absent"},
         "execution": "NOT_RUN",
@@ -527,10 +528,6 @@ def execute_build(plan: dict[str, Any], monitor: types.ModuleType) -> int:
                 raise BuildPreparationError(
                     "olddefconfig changed the pinned config; module build refused"
                 )
-            release_path = OUTPUT / "include/config/kernel.release"
-            if not release_path.is_file() or release_path.read_text().strip() != "5.10.260-g4e5c5ad7d950":
-                raise BuildPreparationError("generated kernel.release differs from pinned release")
-
             source_after_prepare = verify_source()
             resources_after_prepare = resource_snapshot()
             append_phase(phase_stream, "pre_build_gate", source=source_after_prepare,
@@ -627,6 +624,23 @@ def execute_build(plan: dict[str, Any], monitor: types.ModuleType) -> int:
                 append_phase(phase_stream, "module_build_failed", exit_code=module_rc,
                              resource_abort=False, success=False)
                 return 2
+
+            # The pinned Makefile creates include/config/kernel.release through
+            # archprepare, which is reached by modules_prepare for this module
+            # target. olddefconfig alone does not guarantee that generated file.
+            release_path = OUTPUT / "include/config/kernel.release"
+            if release_path.is_symlink() or not release_path.is_file():
+                raise BuildPreparationError(
+                    "module target did not generate the pinned kernel.release"
+                )
+            actual_release = release_path.read_text(encoding="ascii").strip()
+            expected_release = "5.10.260-g4e5c5ad7d950"
+            append_phase(phase_stream, "kernel_release_verified",
+                         actual=actual_release, expected=expected_release)
+            if actual_release != expected_release:
+                raise BuildPreparationError(
+                    f"generated kernel.release differs from pinned release: {actual_release!r}"
+                )
 
             module = verify_module_only_output()
             config_final_hash = sha256_path(OUTPUT / ".config", reject_symlink=True)
