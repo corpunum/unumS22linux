@@ -1,0 +1,333 @@
+--- a/drivers/vision/npu/core/npu-device.h
++++ b/drivers/vision/npu/core/npu-device.h
+@@ -58,3 +58,4 @@
+ enum npu_device_err_state {
+-	NPU_DEVICE_ERR_STATE_EMERGENCY
++	NPU_DEVICE_ERR_STATE_EMERGENCY,
++	NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN
+ };
+--- a/drivers/vision/npu/core/npu-device.c
++++ b/drivers/vision/npu/core/npu-device.c
+@@ -558,2 +558,5 @@
+ 	BUG_ON(!device);
++	if (test_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN,
++			&device->err_state))
++		return -EIO;
+ 
+@@ -703,8 +706,18 @@
+ #ifdef CONFIG_NPU_USE_BOOT_IOCTL
+-	ret += npu_system_suspend(&device->system);
+-	ret += npu_hwdev_recovery_shutdown(device);
+-	ret += npu_log_close(device);
+-	ret += npu_debug_close(device);
++	if (test_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN,
++			&device->err_state))
++		return -EALREADY;
++
++	ret = npu_system_suspend(&device->system);
++	if (ret)
++		goto err_uncertain;
++	ret = npu_hwdev_recovery_shutdown(device);
++	if (ret)
++		goto err_uncertain;
++	ret = npu_log_close(device);
+ 	if (ret)
+-		goto err_coma;
++		goto err_uncertain;
++	ret = npu_debug_close(device);
++	if (ret)
++		goto err_uncertain;
+ #else
+@@ -720,4 +733,6 @@
+ #ifdef CONFIG_NPU_USE_BOOT_IOCTL
+-err_coma:
+-	BUG_ON(1);
++err_uncertain:
++	set_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN, &device->err_state);
++	npu_device_set_emergency_err(device);
++	return ret;
+ #endif
+@@ -731,2 +746,5 @@
+ 	BUG_ON(!device);
++	if (test_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN,
++			&device->err_state))
++		return -EIO;
+ 
+--- a/drivers/vision/npu/core/npu-hw-device.c
++++ b/drivers/vision/npu/core/npu-hw-device.c
+@@ -463,2 +463,8 @@
+ 			hdev = g_hwdev_list[hi];
++			if (hdev && strcmp(hdev->name, "DNC") &&
++			    hdev->status == NPU_HWDEV_STATUS_ERROR)
++				return -EIO;
++			if (hdev && strcmp(hdev->name, "DNC") && hdev->status &&
++			    atomic_read(&hdev->init_cnt.refcount) <= 0)
++				continue;
+ 			if (hdev && strcmp(hdev->name, "DNC") && hdev->status) {
+@@ -480,2 +486,8 @@
+ 			hdev = g_hwdev_list[hi];
++			if (hdev && strcmp(hdev->name, "DNC") &&
++			    hdev->status == NPU_HWDEV_STATUS_ERROR)
++				return -EIO;
++			if (hdev && strcmp(hdev->name, "DNC") && hdev->status &&
++			    atomic_read(&hdev->boot_cnt.refcount) <= 0)
++				return -EINVAL;
+ 			if (hdev && strcmp(hdev->name, "DNC") && hdev->status) {
+--- a/drivers/vision/npu/core/npu-vertex.c
++++ b/drivers/vision/npu/core/npu-vertex.c
+@@ -141,3 +141,5 @@
+ {
+-	if (unlikely(npu_device_is_emergency_err((dev)))) {
++	if (unlikely(test_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN,
++				     &dev->err_state) ||
++			     npu_device_is_emergency_err(dev))) {
+ 		npu_warn("EMERGENCY ERROR STATE!\n");
+@@ -224,2 +226,6 @@
+ 	}
++	if (test_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN, &device->err_state)) {
++		ret = -EIO;
++		goto ErrorExit;
++	}
+ 	ret = __vref_get(&vertex->open_cnt);
+@@ -227,5 +233,12 @@
+ 		npu_err("start for emergency recovery\n");
+-		__vref_put(&vertex->open_cnt);
+-		npu_device_recovery_close(device);
+-		ret = -EWOULDBLOCK;
++		ret = __vref_put(&vertex->open_cnt);
++		if (ret) {
++			set_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN,
++				&device->err_state);
++			npu_device_set_emergency_err(device);
++			goto ErrorExit;
++		}
++		ret = npu_device_recovery_close(device);
++		if (!ret)
++			ret = -EWOULDBLOCK;
+ 		goto ErrorExit;
+@@ -313,2 +326,6 @@
+ 	u32 save_state = vctx->state;
++	if (test_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN, &device->err_state)) {
++		npu_err("retain NPU session after uncertain shutdown\n");
++		return -EIO;
++	}
+ #endif
+@@ -319,2 +336,16 @@
+ 	}
++#ifdef CONFIG_NPU_USE_BOOT_IOCTL
++	if (test_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN, &device->err_state)) {
++		npu_err("retain NPU session after uncertain shutdown\n");
++		mutex_unlock(lock);
++		return -EIO;
++	}
++	if ((save_state & BIT(NPU_VERTEX_POWER)) && check_emergency(device)) {
++		set_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN,
++			&device->err_state);
++		npu_err("retain powered NPU session in emergency state\n");
++		mutex_unlock(lock);
++		return -EIO;
++	}
++#endif
+ 	done_state = check_done_state(vctx->state);
+@@ -363,8 +394,2 @@
+ #endif
+-	ret = npu_session_close(session);
+-	if (ret) {
+-		npu_err("fail(%d) in npu_session_close", ret);
+-		goto p_err;
+-	}
+-
+ #ifdef CONFIG_NPU_USE_BOOT_IOCTL
+@@ -373,2 +398,5 @@
+ 		if (ret) {
++			set_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN,
++				&device->err_state);
++			npu_device_set_emergency_err(device);
+ 			npu_err("fail(%d) in vref_put\n", ret);
+@@ -378,2 +406,11 @@
+ 	if (vertex->normal_count == 1 || vertex->secure_count == 1) {
++		ret = npu_hwdev_shutdown(device, hids);
++		if (ret) {
++			set_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN,
++				&device->err_state);
++			npu_device_set_emergency_err(device);
++			npu_ierr("retain NPU session after shutdown failure(%d)\n",
++				vctx, ret);
++			goto p_err;
++		}
+ 		if (session->sec_mem_buf) {
+@@ -383,11 +420,9 @@
+ 		}
+-		if (!check_emergency(device)) {
+-			ret = npu_hwdev_shutdown(device, hids);
+-			if (ret) {
+-				npu_ierr("fail(%d) in npu_vertex_shutdown\n", vctx, ret);
+-				goto p_err;
+-			}
+-		}
+ 	}
+ #endif
++	ret = npu_session_close(session);
++	if (ret) {
++		npu_err("fail(%d) in npu_session_close", ret);
++		goto p_err;
++	}
+ 
+@@ -422,7 +457,2 @@
+ #endif
+-	ret = npu_session_close(session);
+-	if (ret) {
+-		npu_err("fail(%d) in npu_session_close", ret);
+-		goto p_err;
+-	}
+ #ifdef CONFIG_NPU_USE_BOOT_IOCTL
+@@ -432,2 +462,5 @@
+ 		if (ret) {
++			set_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN,
++				&device->err_state);
++			npu_device_set_emergency_err(device);
+ 			npu_err("fail(%d) in vref_put\n", ret);
+@@ -436,7 +469,10 @@
+ 	}
+-	if (!check_emergency(device)) {
++	if (save_state & BIT(NPU_VERTEX_POWER)) {
+ 		ret = npu_hwdev_shutdown(device, hids);
+ 		if (ret) {
+-			npu_ierr("fail(%d) in npu_vertex_shutdown\n", vctx,
+-				 ret);
++			set_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN,
++				&device->err_state);
++			npu_device_set_emergency_err(device);
++			npu_ierr("retain NPU session after shutdown failure(%d)\n",
++				vctx, ret);
+ 			goto p_err;
+@@ -446,2 +482,7 @@
+ #endif
++	ret = npu_session_close(session);
++	if (ret) {
++		npu_err("fail(%d) in npu_session_close", ret);
++		goto p_err;
++	}
+ 	ret = __vref_put(&vertex->open_cnt);
+@@ -1001,2 +1042,3 @@
+ 	int ret = 0;
++	int shutdown_ret;
+ 	struct npu_vertex *vertex = vctx->vertex;
+@@ -1050,3 +1092,5 @@
+ 		npu_ierr("fail(%d) in npu_vertex_bootup : hids %x\n", vctx, ret, ctrl->value);
+-		goto p_err;
++		set_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN, &device->err_state);
++		npu_device_set_emergency_err(device);
++		goto p_err_uncertain;
+ 	}
+@@ -1058,3 +1102,2 @@
+ 		struct npu_memory_buffer *buf = kzalloc(sizeof(struct npu_memory_buffer), GFP_KERNEL);
+-		buf->size = ctrl->mem_size;
+ 		if (unlikely(!buf)) {
+@@ -1062,4 +1105,5 @@
+ 			ret = -ENOMEM;
+-			return ret;
++			goto p_err_mem;
+ 		}
++		buf->size = ctrl->mem_size;
+ 		session->sec_mem_buf = buf;
+@@ -1081,4 +1125,15 @@
+ p_err_mem:
+-	kfree(session->sec_mem_buf);
+-	npu_hwdev_shutdown(device, ctrl->value);
++	shutdown_ret = npu_hwdev_shutdown(device, ctrl->value);
++	if (shutdown_ret) {
++		set_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN, &device->err_state);
++		npu_device_set_emergency_err(device);
++		npu_ierr("retain secure NPU session after cleanup failure(%d)\n",
++			vctx, shutdown_ret);
++		ret = shutdown_ret;
++		goto p_err_uncertain;
++	}
++	if (session->sec_mem_buf) {
++		kfree(session->sec_mem_buf);
++		session->sec_mem_buf = NULL;
++	}
+ p_err_check:
+@@ -1086,2 +1141,3 @@
+ 	device->is_secure = 0;
++p_err_uncertain:
+ 	mutex_unlock(&vertex->lock);
+@@ -1119,2 +1175,8 @@
+ 
++	ret = npu_hwdev_shutdown(device, ctrl->value);
++	if (ret) {
++		set_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN, &device->err_state);
++		npu_device_set_emergency_err(device);
++		goto p_err;
++	}
+ 	if (session->sec_mem_buf) {
+@@ -1125,4 +1187,2 @@
+ 
+-	npu_hwdev_shutdown(device, ctrl->value);
+-
+ 	device->is_secure = 0;
+@@ -1132,2 +1192,5 @@
+ 	return 0;
++p_err:
++	mutex_unlock(&vertex->lock);
++	return ret;
+ }
+@@ -1269,4 +1332,17 @@
+ 	device->active_non_secure_sessions = 1;
+-	device->active_non_secure_sessions = atomic_xchg(&vref->refcount, device->active_non_secure_sessions);
+-	__vref_put(&vertex->boot_cnt);
++	device->active_non_secure_sessions = atomic_xchg(&vref->refcount,
++			device->active_non_secure_sessions);
++	ret = __vref_put(&vertex->boot_cnt);
++	if (ret) {
++		set_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN, &device->err_state);
++		npu_device_set_emergency_err(device);
++		goto p_err;
++	}
++
++	ret = npu_hwdev_shutdown(device, ctrl->value);
++	if (ret) {
++		set_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN, &device->err_state);
++		npu_device_set_emergency_err(device);
++		goto p_err;
++	}
+ 	device->active_non_secure_sessions--;
+@@ -1274,4 +1350,2 @@
+ 
+-	npu_hwdev_shutdown(device, ctrl->value);
+-
+ 	vertex->normal_count--;
+@@ -1349,3 +1423,6 @@
+ 	}
+-	vctx->state |= BIT(NPU_VERTEX_POWER);
++	if (!ret && (ctrl->ctrl & MASK_BIT_UP_DOWN) == BOOT_UP)
++		vctx->state |= BIT(NPU_VERTEX_POWER);
++	else if (!ret && (ctrl->ctrl & MASK_BIT_UP_DOWN) == BOOT_DOWN)
++		vctx->state &= ~BIT(NPU_VERTEX_POWER);
+ #ifdef CONFIG_NPU_USE_LLC
+@@ -1388,2 +1465,7 @@
+ 	}
++	if (test_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN,
++			&device->err_state)) {
++		mutex_unlock(lock);
++		return -EIO;
++	}
+ 
+@@ -1398,5 +1480,12 @@
+ 		npu_err("start for emergency recovery\n");
+-		__vref_put(&vertex->boot_cnt);
+-		npu_device_recovery_close(device);
+-		ret = -EWOULDBLOCK;
++		ret = __vref_put(&vertex->boot_cnt);
++		if (ret) {
++			set_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN,
++				&device->err_state);
++			npu_device_set_emergency_err(device);
++			goto p_err;
++		}
++		ret = npu_device_recovery_close(device);
++		if (!ret)
++			ret = -EWOULDBLOCK;
+ 		goto p_err;
+
