@@ -4,8 +4,12 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 import shutil
+import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -45,6 +49,28 @@ def trial19_summary() -> dict:
 
 
 class CaptureProfileTests(unittest.TestCase):
+    def test_trial_label_is_bounded_and_has_no_private_delimiters(self) -> None:
+        for label in ("", "a" * 65, "a\nsecret", "user@host", "/private/path", " label"):
+            with self.subTest(label=label), self.assertRaises(profile.ProfileError):
+                summary = trial19_summary()
+                summary["trial_id"] = label
+                profile.validate_trial_summary(summary)
+
+    def test_summary_reader_caps_actual_file_and_stdin_reads(self) -> None:
+        raw = json.dumps(trial19_summary()).encode()
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "summary.json"
+            path.write_bytes(raw)
+            self.assertEqual(profile._read_summary(str(path)), trial19_summary())
+            path.write_bytes(b" " * (profile.MAX_SUMMARY_BYTES + 1))
+            with self.assertRaises(profile.ProfileError):
+                profile._read_summary(str(path))
+        stream = io.BytesIO(b" " * (profile.MAX_SUMMARY_BYTES + 200))
+        with mock.patch.object(profile.sys, "stdin", mock.Mock(buffer=stream)):
+            with self.assertRaises(profile.ProfileError):
+                profile._read_summary("-")
+        self.assertEqual(stream.tell(), profile.MAX_SUMMARY_BYTES + 1)
+
     def test_trial19_flats_are_observations_not_failure_localization(self) -> None:
         trial = profile.validate_trial_summary(trial19_summary())
         gap = profile.summarize_capture_gap(trial)

@@ -23,6 +23,8 @@ from typing import Any
 PINNED_SOURCE_COMMIT = "3fca50941422439b2019db2e4a3dc1016b2138a1"
 PROFILE_SCHEMA = "audio-log-capture-profile/v1"
 TRIAL_SCHEMA = "s22-audio-capture-summary/v1"
+MAX_SUMMARY_BYTES = 65536
+SAFE_TRIAL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\Z")
 LEGACY_O_TREE = Path("/tmp/s22-hci-candidate-build-20260924")
 
 PINNED_FILES = (
@@ -424,8 +426,8 @@ def validate_trial_summary(summary: dict[str, Any]) -> dict[str, Any]:
     if set(summary) != expected_summary_keys:
         raise ProfileError("capture summary has missing or unrecognized fields")
     trial_id = summary.get("trial_id")
-    if not isinstance(trial_id, str) or not trial_id.strip():
-        raise ProfileError("trial_id must be non-empty text")
+    if not isinstance(trial_id, str) or SAFE_TRIAL_ID.fullmatch(trial_id) is None:
+        raise ProfileError("trial_id must be a short public label without whitespace or delimiters")
     sample_count = summary.get("sample_count")
     if isinstance(sample_count, bool) or not isinstance(sample_count, int) or sample_count <= 0:
         raise ProfileError("sample_count must be a positive integer")
@@ -646,9 +648,15 @@ def build_report(summary: dict[str, Any], source_root: Path,
 
 def _read_summary(path: str) -> dict[str, Any]:
     try:
-        raw = sys.stdin.read() if path == "-" else Path(path).read_text(encoding="utf-8")
-        value = json.loads(raw)
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        if path == "-":
+            raw = sys.stdin.buffer.read(MAX_SUMMARY_BYTES + 1)
+        else:
+            with Path(path).open("rb") as stream:
+                raw = stream.read(MAX_SUMMARY_BYTES + 1)
+        if len(raw) > MAX_SUMMARY_BYTES:
+            raise ProfileError("capture summary exceeds the byte limit")
+        value = json.loads(raw.decode("utf-8", "strict"))
+    except (OSError, UnicodeError, ValueError) as exc:
         raise ProfileError("cannot read sanitized capture summary JSON") from exc
     if not isinstance(value, dict):
         raise ProfileError("capture summary root must be an object")
