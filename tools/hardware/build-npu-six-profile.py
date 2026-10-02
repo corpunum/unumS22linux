@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Build the reviewed six-patch NPU profile in a fresh kernel output tree.
+"""Build a reviewed six-patch or native-eight NPU profile in a fresh output.
 
-This host-only builder verifies the exact kernel commit, ordered source patch
-tree, preserved config, and local Android Clang 21 toolchain before invoking
-Kbuild. It never packages or deploys the result.
+This host-only builder keeps the six-patch profile as its default and exposes
+the HCI/camera-preserving eight-patch profile only through an explicit switch.
+It verifies the exact source commit, ordered patch tree, preserved config, and
+local Android Clang 21 toolchain before invoking Kbuild. It never packages or
+deploys the result.
 """
 from __future__ import annotations
 
 import argparse
 from collections import deque
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import errno
 import hashlib
@@ -56,6 +59,55 @@ LD_LLD_SHA256 = "784146955ed87545385bf5c89b3b920ca7fe3ac83e034c3e6c53783ce544adf
 BUILDS_ROOT = LOCAL_S22_ROOT / "builds"
 DEFAULT_SOURCE = BUILDS_ROOT / "npu-six-patch-kernel-20261002"
 DEFAULT_OUTPUT = BUILDS_ROOT / "npu-six-patch-out-20261002"
+NATIVE_EIGHT_SOURCE_BASE = "3fca50941422439b2019db2e4a3dc1016b2138a1"
+NATIVE_EIGHT_PATCHES = (
+    *PATCHES,
+    ("npu-mailbox-missing-callback-reclaim.patch",
+     "f109b57381b3f2afcf2638b518f50db59ef8c9f784debd949488c74f8ea5c39b"),
+    ("npu-mailbox-debug-walk-bounds.patch",
+     "20c700bfa11f13836c76c88cca28a4f8dfa459e5cf146292a814880cd5850b29"),
+)
+NATIVE_EIGHT_SOURCE = BUILDS_ROOT / "npu-native-eight-kernel-20261002"
+NATIVE_EIGHT_OUTPUT = BUILDS_ROOT / "npu-native-eight-out-20261002"
+NATIVE_EIGHT_CONFIG_PATH = Path(
+    "/home/corpunum/s22-linux/builds/native-config-export-20261002.config"
+)
+NATIVE_EIGHT_CONFIG_SHA256 = (
+    "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16"
+)
+NATIVE_EIGHT_REQUIRED_CONFIG = (
+    'CONFIG_LOCALVERSION="-g4e5c5ad7d950"',
+    "# CONFIG_LOCALVERSION_AUTO is not set",
+    "CONFIG_SHADOW_CALL_STACK=y",
+    "CONFIG_LTO_NONE=y",
+    "CONFIG_CFI_CLANG=y",
+    "CONFIG_MODVERSIONS=y",
+    "CONFIG_BT=y",
+    "CONFIG_BT_HCIUART=y",
+    "CONFIG_BT_HCIUART_QCA=y",
+    "CONFIG_VIDEO_EXYNOS_PABLO_ISP=m",
+    "CONFIG_EXYNOS_NPU=m",
+    "CONFIG_NPU_USE_HW_DEVICE=y",
+    "CONFIG_NPU_USE_BOOT_IOCTL=y",
+)
+NATIVE_EIGHT_LLVM_TOOL_SHA256 = {
+    "clang": CLANG_SHA256,
+    "ld.lld": LD_LLD_SHA256,
+    "llvm-ar": "9833ebe9c5cb6be4711e667959cb70bf30434c8045dc135667c9f87b0d531b26",
+    "llvm-nm": "96bc0865c29acfe30b45d84b4acca27ac14340657ffc6dbea58797f3853be6f1",
+    "llvm-objcopy": "1cdde2768f3c94aa5db19361f6857ffe80a1c3c7f87574b64df5da256c4ac959",
+    "llvm-objdump": "68736b054c3d7035474e10b827908417b4d92e22b25bb1aa773f0add7f324b1f",
+    "llvm-readelf": "5104576a3518575cf1887c2afa9249bbd0dc175cb9dc0f2af0d430fe0cb20bbe",
+    "llvm-strip": "1cdde2768f3c94aa5db19361f6857ffe80a1c3c7f87574b64df5da256c4ac959",
+    "llvm-ranlib": "9833ebe9c5cb6be4711e667959cb70bf30434c8045dc135667c9f87b0d531b26",
+    "llvm-size": "50ac8d28bd266f5117de9c8199c84b8ddbaf6994a063f7a38d619fa373a750dd",
+    "clang-21": "7202556a0ecae7ab00c67c1221e502692c7a46cf1531262fc62f597820078eef",
+}
+NATIVE_EIGHT_GNU_TOOL_SHA256 = {
+    "aarch64-linux-gnu-gcc": "cd90adc7801f4595267f61a5d25bd3a0c6beb2f9f1f107ab919a97a12972dc9a",
+    "aarch64-linux-gnu-ld": "7c903ac277dd1f5c4397277db865f12d8239fe45782f71afbeb3d42180a4b1ae",
+    "aarch64-linux-gnu-nm": "96dbed79b11f6cc13b060dd5ca705a277bb5bdecd714df1c470ffaafb2513727",
+}
 GIB = 1024 ** 3
 MIN_START_MEM = 12 * GIB
 MIN_REMAINING_MEM = 8 * GIB
@@ -83,6 +135,48 @@ class BuildError(RuntimeError):
     pass
 
 
+@dataclass(frozen=True)
+class BuildProfile:
+    name: str
+    source_base_commit: str
+    patches: tuple[tuple[str, str], ...]
+    default_source: Path
+    default_output: Path
+    output_prefix: str
+    stack_label: str
+    config_path: Path
+    config_sha256: str
+    required_config: tuple[str, ...]
+
+
+PROFILES = {
+    "six": BuildProfile(
+        name="six",
+        source_base_commit=BASE_COMMIT,
+        patches=PATCHES,
+        default_source=DEFAULT_SOURCE,
+        default_output=DEFAULT_OUTPUT,
+        output_prefix="npu-six-patch-out-",
+        stack_label="six-patch",
+        config_path=CONFIG_PATH,
+        config_sha256=CONFIG_SHA256,
+        required_config=REQUIRED_CONFIG,
+    ),
+    "native-eight": BuildProfile(
+        name="native-eight",
+        source_base_commit=NATIVE_EIGHT_SOURCE_BASE,
+        patches=NATIVE_EIGHT_PATCHES,
+        default_source=NATIVE_EIGHT_SOURCE,
+        default_output=NATIVE_EIGHT_OUTPUT,
+        output_prefix="npu-native-eight-out-",
+        stack_label="native-eight NPU patch",
+        config_path=NATIVE_EIGHT_CONFIG_PATH,
+        config_sha256=NATIVE_EIGHT_CONFIG_SHA256,
+        required_config=NATIVE_EIGHT_REQUIRED_CONFIG,
+    ),
+}
+
+
 def run(command: list[str], *, cwd: Path, env: dict[str, str] | None = None,
         check: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(command, cwd=cwd, env=env, text=True,
@@ -108,9 +202,10 @@ def git(source: Path, *args: str, env: dict[str, str] | None = None) -> str:
     return run(["git", *args], cwd=source, env=env).stdout.strip()
 
 
-def verify_patch_inputs() -> list[dict[str, str]]:
+def verify_patch_inputs(
+        patches: tuple[tuple[str, str], ...] = PATCHES) -> list[dict[str, str]]:
     result: list[dict[str, str]] = []
-    for name, expected in (*PATCHES, FROZEN_OWNERSHIP_PATCH):
+    for name, expected in (*patches, FROZEN_OWNERSHIP_PATCH):
         path = ROOT / "tools/hardware" / name
         if not path.is_file():
             raise BuildError(f"required reviewed patch is missing: {name}")
@@ -119,6 +214,17 @@ def verify_patch_inputs() -> list[dict[str, str]]:
             raise BuildError(f"patch SHA-256 mismatch for {name}: {actual}")
         result.append({"name": name, "sha256": actual})
     return result
+
+
+def patch_receipt_fields(profile: BuildProfile,
+                         patch_info: list[dict[str, str]]) -> dict[str, object]:
+    """Keep applied patches distinct from hash-only exclusions in receipts."""
+    if profile.name == "six":
+        return {"patches": patch_info}
+    return {
+        "patches": patch_info[:-1],
+        "excluded_patch_inputs": [patch_info[-1]],
+    }
 
 
 def verify_config(path: Path = CONFIG_PATH, expected_sha256: str = CONFIG_SHA256,
@@ -152,26 +258,69 @@ def toolchain_identities(toolchain_bin: Path = TOOLCHAIN_BIN) -> list[dict[str, 
     return identities
 
 
-def validate_output_path(output: Path, builds_root: Path = BUILDS_ROOT) -> None:
+def cross_tool_identities() -> list[dict[str, str | int]]:
+    identities: list[dict[str, str | int]] = []
+    for name in NATIVE_EIGHT_GNU_TOOL_SHA256:
+        found = shutil.which(name)
+        if found is None:
+            raise BuildError(f"required GNU cross tool is missing from PATH: {name}")
+        path = Path(found)
+        resolved = path.resolve(strict=True)
+        identities.append({
+            "name": name,
+            "path": str(path),
+            "resolved_path": str(resolved),
+            "bytes": resolved.stat().st_size,
+            "sha256": sha256(resolved),
+        })
+    return identities
+
+
+def verify_native_toolchain_identities(
+        llvm_tools: list[dict[str, str | int]],
+        cross_tools: list[dict[str, str | int]]) -> None:
+    for tools, expected, label in (
+            (llvm_tools, NATIVE_EIGHT_LLVM_TOOL_SHA256, "LLVM"),
+            (cross_tools, NATIVE_EIGHT_GNU_TOOL_SHA256, "GNU cross")):
+        actual = {str(item["name"]): str(item["sha256"]) for item in tools}
+        if set(actual) != set(expected):
+            raise BuildError(f"native-eight {label} tool inventory mismatch")
+        mismatches = {
+            name: actual[name] for name, digest in expected.items()
+            if actual[name] != digest
+        }
+        if mismatches:
+            raise BuildError(
+                f"native-eight pinned {label} tool hash mismatch: {mismatches}"
+            )
+
+
+def validate_output_path(output: Path, builds_root: Path = BUILDS_ROOT,
+                         output_prefix: str = "npu-six-patch-out-") -> None:
     if output.is_symlink():
         raise BuildError(f"refusing a symbolic-link build output path: {output}")
     resolved = output.resolve()
     root = builds_root.resolve()
-    if resolved.parent != root or not resolved.name.startswith("npu-six-patch-out-"):
-        raise BuildError(f"output must be a fresh npu-six-patch directory under {root}")
+    if resolved.parent != root or not resolved.name.startswith(output_prefix):
+        raise BuildError(
+            f"output must be a fresh {output_prefix} directory under {root}"
+        )
     if resolved.exists() or os.path.lexists(str(output)):
         raise BuildError(f"refusing to reuse an existing build output: {resolved}")
 
 
-def verify_patch_tree(source: Path) -> None:
-    """Replay all six diffs into a temporary index and compare the tree ID."""
+def verify_patch_tree(
+        source: Path, *, source_base_commit: str = BASE_COMMIT,
+        patches: tuple[tuple[str, str], ...] = PATCHES,
+        stack_label: str = "six-patch") -> None:
+    """Replay the selected diffs into a temporary index and compare its tree."""
     head_tree = git(source, "rev-parse", "HEAD^{tree}")
     with tempfile.TemporaryDirectory(prefix="npu-six-index-") as directory:
         index = Path(directory) / "index"
         env = os.environ.copy()
         env["GIT_INDEX_FILE"] = str(index)
-        run(["git", "read-tree", BASE_COMMIT], cwd=source, env=env)
-        for name, _expected in PATCHES:
+        run(["git", "read-tree", source_base_commit], cwd=source, env=env)
+        for name, _expected in patches:
             patch = ROOT / "tools/hardware" / name
             apply_args = ["git", "apply", "--cached", "--whitespace=error-all"]
             run([*apply_args, "--check", str(patch)], cwd=source, env=env)
@@ -179,26 +328,40 @@ def verify_patch_tree(source: Path) -> None:
         replayed_tree = git(source, "write-tree", env=env)
     if replayed_tree != head_tree:
         raise BuildError(
-            "kernel source tree is not exactly the ordered six-patch stack: "
+            f"kernel source tree is not exactly the ordered {stack_label} stack: "
             f"replayed={replayed_tree}, HEAD={head_tree}"
         )
 
 
-def verify_source(source: Path) -> dict[str, str]:
+def verify_source(source: Path, profile: BuildProfile = PROFILES["six"]
+                  ) -> dict[str, str]:
     if not source.is_dir():
         raise BuildError(f"kernel source worktree is missing: {source}")
     head = git(source, "rev-parse", "HEAD")
     parents = git(source, "rev-list", "--parents", "-n", "1", "HEAD").split()
-    if len(parents) != 2 or parents[1] != BASE_COMMIT:
-        raise BuildError("kernel commit must be one clean commit directly on the pinned base")
+    if len(parents) != 2 or parents[1] != profile.source_base_commit:
+        if profile.name == "six":
+            raise BuildError(
+                "kernel commit must be one clean commit directly on the pinned base"
+            )
+        raise BuildError(
+            "kernel commit must be one clean commit directly on the pinned native "
+            "HCI/camera base"
+        )
     if git(source, "status", "--porcelain=v1", "--untracked-files=all"):
         raise BuildError("kernel source worktree must be clean before build")
     check = run(["git", "diff", "--check", f"{BASE_COMMIT}..HEAD"], cwd=source)
     if check.stdout:
         raise BuildError(f"kernel patch commit has whitespace findings:\n{check.stdout}")
-    verify_patch_tree(source)
-    return {"base_commit": BASE_COMMIT, "kernel_commit": head,
-            "kernel_tree": git(source, "rev-parse", "HEAD^{tree}")}
+    verify_patch_tree(
+        source, source_base_commit=profile.source_base_commit,
+        patches=profile.patches, stack_label=profile.stack_label,
+    )
+    result = {"base_commit": BASE_COMMIT, "kernel_commit": head,
+              "kernel_tree": git(source, "rev-parse", "HEAD^{tree}")}
+    if profile.name != "six":
+        result["profile_source_base_commit"] = profile.source_base_commit
+    return result
 
 
 def available_memory() -> int:
@@ -381,22 +544,29 @@ def builder_hash_from_launch(phase_info: dict[str, object]) -> str:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--kernel-source", type=Path, default=DEFAULT_SOURCE)
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--profile", choices=tuple(PROFILES), default="six")
+    parser.add_argument("--kernel-source", type=Path)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--config", type=Path)
     parser.add_argument("--jobs", type=int, choices=(1, 2), default=1)
     return parser.parse_args(argv)
 
 
 def main() -> int:
     args = parse_args()
-    source = args.kernel_source.resolve()
+    profile = PROFILES[args.profile]
+    source = (args.kernel_source or profile.default_source).expanduser().resolve()
     builds_root = BUILDS_ROOT.resolve()
-    validate_output_path(args.output.expanduser(), builds_root)
-    output = args.output.expanduser().resolve()
+    requested_output = (args.output or profile.default_output).expanduser()
+    validate_output_path(requested_output, builds_root, profile.output_prefix)
+    output = requested_output.resolve()
+    config_path = (args.config or profile.config_path).expanduser()
 
-    source_info = verify_source(source)
-    patch_info = verify_patch_inputs()
-    config_info = verify_config()
+    source_info = verify_source(source, profile)
+    patch_info = verify_patch_inputs(profile.patches)
+    config_info = verify_config(
+        config_path, profile.config_sha256, profile.required_config
+    )
 
     clang = TOOLCHAIN_BIN / "clang"
     lld = TOOLCHAIN_BIN / "ld.lld"
@@ -406,10 +576,15 @@ def main() -> int:
     version = run([str(clang), "--version"], cwd=source).stdout.splitlines()[0]
     if "r563880c" not in version or "clang version 21.0.0" not in version:
         raise BuildError(f"unexpected Android Clang version: {version}")
-    for tool in ("aarch64-linux-gnu-gcc", "aarch64-linux-gnu-ld",
-                 "aarch64-linux-gnu-nm"):
-        if shutil.which(tool) is None:
-            raise BuildError(f"required GNU cross tool is missing from PATH: {tool}")
+    cross_tools: list[dict[str, str | int]] = []
+    if profile.name == "native-eight":
+        cross_tools = cross_tool_identities()
+        verify_native_toolchain_identities(toolchain_tools, cross_tools)
+    else:
+        for tool in ("aarch64-linux-gnu-gcc", "aarch64-linux-gnu-ld",
+                     "aarch64-linux-gnu-nm"):
+            if shutil.which(tool) is None:
+                raise BuildError(f"required GNU cross tool is missing from PATH: {tool}")
     make = shutil.which("make")
     if make is None:
         raise BuildError("make is missing from PATH")
@@ -423,9 +598,12 @@ def main() -> int:
         raise BuildError(f"only {memory_before} bytes are available; need at least {MIN_START_MEM}")
 
     print(f"SOURCE_BASE {source_info['base_commit']}")
+    if profile.name != "six":
+        print(f"PROFILE {profile.name}")
+        print(f"PROFILE_SOURCE_BASE {source_info['profile_source_base_commit']}")
     print(f"SOURCE_COMMIT {source_info['kernel_commit']}")
     print(f"SOURCE_TREE {source_info['kernel_tree']}")
-    print("PATCHES " + " -> ".join(item[0] for item in PATCHES))
+    print("PATCHES " + " -> ".join(item[0] for item in profile.patches))
     print(f"CONFIG_SHA256 {config_info['sha256']}")
     print(f"CLANG {version}")
     print(f"CLANG_SHA256 {CLANG_SHA256}")
@@ -436,8 +614,8 @@ def main() -> int:
 
     output.mkdir(mode=0o700)
     output_config = output / ".config"
-    shutil.copyfile(CONFIG_PATH, output_config)
-    if sha256(output_config) != CONFIG_SHA256:
+    shutil.copyfile(config_path, output_config)
+    if sha256(output_config) != profile.config_sha256:
         raise BuildError("copied fresh-output config does not match the preserved SHA")
 
     env = os.environ.copy()
@@ -449,7 +627,7 @@ def main() -> int:
     print("PREPARE_COMMAND " + " ".join(prepare), flush=True)
     prepare_result = run(prepare, cwd=source, env=env)
     (output / "olddefconfig.log").write_text(prepare_result.stdout, encoding="utf-8")
-    if sha256(output_config) != CONFIG_SHA256:
+    if sha256(output_config) != profile.config_sha256:
         raise BuildError("olddefconfig changed the preserved configuration; build refused")
 
     build = [*common, f"-j{args.jobs}", "Image", "modules"]
@@ -471,6 +649,9 @@ def main() -> int:
         "bootup_ready": False,
         "bootup_authorized": False,
     }
+    if profile.name != "six":
+        phase_info["profile"] = profile.name
+        phase_info["toolchain"]["gnu_cross_tools"] = cross_tools
     try:
         exit_code, resource_abort = run_monitored_build(build, source, output, env, phase_info)
     except Exception as error:
@@ -503,7 +684,7 @@ def main() -> int:
         print(f"BUILD_LOG_TAIL_BEGIN\n{tail(output / 'build.log')}\nBUILD_LOG_TAIL_END")
         return exit_code or 1
 
-    if sha256(output_config) != CONFIG_SHA256:
+    if sha256(output_config) != profile.config_sha256:
         raise BuildError("configuration SHA changed during the build")
     artifacts = {
         "vmlinux": artifact_info(output / "vmlinux"),
@@ -518,8 +699,8 @@ def main() -> int:
     receipt = {
         "status": "host_build_pass",
         **source_info,
-        "patches": patch_info,
-        "config_sha256": CONFIG_SHA256,
+        **patch_receipt_fields(profile, patch_info),
+        "config_sha256": profile.config_sha256,
         "toolchain": {
             "clang": version, "clang_sha256": CLANG_SHA256,
             "ld_lld_sha256": LD_LLD_SHA256, "bin": str(TOOLCHAIN_BIN),
@@ -535,6 +716,11 @@ def main() -> int:
         "bootup_authorized": False,
         "device_or_deployment_action": False,
     }
+    if profile.name != "six":
+        receipt["profile"] = profile.name
+        receipt["source_profile_base_commit"] = profile.source_base_commit
+        receipt["config_path"] = config_info["path"]
+        receipt["toolchain"]["gnu_cross_tools"] = cross_tools
     (output / "build-receipt.json").write_text(
         json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
