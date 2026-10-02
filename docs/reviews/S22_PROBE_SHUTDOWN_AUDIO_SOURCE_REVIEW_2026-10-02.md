@@ -13,6 +13,7 @@ Reviewed frozen inputs:
 - NPU clock acquisition/probe unwind: author commit `bd3204afb92ab43c53138d654b2850b362401781`; integrated code is identical at `de837b823f6ba7a722056f3103e9d407976e0ea2`.
 - ABOX IPC tracepoints: author commit `58dd9c8370f4f20ac9e7c32c6410ef4a2ceecd21`; integrated code is identical at `d16a7fd46f9265eb65ace1e849bed558c6dcd447`.
 - NPU stack blocker detector: author commit `873894f1ad9139429192a6b215be05b06b9b0828`; integrated test/note are identical at `4c1131bf674d489321d331666457c968ce0f07ff`.
+- NPU required-input negative-check precision fix: author commit `8c6e4dfd1d86e1d8778516fb100cd320a8bce76a`; integrated test/note are identical at `87bb76a1a23dc44e833aed8b79464f37ea351f69`.
 
 The review ran in `codex/s22-source-wave-review-20261002` at `785d74b2695d3bee8bb9f9ecde3d083e2b2140c7`. The only owned repository change in this review worktree is this document.
 
@@ -34,7 +35,7 @@ The separate detector hash-verified the ordered inputs and reproduced the actual
 
 The reverse order also fails at `npu-vertex.c:1188`. The detector rejects mutated patch/source context. Its three Python-mode runs passed by reproducing the blocker; a zero exit is detector success, not stack success. Its own note correctly marks the ordered stack not ready to build.
 
-One test-claim limit remains open for follow-up: the “missing required patch” case runs `git apply --check` on a deliberately nonexistent patch path and confirms the file-open failure. It does not exercise an integration/series builder with the refcount patch omitted, so that individual negative check does not prove such a builder refuses omission. This does not affect the independently reproduced ordered lifecycle/refcount conflict, but the detector's missing-input coverage is not cleared pending the frozen precision fix.
+The initial detector's “missing required patch” case only ran `git apply --check` on a deliberately nonexistent patch path, which proved only the CLI file-open error. The frozen precision fix adds a separate negative case that invokes the actual `patch_paths(repo_root)` reader used by `main()` on a controlled temporary repository containing exact-hash lifecycle, callback, and probe patches but no refcount patch. It checks the specific required-input diagnostic before any source application; the old nonexistent-path case is now explicitly labelled CLI-only. This closes the detector missing-input coverage finding for that reader. It does not test a separate external integration builder that might consume a different manifest implementation.
 
 The probe test separately checks the probe patch alone and a ref-transaction + PM-callback + probe application stack. That result omits the earlier mandatory lifecycle patch and does not override the blocker above. Reconciliation must preserve both historical changes and show the exact selected patch profile and its source/test coverage; silently dropping the conflicting hunk is not supported by this review.
 
@@ -62,6 +63,14 @@ I ran each frozen test from an archive of its author commit, with the derived so
 
 All three used `/home/corpunum/s22-workers/camera-kernel-build-20260927` as the source fixture. The probe/stack tests used `S22_NPU_PROBE_SOURCE_TREE`; the audio test used `--source-tree`. Source evidence stays host-only.
 
+## Follow-up: required-input precision and CI allowlist
+
+I verified that the precision-fix commit's parent is the original detector commit, archived the frozen author commit, and confirmed its test and patch hashes. Its controlled missing-manifest case copied the three non-refcount patch files only after verifying their expected SHA-256 values, called the test's actual required-patch reader with the controlled repository root, and required the exact `required ordered patch is missing: npu-refcount-transaction-fix.patch` error. The separately retained missing-path CLI check reports only a `git apply` open-file failure. The test and research note at integrated commit `87bb76a1a23dc44e833aed8b79464f37ea351f69` match the frozen author versions.
+
+I ran the archived `test-npu-candidate-stack.py` from author commit `8c6e4dfd1d86e1d8778516fb100cd320a8bce76a` with `/home/corpunum/s22-workers/camera-kernel-build-20260927` configured through `S22_NPU_PROBE_SOURCE_TREE`, under normal Python, `python3 -O`, and `PYTHONOPTIMIZE=1`. Each exited 0 and printed the new `PASS negative manifest-loader` result, the separate CLI-only diagnostic, the lifecycle/refcount apply blocker, reverse-order rejection, and BOOTUP refusal. These remain host-only detector results; no full stack was applied or built.
+
+I also inspected CI commit `2c28c37acc67c12993ba5f79c2a703833b792de5` statically. Its only two changed files add exactly the three reviewed host scripts—NPU probe unwind, NPU candidate stack, and ABOX IPC observation—to the runner's fixed reviewed-path tuple, its fixed execution tuple, and the policy test's expected tuple. No discovery, caller-supplied script path, or live-device script was added. I did not run the CI suite or any live script; the coordinator reported its full-suite result separately.
+
 ## Disposition
 
-No blocking source defect was found in the isolated probe-unwind or ABOX observation candidate within the paths exercised and reviewed. Keep both classified as source/host-tested candidates only. The mandatory NPU patch series remains blocked by the exact lifecycle/refcount apply conflict, with later callback/probe/shutdown integration unproven. NPU shutdown ownership/error handling is not reviewed here. No NPU BOOTUP, deployment, runtime, DMA, audio output, or physical acceptance is authorized or established by this receipt.
+No blocking source defect was found in the isolated probe-unwind or ABOX observation candidate within the paths exercised and reviewed. The stack detector's required-input omission check is now covered for its actual loader, but the mandatory NPU patch series remains blocked by the exact lifecycle/refcount apply conflict, with later callback/probe/shutdown integration unproven. NPU shutdown ownership/error handling is not reviewed here. No NPU BOOTUP, deployment, runtime, DMA, audio output, or physical acceptance is authorized or established by this receipt.
