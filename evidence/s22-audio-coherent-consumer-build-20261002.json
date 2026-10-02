@@ -11,7 +11,7 @@
     "rebuilt_consumers_against_actual_abox5_provider": "passed",
     "updated_329_module_static_symbol_inventory": "passed",
     "abox_export_crc_cause": "not_proven",
-    "generic_physical_slot_reuse_test_gap": "unresolved",
+    "generic_physical_slot_reuse_test_gap": "host_test_coverage_closed_separately_by_3da3d06_and_independent_6b9c1f6_not_by_compile",
     "device_or_deployment_approval": false
   },
   "source": {
@@ -32,7 +32,7 @@
   "source_review": {
     "abox5_source_clearance_commit": "55485bda",
     "integrated_commit": "c4562a8",
-    "generic_trace_physical_slot_reuse_gap": "unresolved_and_not_covered_by_compile",
+    "generic_trace_physical_slot_reuse_gap": "original_source_review_finding_corrected_in_3da3d06_independently_reviewed_6b9c1f6_not_covered_by_compile",
     "abox_crc_cause": "not_proven"
   },
   "configuration": {
@@ -223,7 +223,7 @@
     "The static integration inventory is the pinned native-eight 329-module set with exactly three candidate replacements; it is not the current phone's separate 325-module inventory.",
     "A host compile and MODVERSIONS comparison do not prove module loading, runtime PM, IPC, DMA, PCM progress, or physical audio.",
     "The ten earlier ABOX export CRC changes' cause remains unproven; this report does not mask GENKSYMS output or alter version checks.",
-    "The generic trace fixture's physical-slot reuse test gap remains unresolved and is not exercised by module compilation.",
+    "Generic trace physical-slot reuse host coverage was closed separately in 3da3d06/6b9c1f6; compilation does not exercise it or prove actual kernel RCU/concurrency ordering. Original author commit 7d0c3114 preserves the stale open-gap wording.",
     "NPU9/NPU10, Image/vmlinux, full module rebuild, packaging, phone operations, firmware, deployment, and boot were out of scope."
   ]
 }
