@@ -258,7 +258,22 @@ def sha256(path: Path) -> str:
 
 
 def git(source: Path, *args: str, env: dict[str, str] | None = None) -> str:
-    return run(["git", *args], cwd=source, env=env).stdout.strip()
+    return run(["git", "--no-pager", *args], cwd=source, env=env).stdout.strip()
+
+
+def verify_source_repository_context(source: Path) -> None:
+    # This builder performs no authenticated Git transport. Refuse ambient
+    # routing/config/object/index overrides rather than validating one repo
+    # and subsequently running make in a different supplied directory.
+    # The execution environment supplies GIT_PAGER. It cannot redirect Git
+    # identity and is disabled explicitly by git() above.
+    overrides = sorted(name for name in os.environ
+                       if name.startswith("GIT_") and name != "GIT_PAGER")
+    if overrides:
+        raise BuildError("refusing inherited Git environment: " + ", ".join(overrides))
+    top = git(source, "rev-parse", "--show-toplevel")
+    if Path(top).resolve() != source.resolve():
+        raise BuildError("kernel source directory is not the verified Git worktree root")
 
 
 def verify_patch_inputs(
@@ -395,6 +410,7 @@ def verify_patch_tree(
         patches: tuple[tuple[str, str], ...] = PATCHES,
         stack_label: str = "six-patch") -> None:
     """Replay the selected diffs into a temporary index and compare its tree."""
+    verify_source_repository_context(source)
     head_tree = git(source, "rev-parse", "HEAD^{tree}")
     with tempfile.TemporaryDirectory(prefix="npu-six-index-") as directory:
         index = Path(directory) / "index"
@@ -418,6 +434,7 @@ def verify_source(source: Path, profile: BuildProfile = PROFILES["six"]
                   ) -> dict[str, str]:
     if not source.is_dir():
         raise BuildError(f"kernel source worktree is missing: {source}")
+    verify_source_repository_context(source)
     head = git(source, "rev-parse", "HEAD")
     parents = git(source, "rev-list", "--parents", "-n", "1", "HEAD").split()
     if len(parents) != 2 or parents[1] != profile.source_base_commit:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+from dataclasses import replace
 import hashlib
 import importlib.util
 import io
@@ -285,7 +286,7 @@ class NpuBuildProfileSafetyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory)
             responses = [
-                "head", f"head {BUILDER.BASE_COMMIT}", " M drivers/vision/npu/core/npu-device.c",
+                str(source), "head", f"head {BUILDER.BASE_COMMIT}", " M drivers/vision/npu/core/npu-device.c",
             ]
             with mock.patch.object(BUILDER, "git", side_effect=responses), \
                     mock.patch.object(BUILDER, "verify_patch_tree") as replay:
@@ -297,11 +298,11 @@ class NpuBuildProfileSafetyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory)
             with mock.patch.object(BUILDER, "git", side_effect=[
-                    "head", "head unrelated-parent"]):
+                    str(source), "head", "head unrelated-parent"]):
                 with self.assertRaisesRegex(BUILDER.BuildError, "directly on the pinned base"):
                     BUILDER.verify_source(source, BUILDER.PROFILES["six"])
             with mock.patch.object(BUILDER, "git", side_effect=[
-                    "head", "head unrelated-parent"]):
+                    str(source), "head", "head unrelated-parent"]):
                 with self.assertRaisesRegex(
                         BUILDER.BuildError, "directly on the pinned native HCI/camera base"):
                     BUILDER.verify_source(source, BUILDER.PROFILES["native-eight"])
@@ -448,6 +449,67 @@ class NpuBuildProfileSafetyTests(unittest.TestCase):
                                 BUILDER.PROFILES[profile_name],
                                 {"PATH": "/usr/bin", name: value},
                             )
+
+    def test_source_preflight_rejects_real_git_redirect_to_decoy(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            trusted = Path(directory) / "trusted"
+            decoy = Path(directory) / "decoy"
+            trusted.mkdir()
+            decoy.mkdir()
+            (decoy / "Makefile").write_text("# not the verified kernel tree\n")
+            self.git(trusted, "init", "--quiet")
+            for message in ("base", "child"):
+                self.git(trusted, "-c", "user.name=Host Regression",
+                         "-c", "user.email=host-regression@example.invalid",
+                         "commit", "--allow-empty", "-qm", message)
+                if message == "base":
+                    base = self.git(trusted, "rev-parse", "HEAD")
+            profile = replace(BUILDER.PROFILES["six"],
+                              source_base_commit=base, patches=())
+            with mock.patch.object(BUILDER, "BASE_COMMIT", base), \
+                    mock.patch.dict(os.environ, {
+                        "GIT_DIR": str(trusted / ".git"),
+                        "GIT_WORK_TREE": str(trusted),
+                    }):
+                with self.assertRaisesRegex(BUILDER.BuildError, "inherited Git"):
+                    # Actual git, actual verify_source and temporary-index
+                    # replay; no mocked successful source receipt or make.
+                    BUILDER.verify_source(decoy, profile)
+
+    def test_all_inherited_git_overrides_refuse_before_query(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR",
+                         "GIT_INDEX_FILE", "GIT_NAMESPACE", "GIT_OBJECT_DIRECTORY",
+                         "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG_COUNT",
+                         "GIT_CONFIG_PARAMETERS", "GIT_TRACE"):
+                with self.subTest(name=name), \
+                        mock.patch.dict(os.environ, {name: "controlled"}), \
+                        mock.patch.object(BUILDER, "git") as query:
+                    with self.assertRaisesRegex(BUILDER.BuildError, "inherited Git"):
+                        BUILDER.verify_source(source)
+                    with self.assertRaisesRegex(BUILDER.BuildError, "inherited Git"):
+                        BUILDER.verify_patch_tree(source)
+                    query.assert_not_called()
+
+    def test_worktree_root_must_match_make_source_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            with mock.patch.object(BUILDER, "git", return_value=str(source / "other")):
+                with self.assertRaisesRegex(BUILDER.BuildError, "worktree root"):
+                    BUILDER.verify_source(source)
+                with self.assertRaisesRegex(BUILDER.BuildError, "worktree root"):
+                    BUILDER.verify_patch_tree(source)
+
+    def test_allowed_pager_is_explicitly_disabled_without_routing_git(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            result = subprocess.CompletedProcess([], 0, stdout=str(source), stderr="")
+            with mock.patch.dict(os.environ, {"GIT_PAGER": "untrusted-pager"}), \
+                    mock.patch.object(BUILDER, "run", return_value=result) as execute:
+                BUILDER.verify_source_repository_context(source)
+            self.assertEqual(execute.call_args.args[0],
+                             ["git", "--no-pager", "rev-parse", "--show-toplevel"])
 
     def test_patch_hash_manifest_fails_closed_and_keeps_ownership_excluded(self) -> None:
         six = BUILDER.PROFILES["six"]
