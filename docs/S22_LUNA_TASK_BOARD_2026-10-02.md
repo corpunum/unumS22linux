@@ -1,5 +1,84 @@
 # S22 continuation — 2026-10-02
 
+## Continuing review/build wave — 2026-10-02 21:09 UTC (Oct 3 local)
+
+The older checkpoints below remain historical. Nothing in this checkpoint
+authorizes replay of a consumed device operation.
+
+- The ABOX5-only build completed successfully, but retained **10 changed
+  exports and six stale imports in two consumers**. Independent artifact
+  review `05bd1c76`, integrated `0e0b38f`, confirms that negative result.
+  It must not be installed as a one-module replacement.
+- One serialized build of the two affected consumers from the same clean
+  ABOX5 source completed with exit 0 and no resource abort. Author
+  `7d0c3114`, integrated `497d680`, records the three-module substitution:
+  **329 modules / 17,255 imports**, all symbol CRCs, version sections,
+  module-layout CRCs and vermagic checks pass. The two new consumer hashes
+  and build IDs are in `evidence/s22-audio-coherent-consumer-build-20261002.json`.
+  This closes that particular host dependency mismatch, not audio hardware
+  acceptance or compatibility with the distinct current 325-module runtime.
+- Audio generic-zero/actual physical-slot reuse coverage was corrected in
+  author `7c41c13c`, integrated `3da3d06`; independent review `32bda1d4`,
+  integrated `6b9c1f6`, passed the public/local source matrix in normal,
+  `-O` and effective `PYTHONOPTIMIZE=1`, each with C `-O0`/`-O2` and negative
+  overwrite/clear mutations. Earlier open-gap statements are historical;
+  the consumer-build report's stale coverage wording is being reconciled.
+  These extracted-C tests do not establish kernel RCU ordering or firmware.
+- The new NPU message-ID bounds/type repair, author `021bb0c8`, integrated
+  `2051427`, reproduces invalid-ID BUG behavior and wrong-type ownership
+  release in the actual extracted pinned C, then rejects those inputs in
+  the patched C. Six public/local Python-mode runs passed with C `-O0`/`-O2`.
+  Retained `WARN_ON` may still be fatal under `panic_on_warn`; publication,
+  concurrency, ABA and hardware liveness are unresolved. BOOTUP refusal
+  remains. Independent source/test review is running, not deployment.
+- Root test-only corrections `c2bc9f4`/`c9cd6ac` preserve the original inode
+  during replacement, normalize file mode and execute an actual-template
+  inode-only mutant. Independent review passed all 47 route cases in three
+  Python modes. This isolates inode enforcement, not strong attestation.
+- The seventh immutable suite (`3da3d06`) retains its **102/107 pass**
+  result: two inode fixture failures and three public-source fetch failures.
+  The eighth (`c9cd6ac`) retains **106/107 pass**: one already-disappeared
+  owned descendant returned ESRCH while the cleanup test expected ENOENT.
+  Root `ceeb217` corrects only that test and deterministically reproduces
+  the pre-fix error; all 13 cases pass in three Python modes. Independent
+  review is running. Neither failed full run is relabeled successful.
+- The ninth full suite runs in a separate immutable `db23c88` worktree:
+  **56 normal + 53 optimized** fixed invocations, including the new NPU
+  bounds/type test. Normal and optimized runner-policy tests each passed
+  seven cases. A successful full result is not yet claimed.
+
+| Actual reused Luna/Max worker | New isolated worktree | Owned current deliverable |
+| --- | --- | --- |
+| `/root/autonomous_driver_review_20261002` | `npu-msgid-review-20261003` | Independent NPU11 patch/harness/test/CI review |
+| `/root/bt_candidate_independent_review_20261002` | `audio-coherent-review-20261003` | Independent retained audio group artifacts and ESRCH regression review |
+| `/root/audio_driver_path_next_20261002` | `audio-group-package-20261003` | Minimal pinned host-only three-module package helper and negative tests |
+
+All inherit their accepted explicit `gpt-6-luna`/`max` native worker
+selection. This is configuration evidence, not independent backend
+attestation. Completed worktrees/commits remain intact. Workers do not
+access the phone; heavy builds are serialized and currently finished.
+
+Read-only capture at **21:07:55 UTC** confirms SM-S901B/r0s, native guardian,
+GNU build ID `b2dda820b18d410d9bf12f1bd2584567d545991d`, 325 loaded modules,
+healthy native/network/persistent/desktop/Pi/browser/dedicated-session
+readiness and an idle model API. Uptime was 467,245 seconds, battery
+100%/Full at 26.3 C, maximum sampled thermal 39 C. The available ring has
+no serious indicators; full boot-log coverage and measured TrustZone
+progress are not established. Private capture SHA-256:
+`e156a8fff3eb1f3d44cb66bab74b794f067b6a4c1cf21081162d74819b794cbf`.
+
+The preserved camera RECOVERY image was independently rehashed on the host
+as `b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f`,
+100,663,296 bytes. Its 324 ramdisk modules / 16,547 imports match the native
+eight symbol map (receipt `845f9df`). This was not a live RECOVERY readback
+or a check of the new audio group. Camera acceptance remains `not_accepted`.
+
+This turn still has **zero partition writes, reboots, powered hardware
+tests, inference requests or service changes**. Independent physical
+rescue is unproven; NPU BOOTUP, new powered audio/camera/HCI/SIM trials and
+old consumed markers are not bypassed. The review branch remains unmerged;
+remote `master` was verified unchanged at `20605dbe...` by the latest fetch.
+
 ## Audio ABI correction and retained host-suite failure — 20:23 UTC
 
 Historical results below are preserved; they are not current deployment gates.
