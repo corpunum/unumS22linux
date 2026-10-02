@@ -361,7 +361,73 @@ class CaptureValidation(unittest.TestCase):
         self.assertIsNone(observed["host"])
         self.assertEqual(observed["command"], "read-only-fixture")
         self.assertEqual(observed["timeout"], 9)
-        self.assertEqual(observed["project_root"], EVIDENCE.ROOT)
+        self.assertEqual(observed["project_root"], EVIDENCE.ARTIFACT_ROOT)
+        self.assertNotEqual(observed["project_root"], EVIDENCE.ROOT)
+
+    def test_source_helper_and_recovery_artifact_roots_are_separate(self):
+        observed = {}
+
+        class Audio:
+            @staticmethod
+            def run_trusted_remote(transport, host, command, **kwargs):
+                observed.update(transport=transport, host=host, command=command, **kwargs)
+                return "fixture-result"
+
+        def load_helper(name, path):
+            observed["helper_source"] = path
+            return Audio
+
+        worktree_known_hosts = (
+            EVIDENCE.ROOT / "evidence/native-linux-20260919/native-v2-known-hosts")
+        self.assertFalse(worktree_known_hosts.exists())
+        with mock.patch.object(EVIDENCE, "_load_module", side_effect=load_helper):
+            EVIDENCE._default_remote("read-only-fixture", 9)
+
+        self.assertEqual(observed["helper_source"],
+                         EVIDENCE.ROOT / "tools/hardware/audio-recovery-reboot-once.py")
+        self.assertEqual(observed["project_root"], Path("/home/corpunum/s22-linux"))
+        self.assertEqual(observed["project_root"], EVIDENCE.ARTIFACT_ROOT)
+
+    def test_missing_artifact_root_fails_in_wrapper_before_any_ssh_call(self):
+        with tempfile.TemporaryDirectory(prefix="tz-progress-route-") as temporary:
+            artifact_root = Path(temporary) / "artifact-root"
+            tools_dir = artifact_root / "tools"
+            tools_dir.mkdir(parents=True)
+            wrapper = tools_dir / "s22-ssh"
+            # Copy only the reviewed wrapper script; intentionally omit its host-key file.
+            shutil.copyfile(EVIDENCE.ROOT / "tools/s22-ssh", wrapper)
+            wrapper.chmod(0o755)
+            fake_bin = Path(temporary) / "fake-bin"
+            fake_bin.mkdir()
+            ssh_marker = Path(temporary) / "unexpected-ssh-call"
+            fake_ssh = fake_bin / "ssh"
+            fake_ssh.write_text(
+                "#!/bin/sh\n: > " + shlex.quote(str(ssh_marker)) + "\nexit 91\n")
+            fake_ssh.chmod(0o755)
+            known_hosts = artifact_root / "evidence/native-linux-20260919/native-v2-known-hosts"
+            self.assertFalse(known_hosts.exists())
+
+            audio = EVIDENCE._load_module(
+                "s22_tz_progress_missing_root_audio",
+                EVIDENCE.ROOT / "tools/hardware/audio-recovery-reboot-once.py")
+            deployer = EVIDENCE._load_module(
+                "s22_tz_progress_missing_root_deployer",
+                EVIDENCE.ROOT / "tools/hardware/deploy-audio-recovery.py")
+
+            def load_source_helper(_name, path):
+                self.assertEqual(path,
+                                 EVIDENCE.ROOT / "tools/hardware/audio-recovery-reboot-once.py")
+                return audio
+
+            with mock.patch.object(EVIDENCE, "ARTIFACT_ROOT", artifact_root), \
+                    mock.patch.object(EVIDENCE, "_load_module", side_effect=load_source_helper), \
+                    mock.patch.object(deployer, "verified_ssh_path", return_value=str(fake_bin)), \
+                    mock.patch.object(audio, "_trusted_deployer", return_value=deployer):
+                result = EVIDENCE._default_remote("true", 5)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Missing verified phone host-key file", result.stderr)
+            self.assertFalse(ssh_marker.exists())
 
     def test_remote_collector_has_no_android_or_adb_path(self):
         rendered = EVIDENCE.render_remote()

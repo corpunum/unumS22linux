@@ -30,6 +30,9 @@ _ROLES = ("worker", "iwlog", "chub_log")
 _RELEASE_RE = re.compile(r"^[A-Za-z0-9._+-]{1,64}$")
 _UINT64_MAX = (1 << 64) - 1
 ROOT = Path(__file__).resolve().parents[2]
+# Keep reviewed helper source isolated from the original recovery host's sealed
+# USB SSH wrapper and verified host-key artifact; never fall back to ROOT.
+ARTIFACT_ROOT = Path("/home/corpunum/s22-linux")
 
 
 class EvidenceError(ValueError):
@@ -821,7 +824,7 @@ def _default_remote(command: str, timeout: int):
     audio = _load_module("s22_tz_progress_remote_helpers",
                          ROOT / "tools/hardware/audio-recovery-reboot-once.py")
     return audio.run_trusted_remote("usb", None, command, timeout=timeout,
-                                    project_root=ROOT)
+                                    project_root=ARTIFACT_ROOT)
 
 
 def capture_remote(remote=_default_remote) -> dict[str, Any]:

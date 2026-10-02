@@ -82,18 +82,26 @@ request completion.
 
 `--capture` uses the existing `audio-recovery-reboot-once.py` read-only USB
 route (`_default_remote`), which uses the sealed `tools/s22-ssh` wrapper and
-trusted SSH executable path. The collector command is shell-quoted native
+trusted SSH executable path. Helper source is loaded from this isolated
+worktree (`ROOT`), while the wrapper's established host-key artifact root is
+explicitly `/home/corpunum/s22-linux` (`ARTIFACT_ROOT`). The source worktree
+does not contain that verified host-key artifact; there is no host-key copy,
+fallback, or guard weakening. The collector command is shell-quoted native
 `python3 -c`; it has no ADB or Android `/system/bin/sh` path. `--input` only
 classifies local JSON.
 For this implementation, the remote path was not invoked and the phone,
-SSH/ADB services, deploy/reboot paths, and hardware were not accessed.
+SSH/ADB services, deploy/reboot paths, and hardware were not accessed. The
+missing-artifact test invokes only a local wrapper preflight with a temporary
+root and a non-networking fake `ssh` sentinel.
 
 The fake-procfs tests execute the Python program from the rendered collector
 with synthetic procfs files. They cover clipped comm names, positive counter
 deltas, stack redaction, boot-ID and task-starttime changes, missing boot IDs
 and counters, process/task/target visit caps, input-size bounds, and the sealed
 USB helper handoff. These tests establish host behavior only; they do not
-establish device runtime behavior or TrustZone liveness.
+establish device runtime behavior or TrustZone liveness. A local sealed-wrapper
+regression executes against a temporary artifact root without its host-key
+file and confirms the wrapper exits before the fake SSH executable is reached.
 
 ```sh
 python3 tools/hardware/test-tz-progress-evidence.py
