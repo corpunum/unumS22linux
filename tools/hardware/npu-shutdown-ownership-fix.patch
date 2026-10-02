@@ -64,7 +64,7 @@
 +			    atomic_read(&hdev->init_cnt.refcount) <= 0)
 +				continue;
  			if (hdev && strcmp(hdev->name, "DNC") && hdev->status) {
-@@ -480,2 +486,8 @@
+@@ -478,2 +484,8 @@
  			hdev = g_hwdev_list[hi];
 +			if (hdev && strcmp(hdev->name, "DNC") &&
 +			    hdev->status == NPU_HWDEV_STATUS_ERROR)
@@ -213,25 +213,41 @@
  	int ret = 0;
 +	int shutdown_ret;
  	struct npu_vertex *vertex = vctx->vertex;
-@@ -1050,3 +1092,5 @@
+@@ -1013,2 +1055,7 @@
+ 	}
++	ret = check_emergency_vctx(vctx);
++	if (ret) {
++		mutex_unlock(&vertex->lock);
++		return ret;
++	}
+ 
+@@ -1021,2 +1068,7 @@
+ 			mutex_lock(&vertex->lock);
++			ret = check_emergency_vctx(vctx);
++			if (ret) {
++				mutex_unlock(&vertex->lock);
++				return ret;
++			}
+ 			if (!vertex->normal_count) {
+@@ -1050,3 +1102,5 @@
  		npu_ierr("fail(%d) in npu_vertex_bootup : hids %x\n", vctx, ret, ctrl->value);
 -		goto p_err;
 +		set_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN, &device->err_state);
 +		npu_device_set_emergency_err(device);
 +		goto p_err_uncertain;
  	}
-@@ -1058,3 +1102,2 @@
+@@ -1058,3 +1112,2 @@
  		struct npu_memory_buffer *buf = kzalloc(sizeof(struct npu_memory_buffer), GFP_KERNEL);
 -		buf->size = ctrl->mem_size;
  		if (unlikely(!buf)) {
-@@ -1062,4 +1105,5 @@
+@@ -1062,4 +1115,5 @@
  			ret = -ENOMEM;
 -			return ret;
 +			goto p_err_mem;
  		}
 +		buf->size = ctrl->mem_size;
  		session->sec_mem_buf = buf;
-@@ -1081,4 +1125,15 @@
+@@ -1081,4 +1135,15 @@
  p_err_mem:
 -	kfree(session->sec_mem_buf);
 -	npu_hwdev_shutdown(device, ctrl->value);
@@ -249,11 +265,19 @@
 +		session->sec_mem_buf = NULL;
 +	}
  p_err_check:
-@@ -1086,2 +1141,3 @@
+@@ -1086,2 +1151,3 @@
  	device->is_secure = 0;
 +p_err_uncertain:
  	mutex_unlock(&vertex->lock);
-@@ -1119,2 +1175,8 @@
+@@ -1105,2 +1171,7 @@
+ 	}
++	ret = check_emergency_vctx(vctx);
++	if (ret) {
++		mutex_unlock(&vertex->lock);
++		return ret;
++	}
+ 
+@@ -1119,2 +1190,8 @@
  
 +	ret = npu_hwdev_shutdown(device, ctrl->value);
 +	if (ret) {
@@ -262,18 +286,42 @@
 +		goto p_err;
 +	}
  	if (session->sec_mem_buf) {
-@@ -1125,4 +1187,2 @@
+@@ -1125,4 +1202,2 @@
  
 -	npu_hwdev_shutdown(device, ctrl->value);
 -
  	device->is_secure = 0;
-@@ -1132,2 +1192,5 @@
+@@ -1132,2 +1207,5 @@
  	return 0;
 +p_err:
 +	mutex_unlock(&vertex->lock);
 +	return ret;
  }
-@@ -1269,4 +1332,17 @@
+@@ -1149,2 +1227,7 @@
+ 	}
++	ret = check_emergency_vctx(vctx);
++	if (ret) {
++		mutex_unlock(&vertex->lock);
++		return ret;
++	}
+ 
+@@ -1157,2 +1240,7 @@
+ 			mutex_lock(&vertex->lock);
++			ret = check_emergency_vctx(vctx);
++			if (ret) {
++				mutex_unlock(&vertex->lock);
++				return ret;
++			}
+ 			if (!vertex->secure_count) {
+@@ -1246,2 +1334,7 @@
+ 	}
++	ret = check_emergency_vctx(vctx);
++	if (ret) {
++		mutex_unlock(&vertex->lock);
++		return ret;
++	}
+ 
+@@ -1269,4 +1362,17 @@
  	device->active_non_secure_sessions = 1;
 -	device->active_non_secure_sessions = atomic_xchg(&vref->refcount, device->active_non_secure_sessions);
 -	__vref_put(&vertex->boot_cnt);
@@ -293,12 +341,12 @@
 +		goto p_err;
 +	}
  	device->active_non_secure_sessions--;
-@@ -1274,4 +1350,2 @@
+@@ -1274,4 +1380,2 @@
  
 -	npu_hwdev_shutdown(device, ctrl->value);
 -
  	vertex->normal_count--;
-@@ -1349,3 +1423,6 @@
+@@ -1349,3 +1453,6 @@
  	}
 -	vctx->state |= BIT(NPU_VERTEX_POWER);
 +	if (!ret && (ctrl->ctrl & MASK_BIT_UP_DOWN) == BOOT_UP)
@@ -306,7 +354,7 @@
 +	else if (!ret && (ctrl->ctrl & MASK_BIT_UP_DOWN) == BOOT_DOWN)
 +		vctx->state &= ~BIT(NPU_VERTEX_POWER);
  #ifdef CONFIG_NPU_USE_LLC
-@@ -1388,2 +1465,7 @@
+@@ -1388,2 +1495,7 @@
  	}
 +	if (test_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN,
 +			&device->err_state)) {
@@ -314,7 +362,7 @@
 +		return -EIO;
 +	}
  
-@@ -1398,5 +1480,12 @@
+@@ -1398,5 +1510,12 @@
  		npu_err("start for emergency recovery\n");
 -		__vref_put(&vertex->boot_cnt);
 -		npu_device_recovery_close(device);
@@ -330,4 +378,3 @@
 +		if (!ret)
 +			ret = -EWOULDBLOCK;
  		goto p_err;
-

@@ -232,6 +232,7 @@ def extract_functions(sources: dict[str, bytes]) -> str:
         (HW_C, "int npu_hwdev_recovery_shutdown("),
         (VERTEX_C, "int npu_hwdev_secure_bootup("),
         (VERTEX_C, "int npu_hwdev_secure_bootdown("),
+        (VERTEX_C, "int npu_hwdev_normal_bootup("),
         (VERTEX_C, "int npu_hwdev_normal_bootdown("),
         (VERTEX_C, "static int npu_vertex_bootup("),
         (VERTEX_C, "static inline int __vref_put("),
@@ -334,6 +335,7 @@ struct npu_vertex {
 struct npu_system {
     struct npu_memory memory;
     int max_npu_core;
+    int saved_warm_boot_flag;
     void *dhcp;
     struct { int warm_boot_enable; } *mbox_hdr;
 };
@@ -377,6 +379,9 @@ struct test_state {
     int sequence;
     int events[128];
     int lock_acquires, lock_releases, lock_depth;
+    int latch_on_lock_number;
+    int clear_normal_count_on_lock_number;
+    int clear_secure_count_on_lock_number;
     int suspend_calls, suspend_ret;
     int log_close_calls, debug_close_calls;
     int hw_put_calls, hw_put_fail_at, hw_put_fail_ret;
@@ -384,7 +389,7 @@ struct test_state {
     int session_close_calls, session_open_calls, session_undo_open_calls;
     int unreg_hw_calls, reg_hw_calls, power_notify_calls, power_notify_ret;
     int suspend_session_calls, suspend_session_ret, soc_suspend_calls;
-    int memory_alloc_ret, memory_free_calls, kfree_calls;
+    int memory_alloc_calls, memory_alloc_ret, memory_free_calls, kfree_calls;
     int open_get_calls, boot_get_calls, open_put_calls, boot_put_calls;
     int emergency_after_open_get, emergency_after_boot_get;
     int queue_open_calls, shutdown_order;
@@ -399,7 +404,6 @@ static struct npu_hw_device HA, HB, HDNC;
 static int g_hwdev_num;
 static void *configs[1];
 static struct npu_scheduler_info scheduler_info;
-static int secure_normal_bootup_ret;
 int npu_device_shutdown(struct npu_device *device);
 static int __vref_shutdown(struct npu_vertex *vertex);
 
@@ -415,6 +419,14 @@ static int test_bit(int bit, const unsigned long *value) {
 }
 static void set_bit(int bit, unsigned long *value) { *value |= 1UL << bit; }
 static void clear_bit(int bit, unsigned long *value) { *value &= ~(1UL << bit); }
+static void maybe_latch_uncertainty_after_lock(void) {
+    if (T.latch_on_lock_number == T.lock_acquires)
+        set_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN, &D.err_state);
+    if (T.clear_normal_count_on_lock_number == T.lock_acquires)
+        D.vertex.normal_count = 0;
+    if (T.clear_secure_count_on_lock_number == T.lock_acquires)
+        D.vertex.secure_count = 0;
+}
 static int atomic_read(const atomic_t *value) { return value->counter; }
 static void atomic_set(atomic_t *value, int next) { value->counter = next; }
 static int atomic_dec_return(atomic_t *value) {
@@ -430,10 +442,13 @@ static int atomic_xchg(atomic_t *value, int next) {
     int old = value->counter; value->counter = next; return old;
 }
 static int mutex_lock_interruptible(struct mutex *lock) {
-    (void)lock; T.lock_acquires++; T.lock_depth++; return 0;
+    (void)lock; T.lock_acquires++; T.lock_depth++;
+    maybe_latch_uncertainty_after_lock();
+    return 0;
 }
 static void mutex_lock(struct mutex *lock) {
     (void)lock; T.lock_acquires++; T.lock_depth++;
+    maybe_latch_uncertainty_after_lock();
 }
 static void mutex_unlock(struct mutex *lock) {
     (void)lock; T.lock_releases++; T.lock_depth--;
@@ -509,7 +524,9 @@ static void npu_memory_free(struct npu_memory *memory, struct npu_memory_buffer 
 }
 static int npu_memory_alloc_secure(struct npu_memory *memory,
                                    struct npu_memory_buffer *buffer, void *config) {
-    (void)memory; (void)buffer; (void)config; return T.memory_alloc_ret;
+    (void)memory; (void)buffer; (void)config;
+    T.memory_alloc_calls++;
+    return T.memory_alloc_ret;
 }
 static void *kzalloc(size_t size, int flags) { (void)flags; return calloc(1, size); }
 static void kfree(void *pointer) { if (pointer) T.kfree_calls++; }
@@ -542,11 +559,6 @@ static int __vref_get(struct npu_vertex_refcount *ref) {
     }
     return 0;
 }
-static int npu_hwdev_normal_bootup(struct npu_device *device,
-                                   struct npu_vertex_ctx *vctx,
-                                   struct vs4l_ctrl *ctrl) {
-    (void)device; (void)vctx; (void)ctrl; return secure_normal_bootup_ret;
-}
 static int npu_session_NW_CMD_RESUME(struct npu_session *session) { (void)session; return 0; }
 static int npu_session_restore_cnt(struct npu_session *session) { (void)session; return 0; }
 static int npu_session_restart(void) { return 0; }
@@ -562,6 +574,7 @@ static inline int __vref_put(struct npu_vertex_refcount *ref);
 static int __vref_shutdown(struct npu_vertex *vertex);
 int npu_hwdev_secure_bootup(struct npu_device *, struct npu_vertex_ctx *, struct vs4l_ctrl *);
 int npu_hwdev_secure_bootdown(struct npu_device *, struct npu_vertex_ctx *, struct vs4l_ctrl *);
+int npu_hwdev_normal_bootup(struct npu_device *, struct npu_vertex_ctx *, struct vs4l_ctrl *);
 int npu_hwdev_normal_bootdown(struct npu_device *, struct npu_vertex_ctx *, struct vs4l_ctrl *);
 static int npu_vertex_bootup(struct file *, struct vs4l_ctrl *);
 static int npu_vertex_open(struct file *);
@@ -585,7 +598,7 @@ static void reset_fixture(void) {
     S.vctx.vertex = &D.vertex; S.vctx.id = 4; S.hids = NPU_HWDEV_ID_NPU;
     S.memory = &D.system.memory;
     H.name = "NPU"; H.id = NPU_HWDEV_ID_NPU; H.device = &D;
-    secure_normal_bootup_ret = 0; T.shutdown_order = 0;
+    T.shutdown_order = 0;
 }
 static void release_fixture(void) { free(D.system.mbox_hdr); D.system.mbox_hdr = NULL; }
 
@@ -845,6 +858,106 @@ static void test_secure_bootup_success(void) {
     release_fixture();
 }
 
+static void expect_late_lock_refusal(const char *what, int lock_count) {
+    expect(test_bit(NPU_DEVICE_ERR_STATE_SHUTDOWN_UNCERTAIN, &D.err_state) &&
+           !test_bit(NPU_DEVICE_ERR_STATE_EMERGENCY, &D.err_state),
+           "lock hook sets sticky uncertainty without ordinary emergency bit");
+    expect(T.hw_bootup_calls == 0 && T.hw_shutdown_calls == 0 &&
+           T.hw_put_calls == 0 && T.boot_get_calls == 0 && T.boot_put_calls == 0 &&
+           T.open_get_calls == 0 && T.open_put_calls == 0 &&
+           T.reg_hw_calls == 0 && T.unreg_hw_calls == 0 &&
+           T.session_open_calls == 0 && T.session_close_calls == 0 &&
+           T.session_undo_open_calls == 0 && T.queue_open_calls == 0 &&
+           T.power_notify_calls == 0 && T.suspend_session_calls == 0 &&
+           T.soc_suspend_calls == 0 && T.suspend_calls == 0 &&
+           T.memory_alloc_calls == 0 && T.memory_free_calls == 0 &&
+           T.kfree_calls == 0,
+           what);
+    expect(D.state == BIT(NPU_DEVICE_STATE_OPEN) && S.vctx.state == 0 &&
+           D.vertex.open_cnt.refcount.counter == 1,
+           "late-latch refusal leaves open/session/device state unchanged");
+    expect(T.lock_acquires == lock_count && T.lock_releases == lock_count &&
+           T.lock_depth == 0,
+           "late-latch refusal balances exactly the locks acquired");
+}
+
+static void test_late_uncertainty_after_entry_lock(void) {
+    struct vs4l_ctrl ctrl = { .value = NPU_HWDEV_ID_NPU, .mem_size = 0 };
+
+    reset_fixture(); S.vctx.vertex = &D.vertex; T.latch_on_lock_number = 1;
+    expect(npu_hwdev_secure_bootup(&D, &S.vctx, &ctrl) != 0,
+           "secure bootup refuses uncertainty latched at mutex acquisition");
+    expect_late_lock_refusal("secure bootup performs no HW/ref/session work", 1);
+    expect(D.vertex.secure_count == 0 && D.vertex.normal_count == 0 &&
+           D.is_secure == 0,
+           "secure bootup refusal preserves counts and mode");
+    release_fixture();
+
+    reset_fixture(); S.vctx.vertex = &D.vertex; T.latch_on_lock_number = 1;
+    D.system.saved_warm_boot_flag = 17;
+    D.system.mbox_hdr->warm_boot_enable = 23;
+    expect(npu_hwdev_normal_bootup(&D, &S.vctx, &ctrl) != 0,
+           "normal bootup refuses uncertainty latched at mutex acquisition");
+    expect_late_lock_refusal("normal bootup performs no HW/ref/session work", 1);
+    expect(D.vertex.secure_count == 0 && D.vertex.normal_count == 0 &&
+           D.vertex.boot_cnt.refcount.counter == 1 && D.is_secure == 0 &&
+           D.system.saved_warm_boot_flag == 17,
+           "normal bootup refusal preserves counts and mode");
+    release_fixture();
+
+    reset_fixture(); S.vctx.vertex = &D.vertex; T.latch_on_lock_number = 1;
+    D.vertex.secure_count = 1; D.is_secure = 1;
+    S.sec_mem_buf = calloc(1, sizeof(*S.sec_mem_buf));
+    struct npu_memory_buffer *retained = S.sec_mem_buf;
+    expect(npu_hwdev_secure_bootdown(&D, &S.vctx, &ctrl) != 0,
+           "secure bootdown refuses uncertainty latched at mutex acquisition");
+    expect_late_lock_refusal("secure bootdown performs no HW/free/ref work", 1);
+    expect(D.vertex.secure_count == 1 && D.is_secure == 1 &&
+           S.sec_mem_buf == retained,
+           "secure bootdown refusal retains count, mode, and memory owner");
+    free(S.sec_mem_buf); S.sec_mem_buf = NULL;
+    release_fixture();
+
+    reset_fixture(); S.vctx.vertex = &D.vertex; T.latch_on_lock_number = 1;
+    D.vertex.normal_count = 1; D.vertex.boot_cnt.refcount.counter = 1;
+    expect(npu_hwdev_normal_bootdown(&D, &S.vctx, &ctrl) != 0,
+           "normal bootdown refuses uncertainty latched at mutex acquisition");
+    expect_late_lock_refusal("normal bootdown performs no HW/protocol/ref work", 1);
+    expect(D.vertex.normal_count == 1 && D.vertex.boot_cnt.refcount.counter == 1 &&
+           D.is_secure == 0,
+           "normal bootdown refusal preserves counts and mode");
+    release_fixture();
+}
+
+static void test_late_uncertainty_after_wait_reacquire(void) {
+    struct vs4l_ctrl ctrl = { .value = NPU_HWDEV_ID_NPU, .mem_size = 0 };
+
+    reset_fixture(); S.vctx.vertex = &D.vertex;
+    D.vertex.normal_count = 1; T.latch_on_lock_number = 2;
+    T.clear_normal_count_on_lock_number = 2;
+    expect(npu_hwdev_secure_bootup(&D, &S.vctx, &ctrl) != 0,
+           "secure bootup wait refuses uncertainty on mutex reacquisition");
+    expect_late_lock_refusal("secure wait does no HW/ref/session work", 2);
+    expect(D.vertex.normal_count == 0 && D.vertex.secure_count == 0 &&
+           D.is_secure == 0,
+           "secure wait refusal preserves counts and mode");
+    release_fixture();
+
+    reset_fixture(); S.vctx.vertex = &D.vertex;
+    D.vertex.secure_count = 1; T.latch_on_lock_number = 2;
+    T.clear_secure_count_on_lock_number = 2;
+    D.system.saved_warm_boot_flag = 17;
+    D.system.mbox_hdr->warm_boot_enable = 23;
+    expect(npu_hwdev_normal_bootup(&D, &S.vctx, &ctrl) != 0,
+           "normal bootup wait refuses uncertainty on mutex reacquisition");
+    expect_late_lock_refusal("normal wait does no HW/ref/session work", 2);
+    expect(D.vertex.secure_count == 0 && D.vertex.normal_count == 0 &&
+           D.vertex.boot_cnt.refcount.counter == 1 && D.is_secure == 0 &&
+           D.system.saved_warm_boot_flag == 17,
+           "normal wait refusal preserves counts and mode");
+    release_fixture();
+}
+
 static void test_secure_bootdown_error_and_wrapper_state(void) {
     struct vs4l_ctrl ctrl = { .ctrl = BOOT_DOWN | SECURE,
                               .value = NPU_HWDEV_ID_NPU };
@@ -903,6 +1016,57 @@ static void test_normal_bootdown_error(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc > 1 && !strcmp(argv[1], "baseline_late_latch")) {
+        struct vs4l_ctrl ctrl = { .value = NPU_HWDEV_ID_NPU, .mem_size = 0 };
+        int bypasses = 0;
+
+        reset_fixture(); S.vctx.vertex = &D.vertex;
+        T.latch_on_lock_number = 1;
+        if (npu_hwdev_secure_bootup(&D, &S.vctx, &ctrl) == 0 &&
+            T.hw_bootup_calls == 1 && D.vertex.secure_count == 1)
+            bypasses++;
+
+        reset_fixture(); S.vctx.vertex = &D.vertex;
+        T.latch_on_lock_number = 1;
+        if (npu_hwdev_normal_bootup(&D, &S.vctx, &ctrl) == 0 &&
+            T.hw_bootup_calls == 1 && T.boot_get_calls == 1 &&
+            D.vertex.normal_count == 1)
+            bypasses++;
+
+        reset_fixture(); S.vctx.vertex = &D.vertex;
+        T.latch_on_lock_number = 1; D.vertex.secure_count = 1; D.is_secure = 1;
+        S.sec_mem_buf = calloc(1, sizeof(*S.sec_mem_buf));
+        if (npu_hwdev_secure_bootdown(&D, &S.vctx, &ctrl) == 0 &&
+            T.hw_shutdown_calls == 1 && T.memory_free_calls == 1 &&
+            D.vertex.secure_count == 0 && S.sec_mem_buf == NULL)
+            bypasses++;
+
+        reset_fixture(); S.vctx.vertex = &D.vertex;
+        T.latch_on_lock_number = 1; D.vertex.normal_count = 1;
+        if (npu_hwdev_normal_bootdown(&D, &S.vctx, &ctrl) == 0 &&
+            T.hw_shutdown_calls == 1 && T.boot_put_calls == 1 &&
+            D.vertex.normal_count == 0)
+            bypasses++;
+
+        reset_fixture(); S.vctx.vertex = &D.vertex; D.vertex.normal_count = 1;
+        T.latch_on_lock_number = 2; T.clear_normal_count_on_lock_number = 2;
+        if (npu_hwdev_secure_bootup(&D, &S.vctx, &ctrl) == 0 &&
+            T.hw_bootup_calls == 1 && D.vertex.secure_count == 1)
+            bypasses++;
+
+        reset_fixture(); S.vctx.vertex = &D.vertex; D.vertex.secure_count = 1;
+        T.latch_on_lock_number = 2; T.clear_secure_count_on_lock_number = 2;
+        if (npu_hwdev_normal_bootup(&D, &S.vctx, &ctrl) == 0 &&
+            T.hw_bootup_calls == 1 && T.boot_get_calls == 1 &&
+            D.vertex.normal_count == 1)
+            bypasses++;
+
+        if (bypasses == 6) {
+            puts("BASELINE_FAIL late sticky uncertainty bypasses four entrypoints and two wait reacquisitions");
+            return 1;
+        }
+        return 2;
+    }
     if (argc > 1 && !strcmp(argv[1], "panic")) {
         reset_fixture(); D.state |= BIT(NPU_DEVICE_STATE_OPEN);
         T.suspend_ret = -EIO;
@@ -999,6 +1163,8 @@ int main(int argc, char **argv) {
     test_ordinary_close_and_already_down();
     test_secure_bootup_failed_resume_no_inverse();
     test_secure_bootup_success();
+    test_late_uncertainty_after_entry_lock();
+    test_late_uncertainty_after_wait_reacquire();
     test_secure_bootup_cleanup_error();
     test_secure_bootdown_error_and_wrapper_state();
     test_normal_bootdown_error();
@@ -1110,7 +1276,7 @@ def main() -> int:
                       f"baseline recovery caller panic not reproduced in {mode}: "
                       f"rc={caller_panic.returncode}")
             for mode in ("zero_ref", "baseline_error_nonzero", "baseline_close", "baseline_normal",
-                         "baseline_secure", "baseline_secure_down"):
+                         "baseline_secure", "baseline_secure_down", "baseline_late_latch"):
                 result = compile_and_run(
                     compiler, temp, f"baseline_{mode}_{optimization[2:]}",
                     baseline_functions, optimization, mode)

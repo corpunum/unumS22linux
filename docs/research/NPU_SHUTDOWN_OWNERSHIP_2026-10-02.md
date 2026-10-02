@@ -1,9 +1,9 @@
 # S22 NPU shutdown/recovery ownership repair
 
-Status: host-reviewed source candidate only. NPU BOOTUP remains refused. This
-work does not establish kernel-build, module-load, device, runtime, or deployment
-acceptance. Independent Luna review and full-stack reconciliation are required
-before promotion.
+Status: host-tested source candidate pending independent review. NPU BOOTUP
+remains refused. This work does not establish kernel-build, module-load, device,
+runtime, or deployment acceptance. Independent Luna re-review and full-stack
+reconciliation are required before promotion.
 
 ## Scope and source
 
@@ -41,6 +41,11 @@ It does not edit those patches or source worktrees.
   longer lead to session creation or a later cleanup/free. `check_emergency()`,
   `npu_device_open()`, and `npu_device_bootup()` treat the sticky latch as
   authoritative, so a cleared emergency bit cannot reopen or resume the device.
+- Secure bootup/down and normal bootup/down recheck emergency/uncertain state
+  after acquiring `vertex->lock`, before changing counts, calling hardware, or
+  freeing secure memory. Both bootup wait loops repeat that check immediately
+  after each mutex reacquisition. A late-latch refusal unlocks and returns
+  without further callback, ref, counter, or session-memory work.
 - `__npu_vertex_bootup()` similarly propagates the operation boot-ref put and
   recovery errors. The ref put remains before hardware recovery: exact extracted
   `__vref_put()` / `__vref_shutdown()` / `npu_device_shutdown()` execute early
@@ -89,7 +94,15 @@ module/session-manager lifetime are out of scope.
 ## Evidence
 
 `tools/hardware/test-npu-shutdown-ownership.py` runs actual extracted driver C
-with host shims (not a kernel build). Baseline reproductions cover the recovery
+with host shims (not a kernel build). A controlled lock hook latches sticky
+uncertainty after simulated acquisition and exercises all four boot entrypoints
+plus both bootup wait-loop reacquisitions. The pre-fix exact bodies reproduce
+all six bypasses; on wait reacquisition the hook also simulates the waited count
+reaching zero, which otherwise lets bootup proceed to the hardware callback.
+Patched cases verify balanced shim locks and no subsequent modeled hardware,
+protocol, ref, counter, or secure-memory work apart from those explicit hook
+changes. They are not Linux concurrency or memory-ordering evidence.
+Baseline reproductions cover the recovery
 panic, caller panic, ERROR-state inverse puts (zero and nonzero counters),
 close-before-shutdown free, normal false success, and secure cleanup/bootdown
 false success. Patched tests cover ordinary recovery/close/secure-boot success,
