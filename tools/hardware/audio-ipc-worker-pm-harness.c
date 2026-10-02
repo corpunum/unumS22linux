@@ -465,6 +465,7 @@ static void test_negative_resume(void)
 static void test_explicit_callback_retries_retained_fifo(void)
 {
 	int initial_usage;
+	int work_calls_before;
 
 	reset_world();
 	queue_fe_start_be_stop();
@@ -477,9 +478,12 @@ static void test_explicit_callback_retries_retained_fifo(void)
 
 	/* A new user/ASoC callback, not the worker, is the next retry trigger. */
 	g_resume_result = 1;
+	work_calls_before = g_queue_work_calls;
 	CHECK(abox_rdma_trigger(&g_component, &g_substream,
 			SNDRV_PCM_TRIGGER_RESUME) == 0,
 		"later explicit FE RESUME is accepted after PM failure");
+	CHECK(g_queue_work_calls == work_calls_before + 1,
+		"explicit FE callback schedules the retained FIFO through queue_work");
 	CHECK(g_dma.enabled && queue_depth() == 3,
 		"explicit callback appends behind the retained FIFO and commits locally");
 	abox_process_ipc(&g_abox.ipc_work);

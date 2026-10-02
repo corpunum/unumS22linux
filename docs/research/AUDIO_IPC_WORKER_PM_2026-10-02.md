@@ -90,7 +90,9 @@ the host PM model remains inactive. After the patch, the same run verifies one
 failsafe calls, no successful-resume PM tail, a rate-limited errno log, and no
 automatic retry. A later explicit FE RESUME with positive `get_sync` result
 drains the retained START→STOP→RESUME FIFO and balances through one
-autosuspend put. Separate success and post-resume sender-error cases verify
+autosuspend put. The callback must make exactly one additional `queue_work()`
+call before the harness explicitly runs the worker; real Linux workqueue
+scheduling remains outside this host shim. Separate success and post-resume sender-error cases verify
 that existing send/failsafe behavior and PM reference balancing remain
 unchanged.
 
