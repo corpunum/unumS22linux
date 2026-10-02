@@ -11,9 +11,11 @@ matching `module_layout` CRC (`0x0e3c515c`) and the exact expected vermagic.
 
 This is a host-side artifact/inventory result only. It does not establish a
 current-phone ABI, module loading, deployment, runtime PM, IPC, DMA, PCM
-progress, or physical audio. The generic trace test's physical-slot reuse gap
-remains unresolved, and the cause of the earlier ten ABOX export CRC changes
-is not proven. No CRC masking or force-load behavior was used.
+progress, or physical audio. The generic trace test's physical-slot reuse
+coverage was closed separately by actual extracted-C tests in `3da3d06`,
+independently reviewed in `6b9c1f6`; compilation itself does not cover it.
+The cause of the earlier ten ABOX export CRC changes is not proven. No CRC
+masking or force-load behavior was used.
 
 ## Inputs and execution
 
@@ -102,8 +104,12 @@ This build recompiled those consumers against the actual ABOX5 exports, then
 checked the complete substituted 329-module inventory. That closes the
 reported static dependency mismatch for this specific host artifact set; it
 does not prove the CRC-generation cause or compatibility with a separate
-phone module inventory. The separate source review also leaves the generic
-trace fixture's physical-slot reuse coverage gap open.
+phone module inventory. The earlier source review's generic physical-slot
+coverage finding was subsequently corrected in `3da3d06` and independently
+reviewed in `6b9c1f6`. That closes the host test coverage finding, not kernel
+RCU/concurrency ordering, firmware behavior or physical audio. The original
+author commit `7d0c3114` retains the stale open-gap wording for historical
+inspection; this correction changes no source patch or build artifact.
 
 ## Scope limits
 
