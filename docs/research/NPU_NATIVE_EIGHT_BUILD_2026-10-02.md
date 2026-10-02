@@ -271,3 +271,21 @@ The existing unprivileged host sleep-inhibitor request returned `Access
 denied`; it was not routed around. The build remains live on the awake rig,
 with its existing memory/disk monitoring. No guaranteed host wake/rescue is
 claimed.
+
+Independent review subsequently reproduced a second escape with actual Git:
+`GIT_DIR` and `GIT_WORK_TREE` made the helper validate the pinned repository
+while accepting a different supplied directory containing only a fake
+Makefile. A self-contained two-repository regression reproduced that
+false acceptance before the coordinator fix. Both source and temporary-index
+replay now reject inherited `GIT_*` overrides before querying Git, and verify
+that Git's worktree root equals the directory supplied to make. The sole
+exception is the execution environment's `GIT_PAGER`; every builder Git call
+now explicitly uses `--no-pager`. The controlled temporary index is created
+only after this inherited-environment gate and remains scoped to replay.
+
+All 29 tests pass in each Python mode, including actual Git decoy rejection,
+ten independent override-name cases, source-root mismatch, and explicit pager
+disabling. An initial draft rejected the harmless ambient pager and failed
+four tests; that draft failure is not counted as a pass. The actual build
+process has no routing override, so this correction also did not restart or
+change the ongoing frozen-helper invocation.
