@@ -639,3 +639,58 @@ button candidates above, and verifies their node/sysfs device identities.
 This establishes real execution of passive tooling, not real-button delivery
 or a cellular connection. Sanitized follow-up timestamps/hashes are appended
 to the existing public baseline receipt without changing its earlier samples.
+
+### Completed full host run and shutdown-error implementation
+
+The complete explicit host suite at
+`7d2e4a81001db2cbbbc34e5ab53ada717a37393b` returned zero:
+**42 normal / 39 optimized script passes**, no failed script and the same
+three documented optimized-mode exclusions. Its combined output SHA-256 is
+`6391101fb7308194c4f0dc726b247989be63c63633163b4a926f716899b045af`.
+This is a subsequent green invocation; it does not rewrite the earlier
+download-timeout receipts, count nested unavailable-fixture skips as execution,
+or establish hardware functionality.
+
+The five-patch public-source portability and three-line CI change were
+independently reviewed at author
+`a8095177b2af26ba70a5d8a437f9037705481dc7`, integrated `ec9fe25`. Public
+normal/optimized and local one-root environment-optimized runs actually
+passed; missing/mismatched configured roots failed instead of falling back.
+
+The bounded shutdown-error worker froze
+`1df641e4ae5c6c60a41e11d63a1e9f7670c73e51`, integrated `ec0dd71`. This
+sixth, device-function-only patch keeps existing early-close, protocol-close,
+DHCP-deinit and system-suspend order but returns the first nonzero error.
+The actual pre-fix extracted C falsely reports success after early/protocol
+errors and lets the tested close caller free the session. Final extracted C
+reports the error and the tested close path retains session/open-reference
+ownership and latches shutdown uncertainty. Its boot ref has already reached
+zero: this is not proof of complete lifetime recovery or a repaired normal
+count/ref contract. Some alternate/unwind callers still ignore or only log
+callback errors, and real failed protocol/suspend behavior remains unproven.
+
+Patch SHA-256:
+`08374e96792f24d1e0e4fbca594bfce35537af8acace9296b66f27b531564e43`.
+Test SHA-256:
+`7af046d7330acaa5d54ff5a7a334f7acbe07b0ace6301194fa9b15704c251a70`.
+Author local three-mode and one public-default invocation passed; the
+coordinator independently reran all three local Python modes. Each run
+executes 30 scenario configurations at C `-O0` and `-O2`: four reproduced
+pre-fix behaviors, nine new final cases and 17 inherited ownership cases.
+The coordinator output SHA in each mode is
+`9b4d17cadfee39a6ccbecc233cefe55c41caf4310df389d61baa4c299baadf2f`.
+BOOTUP preflight remains status 2 with readiness and authorization false.
+
+`da658ded6d62a8362127b0c1bee73c0591cff5a8` adds only the new sixth-patch
+test to the three explicit CI path lists; all seven runner-policy tests pass
+again in each Python mode. Final independent review is in progress. Expected
+hosted coverage is now **43 normal / 40 optimized scripts**, not an already
+observed hosted result. No kernel build, installation or hardware request is
+inferred from this host/source result.
+
+Next device-specific actions remain distinct: owner-confirmed short physical
+button event delivery/display response; a reviewed audio route/DMA experiment
+for volume and speech; review of protected NV/EFS behavior before any CP
+bootstrap; and separate SIM registration, forced mobile internet, IMS and
+two-way voice acceptance. NPU publication-drain and retained-object lifetime
+remain unresolved. No consumed trial is reopened by this goal or source wave.
