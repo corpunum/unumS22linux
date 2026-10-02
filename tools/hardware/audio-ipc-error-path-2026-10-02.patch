@@ -1,0 +1,26 @@
+diff --git a/sound/soc/samsung/abox/abox_rdma.c b/sound/soc/samsung/abox/abox_rdma.c
+index ba5871c..a9f2c11 100755
+--- a/sound/soc/samsung/abox/abox_rdma.c
++++ b/sound/soc/samsung/abox/abox_rdma.c
+@@ -1640,15 +1640,18 @@ static int abox_rdma_trigger_ipc(struct abox_dma_data *data, bool atomic,
+ {
+ 	ABOX_IPC_MSG msg;
+ 	struct IPC_PCMTASK_MSG *pcmtask_msg = &msg.msg.pcmtask;
++	int ret;
+ 
+ 	if (data->enabled == start)
+ 		return 0;
+ 
+-	data->enabled = start;
+-
+ 	msg.ipcid = IPC_PCMPLAYBACK;
+ 	pcmtask_msg->msgtype = PCM_PLTDAI_TRIGGER;
+ 	msg.task_id = pcmtask_msg->channel_id = data->id;
+ 	pcmtask_msg->param.trigger = start;
+-	return abox_rdma_request_ipc(data, &msg, atomic, 0);
++	ret = abox_rdma_request_ipc(data, &msg, atomic, 0);
++	if (ret >= 0)
++		data->enabled = start;
++
++	return ret;
+ }
