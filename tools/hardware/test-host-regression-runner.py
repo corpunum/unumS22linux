@@ -48,6 +48,7 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-audio-ipc-error-path.py",
     "tools/hardware/test-audio-ipc-worker-pm.py",
     "tools/hardware/test-audio-ipc-duplicate-rekick.py",
+    "tools/hardware/test-audio-ipc-trace-private-abi.py",
     "tools/hardware/test-audio-dma-evidence.py",
     "tools/hardware/test-audio-recovery-observer.py",
     "tools/hardware/test-input-power-readiness.py",
