@@ -1,0 +1,44 @@
+diff --git a/drivers/vision/npu/core/npu-session.c b/drivers/vision/npu/core/npu-session.c
+--- a/drivers/vision/npu/core/npu-session.c
++++ b/drivers/vision/npu/core/npu-session.c
+@@ -184,19 +184,24 @@
+ static void npu_power_wait_cancel_and_drain(struct npu_power_waiter *waiter)
+ {
+-	unsigned long flags;
+-
+-	for (;;) {
+-		spin_lock_irqsave(&npu_power_waiters_lock, flags);
+-		waiter->cancelled = true;
+-		if (!waiter->publishing) {
+-			spin_unlock_irqrestore(&npu_power_waiters_lock, flags);
+-			return;
+-		}
+-		spin_unlock_irqrestore(&npu_power_waiters_lock, flags);
+-
+-		/* The publisher owns a lease on this stack waiter until it reports
+-		 * that the synchronous mailbox post has returned.
+-		 */
+-		wait_for_completion(&waiter->publish_done);
+-	}
++	unsigned long flags;
++
++	for (;;) {
++		spin_lock_irqsave(&npu_power_waiters_lock, flags);
++		waiter->cancelled = true;
++		/* Before authorization, the publisher has only a cookie and must
++		 * look the waiter up again under this lock before it can post.  Once
++		 * authorized, retain the existing drain: the synchronous publisher
++		 * may still be using the mailbox request and its completion path.
++		 */
++		if (!waiter->publishing || !waiter->publish_committed) {
++			spin_unlock_irqrestore(&npu_power_waiters_lock, flags);
++			return;
++		}
++		spin_unlock_irqrestore(&npu_power_waiters_lock, flags);
++
++		/* The publisher owns a lease on this stack waiter until it reports
++		 * that the synchronous mailbox post has returned.
++		 */
++		wait_for_completion(&waiter->publish_done);
++	}
+ }
