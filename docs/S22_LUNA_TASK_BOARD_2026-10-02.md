@@ -1,5 +1,62 @@
 # S22 continuation — 2026-10-02
 
+## Audio ABI correction and retained host-suite failure — 20:23 UTC
+
+Historical results below are preserved; they are not current deployment gates.
+
+- Private-metadata audio author `fc6e07d7`, integrated `5e3be36`, restores
+  the original exported ABOX layouts without CRC masking. Independent review
+  `55485bda`, integrated `c4562a8`, clears the source logic for a host compile
+  but rejects the generic-zero/physical-slot-reuse test claim: generic IPC is
+  filtered from the send trace, and the old assertion did not reuse a slot.
+  The author is correcting actual extracted-C observations and negative
+  mutation controls in a separate worktree; patch bytes remain unchanged.
+- A single host-only GO was issued for the clean five-patch source
+  `7363ab97d917a20f2c96632c94efd9ab7df7729e`, tree
+  `84325be79eab0244dd9a130e51d0974f6eadd4f5`. The fresh module-only output
+  must preserve config `d762d5fc...cd16`, the pinned 13-tool Clang18 profile,
+  and filtered baseline symbol map `ada1bf87...2cafa`. Raw olddefconfig
+  evidence and all 28 export CRCs/six previously stale imports are required.
+  A completed build or ABI result is **not yet claimed**.
+- The distinct BT userspace candidate compiled once, producing static AArch64
+  ELF SHA-256 `74b39343eaa0cd4e7176fb0fef0d6a30ee3e6abcea8954f68331381e719d8c61`
+  and GNU build ID `c5c9be207d9a957fc52734f056c510218ac01be5`. It has not
+  executed or been staged. Independent review `251f5c6a`, integrated
+  `98fe3ae`, confirms retained artifact identity and before/after dependency
+  records, but leaves contemporaneous executed-helper/invocation identity,
+  Python startup and pre/post race limitations explicit. No rebuild is being
+  performed to disguise those historical limits; the old production runner
+  pins and consumed trial remain unchanged.
+- The immutable full run at `5d15a0b` executed **107 invocations: 105 passed,
+  two failed**, both optional BT preflights inheriting the runner's controlled
+  `TMPDIR`. Log SHA-256:
+  `89eb904b2f770d715b26bcf49181c28b9a1b49c0875c469bd7c9237e5c0f2f96`.
+  A focused pre-fix subprocess reproduced it. Root correction `21c3f64`
+  supplies an allowlisted positive-test environment, retains real TMPDIR and
+  CPATH refusal, and requires isolated/no-site startup for future builder CLI
+  preflight/build paths. Sixteen tests pass in normal, `-O` and effective
+  `PYTHONOPTIMIZE=1` with controlled TMPDIR. Independent review is underway;
+  this is not a successful rerun of the full 107-invocation suite.
+
+| Actual accepted Luna/Max worker | Isolated worktree | Current owned deliverable |
+| --- | --- | --- |
+| `/root/audio_driver_path_next_20261002` | `audio-abi-generic-tests-20261002` | Actual generic-zero, same-physical-slot and fault-mutant C regressions; immutable source patch |
+| `/root/autonomous_driver_review_20261002` | `audio-five-native-build-20261002` | One serialized native ABOX module build and actual export/consumer ABI evidence |
+| `/root/bt_candidate_independent_review_20261002` | `bt-builder-startup-review-20261002` | Independent CLI isolation/TMPDIR regression review; no candidate rebuild or execution |
+
+Accepted explicit model selection is configuration evidence, not independent
+backend attestation. Only the coordinator accesses the phone. Fresh bounded
+read-only health at 20:19:45 UTC confirms the same GNU build ID
+`b2dda820b18d410d9bf12f1bd2584567d545991d`, 325 modules, healthy native control,
+desktop/Pi/browser/dedicated session, persistent mounts and idle model API.
+Battery is 100%/Full, 26.3 C; maximum sampled thermal reading is 43 C. Available
+ring serious indicators are absent, but full-boot coverage and measured
+TrustZone progress are not established. No current full RECOVERY rehash is
+claimed. This turn still has **zero partition writes, reboots, powered driver
+trials, inference requests or service changes**; independent rescue remains
+unproven. Current published/CI-verified head is still `04a256d2`, not these
+newer local commits. Master and the dirty original checkout remain unchanged.
+
 ## Actual artifact results and ABI repair wave — 19:28 UTC
 
 These entries supersede the earlier in-progress descriptions without erasing
