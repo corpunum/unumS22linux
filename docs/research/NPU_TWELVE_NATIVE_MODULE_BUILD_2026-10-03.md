@@ -1,13 +1,14 @@
-# NPU 11+12 native module build preparation — 2026-10-03
+# NPU 12 native module build — 2026-10-03
 
 ## State
 
-This is a plan-only preparation record. The composed source tree and the
-configuration, symbol, toolchain, command, and resource inputs have been
-checked. No `olddefconfig`, native module compile, kernel/image build, package,
-deployment, module load, phone/SSH/ADB access, or BOOTUP/runtime action has
-been performed. The coordinator has not issued the one-module-build GO; stop
-here until that explicit authorization.
+The single reviewed host-side target `drivers/vision/npu.ko` completed with
+exit 0 and without a resource abort. The generated release, byte-identical
+configuration, module artifact, and static import/export compatibility were
+verified and recorded in the sanitized receipt. This is not evidence of module
+loading, firmware response, BOOTUP, device/runtime acceptance, or deployment.
+No image or package was built, no phone/SSH/ADB was used, and no module was
+loaded. BOOTUP remains unauthorized.
 
 The initially frozen wrapper at `98b1d0a` (wrapper SHA-256
 `c4a25c93696217c1ae905df51bb57ece4ca652291b6f001a47c2ab23e8aca842`) was
@@ -27,8 +28,9 @@ file with the exact pinned release only after the monitored NPU target exits
 zero without a resource abort. This verifies generated output without
 weakening release identity checks.
 
-The exact new output directory, filtered Symvers output, and raw
-`olddefconfig` log are absent. The private wrapper at
+The new output directory, filtered Symvers output, and raw `olddefconfig` log
+were created by the single authorized run and remain private build artifacts.
+The wrapper at
 `tools/hardware/build-npu-twelve-module-only.py` defaults to read-only plan
 mode; execution requires `--execute`, the reviewed wrapper SHA, and an exact
 source-and-wrapper-bound coordinator GO token. Its operation-specific
@@ -61,10 +63,10 @@ from native ten changes exactly these two source paths:
 | `npu-fw-report-lock-unwind.patch` | `71c2fa44f0fe42bd94ee416fb09453185dd418b408ba15937ec3c787a5e9bf5d` | `drivers/vision/npu/core/npu-log.c` |
 
 The patch files are unchanged from their reviewed author worktree. The source
-HEAD is committed and clean; the module has not been compiled. Independent
-source review is reported cleared by the coordinator (review identifier
-`74059b4d`). That status is not runtime evidence and does not authorize a
-build by itself.
+HEAD was committed and clean before and after the single target compile.
+Independent source review is reported cleared by the coordinator (review
+identifier `74059b4d`); a separate reviewed host GO was recorded before the
+execution. Neither review status nor compilation is runtime evidence.
 
 ## Configuration and symbol inputs
 
@@ -77,12 +79,12 @@ include `CONFIG_EXYNOS_NPU=m`, `CONFIG_NPU_USE_BOOT_IOCTL=y`,
 `CONFIG_MODVERSIONS=y`, `CONFIG_CFI_CLANG=y`, `CONFIG_LTO_NONE=y`,
 `CONFIG_SHADOW_CALL_STACK=y`, `CONFIG_LOCALVERSION="-g4e5c5ad7d950"`, and
 `CONFIG_LOCALVERSION_AUTO=n`. The expected generated release is
-`5.10.260-g4e5c5ad7d950`. The new output `.config` does not yet exist; before
-`olddefconfig`, its copied input must match the pinned export hash, and after
-`olddefconfig` it must still match exactly or compilation is refused. The
-generated `include/config/kernel.release` is checked only after successful
-module preparation/build, because `olddefconfig` does not promise to create
-that file.
+`5.10.260-g4e5c5ad7d950`. The new output `.config` matched the pinned export
+hash both before and after `olddefconfig`. Its raw log was 869 bytes (SHA-256
+`88a885d080fd145f312d6dd20b008e8341fe832670b5aa1e908f1e58ceccddc7`). The
+generated `include/config/kernel.release` was checked after successful module
+preparation/build and matched `5.10.260-g4e5c5ad7d950` (file SHA-256
+`42baea336b74cd6cdbd1d3dbd3c9709c3fff772b21ba109458b388b72d00d961`).
 
 The matching native-eight full `Module.symvers` is
 `/home/corpunum/s22-linux/builds/npu-native-eight-out-clang18-recipe-20261002/Module.symvers`,
@@ -98,12 +100,13 @@ single `module_layout` record is `0x0e3c515c`. The pinned filter helper
 will exclude only owner `drivers/vision/npu`, require that exact one-row hash
 and input hash, and write a new, exclusive output
 `/home/corpunum/s22-linux/builds/npu-native-twelve-dependencies-20261003.symvers`.
-That output is currently absent. The prior native-ten filtered file is only a
+That output was produced and verified: 17,282 rows, 1,108,457 bytes, SHA-256
+`add620bc3a3732654f23161e4c966c7076b020568683f527402c6253cb59a334`. The prior native-ten filtered file is only a
 read-only cross-check (hash
 `add620bc3a3732654f23161e4c966c7076b020568683f527402c6253cb59a334`); it will
 not be substituted for re-deriving the twelve build's pinned input.
 
-## Pinned module-only wrapper (not executed)
+## Pinned module-only wrapper and host execution
 
 The corrected wrapper SHA-256 is
 `8dab1a2c0ea2b01555645717b46c0f1506ff951a60a9256669d90bae6859d61d`. Its
@@ -114,7 +117,8 @@ resource gate. The returned plan now carries the verified toolchain mapping
 used in the build-phase receipt. It does not create output files. It was
 read-only exercised in normal Python (optimization level 0), `-O` (level 1),
 and `PYTHONOPTIMIZE=1` (level 1); all reported the same source, helper, and
-17 tool identities, gate met, and output paths absent.
+17 tool identities. Execution was separately authorized and used the same
+preflighted identity and operation gate.
 With the corrected wrapper SHA but no coordinator token, `--execute` returned
 2 with `--execute requires the exact coordinator GO token`; both reserved
 output paths remained absent.
@@ -139,25 +143,19 @@ compile evidence.
   /home/corpunum/s22-workers/npu-twelve-native-build-20261003/tools/hardware/build-npu-twelve-module-only.py \
   --plan-only
 
-# Execution is prohibited until a separate reviewed coordinator GO. The
-# coordinator must supply this exact wrapper SHA and the matching token.
-/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C /usr/bin/python3 -I -B \
-  /home/corpunum/s22-workers/npu-twelve-native-build-20261003/tools/hardware/build-npu-twelve-module-only.py \
-  --execute \
-  --expect-wrapper-sha256 8dab1a2c0ea2b01555645717b46c0f1506ff951a60a9256669d90bae6859d61d \
-  --coordinator-go-token GO:NPU12-MODULE-ONLY:e9c3016233a72ceccb13e537f0b7ef72426582b9:8dab1a2c0ea2b01555645717b46c0f1506ff951a60a9256669d90bae6859d61d
+# The separately authorized execute invocation was run exactly once. Its full
+# argv, token, and exit receipt are recorded in the JSON evidence; do not replay.
 ```
 
-On explicit GO, the wrapper rechecks all identities, paths, and the 12/24 GiB
-operation gate before writing. It calls the guarded filter helper in an
-exclusive fresh output transaction, verifies the expected 17,282-row filtered
-hash, then copies the preserved config exclusively and invokes only
-`olddefconfig`. Its stdout/stderr is retained verbatim at
-`.../olddefconfig.log`; the before/after config SHA must match or module
-compilation is refused. It does not expect `olddefconfig` to create
-`kernel.release`. It also records filter output and each phase in a private
-append-only `module-only-phase.jsonl` journal. There is no retry or cleanup of
-partial outputs.
+Before writing, the wrapper rechecked all identities, paths, and the 12/24 GiB
+operation gate. It called the guarded filter helper in an exclusive fresh
+output transaction, verified the expected 17,282-row filtered hash, then
+copied the preserved config exclusively and invoked only
+`olddefconfig`. Its stdout/stderr was retained verbatim at
+`.../olddefconfig.log`; the before/after config SHA matched. It did not expect
+`olddefconfig` to create `kernel.release`. It also recorded filter output and
+each phase in a private append-only `module-only-phase.jsonl` journal. The
+execution did not retry or clean partial outputs.
 
 The only compilation argv is
 `/usr/bin/nice -n 10 /usr/bin/env -i PATH=/usr/lib/llvm-18/bin:/usr/bin:/bin
@@ -165,48 +163,74 @@ LC_ALL=C LOCALVERSION= TMPDIR=/tmp /usr/bin/make -C
 <pinned-source> O=<fresh-output> ARCH=arm64 LLVM=1
 CROSS_COMPILE=aarch64-linux-gnu-
 input-symdump=<pinned-filtered-symvers> -j1 V=1 drivers/vision/npu.ko`.
-It is passed to the already-pinned
+It was passed to the already-pinned
 `build-npu-six-profile.py:run_monitored_build` implementation (helper SHA-256
 `56f39759e4a098562cbafd634a659b007be2a540a4ada6234962711be026e5d5`), with
 source set to the exact committed kernel tree, output set to the fresh module
 directory, and child environment exactly `PATH`, `LC_ALL=C`, empty
-`LOCALVERSION`, and `TMPDIR=/tmp`. It records the raw module build log,
+`LOCALVERSION`, and `TMPDIR=/tmp`. It recorded the raw module build log,
 resource samples, and phase receipt under that private output. The wrapper
 fails closed if `resource_abort` is true even when the helper reports a zero
 child exit, and converts any helper `SystemExit(0)` into nonzero failure. Both
 olddefconfig and monitor-run build process groups use the pinned bounded
 SIGINT/SIGTERM/SIGKILL cleanup helper; its confirmation is journaled. Success
-is accepted only for a zero make exit without resource abort, the post-target
+was accepted only for a zero make exit without resource abort, the post-target
 exact `kernel.release`, a stable config and source identity, exactly one
 `*.ko` at `drivers/vision/npu.ko`, and no `Image`.
 
-At the later authorized run, record actual prelaunch UTC time/resources,
-source HEAD/tree and cleanliness immediately before and after, config SHA
-before/after `olddefconfig`, filter receipt, helper/interpreter/wrapper hashes,
-exact argv/environment, and raw log paths. Then verify only the requested
-`drivers/vision/npu.ko` exists in the fresh output (no `Image` or other module
-set), and reconcile its import/version data and export rows against the pinned
-native-eight and native-ten records. Until those results exist, ABI/build
-acceptance is `NOT_RUN`; the previous build's 234 imports and one-export result
-are expectations to check, not claims about this source.
+The actual start gate was recorded at 22:53:51Z with 25,870,323,712 bytes
+available memory and 30,746,574,848 bytes free on the host `builds` filesystem.
+The monitor's six samples reached minima of 24,155,299,840 bytes available
+memory and 30,556,766,208 bytes free disk, above its unchanged 8 GiB / 16 GiB
+abort thresholds. The target ran once from 22:53:57Z to 22:54:57Z (60 seconds);
+the wrapper exited 0 and recorded `resource_abort=false`.
 
-## Current preflight snapshot and evidence boundary
+The only module artifact is
+`builds/npu-native-twelve-module-only-out-20261003/drivers/vision/npu.ko`:
+14,796,512 bytes, SHA-256
+`03e1ad6403265d39e1d6c48d31c1defad3aad984cd972f8fe80f8ee0c4eaa621`, AArch64
+ELF64, GNU Build ID `59da71800d33e0c7dac1936908ffab47ec99584c`, and native
+vermagic `5.10.260-g4e5c5ad7d950 SMP preempt mod_unload modversions aarch64`.
+There is exactly one `.ko` and no `Image`. Its 234 ordered import-version
+records hash to `99aef867af8439d5c5cf1954ff01cd3f70eff870c5e3dbc19c733b386f0aaf55`,
+identical to the native-ten NPU module. The pinned host validator found zero
+missing, mismatched, unknown, or ambiguous import CRCs against the native-eight
+baseline Symvers; both module and baseline record `module_layout` CRC
+`0x0e3c515c`. The one exported symbol is `vision_register_device`, with CRC
+`0x982f6fee`, matching the baseline. These are static host-side compatibility
+checks, not execution of the kernel module loader.
 
-The corrected wrapper's latest read-only point-in-time sample was
-`2026-10-02T22:34:28Z`: 27,276,898,304 bytes available memory and
-31,029,047,296 bytes free at `/home/corpunum/s22-linux/builds`. Both operation
-start thresholds (12 GiB / 24 GiB) passed at that instant. An earlier host
-sample at `22:01:44Z` also saw this build filesystem as the root ext4 mount;
-it was below the *full Image-profile* 32 GiB initial-disk gate but above this
-module-only 24 GiB gate. The coordinator's separate `/srv/s22` collector/PID1
-namespace sample is a different destination and is not comparable to the
-host's `/home/corpunum/s22-linux/builds` filesystem. This worker made no phone
-access and did not treat either namespace's reading as superseding the other.
-These are point-in-time readings only; the 16 GiB monitor threshold includes
-no reservation against concurrent host or owner activity.
+Raw build, filter, resource, and phase logs remain only in the private build
+output. They were not copied into this repository; the sanitized receipt
+records their sizes, hashes, paths, and verifier/tool identities.
 
-The sanitized machine-readable plan is
+After the build, a separate source audit identified an unfixed path in
+`drivers/vision/npu/core/interface/hardware/npu-interface.c`: a
+`report_workqueue` allocation failure in `npu_interface_open()` may return
+success after IRQ requests without releasing those IRQs. Workqueue/IRQ/report
+callback ownership and teardown need a separately reviewed repair and fresh
+build. This unresolved defect blocks deployment/runtime acceptance; it was not
+changed in the committed source or built artifact.
+
+## Resource and evidence boundary
+
+At the actual operation start (`2026-10-02T22:53:51Z`), the wrapper observed
+25,870,323,712 bytes available memory and 30,746,574,848 bytes free at
+`/home/corpunum/s22-linux/builds`. Both operation thresholds (12 GiB / 24 GiB)
+passed then. During the target, six monitor samples had minima of
+24,155,299,840 bytes available memory and 30,556,766,208 bytes free disk,
+above the pinned monitor's 8 GiB / 16 GiB abort limits. These are point-in-time
+host readings, not reservations or guarantees against concurrent activity.
+
+An earlier host sample at `22:01:44Z` saw the builds filesystem below the
+*full Image-profile* 32 GiB initial-disk gate but above this module-only 24 GiB
+gate. The coordinator's `/srv/s22` collector/PID1 namespace is a distinct
+destination; its readings are not comparable to this host's
+`/home/corpunum/s22-linux/builds` filesystem. This worker did not access the
+phone or use one namespace's reading to supersede the other.
+
+The sanitized machine-readable receipt is
 [`s22-npu-twelve-native-module-build-20261003.json`](../../evidence/s22-npu-twelve-native-module-build-20261003.json).
-It records every build phase as `NOT_RUN`. Host source review and host tests
-are not module compilation, module loading, firmware response, BOOTUP, or
-device/runtime acceptance. BOOTUP is not authorized.
+It separates completed host compile/static compatibility evidence from
+unperformed module loading, firmware response, BOOTUP, and device/runtime
+acceptance. BOOTUP is not authorized.
