@@ -534,8 +534,21 @@ class NpuBuildProfileSafetyTests(unittest.TestCase):
             BUILDER.FROZEN_OWNERSHIP_PATCH[0],
         )
         six_receipt = BUILDER.patch_receipt_fields(six, six_inputs)
-        self.assertEqual(len(six_receipt["patches"]), 7)
-        self.assertNotIn("excluded_patch_inputs", six_receipt)
+        self.assertEqual(len(six_receipt["patches"]), 6)
+        self.assertEqual(
+            [item["name"] for item in six_receipt["patches"]],
+            [name for name, _digest in six.patches],
+        )
+        self.assertEqual(len(six_receipt["excluded_patch_inputs"]), 1)
+        self.assertEqual(six_receipt["excluded_patch_inputs"][0]["name"],
+                         BUILDER.FROZEN_OWNERSHIP_PATCH[0])
+        for profile, inputs in ((six, six_inputs), (native, native_inputs)):
+            with self.subTest(profile=profile.name), \
+                    self.assertRaisesRegex(BUILDER.BuildError, "receipt patch inventory"):
+                BUILDER.patch_receipt_fields(profile, list(reversed(inputs)))
+            with self.subTest(profile=profile.name), \
+                    self.assertRaisesRegex(BUILDER.BuildError, "receipt patch inventory"):
+                BUILDER.patch_receipt_fields(profile, inputs[:-1])
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
