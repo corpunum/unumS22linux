@@ -88,14 +88,27 @@ static int parser_byte(struct parser *p, uint8_t c, uint8_t **frame, size_t *len
 static int write_full(int fd, const uint8_t *b, size_t n) {
     const uint64_t deadline = now_ms() + 1000;
     while (n) {
-        if (!running || now_ms() >= deadline) { errno = ECANCELED; return -1; }
+        if (!running) { errno = ECANCELED; return -1; }
+        if (now_ms() >= deadline) { errno = ETIMEDOUT; return -1; }
         ssize_t w = write(fd, b, n);
         if (w > 0) { b += w; n -= (size_t)w; continue; }
-        if (w < 0 && errno == EINTR) { if (!running || now_ms() >= deadline) return -1; continue; }
+        if (w == 0) { errno = EIO; return -1; }
+        if (errno == EINTR) continue;
         if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            struct pollfd p = {fd, POLLOUT, 0};
-            uint64_t left = now_ms() >= deadline ? 0 : deadline - now_ms();
-            if (!left || poll(&p, 1, (int)left) <= 0) return -1;
+            for (;;) {
+                if (!running) { errno = ECANCELED; return -1; }
+                uint64_t now = now_ms();
+                if (now >= deadline) { errno = ETIMEDOUT; return -1; }
+                struct pollfd p = {fd, POLLOUT, 0};
+                int ready = poll(&p, 1, (int)(deadline - now));
+                if (ready < 0 && errno == EINTR) continue;
+                if (ready < 0) return -1;
+                if (ready == 0) { errno = ETIMEDOUT; return -1; }
+                if (p.revents & POLLNVAL) { errno = EBADF; return -1; }
+                if (p.revents & POLLHUP) { errno = EPIPE; return -1; }
+                if (p.revents & POLLERR) { errno = EIO; return -1; }
+                if (p.revents & POLLOUT) break;
+            }
             continue;
         }
         return -1;
@@ -162,9 +175,8 @@ static int handle_pty_byte(struct bridge *x, uint8_t c) {
     return r == 1 ? queue_pty_frame(x, f, n) : 0;
 }
 #ifndef S22_BT_BRIDGE_EMBED
-static int set_uart(int fd, speed_t speed) {
-    struct termios t;
-    if (tcgetattr(fd, &t) < 0) return -1;
+static int set_uart(int fd, speed_t speed, const struct termios *original) {
+    struct termios t = *original;
     cfmakeraw(&t); t.c_cflag |= CLOCAL | CREAD | CRTSCTS;
     if (cfsetispeed(&t, speed) || cfsetospeed(&t, speed)) return -1;
     return tcsetattr(fd, TCSANOW, &t);
@@ -325,21 +337,28 @@ int main(int argc, char **argv) {
     if (!uart_path) { fprintf(stderr, "--uart is required\n"); return 2; }
     speed_t speed; if (speed_value(baud, &speed) < 0) { fprintf(stderr, "unsupported baud\n"); return 2; }
     struct bridge x; memset(&x, 0, sizeof(x)); x.uart = -1; x.pty_master = x.pty_slave = -1;
+    struct termios uart_original;
+    int uart_original_valid = 0;
+    int rc = -1, saved_errno = 0;
     x.uart = open(uart_path, O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
-    if (x.uart < 0 || set_uart(x.uart, speed) < 0 || openpty(&x.pty_master, &x.pty_slave, x.slave_name, NULL, NULL) < 0) {
-        perror("bridge setup");
-        if (x.pty_slave >= 0) close(x.pty_slave);
-        if (x.pty_master >= 0) close(x.pty_master);
-        if (x.uart >= 0) close(x.uart);
-        return 1;
+    if (x.uart < 0) { perror("bridge setup"); saved_errno = errno; goto out; }
+    if (tcgetattr(x.uart, &uart_original) < 0) {
+        perror("bridge setup"); saved_errno = errno; goto out;
+    }
+    uart_original_valid = 1;
+    if (set_uart(x.uart, speed, &uart_original) < 0) {
+        perror("bridge setup"); saved_errno = errno; goto out;
+    }
+    if (openpty(&x.pty_master, &x.pty_slave, x.slave_name, NULL, NULL) < 0) {
+        perror("bridge setup"); saved_errno = errno; goto out;
     }
     int fl = fcntl(x.pty_master, F_GETFL, 0); if (fl >= 0) (void)fcntl(x.pty_master, F_SETFL, fl | O_NONBLOCK);
     fl = fcntl(x.pty_slave, F_GETFL, 0); if (fl >= 0) (void)fcntl(x.pty_slave, F_SETFL, fl | O_NONBLOCK);
     struct termios pt; if (tcgetattr(x.pty_slave, &pt) == 0) { cfmakeraw(&pt); pt.c_cflag |= CLOCAL | CREAD; (void)tcsetattr(x.pty_slave, TCSANOW, &pt); }
     signal(SIGINT, stop_signal); signal(SIGTERM, stop_signal);
     fprintf(stdout, "%s\n", x.slave_name); fflush(stdout);
-    int rc = run_bridge(&x, 0);
-    int saved_errno = errno;
+    rc = run_bridge(&x, 0);
+    saved_errno = errno;
     report_queue_overflow(&x);
     int pty_restore_result = restore_tty_line(&x);
     int restore_errno = errno;
@@ -350,7 +369,21 @@ int main(int argc, char **argv) {
                 restore_errno, strerror(restore_errno));
         if (rc == 0) { rc = -1; saved_errno = restore_errno; }
     }
-    close(x.pty_master); close(x.pty_slave); close(x.uart);
+out:
+    if (x.pty_master >= 0) close(x.pty_master);
+    if (x.pty_slave >= 0) close(x.pty_slave);
+    if (uart_original_valid) {
+        int restore_result = tcsetattr(x.uart, TCSANOW, &uart_original);
+        int restore_errno = errno;
+        printf("uart_termios_restore_result=%d\n", restore_result);
+        fflush(stdout);
+        if (restore_result < 0) {
+            fprintf(stderr, "uart_termios_restore_failed errno=%d (%s)\n",
+                    restore_errno, strerror(restore_errno));
+            if (rc == 0) { rc = -1; saved_errno = restore_errno; }
+        }
+    }
+    if (x.uart >= 0) close(x.uart);
     errno = saved_errno;
     return rc == 0 ? 0 : 1;
 }
