@@ -118,7 +118,16 @@
     "all_91_scripts_returned_zero_across_initial_and_rerun": true,
     "hidden_fixture_fallback": false,
     "optional_individual_avb_and_source_audit_skips_retained": true,
-    "hosted_ci": "pending_exact_published_head_verification"
+    "hosted_ci": {
+      "tested_published_commit": "3cdcef37e0224582661d27df3b3a6983b282ecbd",
+      "run_id": 37023741073,
+      "url": "https://github.com/corpunum/unumS22linux/actions/runs/37023741073",
+      "conclusion": "success",
+      "normal_scripts_passed": 47,
+      "optimized_scripts_passed": 44,
+      "source_fetch_exit_77_or_skip": false,
+      "private_log_sha256": "9a22c5305d023cbe1cfe4570e29cc0cba69f3d9ad98abcbc982af651bf18c14d"
+    }
   },
   "read_only_phone_health": {
     "captured_at": "2026-10-02T14:22:45.634932+00:00",

@@ -864,3 +864,15 @@ and hardware acceptance remain unresolved. No image, firmware, weights,
 credentials or private trace is selected for publication. Only the unmerged
 review branch will be pushed; master remains unchanged. Exact final-head
 hosted CI still requires independent verification after publication.
+
+The code/receipt publication `3cdcef37e0224582661d27df3b3a6983b282ecbd` was
+verified on the remote review branch, with remote master still `20605dbe`.
+Exact-head hosted [run 37023741073](https://github.com/corpunum/unumS22linux/actions/runs/37023741073)
+passed all 47 normal and 44 optimized scripts, retaining the three documented
+optimization exclusions and individual optional-fixture skips. Log inspection
+confirms both new NPU extracted-C suites executed, the malformed baseline
+loop was reproduced, the final 17 builder tests ran, and BOOTUP refusal stayed
+active. No public-source exit-77/availability skip occurred in that hosted
+run. Its private log SHA-256 is
+`9a22c5305d023cbe1cfe4570e29cc0cba69f3d9ad98abcbc982af651bf18c14d`.
+This follow-up changes only public result documentation, not tested code.
