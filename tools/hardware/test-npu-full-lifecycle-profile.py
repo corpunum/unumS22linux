@@ -47,26 +47,84 @@ OWN = load_module(SHUTDOWN_TEST, "s22_npu_shutdown_helpers")
 STACK = RECON.STACK
 
 
-def load_exact_sources() -> tuple[dict[str, bytes], Path, str]:
-    configured = os.environ.get(STACK.SOURCE_TREE_ENV)
-    check(configured,
-          f"{STACK.SOURCE_TREE_ENV} must name the clean derived source fixture")
-    source_root = Path(configured).expanduser().resolve()
-    check(source_root.is_dir(), f"configured source fixture is missing: {source_root}")
-    prior_shutdown_root = os.environ.get(SHUTDOWN_SOURCE_TREE_ENV)
-    check(not prior_shutdown_root or Path(prior_shutdown_root).expanduser().resolve() == source_root,
-          "NPU profile loaders must use the same exact local source fixture")
-    os.environ[SHUTDOWN_SOURCE_TREE_ENV] = str(source_root)
+def configured_source_root(probe_root: str | None,
+                           shutdown_root: str | None) -> Path | None:
+    configured = [value for value in (probe_root, shutdown_root) if value]
+    if not configured:
+        return None
+    roots = {Path(value).expanduser().resolve() for value in configured}
+    check(len(roots) == 1,
+          "configured NPU source roots must resolve to the same exact tree")
+    return roots.pop()
+
+
+def check_input_guardrails() -> None:
+    try:
+        configured_source_root("/tmp/npu-fixture-left", "/tmp/npu-fixture-right")
+    except RuntimeError as error:
+        check("same exact tree" in str(error),
+              "different local-loader roots failed for an unexpected reason")
+    else:
+        raise RuntimeError("different local-loader roots were accepted")
+
+    wrong_bytes = b"deliberately incorrect pinned NPU source bytes"
+    for label, verifier in (
+        ("stack", STACK.HELPERS.verify_hash),
+        ("shutdown", OWN.verify_hash),
+    ):
+        try:
+            verifier(OWN.VERTEX_C, wrong_bytes)
+        except RuntimeError as error:
+            check("hash mismatch" in str(error),
+                  f"{label} loader rejected bad SHA for an unexpected reason")
+        else:
+            raise RuntimeError(f"{label} loader accepted a bad pinned-source SHA")
+    print("PASS loader guardrails: mismatched local roots and bad SHA rejected")
+
+
+def load_exact_sources() -> tuple[dict[str, bytes], Path | None, str, int]:
+    source_root = configured_source_root(
+        os.environ.get(STACK.SOURCE_TREE_ENV),
+        os.environ.get(SHUTDOWN_SOURCE_TREE_ENV),
+    )
+    if source_root is None:
+        os.environ.pop(STACK.SOURCE_TREE_ENV, None)
+        os.environ.pop(SHUTDOWN_SOURCE_TREE_ENV, None)
+    else:
+        check(source_root.is_dir(), f"configured source fixture is missing: {source_root}")
+        # A single explicitly configured path is normalized for both existing
+        # exact-derived loaders. If both were supplied, the equality check
+        # above has already required the same canonical root.
+        os.environ[STACK.SOURCE_TREE_ENV] = str(source_root)
+        os.environ[SHUTDOWN_SOURCE_TREE_ENV] = str(source_root)
 
     stack_sources, stack_identity = STACK.load_fixtures()
     shutdown_sources, shutdown_identity = OWN.load_sources()
+    for relative, data in stack_sources.items():
+        check(len(data) <= STACK.HELPERS.MAX_SOURCE_BYTES,
+              f"stack pinned fixture exceeds per-file cap: {relative}")
+    for relative, data in shutdown_sources.items():
+        check(len(data) <= OWN.MAX_FILE_BYTES,
+              f"shutdown pinned fixture exceeds per-file cap: {relative}")
+    stack_total = sum(len(data) for data in stack_sources.values())
+    stack_total_limit = len(stack_sources) * STACK.HELPERS.MAX_SOURCE_BYTES
+    check(stack_total <= stack_total_limit,
+          f"stack pinned fixture exceeds aggregate cap: {stack_total}")
+    shutdown_total = sum(len(data) for data in shutdown_sources.values())
+    check(shutdown_total <= OWN.MAX_TOTAL_BYTES,
+          f"shutdown pinned fixture exceeds aggregate cap: {shutdown_total}")
+
     sources = dict(stack_sources)
     for relative, data in shutdown_sources.items():
         if relative in sources:
             check(sources[relative] == data,
                   f"overlapping source fixtures differ: {relative}")
         sources[relative] = data
-    return sources, source_root, f"{stack_identity}; {shutdown_identity}"
+    total_bytes = sum(len(data) for data in sources.values())
+    merged_limit = stack_total + OWN.MAX_TOTAL_BYTES
+    check(total_bytes <= merged_limit,
+          f"merged pinned fixture exceeds combined aggregate cap: {total_bytes}")
+    return sources, source_root, f"{stack_identity}; {shutdown_identity}", total_bytes
 
 
 def write_exact_fixture(root: Path, sources: dict[str, bytes]) -> None:
@@ -313,12 +371,21 @@ def run_combined_refcount_regressions(temp: Path,
 
 
 def main() -> int:
-    sources, source_root, source_identity = load_exact_sources()
+    check_input_guardrails()
+    try:
+        sources, _source_root, source_identity, source_bytes = load_exact_sources()
+    except (STACK.SourceFixtureUnavailable,
+            STACK.HELPERS.SourceFixtureUnavailable,
+            OWN.SourceFixtureUnavailable) as error:
+        print(f"SKIP exact public source fixture unavailable; exit 77: {error}")
+        return 77
     patch_paths = RECON.patch_paths()
     check(PROFILE_PATCH.is_file(), "required shutdown-lifecycle profile is missing")
     patch_bytes(PROFILE_PATCH, PROFILE_PATCH.name, PROFILE_SHA256)
     patch_bytes(OWN.OWN_PATCH, OWN.OWN_PATCH.name, FROZEN_SHUTDOWN_SHA256)
     print(f"SOURCE_FIXTURE {source_identity}")
+    print(f"SOURCE_UNION_BYTES {source_bytes}")
+    print(f"SOURCE_UNION_FILES {len(sources)}")
     print("PATCH_ORDER " + " -> ".join(
         [*(path.name for path in patch_paths), PROFILE_PATCH.name]))
     print("PASS SHA-256 and source equality: exact four-patch prefix, shutdown input, and profile")
@@ -385,7 +452,11 @@ def main() -> int:
         finally:
             OWN.PRELUDE = old_prelude
 
-        RECON.check_bootup_stays_refused(source_root, final, temp)
+        # run_preflight requires a real source directory and passes it through
+        # as --source. The exact temporary five-patch fixture works in both
+        # local and public-fetch modes; None would turn into an invented path.
+        STACK.run_preflight(full_root, final, temp)
+        print("PASS BOOTUP gate after full five-patch profile: readiness and authorization remain false")
         print("PASS full five-patch extracted-C regressions at C -O0/-O2")
         print("LIMIT host shims only; no kernel build, module, firmware, device, or BOOTUP evidence")
     return 0

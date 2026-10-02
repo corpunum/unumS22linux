@@ -38,6 +38,18 @@ from the verified loader union are added afterward, so every overlapping core
 path is written once and the complete merged baseline exists before any patch
 is applied.
 
+The test can also run without either source-tree variable: the existing stack
+and shutdown loaders fetch their individually SHA-verified files from the
+pinned public base, with their existing per-file bounds and five-second
+per-request timeouts. The shutdown fixture retains its 1 MiB aggregate cap;
+the merged union is bounded by the stack-fixture byte total plus that cap, and
+overlapping bytes must compare equal. A public fetch that is unavailable is
+reported as `SKIP` with exit status 77; it is never represented as a passing
+test. There is no retry loop. If one local source-tree variable is supplied,
+the other loader is pointed at that same root; if both are supplied, their
+canonical paths must match. The existing loaders still enforce the clean exact
+derived HEAD and source hashes.
+
 The tested order and SHA-256 inputs are:
 
 1. `npu-session-lifecycle-fix.patch` —
@@ -59,7 +71,7 @@ and `npu-vertex.c` in the temporary source fixture.
 ## Verification
 
 Run from this worktree with both source-tree variables pointing to the exact
-fixture:
+fixture for the local-source route:
 
 ```sh
 S22_NPU_PROBE_SOURCE_TREE=/home/corpunum/s22-workers/camera-kernel-build-20260927 \
@@ -67,10 +79,26 @@ S22_NPU_SHUTDOWN_SOURCE_TREE=/home/corpunum/s22-workers/camera-kernel-build-2026
 python3 tools/hardware/test-npu-full-lifecycle-profile.py
 ```
 
-The test passed as `python3`, `python3 -O`, and `PYTHONOPTIMIZE=1 python3`.
-Each invocation applied and checked the complete five-patch sequence, checked
-the frozen-patch blocker and six quarantine points, then compiled and ran the
-actual extracted combined C at both `-O0` and `-O2` with warnings as errors.
+To exercise the default public-SHA loader route, unset both variables and run
+the same command. `STACK.run_preflight` requires a source directory and does
+not accept `None`; the test supplies its exact temporary five-patch fixture
+for `--source`, so no local/public source identity is fabricated.
+
+The local-source route passed with both variables set to the same fixture,
+with only `S22_NPU_PROBE_SOURCE_TREE` set (`python3 -O`), and with only
+`S22_NPU_SHUTDOWN_SOURCE_TREE` set (`PYTHONOPTIMIZE=1 python3`). The default
+public route also passed with both variables unset; the loaders reported the
+public pinned base `4e5c5ad7d950e4de0688b5663965f2075654b2ad`; the shutdown
+loader's exact-source subset was 147,641 bytes, and the deduplicated union was
+1,214,674 bytes across 19 paths. Every successful run applied and checked the
+complete five-patch sequence, checked the frozen-patch blocker and six
+quarantine points, then compiled and ran the actual extracted combined C at
+both `-O0` and `-O2` with warnings as errors. Negative loader guardrails
+rejected mismatched local roots and deliberately altered source bytes.
+
+The public-unavailable handler was exercised with a simulated bounded-fetch
+failure and returned 77 with an explicit `SKIP`; the actual default public run
+was available and passed.
 
 The extracted-C coverage includes the existing 11 refcount transaction cases
 and five normal-bootup lock-path cases, plus all 16 shutdown/recovery ownership
