@@ -5,7 +5,16 @@
   "evidence_class": "host_only_module_build_preparation",
   "wrapper": {
     "path": "/home/corpunum/s22-workers/npu-twelve-native-build-20261003/tools/hardware/build-npu-twelve-module-only.py",
-    "sha256": "c4a25c93696217c1ae905df51bb57ece4ca652291b6f001a47c2ab23e8aca842",
+    "sha256": "8dab1a2c0ea2b01555645717b46c0f1506ff951a60a9256669d90bae6859d61d",
+    "superseded_unexecuted_wrapper": {
+      "author_commit": "98b1d0a29060098ecfb06890dabb7c34431008cd",
+      "sha256": "c4a25c93696217c1ae905df51bb57ece4ca652291b6f001a47c2ab23e8aca842",
+      "reason": [
+        "verified toolchain mapping was omitted from collect_plan() return",
+        "kernel.release was checked after olddefconfig instead of after module preparation"
+      ],
+      "executed": false
+    },
     "mode": "read_only_plan_by_default",
     "execution_requires": [
       "--execute",
@@ -13,17 +22,50 @@
       "exact source-and-wrapper-bound --coordinator-go-token",
       "separate reviewed coordinator GO"
     ],
-    "coordinator_go_token_required": "GO:NPU12-MODULE-ONLY:e9c3016233a72ceccb13e537f0b7ef72426582b9:c4a25c93696217c1ae905df51bb57ece4ca652291b6f001a47c2ab23e8aca842",
+    "coordinator_go_token_required": "GO:NPU12-MODULE-ONLY:e9c3016233a72ceccb13e537f0b7ef72426582b9:8dab1a2c0ea2b01555645717b46c0f1506ff951a60a9256669d90bae6859d61d",
     "plan_only_validation": {
       "normal_python": "PASS_READ_ONLY",
       "python_O": "PASS_READ_ONLY",
       "PYTHONOPTIMIZE_1": "PASS_READ_ONLY",
-      "correct_wrapper_sha_without_go_token": {
+      "effective_optimize_levels": {
+        "normal_python": 0,
+        "python_O": 1,
+        "PYTHONOPTIMIZE_1": 1
+      },
+      "verified_toolchain_entries_returned": 17,
+      "corrected_wrapper_sha_without_go_token": {
+        "exit_code": 2,
+        "output_created": false
+      },
+      "superseded_wrapper_sha_without_go_token": {
         "exit_code": 2,
         "output_created": false
       },
       "module_or_olddefconfig_run": false
     }
+  },
+  "orchestration_regression": {
+    "test": "tools/hardware/test-build-npu-twelve-module-only.py",
+    "sha256": "f27de2c491b6e71d383087cbbdc6efde246688534312879c07dc4077e86e43c7",
+    "suite": "actual collect_plan and execute_build with temporary paths and controlled subprocess/monitor seams",
+    "matrix": {
+      "normal_python_optimize_0": "PASS",
+      "python_O_optimize_1": "PASS",
+      "PYTHONOPTIMIZE_1_optimize_1": "PASS"
+    },
+    "cases": [
+      "collect_plan returns verified toolchain mapping",
+      "successful single drivers/vision/npu.ko target reaches post-target release check",
+      "config mismatch stops before module target",
+      "nonzero olddefconfig stops before module target",
+      "initial and pre-build resource gates fail closed",
+      "resource_abort with zero monitor exit is rejected",
+      "monitor SystemExit(0) is rejected",
+      "existing output path is preserved and rejected",
+      "missing or incorrect post-target kernel.release is rejected"
+    ],
+    "real_kbuild_started": false,
+    "real_kernel_build_paths_written": false
   },
   "model_provenance": {
     "model": "gpt-6-luna",
@@ -73,6 +115,7 @@
     "olddefconfig_raw_log": "/home/corpunum/s22-linux/builds/npu-native-twelve-module-only-out-20261003/olddefconfig.log",
     "olddefconfig_raw_log_status": "NOT_RUN",
     "expected_kernel_release": "5.10.260-g4e5c5ad7d950",
+    "generated_kernel_release_check": "after successful monitored module target only; NOT_RUN",
     "expected_options": {
       "CONFIG_EXYNOS_NPU": "m",
       "CONFIG_NPU_USE_HW_DEVICE": "y",
@@ -122,9 +165,9 @@
         "/home/corpunum/s22-workers/npu-twelve-native-build-20261003/tools/hardware/build-npu-twelve-module-only.py",
         "--execute",
         "--expect-wrapper-sha256",
-        "c4a25c93696217c1ae905df51bb57ece4ca652291b6f001a47c2ab23e8aca842",
+        "8dab1a2c0ea2b01555645717b46c0f1506ff951a60a9256669d90bae6859d61d",
         "--coordinator-go-token",
-        "GO:NPU12-MODULE-ONLY:e9c3016233a72ceccb13e537f0b7ef72426582b9:c4a25c93696217c1ae905df51bb57ece4ca652291b6f001a47c2ab23e8aca842"
+        "GO:NPU12-MODULE-ONLY:e9c3016233a72ceccb13e537f0b7ef72426582b9:8dab1a2c0ea2b01555645717b46c0f1506ff951a60a9256669d90bae6859d61d"
       ]
     },
     "symvers_filter": {
@@ -207,6 +250,7 @@
       "module_build_log": "/home/corpunum/s22-linux/builds/npu-native-twelve-module-only-out-20261003/build.log",
       "resource_monitor": "/home/corpunum/s22-linux/builds/npu-native-twelve-module-only-out-20261003/resource-monitor.jsonl",
       "phase_receipt": "/home/corpunum/s22-linux/builds/npu-native-twelve-module-only-out-20261003/build-phase.json",
+      "kernel_release_check": "after monitored module target returns zero without resource_abort; NOT_RUN",
       "resource_abort_thresholds_bytes": {
         "minimum_available_memory": 8589934592,
         "minimum_free_disk": 17179869184
@@ -272,13 +316,13 @@
     ]
   },
   "preflight_snapshot": {
-    "captured_at_utc": "2026-10-02T22:23:30Z",
+    "captured_at_utc": "2026-10-02T22:34:28Z",
     "measured_path": "/home/corpunum/s22-linux/builds",
-    "mem_available_bytes": 28263329792,
+    "mem_available_bytes": 27276898304,
     "filesystem_source": "/dev/nvme0n1p5",
     "filesystem_type": "ext4",
     "filesystem_mount_for_srv": "/",
-    "disk_free_bytes": 31187976192,
+    "disk_free_bytes": 31029047296,
     "memory_start_gate_met": true,
     "memory_monitor_threshold_met": true,
     "disk_monitor_threshold_met": true,
