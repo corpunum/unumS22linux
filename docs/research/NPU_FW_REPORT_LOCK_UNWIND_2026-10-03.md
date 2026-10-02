@@ -65,10 +65,16 @@ bounded and SHA-256 checked by the existing NPU fixture loader:
 For the four NULL-buffer branches, baseline extracted C reproduces
 `-ENOMEM` with the relevant lock held and IRQs left disabled. The patched
 branches preserve `-ENOMEM`, clear the correct lock, and restore the saved IRQ
-state (including an initially disabled state). The high-ID baseline reaches
-the original `BUG_ON` after entering the actual note/gather path; the combined
-patched validator/report path returns `-1` without the BUG or lock leak. The
-host check also exercises the actual report/profile init/deinit functions,
+state for both initially enabled and initially disabled IRQ state. The high-ID
+case now places one synthetic, nonempty segment in the report ring and follows
+the actual combined path:
+`msgid_get_pt_type()` → `fw_will_note()` → `fw_rprt_gather()` →
+`npu_fw_report_store()` with `fw_report.st_buf == NULL`. A host-only wrapper
+counts entry to the unchanged extracted store body. The test checks one gather,
+one store entry, mailbox read-pointer advance, interface-mutex release, both
+report-lock exits, and preservation of the incoming IRQ state. The combined
+patched validator/report path returns `-1` without a lock leak. The host check
+also exercises the actual report/profile init/deinit functions,
 normal and wraparound stores, a wrapped gather-ring read, newline handling,
 and the `interface.lock` balance. A synthetic segment is also passed through
 the actual gather body with report storage absent: baseline leaks
@@ -77,16 +83,22 @@ of advancing the mailbox read-pointer despite the ignored store error. No
 report payload is printed by the harness.
 
 All three Python-mode invocations passed against the local fixture, with both
-C optimization levels passing in each run. The patch was checked and applied
-using ordinary `git apply --check --whitespace=error-all` / `git apply` in a
-temporary fixture. The public fetch route remains bounded through the same
-loader, but this run used only the verified local source tree; public fetch was
-not retried after the rig's reported GitHub DNS failure.
+C optimization levels passing in each run. One additional normal-mode run
+loaded all three files from the pinned public source URL through the existing
+SHA-verifying loader and passed at both C optimization levels. The public
+loader retains its per-file size bound and five-second request timeout; it was
+not retried. Each patch was checked and applied using ordinary
+`git apply --check --whitespace=error-all` / `git apply` in temporary fixtures.
 
 ## Limits
 
 These are host-extracted-C regressions with controlled spinlock, IRQ, mutex,
-mailbox-ring, and logging shims. They do not establish Linux kernel lockdep,
+mailbox-ring, and logging shims. In the baseline composed high-ID case, the
+first actual store leaks `fw_report_lock`; the subsequent note path attempts to
+take it again. The host shim records that recursive acquisition and continues
+to the pinned `BUG_ON` for deterministic assertions. A real raw spinlock path
+may hang at that relock instead, so the shim's continuation is not a claim
+about baseline kernel execution. The regressions do not establish Linux kernel lockdep,
 IRQ semantics, runtime NPU behavior, firmware acceptance, DMA progress, or
 physical-device behavior. They do not test the whole NPU patch stack or build
 a kernel/module.

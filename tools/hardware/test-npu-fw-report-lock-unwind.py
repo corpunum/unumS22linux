@@ -189,8 +189,17 @@ def render_harness(template: str, log_source: bytes, interface_source: bytes,
     log_text = log_source.decode("utf-8")
     interface_text = interface_source.decode("utf-8")
     msgid_text = msgid_source.decode("utf-8")
-    actual_log = "\n\n".join(function_body(log_text, marker)
-                               for marker in LOG_FUNCTIONS)
+    actual_log_parts = []
+    for marker in LOG_FUNCTIONS:
+        body = function_body(log_text, marker)
+        if marker == "int npu_fw_report_store(":
+            old_signature = "int npu_fw_report_store("
+            new_signature = "static int npu_fw_report_store_body("
+            check(body.count(old_signature) == 1,
+                  "actual report-store body cannot be uniquely instrumented")
+            body = body.replace(old_signature, new_signature, 1)
+        actual_log_parts.append(body)
+    actual_log = "\n\n".join(actual_log_parts)
     actual_gather = function_body(interface_text, "void fw_rprt_gather(")
     actual_msgid = "\n\n".join((
         extract(msgid_text, (
@@ -237,13 +246,13 @@ def compile_and_run(cc: list[str], level: str, source: str,
             "REPRO: baseline fw_will_note_to_kernel leaks fw_report_lock",
             "REPRO: baseline fw_will_note leaks fw_report_lock",
             "REPRO: baseline gather ignores NULL-store error and leaks report lock",
-            "REPRO: pinned high invalid ID calls fw_will_note, leaks lock, then BUGs",
+            "REPRO: baseline composed high-ID path leaks in actual gather/store; shim records relock then BUGs",
         )
         for fragment in expected:
             check(fragment in result.stdout,
                   f"baseline C did not reproduce required behavior at {level}: {fragment}")
     else:
-        check("PASS: actual high-ID validator diagnostic unwinds report lock" in
+        check("PASS: high-ID validator reaches actual gather/store(NULL)/note with balanced locks" in
               result.stdout,
               f"patched C did not exercise combined validator/report path at {level}")
         check("PASS: actual gather wrap and newline paths completed" in result.stdout,
