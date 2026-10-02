@@ -1,5 +1,22 @@
 # NPU mailbox message-ID validation
 
+## Independent-review gate — 2026-10-03 local
+
+This patch alone is **not cleared for a candidate or deployment**. Independent
+Luna review found a real diagnostic-path defect in the pinned `npu-log.c`:
+`fw_will_note()` takes `fw_report_lock` with IRQ save and returns `-ENOMEM`
+without releasing it when `fw_report.st_buf` is NULL. The high-ID validation
+path preserves that call. Its host harness currently counts the diagnostic
+call, not this real report implementation, so its passing bounds/type tests
+do not clear the lock unwind. The same early-return issue exists in
+`fw_will_note_to_kernel()` and `npu_fw_report_store()`.
+
+A separate narrow source/error-unwind patch and actual extracted-C tests are
+being implemented and must be independently reviewed as a pair with this
+change. NULL-buffer reachability, gather-callback lifetime and hardware
+liveness are not declared safe by the bounds/type tests. The current live
+phone has not received this patch; BOOTUP remains refused.
+
 This source-only change hardens the pinned NPU request-ID pool against
 firmware-visible mailbox message IDs outside its 64-entry range and prevents a
 claim made by the wrong request path from releasing the mapped request. It is
