@@ -105,7 +105,7 @@ class PiSessionReadinessTest(unittest.TestCase):
             result = inspect_with_socket_owner(
                 socket_path, proc_root=proc_root,
                 query=lambda: subprocess.CompletedProcess(
-                    ["tmux"], 0, stdout="pi\t234\n", stderr=""),
+                    ["tmux"], 0, stdout="pi:234\n", stderr=""),
             )
 
         self.assertEqual(result, {"status": "ready", "ready": True})
@@ -127,7 +127,7 @@ class PiSessionReadinessTest(unittest.TestCase):
                 result = inspect_with_socket_owner(
                     socket_path, proc_root=proc_root,
                     query=lambda: subprocess.CompletedProcess(
-                        ["tmux"], 0, stdout="pi\t235\n", stderr=""),
+                        ["tmux"], 0, stdout="pi:235\n", stderr=""),
                 )
                 self.assertEqual(result["status"], "failed")
 
@@ -226,6 +226,66 @@ class PiSessionReadinessTest(unittest.TestCase):
             (proc_root / "300" / "stat").write_text("300 (pi) Z 1\n")
             self.assertEqual(readiness.exact_process_status(
                 proc_root, binary, uid=1000), "absent")
+
+    def test_desktop_and_dedicated_web_pi_can_coexist(self):
+        for option in (("--session-dir", readiness.WEB_SESSION_DIRECTORY),
+                       ("--session-dir=" + readiness.WEB_SESSION_DIRECTORY,)):
+            with self.subTest(option=option), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                proc_root = root / "proc"
+                binary = root / "arch" / readiness.PI_EXECUTABLE
+                make_process(proc_root, root / "arch", 300, uid=1000,
+                             executable=binary, argv=(str(binary), "--offline"))
+                make_process(proc_root, root / "arch", 301, uid=1000,
+                             executable=binary,
+                             argv=(str(binary), "--offline", *option, "--continue"))
+                self.assertEqual(readiness.exact_process_status(
+                    proc_root, binary, uid=1000, exclude_web_session=True), "ready")
+                # The generic exact-binary check still rejects multiple instances.
+                self.assertEqual(readiness.exact_process_status(
+                    proc_root, binary, uid=1000), "failed")
+
+    def test_web_pi_alone_is_not_desktop_pi(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            proc_root = root / "proc"
+            binary = root / "arch" / readiness.PI_EXECUTABLE
+            make_process(proc_root, root / "arch", 301, uid=1000,
+                         executable=binary,
+                         argv=(str(binary), "--offline", "--session-dir",
+                               readiness.WEB_SESSION_DIRECTORY))
+            self.assertEqual(readiness.exact_process_status(
+                proc_root, binary, uid=1000, exclude_web_session=True), "absent")
+
+    def test_ambiguous_session_directory_or_missing_cmdline_fails_closed(self):
+        options = (("--session-dir",), ("--session-dir", "--offline"),
+                   ("--session-dir=",), ("--session-dir", "/unknown"),
+                   ("--session-dir", readiness.WEB_SESSION_DIRECTORY,
+                    "--session-dir", readiness.WEB_SESSION_DIRECTORY), None)
+        for option in options:
+            with self.subTest(option=option), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                proc_root = root / "proc"
+                binary = root / "arch" / readiness.PI_EXECUTABLE
+                make_process(proc_root, root / "arch", 300, uid=1000,
+                             executable=binary, argv=(str(binary), "--offline"))
+                make_process(proc_root, root / "arch", 301, uid=1000,
+                             executable=binary, argv=(str(binary), *(option or ())))
+                if option is None:
+                    (proc_root / "301/cmdline").unlink()
+                self.assertEqual(readiness.exact_process_status(
+                    proc_root, binary, uid=1000, exclude_web_session=True), "failed")
+
+    def test_duplicate_desktop_pi_still_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            proc_root = root / "proc"
+            binary = root / "arch" / readiness.PI_EXECUTABLE
+            for pid in (300, 301):
+                make_process(proc_root, root / "arch", pid, uid=1000,
+                             executable=binary, argv=(str(binary), "--offline"))
+            self.assertEqual(readiness.exact_process_status(
+                proc_root, binary, uid=1000, exclude_web_session=True), "failed")
 
     def test_browser_service_receipt_requires_exact_pid_start_executable_uid_and_privileges(self):
         with tempfile.TemporaryDirectory(prefix="pi-browser-process-") as temporary:

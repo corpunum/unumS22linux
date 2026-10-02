@@ -2,6 +2,7 @@
 """Focused host-only policy tests for the RECOVERY observer and HCI smoke."""
 from __future__ import annotations
 
+import ast
 import contextlib
 import hashlib
 import importlib.util
@@ -211,6 +212,7 @@ def write_snapshot_fixture(root, *, persistent_uuid, mountinfo):
     pi_binary.write_bytes(b"synthetic exact desktop Pi executable")
     write("proc/3/stat", "3 (pi) S 1\n")
     write("proc/3/status", "Name:\tpi\nUid:\t1000\t1000\t1000\t1000\n")
+    write("proc/3/cmdline", b"/opt/s22-pi/0.86.1/pi/pi\0--offline\0")
     (root / "proc/3/exe").symlink_to(pi_binary)
 
     web_helper = b"synthetic reviewed helper fixture"
@@ -303,6 +305,30 @@ def p(name):
 
 
 class ObserverPolicyTests(unittest.TestCase):
+    def test_actual_rendered_tmux_query_uses_unambiguous_pane_format(self):
+        tree = ast.parse(observer.render_snapshot_script())
+        query_function = next(node for node in tree.body
+                              if isinstance(node, ast.FunctionDef) and
+                              node.name == "tmux_query")
+        runner = mock.Mock(return_value=subprocess.CompletedProcess(
+            ["tmux"], 0, stdout="pi:234\n", stderr=""))
+        namespace = {"subprocess": mock.Mock(run=runner),
+                     "arch": Path("/mnt/omarchy-trial"),
+                     "pi_readiness": {"PI_PANE_FORMAT": "#{session_name}:#{pane_pid}"}}
+        module = ast.Module(body=[query_function], type_ignores=[])
+        exec(compile(module, "<actual rendered tmux query>", "exec"), namespace)
+        result = namespace["tmux_query"]()
+        command = runner.call_args.args[0]
+        self.assertEqual(command[-4:], ["list-panes", "-a", "-F",
+                                       "#{session_name}:#{pane_pid}"])
+        self.assertEqual(command[command.index("-S") + 1],
+                         "/home/alarm/.pi/agent/web-sessions/web-musl.tmux")
+        self.assertIn("--reuid=1000", command)
+        self.assertIn("--regid=1000", command)
+        self.assertIn("--no-new-privs", command)
+        self.assertEqual(result.stdout, "pi:234\n")
+        runner.assert_called_once()
+
     def test_default_observer_output_is_private_local_state_not_repo_rootfs(self):
         self.assertEqual(observer.OUT, observer.RIG_HOME /
                          ".local/state/s22-hci-trial-20260924/observer")

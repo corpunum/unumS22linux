@@ -157,7 +157,7 @@ except Exception:runtime_processes={'desktop':False,'model_process':False}
 hyprland=runtime_processes.get('desktop') is True
 model_process=runtime_processes.get('model_process') is True
 desktop_pi_status=pi_readiness['exact_process_status'](
- p('/proc'),p('/mnt/omarchy-trial/opt/s22-pi/0.86.1/pi/pi'),uid=1000)
+ p('/proc'),p('/mnt/omarchy-trial/opt/s22-pi/0.86.1/pi/pi'),uid=1000,exclude_web_session=True)
 try:
  web_helper=p('/srv/s22/agent-web/start-agent-web.py')
  helper_matches=hashlib.sha256(web_helper.read_bytes()).hexdigest()=='__EXPECTED_PI_WEB_HELPER_SHA256__'
@@ -183,7 +183,7 @@ def tmux_query():
   '/opt/s22-pi-web/tmux-musl/lib/ld-musl-aarch64.so.1',
   '--library-path','/opt/s22-pi-web/tmux-musl/lib','/opt/s22-pi-web/tmux-musl/tmux',
   '-f','/dev/null','-S','/home/alarm/.pi/agent/web-sessions/web-musl.tmux',
-  'list-panes','-a','-F','#{session_name}\\t#{pane_pid}'],capture_output=True,text=True,timeout=5,check=False)
+  'list-panes','-a','-F',pi_readiness['PI_PANE_FORMAT']],capture_output=True,text=True,timeout=5,check=False)
 pi_session=pi_readiness['inspect_pi_session'](tmux_socket,proc_root=p('/proc'),query=tmux_query)
 pi_session_status=pi_session['status']
 kernel_remote_control_ready=(read('/proc/1/comm')=='native-guardian' and
