@@ -706,3 +706,39 @@ and the dirty original checkout remain unchanged; only the unmerged review
 branch is selected for publication. Hosted CI at the final published SHA
 still must be checked independently; source review and host passes do not
 grant device acceptance.
+
+### Subsequent host build/audio/publication wave
+
+The final previous-wave publication `8c35bacb066bdcbf95678b37ae4ce0d9601df0d7`
+was independently verified on the remote review branch. Exact-head hosted run
+[37009064396](https://github.com/corpunum/unumS22linux/actions/runs/37009064396)
+succeeded: 43 normal and 40 optimized scripts, with the three existing
+documented optimized exclusions. This later result does not replace earlier
+receipts or imply device acceptance.
+
+The next manual continuation starts from that clean integration HEAD; a fresh
+fetch found no review-branch divergence. The original dirty master checkout is
+preserved. Native spawn accepted explicit `gpt-6-luna` and `max` reasoning for
+each worker below, with no known fallback. This records selected configuration,
+not independent backend identity attestation.
+
+| Actual worker | Isolated worktree | Narrow deliverable |
+| --- | --- | --- |
+| `/root/audio_passive_impl_20261002` | `/home/corpunum/s22-workers/audio-passive-20261002` | Passive default audio metadata, bounded collection and focused executable tests; only audio-control readiness source/new test/note. |
+| `/root/npu_publication_impl_20261002` | `/home/corpunum/s22-workers/npu-publication-20261002` | Actual extracted-C stalled-publication ownership/liveness evidence; new test/note, no changes to the six frozen patches. |
+| `/root/npu_six_patch_build_20261002` | `/home/corpunum/s22-workers/npu-six-build-20261002` | Clean committed six-patch kernel source and first actual composite/kernel compile; new build helper/test/note. Exclusive heavy-build slot. |
+
+Only the coordinator accesses the phone. A bounded read-only snapshot at the
+start of this wave still identifies r0s, native guardian, GNU build ID
+`b2dda820b18d410d9bf12f1bd2584567d545991d`, 325 modules and stable uptime
+439230 seconds. Persistent mounts, remote control, model API/idleness, desktop,
+desktop Pi, browser terminal and dedicated Pi session are healthy. Battery is
+100%/Full; maximum readable thermal zone is 44.0 C. The available kernel ring
+has no fatal/hung-task indicators, but does not cover the full boot and is not
+proof of TrustZone or NPU request progress. No flash, reboot, event-device open,
+control/PCM operation, modem request or inference is part of this wave.
+
+Independent rescue remains unproven, consumed trial authorizations stay
+consumed, and NPU BOOTUP remains refused. Implementations and any real host
+build require independent review before publication; none is permission for
+deployment. Results and frozen commit identities will be appended here.
