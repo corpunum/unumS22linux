@@ -1,0 +1,170 @@
+{
+  "schema": "s22-driver-host-regressions-eleventh-v1",
+  "captured_date": "2026-10-03",
+  "evidence_class": "host_only_regression_tests",
+  "tested_worktree": {
+    "path": "/home/corpunum/s22-workers/host-suite-eleventh-frozen-20261003",
+    "head": "4f9e7760b18c2c25a013fca69937ef01d69e5c5a",
+    "tree": "2b9bf92214a577160e21b4142a87cdf6d9cafffd",
+    "clean_before": true,
+    "clean_after": true
+  },
+  "runner_inventory": {
+    "source": "frozen explicit HOST_TESTS and REVIEWED_HOST_TEST_PATHS",
+    "normal_invocations": 59,
+    "optimized_invocations": 56,
+    "runner_policy_tests": {
+      "command": "python3 -I -B tools/hardware/test-host-regression-runner.py",
+      "status": "PASS",
+      "passed": 7,
+      "failed": 0,
+      "private_log": {
+        "path": "/home/corpunum/.local/state/s22-driver-continuation-20261002/eleventh-host-suite-runner-policy.log",
+        "sha256": "b30aa35305f0f2297bd5571b915e3f95753bd4c7225a0da991d9e69d984e9f9d",
+        "bytes": 1110,
+        "mode": "0600"
+      }
+    },
+    "explicit_optimized_skips": [
+      {
+        "path": "tools/hardware/test-bt-qca6490-patch-receipt.py",
+        "reason": "standalone contract checks use bare assert statements"
+      },
+      {
+        "path": "tools/hardware/test-close-range-kernel-fix.py",
+        "reason": "standalone contract checks use bare assert statements"
+      },
+      {
+        "path": "tools/pi-web/test_agent_web.py",
+        "reason": "launcher deliberately refuses Python optimization"
+      }
+    ]
+  },
+  "local_combined_run": {
+    "command": "python3 -I -B tools/hardware/run-host-regressions.py --mode both",
+    "stdout_persisted": false,
+    "observed_exit_code": 1,
+    "observed_final_summary": "Host regression summary: 3 failure(s)",
+    "failure_breakdown_complete_from_durable_log": false,
+    "failures_visible_in_stream": [
+      {
+        "mode": "optimized",
+        "path": "tools/hardware/test-npu-reconciled-stack.py",
+        "exit_code": 1,
+        "reason": "pinned source fixture fetch timed out"
+      },
+      {
+        "mode": "optimized",
+        "path": "tools/hardware/test-npu-shutdown-ownership.py",
+        "exit_code": 77,
+        "reason": "public pinned fixture unavailable; network unreachable"
+      },
+      {
+        "mode": "optimized",
+        "path": "tools/hardware/test-npu-publication-drain-ownership.py",
+        "exit_code": 1,
+        "reason": "pinned source fixture fetch timed out"
+      }
+    ],
+    "additional_skip_examples_visible_in_stream": [
+      "test-audio-ipc-evidence.py: optional pinned-source check skipped because S22_AUDIO_IPC_SOURCE_TREE was not set",
+      "test-audio-log-coverage.py: optional O-tree and pinned-source checks skipped because their source/build environment was not set",
+      "test-recovery-deployment-hardening.py: three AVB tests skipped because pinned avbtool.py was unavailable"
+    ],
+    "complete_inner_skip_inventory_recoverable": false,
+    "interpretation": "local combined run remains FAILED; no omitted aggregate detail is inferred"
+  },
+  "local_source_fixture_supplements": {
+    "source_worktree": {
+      "path": "/home/corpunum/s22-workers/camera-kernel-build-20260927",
+      "head": "3fca50941422439b2019db2e4a3dc1016b2138a1",
+      "tree": "5aad5cf1dbaa0f430377737141f0547e971b0a2d",
+      "clean_before": true,
+      "clean_after": true
+    },
+    "scope": "only the three optimized invocations whose public source fetches failed; unchanged supported source-tree environment options",
+    "results": [
+      {
+        "path": "tools/hardware/test-npu-reconciled-stack.py",
+        "mode": "optimized",
+        "source_option": "S22_NPU_PROBE_SOURCE_TREE",
+        "status": "PASS",
+        "exit_code": 0,
+        "private_log": {
+          "path": "/home/corpunum/.local/state/s22-driver-continuation-20261002/eleventh-local-supplement-npu-reconciled-optimized.log",
+          "sha256": "92b21af916463c1a984ff4d9fb46a1f109d13d188a4ce55a0f1f6ed2e08df59d",
+          "bytes": 4396,
+          "mode": "0600"
+        },
+        "limit": "WIP source profile and host C regression only; later shutdown patch, kernel build/runtime, and device validation excluded"
+      },
+      {
+        "path": "tools/hardware/test-npu-shutdown-ownership.py",
+        "mode": "optimized",
+        "source_option": "S22_NPU_SHUTDOWN_SOURCE_TREE",
+        "status": "PASS",
+        "exit_code": 0,
+        "private_log": {
+          "path": "/home/corpunum/.local/state/s22-driver-continuation-20261002/eleventh-local-supplement-npu-shutdown-optimized.log",
+          "sha256": "c0c72bf02026c11dfbf711ab8cec202063c537e3262dd2daa943c7f338dcc276",
+          "bytes": 323,
+          "mode": "0600"
+        },
+        "limit": "extracted C host shims only; no kernel or device evidence"
+      },
+      {
+        "path": "tools/hardware/test-npu-publication-drain-ownership.py",
+        "mode": "optimized",
+        "source_options": [
+          "S22_NPU_PROBE_SOURCE_TREE",
+          "S22_NPU_SHUTDOWN_SOURCE_TREE"
+        ],
+        "status": "PASS_WITH_UNRESOLVED_LIVENESS_LIMIT",
+        "exit_code": 0,
+        "finding": "host C reproducer still blocks while synchronous publication is held; production drain has no timeout",
+        "private_log": {
+          "path": "/home/corpunum/.local/state/s22-driver-continuation-20261002/eleventh-local-supplement-npu-drain-optimized.log",
+          "sha256": "576331a6d8abbfbb29881e93d7aaf4b66d6a29977654dd22ac37949f9f4e85f6",
+          "bytes": 7009,
+          "mode": "0600"
+        },
+        "limit": "host pthread/list/completion/queue/mailbox shims only; no kernel build or device acceptance"
+      }
+    ],
+    "does_not_replace_local_combined_status": true
+  },
+  "cancelled_log_capture_attempt": {
+    "command": "python3 -I -B tools/hardware/run-host-regressions.py --mode both",
+    "status": "CANCELLED_INCOMPLETE",
+    "exec_session": 12914,
+    "exit_code": 130,
+    "reason": "coordinator stopped redundant capture rerun; not counted as a suite result",
+    "private_partial_log": {
+      "path": "/home/corpunum/.local/state/s22-driver-continuation-20261002/eleventh-host-suite-both-capture-rerun.log",
+      "sha256": "a296bf6c708e8b6b34fd73ab50b1fca2b37c756a3b1c070175e40680b0d18635",
+      "bytes": 27597,
+      "mode": "0600",
+      "ends_with": "KeyboardInterrupt",
+      "complete": false
+    }
+  },
+  "separate_hosted_context": {
+    "reported_by_coordinator": true,
+    "revision_prefix": "1edf236",
+    "ci_job": "37075233538",
+    "status": "SUCCESS",
+    "normal_invocations": 59,
+    "optimized_invocations": 56,
+    "runner_failures": 0,
+    "private_log_sha256": "3a2d523b736ec9a7bc23ab4a27aafe99e562077f6843656c92035d2b60173660",
+    "replaces_local_failure": false
+  },
+  "safety_boundary": {
+    "kernel_build": false,
+    "module_load": false,
+    "phone_access": false,
+    "partition_write": false,
+    "reboot": false,
+    "bootup_or_runtime_acceptance": false
+  }
+}
