@@ -331,18 +331,24 @@ def run_monitored_build(command: list[str], source: Path, output: Path,
                     print("BUILD_ABORT resource threshold reached; stopping this build", flush=True)
                     stopped = stop_own_process_group(process)
                     if not stopped:
-                        print("BUILD_ABORT process group remained or its disappearance could not "
-                              "be confirmed after bounded SIGKILL wait",
+                        print("BUILD_ABORT owned process-group absence was not confirmed under "
+                              "bounded cleanup",
                               flush=True)
                         return -signal.SIGKILL, True
                     break
             return process.poll() if process.poll() is not None else -signal.SIGKILL, interrupted_for_resources
         except BaseException:
-            stopped = stop_own_process_group(process)
-            if not stopped:
-                print("BUILD_ABORT monitor failed; process group remained or its disappearance "
-                      "could not be confirmed after bounded SIGKILL wait",
+            try:
+                stopped = stop_own_process_group(process)
+            except BaseException as cleanup_error:
+                print("BUILD_ABORT monitor failed; cleanup raised "
+                      f"{type(cleanup_error).__name__}: {cleanup_error}",
                       file=sys.stderr, flush=True)
+            else:
+                if not stopped:
+                    print("BUILD_ABORT monitor failed; owned process-group absence was not "
+                          "confirmed under bounded cleanup",
+                          file=sys.stderr, flush=True)
             raise
 
 

@@ -123,7 +123,7 @@ class NpuSixBuildSafetyTests(unittest.TestCase):
         except subprocess.TimeoutExpired:
             pass
 
-    def test_monitor_error_interrupts_and_reaps_owned_process_group(self) -> None:
+    def test_monitor_error_interrupts_and_confirms_owned_group_absence(self) -> None:
         process = FakeProcess(wait_results=[0])
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory)
@@ -161,7 +161,26 @@ class NpuSixBuildSafetyTests(unittest.TestCase):
             ):
                 BUILDER.run_monitored_build(["make"], Path(directory), output, {})
         self.assertIs(raised.exception, original_error)
-        self.assertIn("process group remained or its disappearance could not be confirmed", stderr.getvalue())
+        self.assertIn("owned process-group absence was not confirmed", stderr.getvalue())
+
+    def test_cleanup_exception_does_not_replace_original_monitor_exception(self) -> None:
+        process = FakeProcess()
+        original_error = OSError("monitor sampling failed")
+        stderr = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            with (
+                mock.patch.object(BUILDER.subprocess, "Popen", return_value=process),
+                mock.patch.object(BUILDER, "resource_sample", side_effect=original_error),
+                mock.patch.object(BUILDER.time, "sleep", return_value=None),
+                mock.patch.object(BUILDER, "stop_own_process_group",
+                                  side_effect=RuntimeError("cleanup sampling failed")),
+                contextlib.redirect_stderr(stderr),
+                self.assertRaises(OSError) as raised,
+            ):
+                BUILDER.run_monitored_build(["make"], Path(directory), output, {})
+        self.assertIs(raised.exception, original_error)
+        self.assertIn("cleanup raised RuntimeError: cleanup sampling failed", stderr.getvalue())
 
     def test_process_group_escalation_uses_only_bounded_waits(self) -> None:
         process = FakeProcess(wait_results=[-9])

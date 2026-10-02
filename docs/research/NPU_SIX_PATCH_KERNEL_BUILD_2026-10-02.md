@@ -130,7 +130,7 @@ the leader exiting on SIGINT and one with the leader already reaped. The final
 future-run helper hashes group presence through bounded SIGINT/SIGTERM/SIGKILL
 stages, reports false if disappearance is not confirmed, and preserves the
 original monitor exception. Its reviewed source SHA-256 is
-`45bec3c9b0f7632d40d89c869f256e38aa4796eb391e0141bee022a1181991bf`. All 16
+`c9122938aba78a7ce9a8af0242de7666aa69d81dc42f0d7d04e6bf8472e72998`. All 17
 focused safety tests pass both normally and under `python -O`; the two real
 process-group regressions pass after the fix. This helper change did not
 restart or rerun Kbuild. The raw generated build receipt contains no helper
