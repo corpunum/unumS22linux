@@ -1,0 +1,288 @@
+diff --git a/sound/soc/samsung/abox/abox.c b/sound/soc/samsung/abox/abox.c
+index 7506805..42e4440 100755
+--- a/sound/soc/samsung/abox/abox.c
++++ b/sound/soc/samsung/abox/abox.c
+@@ -28,6 +28,7 @@
+ #include <linux/delay.h>
+ #include <linux/suspend.h>
+ #include <linux/sched/clock.h>
++#include <linux/rcupdate.h>
+ 
+ #include <sound/soc.h>
+ #include <sound/soc-dapm.h>
+@@ -82,6 +83,123 @@
+ #define IPC_RETRY			(10)
+ static atomic64_t abox_pcm_trigger_trace_seq = ATOMIC64_INIT(0);
+ 
++struct abox_ipc_trace_owner {
++	struct abox_ipc_trace_owner __rcu *next;
++	struct abox_data *data;
++	u64 trace_seq[ABOX_IPC_QUEUE_SIZE];
++	bool registered;
++};
++
++static struct abox_ipc_trace_owner __rcu *abox_ipc_trace_owner_head;
++static DEFINE_SPINLOCK(abox_ipc_trace_owner_lock);
++
++/* Caller holds rcu_read_lock() while using the returned owner. */
++static struct abox_ipc_trace_owner *
++abox_ipc_trace_owner_find(struct abox_data *data)
++{
++	struct abox_ipc_trace_owner *owner;
++
++	owner = rcu_dereference(abox_ipc_trace_owner_head);
++	while (owner) {
++		if (owner->data == data)
++			return owner;
++		owner = rcu_dereference(owner->next);
++	}
++
++	return NULL;
++}
++
++/* Caller holds abox_ipc_trace_owner_lock. */
++static bool abox_ipc_trace_owner_unlink_locked(
++		struct abox_ipc_trace_owner *target)
++{
++	struct abox_ipc_trace_owner __rcu **link =
++		&abox_ipc_trace_owner_head;
++	struct abox_ipc_trace_owner *owner;
++
++	while ((owner = rcu_dereference_protected(*link, 1))) {
++		if (owner == target) {
++			rcu_assign_pointer(*link,
++					rcu_access_pointer(owner->next));
++			owner->registered = false;
++			return true;
++		}
++		link = &owner->next;
++	}
++
++	return false;
++}
++
++static void abox_ipc_trace_owner_release(void *arg)
++{
++	struct abox_ipc_trace_owner *owner = arg;
++	unsigned long flags;
++	bool removed;
++
++	spin_lock_irqsave(&abox_ipc_trace_owner_lock, flags);
++	removed = owner->registered &&
++		abox_ipc_trace_owner_unlink_locked(owner);
++	spin_unlock_irqrestore(&abox_ipc_trace_owner_lock, flags);
++	if (removed)
++		synchronize_rcu();
++}
++
++static void abox_ipc_trace_owner_unregister_data(struct abox_data *data)
++{
++	struct abox_ipc_trace_owner *owner;
++	unsigned long flags;
++	bool removed = false;
++
++	spin_lock_irqsave(&abox_ipc_trace_owner_lock, flags);
++	owner = rcu_dereference_protected(abox_ipc_trace_owner_head, 1);
++	while (owner) {
++		if (owner->data == data) {
++			removed = abox_ipc_trace_owner_unlink_locked(owner);
++			break;
++		}
++		owner = rcu_dereference_protected(owner->next, 1);
++	}
++	spin_unlock_irqrestore(&abox_ipc_trace_owner_lock, flags);
++	if (removed)
++		synchronize_rcu();
++}
++
++static int abox_ipc_trace_owner_register(struct device *dev,
++		struct abox_data *data)
++{
++	struct abox_ipc_trace_owner *owner;
++	struct abox_ipc_trace_owner *existing;
++	unsigned long flags;
++	int ret;
++
++	owner = devm_kzalloc(dev, sizeof(*owner), GFP_KERNEL);
++	if (!owner)
++		return -ENOMEM;
++	owner->data = data;
++	ret = devm_add_action_or_reset(dev, abox_ipc_trace_owner_release,
++			owner);
++	if (ret)
++		return ret;
++
++	spin_lock_irqsave(&abox_ipc_trace_owner_lock, flags);
++	for (existing = rcu_dereference_protected(
++			abox_ipc_trace_owner_head, 1);
++			existing;
++		existing = rcu_dereference_protected(existing->next, 1)) {
++		if (existing->data == data) {
++			spin_unlock_irqrestore(&abox_ipc_trace_owner_lock, flags);
++			return -EEXIST;
++		}
++	}
++	owner->registered = true;
++	rcu_assign_pointer(owner->next,
++			rcu_access_pointer(abox_ipc_trace_owner_head));
++	rcu_assign_pointer(abox_ipc_trace_owner_head, owner);
++	spin_unlock_irqrestore(&abox_ipc_trace_owner_lock, flags);
++
++	return 0;
++}
++
+ /* For only external static functions */
+ static struct abox_data *p_abox_data;
+ 
+@@ -551,11 +669,12 @@ static bool __abox_ipc_queue_full(struct abox_data *data)
+ 
+ static int abox_ipc_queue_put(struct abox_data *data, struct device *dev,
+ 		int hw_irq, const ABOX_IPC_MSG *msg, size_t size,
+-		u64 trace_seq, bool *trigger_enabled, bool trigger_start,
++		u64 *trace_seq, bool *trigger_enabled, bool trigger_start,
+ 		bool *duplicate, bool *duplicate_pending)
+ {
+ 	spinlock_t *lock = &data->ipc_queue_lock;
+ 	size_t length = ARRAY_SIZE(data->ipc_queue);
++	struct abox_ipc_trace_owner *trace_owner;
+ 	struct abox_ipc *ipc;
+ 	unsigned long flags;
+ 	int ret;
+@@ -565,7 +684,12 @@ static int abox_ipc_queue_put(struct abox_data *data, struct device *dev,
+ 	if (unlikely(sizeof(ipc->msg) < size))
+ 		return -EINVAL;
+ 
++	rcu_read_lock();
++	trace_owner = abox_ipc_trace_owner_find(data);
+ 	spin_lock_irqsave(lock, flags);
++	/* No registered sidecar means no truthful queue/send correlation. */
++	if (!trace_owner)
++		*trace_seq = 0;
+ 	if (trigger_enabled && *trigger_enabled == trigger_start) {
+ 		*duplicate = true;
+ 		*duplicate_pending = !__abox_ipc_queue_empty(data);
+@@ -576,8 +700,8 @@ static int abox_ipc_queue_put(struct abox_data *data, struct device *dev,
+ 		ipc->hw_irq = hw_irq;
+ 		ipc->put_time = sched_clock();
+ 		ipc->get_time = 0;
+-		if (trace_seq || ipc->trace_seq)
+-			ipc->trace_seq = trace_seq;
++		if (trace_owner)
++			trace_owner->trace_seq[data->ipc_queue_end] = *trace_seq;
+ 		memcpy(&ipc->msg, msg, size);
+ 		ipc->size = size;
+ 		data->ipc_queue_end = (data->ipc_queue_end + 1) % length;
+@@ -588,23 +712,33 @@ static int abox_ipc_queue_put(struct abox_data *data, struct device *dev,
+ 		ret = -EBUSY;
+ 	}
+ 	spin_unlock_irqrestore(lock, flags);
++	rcu_read_unlock();
+ 
+ 	return ret;
+ }
+ 
+-static int abox_ipc_queue_get(struct abox_data *data, struct abox_ipc *ipc)
++static int abox_ipc_queue_get(struct abox_data *data, struct abox_ipc *ipc,
++		u64 *trace_seq)
+ {
+ 	spinlock_t *lock = &data->ipc_queue_lock;
+ 	size_t length = ARRAY_SIZE(data->ipc_queue);
++	struct abox_ipc_trace_owner *trace_owner;
+ 	unsigned long flags;
+ 	int ret;
+ 
++	*trace_seq = 0;
++	rcu_read_lock();
++	trace_owner = abox_ipc_trace_owner_find(data);
+ 	spin_lock_irqsave(lock, flags);
+ 	if (!__abox_ipc_queue_empty(data)) {
+ 		struct abox_ipc *tmp;
+ 
+ 		tmp = &data->ipc_queue[data->ipc_queue_start];
+ 		tmp->get_time = sched_clock();
++		if (trace_owner) {
++			*trace_seq = trace_owner->trace_seq[data->ipc_queue_start];
++			trace_owner->trace_seq[data->ipc_queue_start] = 0;
++		}
+ 		*ipc = *tmp;
+ 		data->ipc_queue_start = (data->ipc_queue_start + 1) % length;
+ 
+@@ -613,6 +747,7 @@ static int abox_ipc_queue_get(struct abox_data *data, struct abox_ipc *ipc)
+ 		ret = -ENODATA;
+ 	}
+ 	spin_unlock_irqrestore(lock, flags);
++	rcu_read_unlock();
+ 
+ 	return ret;
+ }
+@@ -662,9 +797,10 @@ static int __abox_process_ipc(struct device *dev, struct abox_data *data,
+ 
+ static void abox_process_ipc(struct work_struct *work)
+ {
+-	static struct abox_ipc ipc;
++	struct abox_ipc ipc;
+ 	struct abox_data *data = container_of(work, struct abox_data, ipc_work);
+ 	struct device *dev = data->dev;
++	u64 trace_seq;
+ 	int ret;
+ 
+ 	abox_dbg(dev, "%s: %d %d\n", __func__, data->ipc_queue_start,
+@@ -680,14 +816,14 @@ static void abox_process_ipc(struct work_struct *work)
+ 	}
+ 
+ 	if (abox_can_calliope_ipc(dev, data)) {
+-		while (abox_ipc_queue_get(data, &ipc) == 0) {
++		while (abox_ipc_queue_get(data, &ipc, &trace_seq) == 0) {
+ 			struct device *dev = ipc.dev;
+ 			int hw_irq = ipc.hw_irq;
+ 			const ABOX_IPC_MSG *msg = &ipc.msg;
+ 			size_t size = ipc.size;
+ 
+ 			ret = __abox_process_ipc(dev, data, hw_irq, msg, size,
+-					ipc.trace_seq);
++					trace_seq);
+ 			if (ret < 0)
+ 				abox_failsafe_report(dev, true);
+ 		}
+@@ -719,7 +855,7 @@ static int abox_schedule_ipc(struct device *dev, struct abox_data *data,
+ 
+ 	do {
+ 		ret = abox_ipc_queue_put(data, dev, hw_irq, msg, size,
+-				trace_seq, trigger_enabled, trigger_start,
++				&trace_seq, trigger_enabled, trigger_start,
+ 				&duplicate, &duplicate_pending);
+ 		if (duplicate) {
+ 			if (duplicate_pending)
+@@ -4031,6 +4167,11 @@ static int samsung_abox_probe(struct platform_device *pdev)
+ 	INIT_LIST_HEAD(&data->firmware_extra);
+ 	INIT_LIST_HEAD(&data->ipc_actions);
+ 	INIT_LIST_HEAD(&data->iommu_maps);
++	ret = abox_ipc_trace_owner_register(dev, data);
++	if (ret)
++		dev_warn_ratelimited(dev,
++				"%s: PCM IPC trace correlation unavailable: %d\n",
++				__func__, ret);
+ 
+ 	data->ipc_workqueue = alloc_workqueue("%s", WQ_HIGHPRI | WQ_UNBOUND |
+ 			WQ_MEM_RECLAIM | WQ_SYSFS, 1, "abox_ipc");
+@@ -4345,6 +4486,7 @@ static int samsung_abox_remove(struct platform_device *pdev)
+ 	device_init_wakeup(dev, false);
+ 	destroy_workqueue(data->ipc_workqueue);
+ 	snd_soc_unregister_component(dev);
++	abox_ipc_trace_owner_unregister_data(data);
+ 	abox_iommu_unmap(dev, IOVA_DRAM_FIRMWARE);
+ 
+ 	return 0;
+diff --git a/sound/soc/samsung/abox/abox.h b/sound/soc/samsung/abox/abox.h
+index d41b42a..ad26e56 100755
+--- a/sound/soc/samsung/abox/abox.h
++++ b/sound/soc/samsung/abox/abox.h
+@@ -372,8 +372,6 @@ struct abox_ipc {
+ 	int hw_irq;
+ 	unsigned long long put_time;
+ 	unsigned long long get_time;
+-	/* Local trace correlation only; never copied into the IPC message. */
+-	u64 trace_seq;
+ 	size_t size;
+ 	ABOX_IPC_MSG msg;
+ };
