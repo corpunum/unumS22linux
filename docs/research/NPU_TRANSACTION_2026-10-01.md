@@ -24,20 +24,21 @@ recovery, and owner-authorization gates remained false.
 
 The patch targets upstream LineageOS kernel commit
 `4e5c5ad7d950e4de0688b5663965f2075654b2ad` and applies with ordinary
-`git apply --check` to its `npu-hw-device.h` and `npu-hw-device.c`. The test
-fetches those two public raw files at that immutable commit, caps each response
-at 128 KiB with a 5-second timeout (256 KiB total), and verifies these
-SHA-256 values before extracting or compiling any C:
+`git apply --check` to its `npu-hw-device.h`, `npu-hw-device.c`, and
+`npu-vertex.c`. The test fetches those three public raw files at that immutable
+commit, caps each response at 128 KiB with a 5-second timeout (384 KiB total),
+and verifies these SHA-256 values before extracting or compiling any C:
 
 | File | SHA-256 |
 | --- | --- |
 | `drivers/vision/npu/core/npu-hw-device.h` | `43165437c7b6a4c50599c2677536376ab31579de0f5866c8b76e33ff7813e9c3` |
 | `drivers/vision/npu/core/npu-hw-device.c` | `14617a6f8e5b08e1bb169618daa8544f2680ad6709cb9f3b9730919d4dc8e16f` |
+| `drivers/vision/npu/core/npu-vertex.c` | `0e130ccedaebab85b2d6e78453a049610abed431c04ab630e4426a0f7aca077a` |
 
 An optional `S22_NPU_REFCOUNT_SOURCE_TREE` path supports offline provenance
 checks. It is accepted only at derived commit
 `3fca50941422439b2019db2e4a3dc1016b2138a1`, with a clean tree, unchanged NPU
-files relative to `4e5c5ad`, and the same two hashes. A public fetch outage
+files relative to `4e5c5ad`, and the same three hashes. A public fetch outage
 prints `SKIP actual-C transaction test` and exits 77; it is not reported as an
 actual-C pass. A hash mismatch or patch-application failure is a test failure.
 
@@ -99,6 +100,20 @@ mutex. No reverse DNC-to-child callback path was found. This source trace
 shows no cycle in the present graph, but is not lockdep or runtime evidence and
 does not establish safety for future callbacks.
 
+The new error propagation exposed a lock leak in
+`npu_hwdev_normal_bootup()`: the hardware boot error jumps to `p_err`, which
+previously returned without releasing `vertex->lock`. In that function every
+`goto p_err` occurs after acquiring the lock and while still holding it; the
+`secure_count` timeout instead reaches `p_err_check` after the retry loop has
+unlocked the mutex. The patch now unlocks at `p_err` before falling through to
+`p_err_check`, preserving the timeout path and all successful unlocks. The
+host test executes this exact extracted caller body and proves the old source
+reproduces the held-lock return, while the patch releases exactly once for the
+propagated hardware error, vref and POWER_NOTIFY errors, balances the secure
+timeout loop without a double-unlock, and leaves the warm-boot success path
+unchanged. This covers lock accounting under a pthread shim, not kernel lock
+semantics or recovery of other resources after those errors.
+
 Some callers still discard propagated shutdown errors: secure and normal
 bootdown ignore `npu_hwdev_shutdown()` results, and one secure-bootup memory
 failure cleanup also ignores its shutdown result (`npu-vertex.c`). The
@@ -113,8 +128,9 @@ claiming end-to-end error handling.
 functions, compiles the unpatched baseline and patch-applied versions with
 pthread and device-service shims, and runs both `-O0` and `-O2` C builds. The
 baseline produces expected failures for callback publication, ignored parent
-init error, underflow, shutdown error propagation, and a concurrent get that
-returns success before the first callback fails. Patched C passes tests for:
+init error, underflow, shutdown error propagation, a concurrent get that
+returns success before the first callback fails, and the normal-bootup
+propagated-error lock leak. Patched C passes tests for:
 
 - serialization of concurrent first get on success and failure;
 - parent acquire-error propagation and child callback suppression;
