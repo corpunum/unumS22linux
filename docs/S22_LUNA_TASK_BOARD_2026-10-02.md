@@ -819,3 +819,48 @@ does not cover the full boot. Private receipt hash is
 `cad0e6e810c56b993d0c25382c3a7bea8351314e1bcbf17fd23c0b8ad5e86da2`.
 No fresh RECOVERY partition readback was taken in this host-only wave.
 New device writes, reboots, powered trials and inference requests remain zero.
+
+### Final independent retests and source-wave publication
+
+Builder author `d5ba8e0` / integrated `65a85a1` repairs whole-group cleanup;
+`3283017` / integrated `2f17e69` also preserves the primary monitor exception
+when cleanup itself raises. Independent review `e844b7b` / integrated
+`fc60216` clears this final future helper after all 17 tests in each Python
+mode, original real-process reproductions and artifact/CRC cross-checks.
+Doc-only `6636770` corrects the wording and records each helper identity.
+The earlier negative finding remains historical; these fixes did not control
+or repeat the one completed build.
+
+The same explicitly selected publication worker implemented the separate
+optional diagnostic-walk patch: author `ee7ae49`, integrated `b63c089`.
+It compiles the pinned production command-v10 header/dispatcher and mailbox-v9
+C, reproduces a constructed baseline non-progress loop, and tests bounds,
+producer padding, marked records and rollover refusal. The initial draft's
+wrong v9 command/MARK assumption was corrected before freeze and is recorded,
+not counted as accepted evidence. Independent Luna review reused the completed
+build worker in its separate worktree: author `3f7cde5`, integrated `6ffd8ed`.
+Local exact-source tests passed all Python modes with C `-O0`/`-O2`; that
+reviewer's public fetch remained unavailable and is explicitly recorded.
+This bounds a diagnostic walk, not the full publisher or its unbounded drain.
+
+`f98bbcf` adds exactly three CI allowlist entries for the new diagnostic test;
+seven runner-policy tests pass in each mode, independently verified. The
+complete 47-normal/44-optimized suite attempted every script, returning two
+exit-77 public read timeouts. Both failed invocations passed a separate bounded
+public rerun. Thus all 91 invocations are covered across the preserved original
+run and retry, **not** a rewritten one-shot suite PASS. Existing individual
+AVB/source-audit fixture skips and three optimized exclusions remain visible.
+Host-suite logs and retry hashes are bound by the sanitized source-wave JSON.
+
+An ordinary ordered temporary-index check applied all eight exact patches with
+no force/fuzz. The six-patch tree matches the actually compiled source; the
+eight-patch source tree is `020822e0101392587ebb35d6f37e9dc4ec60bb73`.
+The kernel worktree and build outputs were unchanged. Optional patches seven
+and eight were **not** included in the completed six-patch kernel build.
+
+This closes the scoped implementation/review wave, not the driver mission.
+NPU publication-drain/object lifetime, integrated native-kernel compatibility
+and hardware acceptance remain unresolved. No image, firmware, weights,
+credentials or private trace is selected for publication. Only the unmerged
+review branch will be pushed; master remains unchanged. Exact final-head
+hosted CI still requires independent verification after publication.
