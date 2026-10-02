@@ -1,5 +1,200 @@
 # S22 continuation — 2026-10-02
 
+## Ongoing autonomous implementation checkpoint — 17:44 UTC
+
+The historical entries below remain intact. This checkpoint supersedes their
+in-progress descriptions, not their evidence or authorization boundaries.
+
+- Revised audio author `f788f87`, integrated `c22e2c3`, now linearizes
+  duplicate detection, queue publication and accepted state under the existing
+  IPC queue lock. Actual FE/BE overlap, queue-full retry and DAPM caller C pass
+  at `-O0`/`-O2`; public and explicit local fixtures pass all three Python
+  modes. Independent Luna review has cleared this narrow invariant, while
+  retaining the async-send/acknowledgement and swallowed DAPM-error limits.
+  The initial `7e82af3` rejection remains recorded.
+- NPU author `d50a90464d66c5371de17076ba84402316820123`, integrated
+  `afceff8`, retains the POWER_CTL message ID after the precisely identified
+  post-publication interrupt timeout. Actual extracted-C baseline failures
+  and candidate ownership/STUCKED/64-ID-exhaustion tests pass at both C
+  optimization levels across public/local and three Python modes. Root's
+  independent local runs pass in all three Python modes. Independent Luna
+  review also passes both public/local fixture routes in all three modes and
+  clears this narrow ownership invariant; the committed review note follows.
+  Unbounded publication drain and close/reopen quiescence remain unresolved;
+  BOOTUP remains refused. This ninth patch is **not** in the active build.
+- Bluetooth author `844bd3e`, integrated `6340e9a`, fixes bounded write/poll
+  error handling and standalone UART termios restoration. Four new tests fail
+  against the old source; all 30 pass after correction in normal, `-O` and
+  environment-optimized Python, independently rerun by the coordinator.
+  The existing deployment fingerprint correctly rejects the changed source;
+  no artifact, trial identity or authorization was repinned.
+- Native-eight kernel compilation is actually running, serialized at `-j1`,
+  from frozen helper author `3c5be372` and source `872bffb8`; the exact native
+  config survived `olddefconfig` byte-for-byte with the recorded Clang 18
+  recipe. Future builder corrections reject Kconfig/Git redirection and fix
+  six/eight applied-versus-excluded receipt inventories. All 29 tests pass in
+  three Python modes; independent review has found no remaining source/config
+  blocker. Those later helper edits neither restarted nor controlled the
+  frozen running invocation. No completed-build result is claimed yet.
+
+Actual accepted Luna/Max workers now include the completed Bluetooth author
+`/root/bt_transport_next_20261002` in `bt-transport-next-20261002` and reused
+`/root/native_npu_eight_build_20261002` performing **independent Bluetooth
+review** in the new `bt-transport-review-20261002` worktree. The separate
+`/root/autonomous_driver_review_20261002` reviewer is finishing native/audio/
+NPU review in `autonomous-review-followup-20261002`. Both own only their new
+review notes; only the coordinator accesses the phone. Accepted explicit
+model selection is configuration evidence, not independent backend attestation.
+
+The completed NPU author has also been reused for the next actual drain/lifetime
+implementation in new isolated `npu-drain-next-20261002` at `39aa985`, owning
+only a separate candidate patch, harness, regression and document. It must
+establish safe publisher/waiter ownership before removing the unbounded drain;
+a naive timeout/free is expressly forbidden. No active source/build or
+previous patch is edited by this subsequent host-only workstream.
+
+Combined independent review `71ee49e`, integrated `dc3ea6f`, is committed for
+native profile guards, the revised audio queue invariant and NPU9. A separate
+evidence correction `dc5bdf4` preserves its original history: `-I` ignores
+`PYTHONOPTIMIZE`, so affected environment-mode claims were rerun **without**
+`-I`, first checking `sys.flags.optimize == 1`. Both public/local NPU and audio
+environment-mode cases pass, as do all 29 native builder cases. Normal and
+explicit `-O` results remain valid; HCI's environment invocation was already
+correct. This is a verification correction, not a weakened test or source gate.
+
+The second complete fixed suite finished against `39aa985`, with 50 normal
+and 47 optimized invocations and credential-free child environments: 95 passed,
+two adapter-script invocations failed (normal and optimized). Each failure has
+the same two artifact-corruption/TOCTOU fixture cases: the preserved production
+source fingerprint correctly rejects the changed bridge before their intended
+checks. This is not a one-shot suite PASS. The Bluetooth author is repairing
+only test fixtures in new `bt-ci-fixtures-20261002`; production source/artifact
+pins, trial IDs and authorization remain unchanged. NPU9 actually executed and
+passed against public pinned source in both suite modes. The new
+NPU regression is explicitly listed in both runner inventories and the policy
+test; no discovery or live-device script was added.
+
+The fixture repair is frozen at author `69f8733`, integrated `01f20fc`:
+all 32 adapter tests pass in three Python modes, using actual validators and
+board code, temporary copied sources and one literal test-only bridge pin.
+Source-tamper, artifact-corruption, pin restoration and TOCTOU no-stage checks
+remain active; default production refusal is explicitly tested. Independent
+Luna review is running in `bt-fixture-review-20261002`, owning only its new
+review note. A third complete 97-invocation suite is now running against this
+frozen code. Earlier failed suite evidence is not erased or relabeled.
+
+Independent fixture review `b1c0740`, integrated `97eea8b`, reproduced both
+pre-fix cases and cleared the repair after 32 tests passed in each mode,
+including an actual `sys.flags.optimize == 1` environment run. It separately
+forced exceptions through the fixture contexts and verified pin restoration.
+The third complete suite at `01f20fc` passed 94/97 initially; three public
+source downloads timed out before assertions (liveness normal, probe-unwind
+optimized, shutdown-error optimized). One bounded **public** rerun of each
+then returned zero. All 97 invocations have passing executions across those
+runs; no one-shot PASS, hidden local fallback or hosted-CI success is claimed.
+
+Independent Bluetooth source review `f663717`, integrated `71dc06d`, found no
+blocking source defect and independently passed all 30 cases in three Python
+modes and warning-clean C `-O0`/`-O2`. It records nonblocking injected cleanup
+and wall-time measurement gaps, and confirms the production gate's refusal.
+
+Read-only native health at 17:33 UTC confirms the same boot and all 325 loaded
+modules, GNU build ID `b2dda820b18d410d9bf12f1bd2584567d545991d`, native control,
+desktop, desktop Pi, browser/dedicated Pi and idle model health. Battery is
+100%/Full, 26.9 C; maximum sampled thermal reading 43 C. The available ring has
+no new severe indicators but is not a full-boot log or measured-progress proof.
+No new partition writes, reboots, powered tests or inference requests occurred.
+The supported unprivileged host sleep-inhibition request was denied; no bypass
+or guaranteed host-awake claim is made. Independent hardware rescue remains
+unproven, and consumed single-attempt approvals are not replayed.
+
+## Autonomous continuation after the completed source/build wave
+
+Fresh fetch at 16:10 UTC found review HEAD still `5e2eebf` and no divergence.
+No previous worker or heavy kernel build was still running. The original dirty
+checkout, completed six-patch build, historical worktrees and phase journals
+remain preserved. The mission is not complete; another host implementation
+wave is running while specific hardware acceptance remains unresolved.
+
+All three workers below were actually launched using supported explicit
+`model=gpt-6-luna`, `reasoning_effort=max`, `fork_turns=none`. The accepted
+configuration has no known fallback; independent backend identity is not
+exposed. Only the coordinator accesses the phone. Directory names are durable
+labels, not evidence of a worker's assignment; the two reused generic names
+below are newly created worktrees, not overwritten historical directories.
+
+| Actual worker | Separate worktree | File ownership and deliverable | State |
+| --- | --- | --- | --- |
+| `/root/native_npu_eight_build_20261002` | `native-npu-eight-20261002` | Existing guarded NPU builder/test plus one build document; explicit preserved-native eight-patch profile and configured kernel/module compilation | Author `f690453`, `f58ba24`, `f975651`; two preparation refusals preserved, build recipe investigation continues before compilation |
+| `/root/npu_lifetime_next_20261002` | `audio-driver-next-20261002` | New NPU publication-ownership patch/C regression/document only | Implementation running; unsafe timeout/free and BOOTUP forbidden |
+| `/root/audio_driver_path_next_20261002` | `button-actions-20261002` | New ABOX IPC error-path patch/C regression/document only | Implementation running; no powered audio operation |
+
+Audio author `5651aee` is preserved in history and integrated as
+`87096f8`: the failed trigger request no longer updates the cached enabled
+state and suppresses the next caller-requested START/STOP. Six fixture/Python
+mode invocations passed at both C optimization levels. This does not establish
+async sender success, firmware acknowledgement, DMA or physical audio.
+Independent review `7e82af3` (integrated `33961e2`) **blocked** this initial
+fix: concurrent FE/BE calls can lose a transition, and a BE error may be
+consumed upstream. The author is implementing duplicate suppression and
+successful state publication under the existing queue lock, with actual
+queue/caller C and controlled concurrent tests. The initial negative review
+is retained; the revised source is not yet cleared.
+
+Coordinator commit `0f643f7` adds actual extracted HCI lifecycle/IDA C coverage
+and its explicit CI entry. Baseline create false-success is reproduced;
+registration, allocation/type failures, cleanup/error unwind and the real
+negative-ID guard are tested. All local/public × normal/optimized/environment-
+optimized invocations passed; no new cookie patch is warranted.
+
+Actual independent `/root/autonomous_driver_review_20261002` was launched with
+the same explicit Luna/Max selection in `autonomous-review-20261002`, from
+`87096f8`, owning only its new review note. Its HCI host scope is cleared;
+initial audio scope is blocked as above. Local tests passed in all three
+Python modes; all six attempted independent public fetches were unavailable
+and are not counted as executed coverage. Builder and revised audio/NPU
+ownership review follow as author commits are frozen.
+
+The complete explicit suite at `475a5af` attempted **49 normal and 46
+optimized scripts**. It returned failure for two optimized public-source
+fetches (exit 77); the other 93 invocations passed. One bounded public rerun
+of each unavailable script subsequently returned zero. This is coverage
+across a failed initial run and a successful bounded rerun, not a one-shot
+PASS. No hidden local fallback or hosted-CI result is claimed.
+
+Native source `872bffb8ea2ea657f94d10b866dc655b5718d6db`, tree
+`417e4a55e222b99ecca0f198e081d2d808ef5628`, is a clean single commit of the
+eight ordered NPU patches directly on native HCI/camera base `3fca509`.
+The actual parent history contains HCI restoration and two camera unwind
+fixes, **not** a `fs/file.c` close-range change. The existing scoped Pi
+userspace wrapper is preserved; older broad descriptions of a native
+close-range kernel patch are not evidence that one is installed.
+
+The first preparation used the historical Clang 21 and correctly refused
+the changed config before `Image modules`. Profile-only author `f975651`
+(integrated `9eed440`) pins the existing working-HCI manifest's exact Ubuntu
+Clang/LLD 18.1.3 bytes, ten LLVM helpers and three GNU cross tools; 22 host
+tests pass in each Python mode. A separately authorized fresh **host**
+invocation also refused before compilation: explicit `LLVM_IAS=1` made
+Kconfig expose `HAS_LTO_CLANG` and two unselected options absent from the
+working recipe. Both outputs are preserved. No byte guard was relaxed;
+matching the recorded recipe without that explicit override is the next
+bounded host investigation, not a device trial.
+
+Coordinator USB read-only health capture at 16:18 UTC verified the same boot,
+kernel GNU build ID `b2dda820b18d410d9bf12f1bd2584567d545991d`, unchanged 325
+modules, guardian/control, persistent mounts, desktop/Pi and idle model health.
+Battery was 100%/Full, 27.7 C; maximum sampled thermal reading was 43 C. Ring
+coverage is not full-boot coverage and supplies no new hardware acceptance.
+The exact embedded config was separately recovered read-only: 236,183 bytes,
+SHA-256 `d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16`.
+Host fsync/readback passed; private configuration text was not published.
+Native-eight does not substitute the historical six-profile config.
+
+Previous single-attempt
+device authorizations remain consumed. This continuation has issued no new
+partition write, reboot, powered hardware trial or inference request.
+
 Integration remains on `s22/luna-driver-completion-20260923`; starting published
 HEAD was `d5532950994fa4cc1444051ffcb90cc6394912b7`. Fetch found no divergence.
 The original master checkout and its five tracked modifications are preserved.
