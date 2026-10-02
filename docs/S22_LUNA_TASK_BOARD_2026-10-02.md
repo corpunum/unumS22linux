@@ -1,5 +1,41 @@
 # S22 continuation — 2026-10-02
 
+## Actual review/test checkpoint — 2026-10-02 21:25 UTC
+
+- Immutable `db23c885fd8f1825aa77117b387d8cee40bdcd4e` completed with
+  **109/109 script invocations passing** (56 normal, 53 optimized), exit 0.
+  Log SHA-256 `82be8c979cff0b50659cc75224953866c94b142997d57548be0ac4b149f7eafa`.
+  Three unavailable AVB cases and three optional audio source/O-tree cases
+  remain explicitly skipped per mode; three assert-based scripts are
+  normal-only. This is not hardware acceptance or execution of skipped cases.
+- Independent Luna review `4d76bdef`, integrated `3de0cf2`, confirms the
+  retained audio three-module set, its 329-module/17,255-import static result,
+  and the deterministic ESRCH test-only correction. The stale generic-slot
+  wording was reconciled in `d981f13`; original author history is preserved.
+- Independent NPU11 review `6d52632a` **blocks that patch alone** on a real
+  retained firmware-report diagnostic NULL-buffer spinlock/IRQ unwind bug.
+  Its six source-test runs pass but stub that diagnostic. Actual paired
+  cleanup/tests for the four report/profile functions are being implemented
+  in a separate Luna worktree; final code and review are still pending.
+  BOOTUP refusal and all broader firmware/concurrency/liveness limits remain.
+- Coordinator-only read-only capture plus exact host ELF comparison finds
+  **all 325 running module GNU build IDs/internal names** matching the
+  preserved camera ramdisk's 324 modules plus selected Lineage WLAN.
+  Receipt: `evidence/s22-runtime-module-build-id-correlation-20261003.json`.
+  This is baseline binary correlation, not full memory/file-path attestation
+  or execution of the new audio/NPU artifacts.
+- `/root/audio_driver_path_next_20261002` now owns the urgent NPU report-lock
+  cleanup; its clean, empty audio-package worktree is preserved.
+  `/root/bt_candidate_independent_review_20261002` continues as actual Luna
+  implementation worker in `audio-coherent-package-impl-20261003`, owning
+  only the new host-only pinned package helper, executable tests and doc.
+  Actual packaging awaits independent review/host GO; no device action.
+
+No live mutation was needed for these results. Master and the dirty original
+checkout remain unchanged. Review-branch publication may include explicitly
+blocked WIP source for independent inspection; it is not candidate/deployment
+clearance, and no high-risk change is merged into master.
+
 ## Continuing review/build wave — 2026-10-02 21:09 UTC (Oct 3 local)
 
 The older checkpoints below remain historical. Nothing in this checkpoint
