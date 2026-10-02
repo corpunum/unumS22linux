@@ -1,0 +1,224 @@
+{
+  "schema": "s22-npu-native-module-build-plan/v1",
+  "status": "prepared_waiting_for_coordinator_go",
+  "prepared_at_utc": "2026-10-02T22:01:44Z",
+  "evidence_class": "host_only_module_build_preparation",
+  "model_provenance": {
+    "model": "gpt-6-luna",
+    "reasoning_effort": "max",
+    "basis": "explicit_task_configuration",
+    "independent_runtime_attestation": false
+  },
+  "source": {
+    "worktree": "/home/corpunum/s22-linux/builds/npu-native-twelve-kernel-20261003",
+    "branch": "codex/npu-native-twelve-kernel-20261003",
+    "commit": "e9c3016233a72ceccb13e537f0b7ef72426582b9",
+    "tree": "f917408e1c3388c87a8ed8f0220e4f9c3c9c6a4e",
+    "parent_commit": "709ac38b573d092e300f3787d0d5ba97dd333c0a",
+    "parent_tree": "a1606229eeb84e55175fcd43fd9a6f2faff200ef",
+    "native_eight_parent_commit": "872bffb8ea2ea657f94d10b866dc655b5718d6db",
+    "native_eight_parent_tree": "417e4a55e222b99ecca0f198e081d2d808ef5628",
+    "clean_at_preparation": true,
+    "changed_source_files": [
+      "drivers/vision/npu/core/npu-log.c",
+      "drivers/vision/npu/core/npu-util-msgidgen.c"
+    ],
+    "patches_in_order": [
+      {
+        "file": "tools/hardware/npu-mailbox-msgid-validation.patch",
+        "sha256": "c8366edfab42090ac09a6c366ad3c535a62e13384dd494ed685bbfe524a64d14",
+        "changed_source_file": "drivers/vision/npu/core/npu-util-msgidgen.c"
+      },
+      {
+        "file": "tools/hardware/npu-fw-report-lock-unwind.patch",
+        "sha256": "71c2fa44f0fe42bd94ee416fb09453185dd418b408ba15937ec3c787a5e9bf5d",
+        "changed_source_file": "drivers/vision/npu/core/npu-log.c"
+      }
+    ],
+    "source_review": {
+      "status": "clear_reported_by_coordinator",
+      "review_id_prefix": "74059b4d",
+      "host_review_is_device_acceptance": false
+    }
+  },
+  "configuration": {
+    "private_export": "/home/corpunum/s22-linux/builds/native-config-export-20261002.config",
+    "bytes": 236183,
+    "sha256": "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16",
+    "existing_native_ten_output_config_sha256": "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16",
+    "new_output_config_before_olddefconfig": "NOT_RUN",
+    "new_output_config_after_olddefconfig": "NOT_RUN",
+    "olddefconfig_raw_log": "/home/corpunum/s22-linux/builds/npu-native-twelve-module-only-out-20261003/olddefconfig.log",
+    "olddefconfig_raw_log_status": "NOT_RUN",
+    "expected_kernel_release": "5.10.260-g4e5c5ad7d950",
+    "expected_options": {
+      "CONFIG_EXYNOS_NPU": "m",
+      "CONFIG_NPU_USE_BOOT_IOCTL": "y",
+      "CONFIG_MODVERSIONS": "y",
+      "CONFIG_CFI_CLANG": "y",
+      "CONFIG_LTO_NONE": "y",
+      "CONFIG_SHADOW_CALL_STACK": "y",
+      "CONFIG_LOCALVERSION": "-g4e5c5ad7d950",
+      "CONFIG_LOCALVERSION_AUTO": "n"
+    },
+    "configuration_edited": false
+  },
+  "symbol_inputs": {
+    "baseline_profile": "native-eight full build; read-only inspected",
+    "baseline_module_symvers": "/home/corpunum/s22-linux/builds/npu-native-eight-out-clang18-recipe-20261002/Module.symvers",
+    "baseline_module_symvers_rows": 17283,
+    "baseline_module_symvers_bytes": 1108525,
+    "baseline_module_symvers_sha256": "15fc69e815cb4da6cb3372f4b5141005ab2e770b0414b67f230f1b185bf03df7",
+    "excluded_owner": "drivers/vision/npu",
+    "excluded_rows": 1,
+    "excluded_row_sha256": "d1c251e9556acde53f523b84521ce9d55ce16d531f1e37b54117873852bfc900",
+    "module_layout_crc": "0x0e3c515c",
+    "filter_helper": "tools/hardware/prepare-camera-modpost-symvers.py",
+    "filter_helper_sha256": "2404fab4a2ed469eab1930a7275c28fd3f5a0bbb1b23c88369338ca23cd26c67",
+    "filtered_output": "/home/corpunum/s22-linux/builds/npu-native-twelve-dependencies-20261003.symvers",
+    "filtered_output_status": "NOT_RUN",
+    "expected_filtered_rows": 17282,
+    "expected_filtered_sha256": "add620bc3a3732654f23161e4c966c7076b020568683f527402c6253cb59a334",
+    "prior_native_ten_filtered_input_used": false
+  },
+  "commands": {
+    "olddefconfig": {
+      "status": "NOT_RUN",
+      "argv": [
+        "/usr/bin/make",
+        "-C",
+        "/home/corpunum/s22-linux/builds/npu-native-twelve-kernel-20261003",
+        "O=/home/corpunum/s22-linux/builds/npu-native-twelve-module-only-out-20261003",
+        "ARCH=arm64",
+        "LLVM=1",
+        "CROSS_COMPILE=aarch64-linux-gnu-",
+        "olddefconfig"
+      ],
+      "environment": {
+        "PATH": "/usr/lib/llvm-18/bin:/usr/bin:/bin",
+        "LC_ALL": "C",
+        "LOCALVERSION": "",
+        "TMPDIR": "/tmp"
+      },
+      "wrapper": "/usr/bin/env -i",
+      "source_head_tree_before_after": "NOT_RUN_AFTER_GO"
+    },
+    "module_build": {
+      "status": "NOT_RUN",
+      "target": "drivers/vision/npu.ko",
+      "jobs": 1,
+      "verbosity": "V=1",
+      "argv": [
+        "/usr/bin/make",
+        "-C",
+        "/home/corpunum/s22-linux/builds/npu-native-twelve-kernel-20261003",
+        "O=/home/corpunum/s22-linux/builds/npu-native-twelve-module-only-out-20261003",
+        "ARCH=arm64",
+        "LLVM=1",
+        "CROSS_COMPILE=aarch64-linux-gnu-",
+        "input-symdump=/home/corpunum/s22-linux/builds/npu-native-twelve-dependencies-20261003.symvers",
+        "-j1",
+        "V=1",
+        "drivers/vision/npu.ko"
+      ],
+      "child_environment": {
+        "PATH": "/usr/lib/llvm-18/bin:/usr/bin:/bin",
+        "LC_ALL": "C",
+        "LOCALVERSION": "",
+        "TMPDIR": "/tmp"
+      },
+      "launcher": "/usr/bin/nice -n 10 /usr/bin/env -i",
+      "monitor_helper": "tools/hardware/build-npu-six-profile.py:run_monitored_build",
+      "monitor_helper_sha256": "56f39759e4a098562cbafd634a659b007be2a540a4ada6234962711be026e5d5",
+      "module_build_log": "/home/corpunum/s22-linux/builds/npu-native-twelve-module-only-out-20261003/build.log",
+      "resource_monitor": "/home/corpunum/s22-linux/builds/npu-native-twelve-module-only-out-20261003/resource-monitor.jsonl",
+      "phase_receipt": "/home/corpunum/s22-linux/builds/npu-native-twelve-module-only-out-20261003/build-phase.json",
+      "resource_abort_thresholds_bytes": {
+        "minimum_available_memory": 8589934592,
+        "minimum_free_disk": 17179869184
+      },
+      "full_helper_start_thresholds_bytes": {
+        "minimum_available_memory": 12884901888,
+        "minimum_free_disk": 34359738368
+      },
+      "inherited_environment": "empty",
+      "native_overrides_unset": [
+        "GIT_*",
+        "KCONFIG_*",
+        "KBUILD_*",
+        "MAKEFLAGS",
+        "MFLAGS",
+        "GNUMAKEFLAGS",
+        "MAKEOVERRIDES",
+        "CC",
+        "AS",
+        "LD",
+        "LLVM_IAS"
+      ]
+    }
+  },
+  "toolchain": {
+    "clang_version_first_line": "Ubuntu clang version 18.1.3 (1ubuntu1)",
+    "lld_version_first_line": "Ubuntu LLD 18.1.3 (compatible with GNU linkers)",
+    "interpreter": {
+      "path": "/usr/bin/python3",
+      "sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f"
+    },
+    "tools": [
+      {"name":"clang","path":"/usr/lib/llvm-18/bin/clang","sha256":"8ef402d453d1ba4902e4ee0f0f847f6cfa01400c95aa43c24e97818b9c0e3f45"},
+      {"name":"ld.lld","path":"/usr/lib/llvm-18/bin/ld.lld","sha256":"7ad9a0e8fe6d0e79b71172d731e33872c0274e49fceb7b516d774876d5a58ade"},
+      {"name":"llvm-ar","path":"/usr/lib/llvm-18/bin/llvm-ar","sha256":"eedd2efbdee80acf60e17e10adeddf31be0347226245f935be95efa3ae00ec79"},
+      {"name":"llvm-ranlib","path":"/usr/lib/llvm-18/bin/llvm-ranlib","sha256":"eedd2efbdee80acf60e17e10adeddf31be0347226245f935be95efa3ae00ec79"},
+      {"name":"llvm-nm","path":"/usr/lib/llvm-18/bin/llvm-nm","sha256":"3f85dd567c2806f2c031e317871e7145f858072fc9595aba4dc33d2e3a671402"},
+      {"name":"llvm-objcopy","path":"/usr/lib/llvm-18/bin/llvm-objcopy","sha256":"f52b9997b3c5019b4b3043e12b1ae2e821df67996ca344921c234c89c4d23e34"},
+      {"name":"llvm-objdump","path":"/usr/lib/llvm-18/bin/llvm-objdump","sha256":"4f98b86448d23bd1f858c50e93fbfc799f1c3640961a95e3b6c89d229a1b91bb"},
+      {"name":"llvm-readelf","path":"/usr/lib/llvm-18/bin/llvm-readelf","sha256":"8ed942a8c33f191480253ff7f236b7e49966c7441d12063d49dce9743aba9a6d"},
+      {"name":"llvm-strip","path":"/usr/lib/llvm-18/bin/llvm-strip","sha256":"f52b9997b3c5019b4b3043e12b1ae2e821df67996ca344921c234c89c4d23e34"},
+      {"name":"llvm-size","path":"/usr/lib/llvm-18/bin/llvm-size","sha256":"401e6835686b116baeaa8b98a5ebee54fbe66148b4a3fcda5436ef243a3653f3"},
+      {"name":"aarch64-linux-gnu-gcc","path":"/usr/bin/aarch64-linux-gnu-gcc","sha256":"cd90adc7801f4595267f61a5d25bd3a0c6beb2f9f1f107ab919a97a12972dc9a"},
+      {"name":"aarch64-linux-gnu-ld","path":"/usr/bin/aarch64-linux-gnu-ld","sha256":"7c903ac277dd1f5c4397277db865f12d8239fe45782f71afbeb3d42180a4b1ae"},
+      {"name":"aarch64-linux-gnu-nm","path":"/usr/bin/aarch64-linux-gnu-nm","sha256":"96dbed79b11f6cc13b060dd5ca705a277bb5bdecd714df1c470ffaafb2513727"},
+      {"name":"make","path":"/usr/bin/make","sha256":"d78b8f1d099fbcfb6f2f49ab87223b9b68fb3956642f92d6ec6de812e8afa965"},
+      {"name":"nice","path":"/usr/bin/nice","sha256":"2f92f24856db2e178fd91b02d28a5dbe0b4678de62738edfde0ece66b0f57c5d"},
+      {"name":"env","path":"/usr/bin/env","sha256":"886e5fa8be716b03eeda48856e0f04493f2969fc148fb7812594ffac647fa050"}
+    ],
+    "compiled_flags_expected_from_prior_profile": [
+      "-fintegrated-as",
+      "-fsanitize=kcfi",
+      "-fsanitize=shadow-call-stack",
+      "-O2",
+      "-Werror"
+    ]
+  },
+  "preflight_snapshot": {
+    "captured_at_utc": "2026-10-02T22:01:44Z",
+    "mem_available_bytes": 23861620736,
+    "filesystem_source": "/dev/nvme0n1p5",
+    "filesystem_type": "ext4",
+    "filesystem_mount_for_srv": "/",
+    "disk_free_bytes": 32119492608,
+    "disk_free_inodes": 101109135,
+    "memory_start_gate_met": true,
+    "memory_monitor_threshold_met": true,
+    "disk_monitor_threshold_met": true,
+    "disk_start_gate_met": false,
+    "disk_start_gate_required_bytes": 34359738368,
+    "launch_ready": false,
+    "note": "Current /srv resolves to root ext4, not the separate /srv capacity in an earlier coordinator snapshot; recheck after GO."
+  },
+  "artifacts": {
+    "new_module_output_directory": "/home/corpunum/s22-linux/builds/npu-native-twelve-module-only-out-20261003",
+    "new_module_output_exists": false,
+    "new_filtered_symvers_exists": false,
+    "new_olddefconfig_log_exists": false,
+    "module_build_status": "NOT_RUN",
+    "module_imports_and_exports": "NOT_RUN",
+    "module_load_or_runtime": "NOT_RUN",
+    "packaged": false,
+    "deployed": false,
+    "phone_ssh_adb": false,
+    "firmware_or_bootup": false,
+    "bootup_authorized": false,
+    "device_acceptance": "NOT_RUN"
+  }
+}
