@@ -1,0 +1,51 @@
+{
+  "schema": "s22-native-recovery-storage-readonly-baseline/v1",
+  "scope": "one bounded coordinator read-only baseline, no deployment or hardware trial",
+  "captured_at_utc": "2026-10-02T21:37:51.088037+00:00",
+  "phone": "SM-S901B r0s",
+  "pid1": "native-guardian",
+  "boot_id_unchanged_during_read": true,
+  "collector_mount_namespace_matches_native_PID1": true,
+  "RECOVERY": {
+    "by_name_target": "/dev/block/by-name/recovery",
+    "regular_block_device_verified": true,
+    "capacity_bytes": 100663296,
+    "entire_partition_sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+    "exact_retained_host_image_matches": true,
+    "host_rollback": "builds/camera-module-recovery-20260927/recovery.img",
+    "current_baseline_preserved": true,
+    "camera_hardware_accepted": false
+  },
+  "destination_specific_filesystems": [
+    {
+      "path": "/",
+      "mount_type": "overlay",
+      "free_bytes": 34844672,
+      "free_inodes": 29780,
+      "total_bytes": 610861056,
+      "read_only": false,
+      "appropriate_for_large_candidate_and_backup_staging": false
+    },
+    {
+      "path": "/srv/s22",
+      "mount_type": "ext4",
+      "free_bytes": 101570514944,
+      "free_inodes": 1652475,
+      "total_bytes": 112233304064,
+      "read_only": false,
+      "separate_native_mount_verified": true,
+      "large_image_staging_has_capacity_at_capture": true
+    }
+  ],
+  "private_full_receipt_sha256": "b5517efaafe15360b8bbea5d6ae03a245e94e04d361d97fe33b725f66f3ff8ac",
+  "overlay_backing_files_touched_or_deleted": false,
+  "packages_installed": false,
+  "phone_partition_writes_reboots_powered_tests_service_changes": 0,
+  "independent_physical_rescue": "unproven",
+  "future_deployment_authorized_by_this_receipt": false,
+  "limitations": [
+    "Free space/inodes and native namespace are measured at capture time, not a reservation; each future operation must revalidate its actual destinations and incidental writes.",
+    "Matching current RECOVERY to a readable host backup is not a Download Mode/independent hardware rescue demonstration.",
+    "The unchanged camera-containing native baseline is usable remotely, but the camera trial remains not accepted; no powered acceptance is inferred."
+  ]
+}
