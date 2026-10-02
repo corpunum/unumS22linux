@@ -506,7 +506,7 @@ def summarize_capture_gap(trial: dict[str, Any]) -> dict[str, Any]:
     rdma_disabled_all = set(rdma_counts) == {"false"}
     policy = trial["log_policy"]
     memlog = policy["objects"]["abox-mem"]
-    debug_filtered_now = memlog["enabled"] and policy["debug_level"] > memlog["level"]
+    supplied_debug_filtered = memlog["enabled"] and policy["debug_level"] > memlog["level"]
     markers = trial["retained_boundary_marker_counts"]
 
     boundaries = {}
@@ -518,9 +518,11 @@ def summarize_capture_gap(trial: dict[str, Any]) -> dict[str, Any]:
     historical_policy = (
         "linked_historical_policy_filters_debug"
         if policy["scope"] == "historical_trial" and policy["linked_to_trial"]
-        and debug_filtered_now
+        and supplied_debug_filtered
         else "current_policy_filters_debug_but_trial_policy_unlinked"
-        if debug_filtered_now
+        if policy["scope"] == "current" and supplied_debug_filtered
+        else "unlinked_historical_policy_filters_debug"
+        if policy["scope"] == "historical_trial" and supplied_debug_filtered
         else "trial_policy_or_marker_capture_coverage_unknown"
     )
     return {
@@ -530,7 +532,8 @@ def summarize_capture_gap(trial: dict[str, Any]) -> dict[str, Any]:
             "all_running_rdma_enable_values_false": rdma_disabled_all,
         },
         "producer_boundaries": boundaries,
-        "current_abox_mem_debug_policy_filters_level": debug_filtered_now,
+        "supplied_policy_scope": policy["scope"],
+        "supplied_abox_mem_debug_policy_filters_level": supplied_debug_filtered,
         "historical_policy_assessment": historical_policy,
         "localization": (
             "No progress was observed in sampled ALSA hw_ptr or RDMA enable state. "

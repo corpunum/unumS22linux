@@ -67,6 +67,19 @@ class CaptureProfileTests(unittest.TestCase):
         with self.assertRaises(profile.ProfileError):
             profile.validate_trial_summary(summary)
 
+    def test_unlinked_historical_policy_is_not_reported_as_current(self) -> None:
+        for linked in (False, True):
+            with self.subTest(linked=linked):
+                summary = trial19_summary()
+                summary["log_policy"].update(scope="historical_trial", linked_to_trial=linked)
+                gap = profile.summarize_capture_gap(profile.validate_trial_summary(summary))
+                self.assertEqual(gap["supplied_policy_scope"], "historical_trial")
+                self.assertTrue(gap["supplied_abox_mem_debug_policy_filters_level"])
+                self.assertEqual(gap["historical_policy_assessment"],
+                                 "linked_historical_policy_filters_debug" if linked else
+                                 "unlinked_historical_policy_filters_debug")
+                self.assertNotIn("current_abox_mem_debug_policy_filters_level", gap)
+
         summary = trial19_summary()
         summary["capture_coverage"] = "proven"
         with self.assertRaises(profile.ProfileError):
