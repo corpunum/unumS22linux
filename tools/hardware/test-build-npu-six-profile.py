@@ -433,6 +433,22 @@ class NpuBuildProfileSafetyTests(unittest.TestCase):
         with self.assertRaisesRegex(BUILDER.BuildError, "unexpected Android Clang"):
             BUILDER.verify_toolchain_versions(six, clang18)
 
+    def test_config_paths_and_external_module_overrides_are_refused(self) -> None:
+        # Independent literals: do not derive this negative coverage from
+        # the implementation's refusal list and accidentally omit a gate.
+        for profile_name in ("six", "native-eight"):
+            for name in ("KCONFIG_CONFIG", "KCONFIG_AUTOCONFIG",
+                         "KCONFIG_AUTOHEADER", "KBUILD_EXTMOD"):
+                for value in ("", "/controlled/alternate"):
+                    with self.subTest(profile=profile_name, name=name, value=value):
+                        with self.assertRaisesRegex(
+                                BUILDER.BuildError,
+                                rf"{profile_name} refuses inherited Kbuild override variables: {name}"):
+                            BUILDER.make_environment(
+                                BUILDER.PROFILES[profile_name],
+                                {"PATH": "/usr/bin", name: value},
+                            )
+
     def test_patch_hash_manifest_fails_closed_and_keeps_ownership_excluded(self) -> None:
         six = BUILDER.PROFILES["six"]
         native = BUILDER.PROFILES["native-eight"]

@@ -129,6 +129,9 @@ MIN_START_DISK = 32 * GIB
 MIN_REMAINING_DISK = 16 * GIB
 CLEANUP_STAGE_TIMEOUTS = (30.0, 15.0, 5.0)
 CLEANUP_POLL_INTERVAL = 0.1
+CONFIG_ENVIRONMENT_OVERRIDES = (
+    "KCONFIG_CONFIG", "KCONFIG_AUTOCONFIG", "KCONFIG_AUTOHEADER", "KBUILD_EXTMOD",
+)
 REQUIRED_CONFIG = (
     "CONFIG_EXYNOS_NPU=m",
     "CONFIG_NPU_USE_HW_DEVICE=y",
@@ -646,7 +649,8 @@ def make_environment(profile: BuildProfile,
                      inherited: dict[str, str]) -> dict[str, str]:
     """Apply only the profile's reviewed build-environment overrides."""
     inherited_overrides = [
-        name for name in profile.refuse_environment if name in inherited
+        name for name in (*CONFIG_ENVIRONMENT_OVERRIDES, *profile.refuse_environment)
+        if name in inherited
     ]
     if inherited_overrides:
         raise BuildError(
