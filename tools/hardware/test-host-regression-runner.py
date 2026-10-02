@@ -40,6 +40,8 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-audio-dma-evidence.py",
     "tools/hardware/test-audio-recovery-observer.py",
     "tools/hardware/test-input-power-readiness.py",
+    "tools/hardware/test-button-event-evidence.py",
+    "tools/hardware/test-cellular-readiness-evidence.py",
     "tools/hardware/test-camera-readiness-once.py",
     "tools/hardware/test-camera-resource-unwind.py",
     "tools/hardware/test-camera-runtime-pm-unwind.py",
