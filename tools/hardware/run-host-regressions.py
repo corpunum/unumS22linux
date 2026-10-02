@@ -72,6 +72,7 @@ REVIEWED_HOST_TEST_PATHS = (
     "tools/hardware/test-hci-recovery-profile.py",
     "tools/hardware/test-s22-hci-candidate-preflight-20260924.py",
     "tools/hardware/test-bt-h4-ibs-bridge.py",
+    "tools/hardware/test-bt-hci-lifecycle-c.py",
     "tools/hardware/test-bt-baud-reply.py",
     "tools/hardware/test-run-bt-hci-bridge-once.py",
     "tools/hardware/test-bt-qca6490-patch-receipt.py",
@@ -122,6 +123,7 @@ HOST_TESTS = (
     HostTest("tools/hardware/test-hci-recovery-profile.py"),
     HostTest("tools/hardware/test-s22-hci-candidate-preflight-20260924.py"),
     HostTest("tools/hardware/test-bt-h4-ibs-bridge.py"),
+    HostTest("tools/hardware/test-bt-hci-lifecycle-c.py"),
     HostTest("tools/hardware/test-bt-baud-reply.py"),
     HostTest("tools/hardware/test-run-bt-hci-bridge-once.py"),
     HostTest(
