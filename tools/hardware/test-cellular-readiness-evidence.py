@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 TOOL = Path(__file__).with_name("cellular-readiness-evidence.py")
@@ -40,8 +41,19 @@ class FakeSysfs:
         self.cpif_link.unlink(missing_ok=True)
         self.cpif_link.symlink_to(self.cpif)
         target = self.sysfs / "bus" / "platform" / "drivers" / driver
-        target.parent.mkdir(parents=True, exist_ok=True)
+        target.mkdir(parents=True, exist_ok=True)
         (self.cpif / "driver").symlink_to(target)
+
+    def replace_driver_link(self, target: Path, *, symlink: bool = True) -> None:
+        link = self.cpif / "driver"
+        if link.is_symlink() or link.is_file():
+            link.unlink()
+        elif link.is_dir():
+            link.rmdir()
+        if symlink:
+            link.symlink_to(target)
+        else:
+            link.mkdir()
 
     def interface(self, name: str, operstate: str) -> None:
         path = self.net / name
@@ -89,11 +101,67 @@ class CellularReadinessEvidenceTests(unittest.TestCase):
         self.assertEqual(report["cpif"]["platform_device"], "present")
         self.assertEqual(report["cpif"]["driver_binding"], "bound_cp_interface")
         self.assertEqual(report["cpif"]["modem_state"]["value"], "ONLINE")
+        self.assertEqual(report["cpif"]["module_inventory"]["listed"], ["cpif"])
+        self.assertEqual(len(report["cpif"]["module_inventory"]["not_listed"]), 6)
         self.assertEqual(report["readiness_observations"]["cp_online_state"], "observed")
         self.assertEqual(report["rmnet_inventory"]["interfaces"], [
             {"name": "rmnet0", "operstate": "up", "read_status": "ok"},
         ])
         self.assert_all_higher_layers_unknown(report)
+
+    def test_valid_other_cpif_driver_is_classified_separately(self) -> None:
+        self.fake.cpif_device("INIT\n", driver="other_cp_driver")
+
+        report = self.collect()
+
+        self.assertEqual(report["cpif"]["driver_binding"], "bound_other")
+
+    def test_dangling_cp_interface_driver_link_is_unknown(self) -> None:
+        self.fake.cpif_device("INIT\n")
+        expected = self.fake.sysfs / "bus" / "platform" / "drivers" / "cp_interface"
+        expected.rmdir()
+
+        report = self.collect()
+
+        self.assertEqual(report["cpif"]["driver_binding"], "unknown")
+
+    def test_out_of_namespace_cp_interface_basename_is_unknown(self) -> None:
+        self.fake.cpif_device("INIT\n")
+        outside = self.fake.sysfs / "devices" / "platform" / "unrelated" / "cp_interface"
+        outside.mkdir(parents=True)
+        self.fake.replace_driver_link(outside)
+
+        report = self.collect()
+
+        self.assertEqual(report["cpif"]["driver_binding"], "unknown")
+
+    def test_non_symlink_driver_entry_is_unknown(self) -> None:
+        self.fake.cpif_device("INIT\n")
+        expected = self.fake.sysfs / "bus" / "platform" / "drivers" / "cp_interface"
+        self.fake.replace_driver_link(expected, symlink=False)
+
+        report = self.collect()
+
+        self.assertEqual(report["cpif"]["driver_binding"], "unknown")
+
+    def test_per_module_stat_error_is_explicit_and_marks_partial(self) -> None:
+        self.fake.modules.mkdir(parents=True)
+        failed_path = self.fake.modules / "mcu_ipc"
+        real_lstat = Path.lstat
+
+        def injected_lstat(path: Path):
+            if path == failed_path:
+                raise PermissionError("fixture permission failure")
+            return real_lstat(path)
+
+        with mock.patch.object(Path, "lstat", autospec=True, side_effect=injected_lstat):
+            inventory = MODULE._module_inventory(self.fake.sysfs)
+
+        self.assertEqual(inventory["status"], "partial")
+        self.assertIn("mcu_ipc", inventory["unknown"])
+        self.assertEqual(inventory["errors"]["mcu_ipc"], "permission_denied")
+        self.assertEqual(inventory["per_module"]["mcu_ipc"], "unknown")
+        self.assertIn("cpif", inventory["not_listed"])
 
     def test_generic_mif_names_and_wlan_up_are_not_cpif_evidence(self) -> None:
         self.fake.interface("wlan0", "up\n")

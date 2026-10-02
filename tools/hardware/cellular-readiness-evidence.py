@@ -79,17 +79,30 @@ READINESS_KEYS = (
 
 def _lstat_status(path: Path, parent: Path) -> str:
     """Return present/absent/unknown without following the final symlink."""
+    return _lstat_result(path, parent)["status"]
+
+
+def _stat_error_name(error: OSError) -> str:
+    if isinstance(error, PermissionError):
+        return "permission_denied"
+    if isinstance(error, FileNotFoundError):
+        return "not_found"
+    return "stat_error"
+
+
+def _lstat_result(path: Path, parent: Path) -> dict[str, Any]:
+    """Return a bounded status and sanitized cause for a sysfs lstat."""
     try:
         path.lstat()
-        return "present"
+        return {"status": "present", "error": None}
     except FileNotFoundError:
         try:
             parent.stat()
-        except OSError:
-            return "unknown"
-        return "absent"
-    except OSError:
-        return "unknown"
+        except OSError as error:
+            return {"status": "unknown", "error": _stat_error_name(error)}
+        return {"status": "absent", "error": None}
+    except OSError as error:
+        return {"status": "unknown", "error": _stat_error_name(error)}
 
 
 def _read_ascii(path: Path, limit: int = MAX_ATTRIBUTE_BYTES) -> dict[str, Any]:
@@ -141,7 +154,7 @@ def _bounded_names(path: Path) -> dict[str, Any]:
         return {"status": "unreadable", "names": []}
 
 
-def _driver_binding(cpif_path: Path, device_status: str) -> str:
+def _driver_binding(cpif_path: Path, device_status: str, sysfs_root: Path) -> str:
     if device_status != "present":
         return "unknown"
     driver_path = cpif_path / "driver"
@@ -153,30 +166,77 @@ def _driver_binding(cpif_path: Path, device_status: str) -> str:
         return "unknown"
     if not stat.S_ISLNK(metadata.st_mode):
         return "unknown"
+
+    driver_root_path = sysfs_root / "bus" / "platform" / "drivers"
     try:
-        target_name = Path(os.readlink(driver_path)).name
+        driver_root_metadata = driver_root_path.lstat()
+        if not stat.S_ISDIR(driver_root_metadata.st_mode):
+            return "unknown"
+        driver_root = driver_root_path.resolve(strict=True)
+        target = driver_path.resolve(strict=True)
     except OSError:
         return "unknown"
-    if target_name == "cp_interface":
+    if not driver_root.is_dir() or not target.is_dir() or target.parent != driver_root:
+        return "unknown"
+
+    expected_path = driver_root_path / "cp_interface"
+    try:
+        expected_metadata = expected_path.lstat()
+        expected_target = expected_path.resolve(strict=True)
+    except OSError:
+        expected_metadata = None
+        expected_target = None
+    if (expected_metadata is not None
+            and stat.S_ISDIR(expected_metadata.st_mode)
+            and expected_target == target):
         return "bound_cp_interface"
     return "bound_other"
 
 
 def _module_inventory(sysfs_root: Path) -> dict[str, Any]:
     module_root = sysfs_root / "module"
-    root_status = _lstat_status(module_root, sysfs_root)
+    root_result = _lstat_result(module_root, sysfs_root)
+    root_status = root_result["status"]
     if root_status != "present":
-        return {"status": root_status, "listed": [], "not_listed": []}
+        unknown = list(CPIF_MODULES)
+        return {
+            "status": root_status,
+            "listed": [],
+            "not_listed": [],
+            "unknown": unknown,
+            "errors": {
+                name: root_result["error"] or f"module_root_{root_status}"
+                for name in CPIF_MODULES
+            },
+            "per_module": {name: "unknown" for name in CPIF_MODULES},
+        }
 
     listed: list[str] = []
     not_listed: list[str] = []
+    unknown: list[str] = []
+    errors: dict[str, str] = {}
+    per_module: dict[str, str] = {}
     for name in CPIF_MODULES:
-        status = _lstat_status(module_root / name, module_root)
+        result = _lstat_result(module_root / name, module_root)
+        status = result["status"]
         if status == "present":
             listed.append(name)
+            per_module[name] = "listed"
         elif status == "absent":
             not_listed.append(name)
-    return {"status": "ok", "listed": listed, "not_listed": not_listed}
+            per_module[name] = "not_listed"
+        else:
+            unknown.append(name)
+            per_module[name] = "unknown"
+            errors[name] = result["error"] or "stat_error"
+    return {
+        "status": "partial" if unknown else "ok",
+        "listed": listed,
+        "not_listed": not_listed,
+        "unknown": unknown,
+        "errors": errors,
+        "per_module": per_module,
+    }
 
 
 def _rmnet_inventory(sysfs_root: Path) -> dict[str, Any]:
@@ -239,7 +299,7 @@ def collect(sysfs_root: Path = Path("/sys")) -> dict[str, Any]:
         "collection_scope": "passive_fixed_sysfs_inventory",
         "cpif": {
             "platform_device": device_status,
-            "driver_binding": _driver_binding(cpif_path, device_status),
+            "driver_binding": _driver_binding(cpif_path, device_status, sysfs_root),
             "modem_state": modem_state,
             "module_inventory": _module_inventory(sysfs_root),
             "umts_class_inventory": _umts_class_inventory(sysfs_root),
