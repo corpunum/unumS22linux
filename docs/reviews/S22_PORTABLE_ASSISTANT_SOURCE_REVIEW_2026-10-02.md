@@ -252,3 +252,40 @@ and duplicate rejection, live-device-script substitution rejection, symlink
 escape rejection, and explicit execution/failure aggregation. This is a
 bounded static wiring review and policy-test result, not a run of the full
 hardware host suite.
+
+## Button collector-path test follow-up — 2026-10-02
+
+Reviewed frozen test-only follow-up b4a9e021a7b24e1433d946fe4c2817bf15afc09d
+on dcfa9754e01d344c2d88b40bcb9471ef92471bd9. The patch changes only
+test-button-event-evidence.py and the physical-buttons research note; the
+collector source is unchanged.
+
+The three new collector-path cases use a read-only temporary regular file,
+fake capability inventory, mocked fstat reporting the expected character
+device identity, a controlled select result, and fixed monotonic time. They
+exercise: an injected read error; three partial record bytes followed by EOF;
+and a five-record limit whose final raw record is a private key code that must
+not appear in serialized events. All three result paths are incomplete, and
+each test verifies that the opened descriptor is closed after collection. The
+partial-record case reports stream-ended/failed at capture level because EOF
+is also observed, while the node record separately preserves the three-byte
+partial-record fact.
+
+This follow-up adds collector-level host coverage for read error, partial
+record/EOF, and event-limit handling. Open failure, SYN_DROPPED, and
+unterminated-frame cases remain covered through analyzer/node-status tests,
+not newly injected through the collector syscall loop. The shims use only a
+temporary file descriptor; no real event node is opened.
+
+Executed only the frozen follow-up test file with bytecode disabled:
+
+    python3 -B tools/hardware/test-button-event-evidence.py
+      16 tests passed
+    python3 -B -O tools/hardware/test-button-event-evidence.py
+      16 tests passed
+    PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-button-event-evidence.py
+      16 tests passed
+
+These deterministic host tests validate collector control flow and descriptor
+cleanup for the injected cases. They do not establish live evdev reads,
+physical button activity, human origin, or downstream behavior.
