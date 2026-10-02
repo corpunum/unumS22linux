@@ -2,6 +2,17 @@
 
 ## Independent-review gate — 2026-10-03 local
 
+Subsequent paired review `74059b4d` clears the **host-source scope only** when
+this patch is accompanied by `npu-fw-report-lock-unwind.patch`. The diagnostic
+NULL-buffer unlocks are fixed in author `3c3b4ee`; test-only follow-up
+`bedc49a` closes the nonempty composed high-ID diagnostic and both-entry-IRQ
+coverage findings. Independent public/local tests passed all three Python
+modes, each compiling/running baseline and patched C at `-O0`/`-O2`.
+This is not a compiled candidate, kernel execution, BOOTUP authorization or
+hardware acceptance. The standalone finding below remains valid without
+that companion; existing gather-on-store-error data loss, callback/ring
+concurrency and publication liveness remain unresolved.
+
 This patch alone is **not cleared for a candidate or deployment**. Independent
 Luna review found a real diagnostic-path defect in the pinned `npu-log.c`:
 `fw_will_note()` takes `fw_report_lock` with IRQ save and returns `-ENOMEM`
@@ -11,9 +22,9 @@ call, not this real report implementation, so its passing bounds/type tests
 do not clear the lock unwind. The same early-return issue exists in
 `fw_will_note_to_kernel()` and `npu_fw_report_store()`.
 
-A separate narrow source/error-unwind patch and actual extracted-C tests are
-being implemented and must be independently reviewed as a pair with this
-change. NULL-buffer reachability, gather-callback lifetime and hardware
+A separate narrow source/error-unwind patch and actual extracted-C tests were
+implemented and independently reviewed as a pair as recorded above.
+NULL-buffer reachability, gather-callback lifetime and hardware
 liveness are not declared safe by the bounds/type tests. The current live
 phone has not received this patch; BOOTUP remains refused.
 
