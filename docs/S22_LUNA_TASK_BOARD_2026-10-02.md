@@ -1,5 +1,77 @@
 # S22 continuation — 2026-10-02
 
+## Completed native host build and next implementation wave — 18:45 UTC
+
+The earlier records below remain historical. The exact native-eight build
+finished at 18:16:28 UTC with exit zero and no resource abort; it was not
+restarted after later helper changes. Frozen helper `3c5be372`, source
+`872bffb8`, native config `d762d5fc...cd16` and pinned Clang 18 are bound by
+the preserved phase/build receipts. `Image`, `vmlinux` and 329 modules were
+produced. Independent Luna artifact review `c6eb5c90`, integrated `a5cca03`,
+rehashed them, matched all 329 actual modules to `modules.order`, and checked
+their version sections, remaining vermagic flags, symbol CRCs and
+`module_layout` against this output's symbol table: zero rejected modules or
+unverified CRCs. The NPU module has 234 imports. This verifies same-build ABI,
+not compatibility with the 325 currently loaded phone modules or hardware.
+The completed build contains eight NPU patches, **not** NPU9/NPU10 or the new
+audio patches. No image packaging, loading or installation occurred.
+
+- NPU10 author `394ecc49`, integrated `07ca80e`, safely lets cancellation
+  unlink a waiter before publication authorization. The actual-C baseline
+  reproduces the old caller/session-lock stall; the corrected path and stale
+  cookie tests pass at C `-O0`/`-O2` in all three local Python modes and the
+  coordinator's bounded public-fixture run. Independent worker
+  `/root/npu_drain_independent_review_20261002`, explicitly selected
+  `gpt-6-luna`/`max`, cleared only this scope in `a7dea564` (integrated
+  `e34f9f3`). Committed publication still drains indefinitely; driver close
+  can still stall in `kthread_stop()`. BOOTUP remains refused.
+- Audio PM author `fdf0834f`, integrated `02bcc7d`, checks failed
+  `pm_runtime_get_sync()`, balances with `put_noidle()` and preserves FIFO
+  without unpowered sending, failsafe/reset or automatic retry. Local/public
+  extracted-C baseline/candidate tests pass all three Python modes.
+  Independent worker `/root/audio_pm_independent_review_20261002`, also
+  explicitly `gpt-6-luna`/`max`, cleared this narrow scope at `ab0f1f0a`
+  (integrated `d9ecf4f`). Its findings produced coordinator follow-ups
+  `87d1986`/`40c8442`: an executable callback scheduling assertion and explicit
+  duplicate-direction restart limitation, independently rerun in all modes.
+- Fixed CI additions `5847824` place both actual-C scripts in both static
+  runner inventories and the independent policy test; all seven policy cases
+  pass. The expanded host suite passed 52 normal plus 49 optimized script
+  invocations, zero failures, with the existing three normal-only exclusions.
+  The callback assertion was added during that run, so it is not labeled a
+  single-frozen-HEAD result; supplementary runs and independent review cover
+  that change. Hosted CI **did** pass at exact published `bd8e5fff`:
+  [run 37045424320](https://github.com/corpunum/unumS22linux/actions/runs/37045424320),
+  with the earlier 50+47 fixed suite. New publication requires its own CI.
+- The trusted existing public AVB tool was supplied locally: deployment
+  hardening passed all 45 cases in each Python mode with **zero skips**.
+  Hosted CI's three unavailable-AVB cases remain explicitly skipped, not
+  silently relabeled. These execute generated fake-device fixtures only.
+
+Useful subsequent work is already launched, not deferred to a general plan:
+
+| Actual Luna worker | Isolated worktree | Narrow deliverable |
+| --- | --- | --- |
+| `/root/npu_ten_native_module_build_20261002` | `npu-ten-module-build-20261002` | New clean native NPU9+NPU10 source and actual module-only compile, reusing verified baseline ABI; no full-kernel receipt rebuild |
+| `/root/audio_driver_path_next_20261002` | `audio-duplicate-rekick-20261002` | Separate explicit duplicate/pending-FIFO restart patch and actual-C regressions; immutable earlier patches |
+| `/root/autonomous_driver_review_20261002` | `audio-native-module-build-20261002` | Native compile of the reviewed three audio patches in a separate source/output; serialized after NPU compile |
+
+All use the supported accepted explicit `gpt-6-luna`/`max` configuration;
+this is selection evidence, not independent backend attestation. Kernel
+builds require coordinator GO and are serialized. Only the coordinator
+accesses the phone. Independent review will remain separate from authorship.
+
+Read-only health at 18:30 UTC confirms the same boot, GNU build ID
+`b2dda820b18d410d9bf12f1bd2584567d545991d`, all 325 loaded modules, native
+control/persistent mounts, desktop/Pi/web Pi and an idle model. Battery is
+100%/Full, 26.4 C; maximum sampled thermal reading is 40 C. The available
+ring has no serious indicators, but it is neither a full-boot log nor proof
+of TrustZone progress. This turn still has zero partition writes, reboot
+requests, powered driver tests or inference requests. Consumed operations
+remain consumed; independent hardware rescue is unproven. Camera, physical
+button actions, speaker/microphone progress and cellular/IMS calls are not
+accepted by these host results.
+
 ## Ongoing autonomous implementation checkpoint — 17:44 UTC
 
 The historical entries below remain intact. This checkpoint supersedes their
