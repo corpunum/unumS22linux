@@ -256,6 +256,120 @@ int main(int argc, char **argv) {
 }
 '''
 
+WRITE_FULL_SOURCE = r'''#define _GNU_SOURCE
+#include <errno.h>
+#include <fcntl.h>
+#include <getopt.h>
+#include <poll.h>
+#include <pty.h>
+#include <signal.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <termios.h>
+#include <time.h>
+#include <unistd.h>
+#include <linux/tty.h>
+
+static ssize_t scripted_write(int fd, const void *bytes, size_t length);
+static int scripted_poll(struct pollfd *fds, nfds_t nfds, int timeout);
+#define write scripted_write
+#define poll scripted_poll
+#define S22_BT_BRIDGE_EMBED 1
+#include "tools/hardware/bt-h4-ibs-bridge.c"
+#undef write
+#undef poll
+
+enum script_mode {
+    SCRIPT_PARTIAL, SCRIPT_POLL_EINTR, SCRIPT_TIMEOUT, SCRIPT_ZERO,
+    SCRIPT_POLL_NVAL, SCRIPT_POLL_HUP, SCRIPT_POLL_ERR
+};
+static enum script_mode mode;
+static unsigned write_calls, poll_calls;
+static uint8_t output[16];
+static size_t output_n;
+
+static ssize_t scripted_write(int fd, const void *bytes, size_t length)
+{
+    (void)fd;
+    write_calls++;
+    if (mode == SCRIPT_PARTIAL) {
+        if (write_calls == 1) {
+            if (length < 2) return -1;
+            memcpy(output, bytes, 2); output_n = 2; return 2;
+        }
+        if (write_calls == 2) { errno = EINTR; return -1; }
+        if (write_calls == 3) { errno = EAGAIN; return -1; }
+        memcpy(output + output_n, bytes, length); output_n += length;
+        return (ssize_t)length;
+    }
+    if (mode == SCRIPT_POLL_EINTR) {
+        if (write_calls == 1) { errno = EAGAIN; return -1; }
+        memcpy(output, bytes, length); output_n = length;
+        return (ssize_t)length;
+    }
+    if (mode == SCRIPT_ZERO) { errno = 0; return 0; }
+    errno = EAGAIN;
+    return -1;
+}
+
+static int scripted_poll(struct pollfd *fds, nfds_t nfds, int timeout)
+{
+    (void)timeout;
+    poll_calls++;
+    if (mode == SCRIPT_TIMEOUT) return 0;
+    if (mode == SCRIPT_POLL_EINTR && poll_calls == 1) {
+        errno = EINTR;
+        return -1;
+    }
+    if (nfds != 1) return -1;
+    if (mode == SCRIPT_POLL_NVAL) fds[0].revents = POLLNVAL;
+    else if (mode == SCRIPT_POLL_HUP) fds[0].revents = POLLHUP;
+    else if (mode == SCRIPT_POLL_ERR) fds[0].revents = POLLERR;
+    else fds[0].revents = POLLOUT;
+    return 1;
+}
+
+int main(int argc, char **argv)
+{
+    static const uint8_t payload[] = {0x10, 0x21, 0x32, 0x43, 0x54, 0x65};
+    if (argc != 2) return 2;
+    if (!strcmp(argv[1], "partial")) mode = SCRIPT_PARTIAL;
+    else if (!strcmp(argv[1], "poll-eintr")) mode = SCRIPT_POLL_EINTR;
+    else if (!strcmp(argv[1], "timeout")) mode = SCRIPT_TIMEOUT;
+    else if (!strcmp(argv[1], "zero")) mode = SCRIPT_ZERO;
+    else if (!strcmp(argv[1], "poll-nval")) mode = SCRIPT_POLL_NVAL;
+    else if (!strcmp(argv[1], "poll-hup")) mode = SCRIPT_POLL_HUP;
+    else if (!strcmp(argv[1], "poll-err")) mode = SCRIPT_POLL_ERR;
+    else return 2;
+
+    running = 1;
+    errno = 0;
+    int result = write_full(17, payload, sizeof(payload));
+    int result_errno = errno;
+    int ok = 0;
+    if (mode == SCRIPT_PARTIAL || mode == SCRIPT_POLL_EINTR)
+        ok = result == 0 && output_n == sizeof(payload) &&
+             !memcmp(output, payload, sizeof(payload)) &&
+             poll_calls == (mode == SCRIPT_PARTIAL ? 1u : 2u);
+    else if (mode == SCRIPT_TIMEOUT)
+        ok = result < 0 && result_errno == ETIMEDOUT && write_calls == 1 && poll_calls == 1;
+    else if (mode == SCRIPT_POLL_NVAL || mode == SCRIPT_POLL_HUP || mode == SCRIPT_POLL_ERR) {
+        int expected_errno = mode == SCRIPT_POLL_NVAL ? EBADF :
+                             mode == SCRIPT_POLL_HUP ? EPIPE : EIO;
+        ok = result < 0 && result_errno == expected_errno &&
+             write_calls == 1 && poll_calls == 1;
+    }
+    else
+        ok = result < 0 && result_errno == EIO && write_calls == 1 && poll_calls == 0;
+    printf("write_full case=%s rc=%d errno=%d writes=%u polls=%u bytes=%zu\n",
+           argv[1], result, result_errno, write_calls, poll_calls, output_n);
+    return ok ? 0 : 1;
+}
+'''
+
 LIFECYCLE_SOURCE = r'''#define S22_BT_BRIDGE_EMBED 1
 #define ioctl s22_bt_test_ioctl
 #define socket s22_bt_test_socket
@@ -493,6 +607,7 @@ class BridgeTests(unittest.TestCase):
         cls._build_tmp = tempfile.TemporaryDirectory(prefix="s22-bt-bridge-tests-")
         cls.BINARY = os.path.join(cls._build_tmp.name, "bt-h4-ibs-bridge")
         cls.UNIT_BINARY = os.path.join(cls._build_tmp.name, "bt-h4-ibs-bridge-unit")
+        cls.WRITE_FULL_BINARY = os.path.join(cls._build_tmp.name, "bt-h4-ibs-bridge-write-full")
         cls.LIFECYCLE_BINARY = os.path.join(cls._build_tmp.name, "bt-h4-ibs-bridge-lifecycle")
         cls.PROFILE_BINARY = os.path.join(cls._build_tmp.name, "bt-qca6490-profile-test")
         source = os.path.join(ROOT, "tools/hardware/bt-h4-ibs-bridge.c")
@@ -501,6 +616,9 @@ class BridgeTests(unittest.TestCase):
         subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-O2",
                         "-pthread", "-I", ROOT, "-x", "c", "-", "-o", cls.UNIT_BINARY,
                         "-lutil", "-pthread"], input=UNIT_SOURCE, text=True, check=True)
+        subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-O2",
+                        "-I", ROOT, "-x", "c", "-", "-o", cls.WRITE_FULL_BINARY],
+                       input=WRITE_FULL_SOURCE, text=True, check=True)
         subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-O2",
                         "-pthread", "-I", ROOT, "-x", "c", "-", "-o", cls.LIFECYCLE_BINARY,
                         "-lutil", "-pthread"], input=LIFECYCLE_SOURCE, text=True, check=True)
@@ -535,6 +653,60 @@ class BridgeTests(unittest.TestCase):
             self.assertEqual(read_exact(virtual, len(EVENT)), EVENT)
         finally:
             stop_bridge(proc, virtual, physical_master, physical_slave)
+
+    def test_write_full_retries_poll_eintr(self):
+        result = subprocess.run([self.WRITE_FULL_BINARY, "poll-eintr"], check=False,
+                                capture_output=True, text=True, timeout=2)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_write_full_reports_timeout_after_backpressure(self):
+        result = subprocess.run([self.WRITE_FULL_BINARY, "timeout"], check=False,
+                                capture_output=True, text=True, timeout=2)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_write_full_maps_zero_write_to_eio(self):
+        result = subprocess.run([self.WRITE_FULL_BINARY, "zero"], check=False,
+                                capture_output=True, text=True, timeout=2)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_write_full_maps_poll_descriptor_errors(self):
+        for case in ("poll-nval", "poll-hup", "poll-err"):
+            with self.subTest(case=case):
+                result = subprocess.run([self.WRITE_FULL_BINARY, case], check=False,
+                                        capture_output=True, text=True, timeout=2)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_write_full_completes_partial_writes_across_eintr_and_backpressure(self):
+        result = subprocess.run([self.WRITE_FULL_BINARY, "partial"], check=False,
+                                capture_output=True, text=True, timeout=2)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_cli_restores_uart_termios_after_bridge_error(self):
+        physical_master, physical_slave = pty.openpty()
+        raw(physical_master)
+        raw(physical_slave)
+        original = termios.tcgetattr(physical_slave)
+        proc = subprocess.Popen([self.BINARY, "--uart", os.ttyname(physical_slave)],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        virtual = None
+        try:
+            virtual_name = proc.stdout.readline().strip()
+            self.assertTrue(virtual_name.startswith("/dev/pts/"), virtual_name)
+            virtual = os.open(virtual_name, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+            raw(virtual)
+            os.write(virtual, b"\x06")
+            stdout, stderr = proc.communicate(timeout=2)
+            self.assertNotEqual(proc.returncode, 0, stdout + stderr)
+            self.assertEqual(termios.tcgetattr(physical_slave), original,
+                             "bridge error left caller UART termios changed")
+        finally:
+            if proc.poll() is None:
+                proc.send_signal(signal.SIGTERM)
+                proc.communicate(timeout=2)
+            if virtual is not None:
+                os.close(virtual)
+            os.close(physical_master)
+            os.close(physical_slave)
 
     def test_queue_bound_fails_closed(self):
         proc, virtual, physical_master, physical_slave = start_bridge(self)
