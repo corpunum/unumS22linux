@@ -25,6 +25,13 @@ sys.modules[SPEC.name] = BUILDER
 SPEC.loader.exec_module(BUILDER)
 
 
+def isolated_cli(*args: str) -> list[str]:
+    # -I ignores PYTHONOPTIMIZE, so propagate the tested mode explicitly.
+    optimize = ["-O"] if sys.flags.optimize else []
+    return [sys.executable, *optimize, "-I", "-S", "-B",
+            str(BUILDER_PATH), *args]
+
+
 def fixture_git(*args: str, cwd: Path) -> str:
     result = subprocess.run(
         ["/usr/bin/git", "--no-pager", "-C", str(cwd), *args],
@@ -104,7 +111,7 @@ class CandidateBuilderPortableTests(unittest.TestCase):
         blocked = (
             "CC", "CFLAGS", "CPATH", "C_INCLUDE_PATH", "COMPILER_PATH",
             "GCC_EXEC_PREFIX", "LIBRARY_PATH", "DEPENDENCIES_OUTPUT",
-            "GIT_DIR", "KCONFIG_CONFIG", "KBUILD_OUTPUT",
+            "GIT_DIR", "KCONFIG_CONFIG", "KBUILD_OUTPUT", "TMPDIR",
         )
         for name in blocked:
             with self.subTest(name=name):
@@ -113,10 +120,10 @@ class CandidateBuilderPortableTests(unittest.TestCase):
         BUILDER.check_environment({"GIT_PAGER": "cat"})
 
     def test_real_cli_subprocess_refuses_inherited_compiler_redirection(self):
-        environment = os.environ.copy()
+        environment = BUILDER.clean_git_env()
         environment["CPATH"] = "/tmp/bt-include-redirect"
         completed = subprocess.run(
-            [sys.executable, "-B", str(BUILDER_PATH), "--check-only"],
+            isolated_cli("--check-only"),
             cwd=ROOT,
             env=environment,
             capture_output=True,
@@ -125,6 +132,41 @@ class CandidateBuilderPortableTests(unittest.TestCase):
         )
         self.assertEqual(completed.returncode, 2)
         self.assertIn("unsafe environment variable set: CPATH", completed.stderr)
+
+    def test_real_cli_refuses_redirected_tmpdir_without_relaxing_guard(self):
+        environment = BUILDER.clean_git_env()
+        environment["TMPDIR"] = "/tmp/bt-temp-redirect"
+        completed = subprocess.run(
+            isolated_cli("--check-only"), cwd=ROOT, env=environment,
+            capture_output=True, text=True, timeout=10,
+        )
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("unsafe environment variable set: TMPDIR", completed.stderr)
+
+    def test_nonisolated_cli_is_refused_before_preflight(self):
+        completed = subprocess.run(
+            [sys.executable, "-B", str(BUILDER_PATH), "--check-only"],
+            cwd=ROOT, env=BUILDER.clean_git_env(), capture_output=True,
+            text=True, timeout=10,
+        )
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("requires Python -I -S", completed.stderr)
+
+    def test_isolated_cli_does_not_load_injected_sitecustomize(self):
+        with tempfile.TemporaryDirectory(prefix="bt-python-startup-") as temporary:
+            root = Path(temporary)
+            marker = root / "startup-executed"
+            (root / "sitecustomize.py").write_text(
+                "from pathlib import Path\n"
+                f"Path({str(marker)!r}).touch()\n", encoding="ascii")
+            environment = BUILDER.clean_git_env()
+            environment["PYTHONPATH"] = str(root)
+            completed = subprocess.run(
+                isolated_cli("--help"), cwd=ROOT, env=environment,
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertFalse(marker.exists())
 
     def test_preflight_child_environment_is_allowlisted(self):
         self.assertEqual(BUILDER.clean_git_env(), {
@@ -197,8 +239,9 @@ class CandidateBuilderLocalFixtureTests(unittest.TestCase):
         self.require_local_fixture()
         output_before = BUILDER.OUTPUT_DIR.exists()
         completed = subprocess.run(
-            [sys.executable, "-B", str(BUILDER_PATH), "--check-only"],
+            isolated_cli("--check-only"),
             cwd=ROOT,
+            env=BUILDER.clean_git_env(),
             capture_output=True,
             text=True,
             timeout=60,

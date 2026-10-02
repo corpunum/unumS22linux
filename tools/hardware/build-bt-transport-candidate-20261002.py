@@ -711,6 +711,8 @@ def main(argv: list[str] | None = None) -> int:
                        help="run exactly one bounded host AArch64 static build")
     args = parser.parse_args(argv)
     try:
+        require(bool(sys.flags.isolated) and bool(sys.flags.no_site),
+                "CLI requires Python -I -S startup isolation")
         preflight = run_preflight()
         if args.check_only:
             payload = {
