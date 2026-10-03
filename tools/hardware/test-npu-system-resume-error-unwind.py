@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import sys
@@ -13,7 +14,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 HELPER_PATH = ROOT / "tools/hardware/test-npu-probe-unwind.py"
-STACK_PATH = ROOT / "tools/hardware/test-npu-candidate-stack.py"
+BUILD_PROFILE_PATH = ROOT / "tools/hardware/build-npu-six-profile.py"
 PATCH_PATH = ROOT / "tools/hardware/npu-system-resume-error-unwind.patch"
 NPU13_PATCH_PATH = ROOT / "tools/hardware/npu-interface-open-unwind.patch"
 HARNESS_PATH = ROOT / "tools/hardware/npu-system-resume-error-unwind-harness.c"
@@ -35,7 +36,11 @@ DEVICE_SHA256 = "98be21e422ca864cc971dfe6a78e71b292d7691cb625c1f029bf4502100644a
 COMPOSED_DEVICE_SHA256 = "a281fd35f2311951328d797824b8dbb165639bfc7977da30044bb764688cdc11"
 HWDEV_SHA256 = "b052462aa4919458a2b86c7ba0aed78bfdb938690cd58d5dcd01bdf0d75a312b"
 INTERFACE_SHA256 = "c2deaa0abd990184b64373bb13983f048b925e0f5f421f6623de7de85f667108"
+RAW_HWDEV_SHA256 = "14617a6f8e5b08e1bb169618daa8544f2680ad6709cb9f3b9730919d4dc8e16f"
+RAW_INTERFACE_SHA256 = INTERFACE_SHA256
 NPU13_PATCH_SHA256 = "95e63b45d60e0a2611c1f2dcab4428e5658a03ff9954b8197d175ac6fec139cb"
+FROZEN_NPU14_COMMIT = "4a22948184f101f2bd80d2f44eef44b46004b790"
+FROZEN_NPU14_PATCH_SHA256 = "464a78b43f7ef0cc7e26b5f69075980460211f9c789d0a418b36d44be548968e"
 MAX_PATCH_BYTES = 512 * 1024
 
 
@@ -55,7 +60,7 @@ def load_module(path: Path, name: str):
 
 
 SOURCE_LOADER = load_module(HELPER_PATH, "s22_npu_resume_source_loader")
-STACK = load_module(STACK_PATH, "s22_npu_resume_stack_loader")
+BUILD_PROFILE = load_module(BUILD_PROFILE_PATH, "s22_npu_resume_build_profile")
 
 
 def digest(data: bytes) -> str:
@@ -74,8 +79,11 @@ def git_output(root: Path, *args: str) -> str:
 
 def read_pinned_local(root: Path, commit: str, paths: tuple[tuple[str, str], ...],
                       label: str) -> dict[str, bytes]:
-    root = root.expanduser().resolve()
-    check(root.is_dir(), f"{label} tree is absent: {root}")
+    root = root.expanduser()
+    check(not root.is_symlink(), f"{label} tree must not be a symlink: {root}")
+    root = root.resolve()
+    check(root.is_dir(),
+          f"{label} tree is absent or a symlink: {root}")
     check(git_output(root, "rev-parse", "HEAD") == commit,
           f"{label} tree must be {commit}")
     check(not git_output(root, "status", "--porcelain"),
@@ -100,20 +108,29 @@ def read_pinned_local(root: Path, commit: str, paths: tuple[tuple[str, str], ...
 
 
 def load_public_source() -> dict[str, bytes]:
-    paths = ((SYSTEM_C, SYSTEM_SHA256), (DEVICE_C, DEVICE_SHA256))
-    old = SOURCE_LOADER.SOURCE_SHA256.get(DEVICE_C)
-    SOURCE_LOADER.SOURCE_SHA256[DEVICE_C] = DEVICE_SHA256
+    paths = (
+        (SYSTEM_C, SYSTEM_SHA256),
+        (DEVICE_C, DEVICE_SHA256),
+        (HWDEV_C, RAW_HWDEV_SHA256),
+        (INTERFACE_C, RAW_INTERFACE_SHA256),
+    )
+    old = {relative: SOURCE_LOADER.SOURCE_SHA256.get(relative)
+           for relative, _ in paths}
+    for relative, expected in paths:
+        SOURCE_LOADER.SOURCE_SHA256[relative] = expected
     try:
         loaded = {relative: SOURCE_LOADER.fetch_source(relative)
                   for relative, _ in paths}
     finally:
-        if old is None:
-            SOURCE_LOADER.SOURCE_SHA256.pop(DEVICE_C, None)
-        else:
-            SOURCE_LOADER.SOURCE_SHA256[DEVICE_C] = old
+        for relative, _ in paths:
+            if old[relative] is None:
+                SOURCE_LOADER.SOURCE_SHA256.pop(relative, None)
+            else:
+                SOURCE_LOADER.SOURCE_SHA256[relative] = old[relative]
     for relative, expected in paths:
         check(digest(loaded[relative]) == expected,
               f"raw public {relative} digest mismatch")
+    print(f"SOURCE: bounded public fetch from {SOURCE_LOADER.SOURCE_URL}/{PINNED_BASE}")
     return loaded
 
 
@@ -147,98 +164,189 @@ def enum_definition(source: str, marker: str) -> str:
     return source[start:end + 2]
 
 
-def apply_one(tree: Path, patch_path: Path, label: str) -> None:
-    patch = patch_path.read_bytes()
-    check(len(patch) <= MAX_PATCH_BYTES, f"patch exceeds bounded size: {patch_path.name}")
-    checked = subprocess.run(
-        ["git", "apply", "--check", "--whitespace=error-all", str(patch_path)],
-        cwd=tree, capture_output=True, text=True, check=False, timeout=10,
-    )
-    check(checked.returncode == 0,
-          f"ordinary git apply --check failed for {label}:\n{checked.stderr}")
-    applied = subprocess.run(
-        ["git", "apply", "--whitespace=error-all", str(patch_path)],
-        cwd=tree, capture_output=True, text=True, check=False, timeout=10,
-    )
-    check(applied.returncode == 0,
-          f"ordinary git apply failed for {label}:\n{applied.stderr}")
+def patch_paths(patch: bytes) -> set[str]:
+    text = patch.decode("utf-8", errors="strict")
+    paths = set(re.findall(r"^diff --git a/(\S+) b/\S+$", text, re.MULTILINE))
+    if not paths:
+        paths = set(re.findall(r"^--- a/(\S+)$", text, re.MULTILINE))
+    return paths
 
 
-def build_composed_source(composed_root: Path, destination: Path) -> dict[str, dict[str, bytes]]:
-    sources = read_pinned_local(
-        composed_root, COMPOSED12_COMMIT,
-        ((SYSTEM_C, SYSTEM_SHA256), (DEVICE_C, COMPOSED_DEVICE_SHA256),
-         (HWDEV_C, HWDEV_SHA256), (INTERFACE_C, INTERFACE_SHA256)),
-        "composed NPU12 kernel source",
-    )
+def apply_selected_patch(tree: Path, patch: bytes, label: str,
+                         selected: tuple[str, ...]) -> tuple[str, ...]:
+    check(len(patch) <= MAX_PATCH_BYTES, f"patch exceeds bounded size: {label}")
+    touched = tuple(sorted(patch_paths(patch).intersection(selected)))
+    if not touched:
+        return ()
+    text = patch.decode("utf-8", errors="strict")
+    for check_only in (True, False):
+        command = ["git", "apply", "--whitespace=error-all"]
+        if check_only:
+            command.append("--check")
+        for relative in touched:
+            command.extend(("--include", relative))
+        command.append("-")
+        result = subprocess.run(
+            command, cwd=tree, input=text, capture_output=True, text=True,
+            check=False, timeout=10,
+        )
+        operation = "--check" if check_only else "apply"
+        check(result.returncode == 0,
+              f"ordinary selected-path git apply {operation} failed for {label}:\n"
+              f"{result.stderr}")
+    return touched
+
+
+def copy_sources(sources: dict[str, bytes], destination: Path) -> None:
     for relative, data in sources.items():
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
+
+
+def read_selected_sources(tree: Path) -> dict[str, bytes]:
+    return {relative: (tree / relative).read_bytes()
+            for relative in (SYSTEM_C, DEVICE_C, HWDEV_C, INTERFACE_C)}
+
+
+def legacy_npu14_patch() -> bytes:
+    relative = str(PATCH_PATH.relative_to(ROOT))
+    result = subprocess.run(
+        ["git", "-C", str(ROOT), "show",
+         f"{FROZEN_NPU14_COMMIT}:{relative}"],
+        capture_output=True, check=False, timeout=10,
+    )
+    check(result.returncode == 0,
+          "frozen pre-correction NPU14 patch commit is unavailable")
+    check(digest(result.stdout) == FROZEN_NPU14_PATCH_SHA256,
+          "frozen pre-correction NPU14 patch digest changed")
+    return result.stdout
+
+
+def verify_optional_local_fixtures(public: dict[str, bytes]) -> None:
+    raw_paths = ((SYSTEM_C, SYSTEM_SHA256), (DEVICE_C, DEVICE_SHA256),
+                 (HWDEV_C, RAW_HWDEV_SHA256),
+                 (INTERFACE_C, RAW_INTERFACE_SHA256))
+    configured_derived = os.environ.get(SOURCE_TREE_ENV)
+    derived_root = Path(configured_derived).expanduser() if configured_derived else DEFAULT_DERIVED_TREE
+    if configured_derived or derived_root.exists() or derived_root.is_symlink():
+        derived = read_pinned_local(derived_root, DERIVED_COMMIT, raw_paths,
+                                    "optional clean 3fca-derived fixture")
+        check(derived == public,
+              "public raw-pinned sources differ from supplied clean-derived fixture")
+        print(f"SOURCE: optional clean derived fixture {DERIVED_COMMIT} verified")
+    else:
+        print("SOURCE: optional clean derived fixture absent; public route continues")
+
+    configured_composed = os.environ.get(COMPOSED_TREE_ENV)
+    composed_root = Path(configured_composed).expanduser() if configured_composed else DEFAULT_COMPOSED_TREE
+    npu12_paths = ((SYSTEM_C, SYSTEM_SHA256), (DEVICE_C, COMPOSED_DEVICE_SHA256),
+                   (HWDEV_C, HWDEV_SHA256), (INTERFACE_C, INTERFACE_SHA256))
+    if configured_composed or composed_root.exists() or composed_root.is_symlink():
+        composed = read_pinned_local(composed_root, COMPOSED12_COMMIT,
+                                     npu12_paths,
+                                     "optional clean composed NPU12 fixture")
+        changed = subprocess.run(
+            ["git", "-C", str(composed_root), "diff", "--name-only",
+             "872bffb8ea2ea657f94d10b866dc655b5718d6db",
+             COMPOSED12_COMMIT, "--", SYSTEM_C, DEVICE_C, HWDEV_C, INTERFACE_C],
+            capture_output=True, text=True, check=False, timeout=10,
+        )
+        check(changed.returncode == 0 and not changed.stdout.strip(),
+              "NPU9-12 source history unexpectedly changes a selected NPU source input")
+        print("SOURCE: optional NPU12 fixture and NPU8-to-NPU12 selected-path history verified")
+    else:
+        print("SOURCE: optional composed NPU12 fixture absent; public composition hash checks remain active")
+
+
+def compose_public_source(public: dict[str, bytes]) -> dict[str, dict[str, bytes]]:
+    selected = (SYSTEM_C, DEVICE_C, HWDEV_C, INTERFACE_C)
+    npu12_hashes = {
+        SYSTEM_C: SYSTEM_SHA256,
+        DEVICE_C: COMPOSED_DEVICE_SHA256,
+        HWDEV_C: HWDEV_SHA256,
+        INTERFACE_C: INTERFACE_SHA256,
+    }
+    patch_specs = BUILD_PROFILE.NATIVE_EIGHT_PATCHES
+    for name, expected in patch_specs:
+        path = ROOT / "tools/hardware" / name
+        check(path.is_file(), f"pinned native-eight source patch is missing: {name}")
+        data = path.read_bytes()
+        check(digest(data) == expected,
+              f"pinned native-eight patch digest mismatch: {name}")
     check(digest(NPU13_PATCH_PATH.read_bytes()) == NPU13_PATCH_SHA256,
           "NPU13 interface patch bytes changed")
-    apply_one(destination, NPU13_PATCH_PATH, "NPU13 interface patch after NPU12")
-    before = {
-        SYSTEM_C: (destination / SYSTEM_C).read_bytes(),
-        DEVICE_C: (destination / DEVICE_C).read_bytes(),
-        HWDEV_C: (destination / HWDEV_C).read_bytes(),
-    }
-    apply_one(destination, PATCH_PATH, "NPU14 system resume patch after NPU12+13")
-    after = {
-        SYSTEM_C: (destination / SYSTEM_C).read_bytes(),
-        DEVICE_C: (destination / DEVICE_C).read_bytes(),
-        HWDEV_C: (destination / HWDEV_C).read_bytes(),
-    }
-    return {"before": before, "after": after}
+    check(digest(PATCH_PATH.read_bytes()) != FROZEN_NPU14_PATCH_SHA256,
+          "current NPU14 patch unexpectedly equals its pre-correction predecessor")
 
-
-def verify_patch_order_and_source_identities(public: dict[str, bytes]) -> dict[str, bytes]:
-    for relative, expected in ((SYSTEM_C, SYSTEM_SHA256), (DEVICE_C, DEVICE_SHA256)):
-        check(digest(public[relative]) == expected,
-              f"raw public identity is not pinned for {relative}")
-
-    derived_root = Path(os.environ.get(SOURCE_TREE_ENV, str(DEFAULT_DERIVED_TREE)))
-    derived = read_pinned_local(
-        derived_root, DERIVED_COMMIT,
-        ((SYSTEM_C, SYSTEM_SHA256), (DEVICE_C, DEVICE_SHA256)),
-        "clean 3fca-derived fixture",
-    )
-    composed_root = Path(os.environ.get(COMPOSED_TREE_ENV, str(DEFAULT_COMPOSED_TREE)))
-    composed_current = read_pinned_local(
-        composed_root, COMPOSED12_COMMIT,
-        ((SYSTEM_C, SYSTEM_SHA256), (DEVICE_C, COMPOSED_DEVICE_SHA256)),
-        "clean composed NPU12 fixture",
-    )
-    check(derived == public,
-          "raw public and clean-derived source bytes must match exactly")
-    check(composed_current[SYSTEM_C] == public[SYSTEM_C],
-          "NPU12 source must preserve the system file targeted by NPU14")
-
-    # Verify existing NPU12 patch pins and add the NPU13 patch before NPU14 in
-    # an isolated three-file copy. Neither actual kernel worktree is mutated.
-    STACK.patch_paths()
+    before_npu14: dict[str, bytes]
+    prior_npu14: dict[str, bytes]
+    after_npu14: dict[str, bytes]
     with tempfile.TemporaryDirectory(prefix="npu-system-resume-compose-") as temp:
-        composite = Path(temp)
-    output = build_composed_source(composed_root, composite)
-    check(output["before"][SYSTEM_C] == public[SYSTEM_C],
-          "NPU12+13 baseline system source must match raw pinned source")
-    check(output["after"][SYSTEM_C] != output["before"][SYSTEM_C],
-          "NPU14 patch must alter the real extracted npu-system.c")
-    check(output["after"][DEVICE_C] != output["before"][DEVICE_C],
-          "NPU14 patch must alter the real extracted npu-device.c")
+        parent = Path(temp)
+        npu12 = parent / "npu12"
+        copy_sources(public, npu12)
+        for name, _expected in patch_specs:
+            path = ROOT / "tools/hardware" / name
+            touched = apply_selected_patch(npu12, path.read_bytes(), name, selected)
+            if touched:
+                print(f"SOURCE: selected-path ordinary apply {name}: {', '.join(touched)}")
+        npu12_sources = read_selected_sources(npu12)
+        for relative, expected in npu12_hashes.items():
+            check(digest(npu12_sources[relative]) == expected,
+                  f"NPU12 selected-source hash mismatch for {relative}: "
+                  f"{digest(npu12_sources[relative])}")
+        print("SOURCE: public raw source + pinned native-eight profile patches reproduce exact NPU12 selected hashes")
 
-    # Separately prove ordinary apply to the 3fca clean-derived source fixture.
+        npu13 = parent / "npu13"
+        copy_sources(npu12_sources, npu13)
+        apply_selected_patch(npu13, NPU13_PATCH_PATH.read_bytes(),
+                             "NPU13 interface patch after selected NPU12 stack",
+                             selected)
+        before_npu14 = read_selected_sources(npu13)
+
+        legacy = parent / "legacy-npu14"
+        copy_sources(before_npu14, legacy)
+        apply_selected_patch(legacy, legacy_npu14_patch(),
+                             "frozen pre-correction NPU14 patch after NPU13",
+                             selected)
+        prior_npu14 = read_selected_sources(legacy)
+
+        fixed = parent / "corrected-npu14"
+        copy_sources(before_npu14, fixed)
+        apply_selected_patch(fixed, PATCH_PATH.read_bytes(),
+                             "corrected NPU14 patch after NPU13",
+                             selected)
+        after_npu14 = read_selected_sources(fixed)
+
+    check(before_npu14[SYSTEM_C] == public[SYSTEM_C],
+          "NPU12+NPU13 system source must match raw pinned system source")
+    check(after_npu14[SYSTEM_C] != prior_npu14[SYSTEM_C] and
+          after_npu14[DEVICE_C] == prior_npu14[DEVICE_C],
+          "correction must be confined to the NPU14 system source path")
+    check(after_npu14[DEVICE_C] != before_npu14[DEVICE_C],
+          "NPU14 patch must still alter the actual extracted npu-device.c")
+
+    # Optional fixture checks are corroboration only; public composition above
+    # is the runnable source route and does not depend on either private tree.
+    verify_optional_local_fixtures(public)
     with tempfile.TemporaryDirectory(prefix="npu-system-resume-derived-") as temp:
-        derived_copy = Path(temp)
-        for relative, data in derived.items():
-            target = derived_copy / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(data)
-        apply_one(derived_copy, PATCH_PATH, "NPU14 patch on clean 3fca fixture")
-    print("SOURCE: supplied raw-pinned system/device bytes match exact SHA-256 values")
-    print(f"SOURCE: clean derived fixture {DERIVED_COMMIT} verified; ordinary apply passed")
-    print(f"SOURCE: clean composed NPU12 {COMPOSED12_COMMIT}; NPU13 then NPU14 ordinary apply passed")
-    return output["before"], output["after"]
+        derived_root = Path(os.environ.get(SOURCE_TREE_ENV, str(DEFAULT_DERIVED_TREE)))
+        if derived_root.exists() or derived_root.is_symlink():
+            derived = read_pinned_local(
+                derived_root, DERIVED_COMMIT,
+                ((SYSTEM_C, SYSTEM_SHA256), (DEVICE_C, DEVICE_SHA256)),
+                "clean 3fca-derived fixture",
+            )
+            derived_copy = Path(temp)
+            copy_sources(derived, derived_copy)
+            apply_selected_patch(derived_copy, PATCH_PATH.read_bytes(),
+                                 "corrected NPU14 patch on clean 3fca-derived fixture",
+                                 (SYSTEM_C, DEVICE_C))
+            print("SOURCE: ordinary corrected-patch apply passed on optional clean-derived fixture")
+    print("SOURCE: selected NPU12->NPU13->NPU14 apply order verified on public exact-SHA inputs")
+    return {"before": before_npu14, "precorrection": prior_npu14,
+            "after": after_npu14}
 
 
 def render_harness(template: str, system_bytes: bytes, device_bytes: bytes,
@@ -279,9 +387,10 @@ def render_harness(template: str, system_bytes: bytes, device_bytes: bytes,
 
 
 def compile_run(cc: list[str], level: str, text: str, directory: Path,
-                baseline: bool, boot_ioctl: bool) -> str:
+                baseline: bool, boot_ioctl: bool,
+                precorrection: bool = False) -> str:
     variant = "boot" if boot_ioctl else "runtime"
-    tag = "base" if baseline else "fixed"
+    tag = "base" if baseline else "pre-correction" if precorrection else "fixed"
     source_file = directory / f"npu-system-resume-{variant}-{tag}-{level[2:]}.c"
     binary = directory / f"npu-system-resume-{variant}-{tag}-{level[2:]}"
     source_file.write_text(text, encoding="utf-8")
@@ -291,6 +400,8 @@ def compile_run(cc: list[str], level: str, text: str, directory: Path,
                "-pthread", level]
     if baseline:
         command.append("-DEXPECT_BASELINE=1")
+    if precorrection:
+        command.append("-DEXPECT_PRECORRECTION=1")
     if boot_ioctl:
         command.append("-DTEST_BOOT_IOCTL=1")
     command.extend((str(source_file), "-o", str(binary)))
@@ -298,12 +409,12 @@ def compile_run(cc: list[str], level: str, text: str, directory: Path,
                            check=False, timeout=30)
     check(built.returncode == 0,
           f"actual extracted source did not compile at {level}/{variant}/"
-          f"{'baseline' if baseline else 'patched'}:\n{built.stderr}")
+          f"{'baseline' if baseline else 'pre-correction' if precorrection else 'patched'}:\n{built.stderr}")
     result = subprocess.run([str(binary)], capture_output=True, text=True,
                             check=False, timeout=15)
     check(result.returncode == 0,
           f"actual extracted source failed at {level}/{variant}/"
-          f"{'baseline' if baseline else 'patched'}:\n"
+          f"{'baseline' if baseline else 'pre-correction' if precorrection else 'patched'}:\n"
           f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}")
     return result.stdout
 
@@ -318,23 +429,32 @@ def main() -> int:
         help="use the exact SHA-pinned clean derived source when public fetch is unavailable",
     )
     args = parser.parse_args()
+    print(f"PY: sys.flags.optimize={sys.flags.optimize}")
     if args.local_only:
         derived_root = Path(os.environ.get(SOURCE_TREE_ENV,
                                            str(DEFAULT_DERIVED_TREE)))
         public = read_pinned_local(
             derived_root, DERIVED_COMMIT,
-            ((SYSTEM_C, SYSTEM_SHA256), (DEVICE_C, DEVICE_SHA256)),
+            ((SYSTEM_C, SYSTEM_SHA256), (DEVICE_C, DEVICE_SHA256),
+             (HWDEV_C, RAW_HWDEV_SHA256),
+             (INTERFACE_C, RAW_INTERFACE_SHA256)),
             "raw-pinned source bytes from clean derived fixture",
         )
-        print("SOURCE: --local-only; clean-derived file bytes match raw pinned SHA-256 values")
+        print("SOURCE: --local-only; four clean-derived source files match raw pinned SHA-256 values")
     else:
         public = load_public_source()
-    composed_baseline, patched = verify_patch_order_and_source_identities(public)
+    composed = compose_public_source(public)
     template = HARNESS_PATH.read_text(encoding="utf-8")
-    baseline = render_harness(template, composed_baseline[SYSTEM_C],
-                              composed_baseline[DEVICE_C], composed_baseline[HWDEV_C])
-    fixed = render_harness(template, patched[SYSTEM_C], patched[DEVICE_C],
-                           patched[HWDEV_C])
+    baseline = render_harness(template, composed["before"][SYSTEM_C],
+                              composed["before"][DEVICE_C],
+                              composed["before"][HWDEV_C])
+    precorrection = render_harness(
+        template, composed["precorrection"][SYSTEM_C],
+        composed["precorrection"][DEVICE_C],
+        composed["precorrection"][HWDEV_C])
+    fixed = render_harness(template, composed["after"][SYSTEM_C],
+                           composed["after"][DEVICE_C],
+                           composed["after"][HWDEV_C])
     compiler = shlex.split(args.cc)
     check(compiler, "C compiler command cannot be empty")
 
@@ -347,6 +467,9 @@ def main() -> int:
                                          baseline=True, boot_ioctl=boot_ioctl)
                 fixed_output = compile_run(compiler, level, fixed, directory,
                                           baseline=False, boot_ioctl=boot_ioctl)
+                precorrection_output = compile_run(
+                    compiler, level, precorrection, directory,
+                    baseline=False, boot_ioctl=boot_ioctl, precorrection=True)
                 expected_base = (
                     "REPRO: firmware error is reported as runtime-resume success",
                     "REPRO: bootup error path directly closes with the NPU CPU still on",
@@ -391,6 +514,8 @@ def main() -> int:
                       "baseline first-allocation failure repro is missing")
                 check("PASS: first actual log allocation failure returns -ENOMEM without buffer ownership" in fixed_output,
                       "patched first-allocation failure regression is missing")
+                check("REPRO: pre-correction NPU14 requests firmware shutdown before unknown-SoC quarantine" in precorrection_output,
+                      f"pre-correction ordering negative control missing at {level}/{boot_ioctl}")
                 check("PASS: actual NPU hwdev callback balances PM on failure and success" in base_output and
                       "PASS: actual NPU hwdev callback balances PM on failure and success" in fixed_output,
                       "actual default hwdev callback refcount regression is missing")
@@ -405,13 +530,17 @@ def main() -> int:
                     for text in (
                         "PASS: clock-prepare failure propagates and rolls back earlier owned stages",
                         "PASS: uncertain STM acquisition is quarantined without guessed inverse",
+                        "PASS: partial STM-enable failure preserves firmware and wake ownership before quarantine",
                         "PASS: STM inverse failure retains ownership and stops lower teardown",
                     ):
                         check(text in fixed_output,
                               f"runtime-PM patched regression missing at {level}: {text}")
-                total += 2
-                print(f"C: {level} {'CONFIG_NPU_USE_BOOT_IOCTL' if boot_ioctl else 'runtime-PM'} baseline+patched passed")
-        print(f"PASS: {total} extracted-C compile/run jobs across O0/O2 and both resume callers")
+                else:
+                    check("PASS: partial CPU_ON failure preserves firmware and wake ownership before quarantine" in fixed_output,
+                          f"configured CPU_ON pre-teardown guard missing at {level}")
+                total += 3
+                print(f"C: {level} {'CONFIG_NPU_USE_BOOT_IOCTL' if boot_ioctl else 'runtime-PM'} baseline+pre-correction+patched passed")
+        print(f"PASS: {total} extracted-C compile/run jobs across O0/O2, both callers, and the pre-correction control")
     return 0
 
 

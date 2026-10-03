@@ -191,7 +191,7 @@ diff --git a/drivers/vision/npu/core/npu-system.c b/drivers/vision/npu/core/npu-
 +		return resume_error;
 +	}
  }
-@@ -1780,58 +1855,101 @@ int npu_system_suspend(struct npu_system *system)
+@@ -1780,58 +1855,115 @@ int npu_system_suspend(struct npu_system *system)
  	npu_info("fw_cold_boot(%d)\n", system->fw_cold_boot);
  
 +	if (test_bit(NPU_SYS_RESUME_OPEN_INTERFACE_CLOSE_UNCERTAIN,
@@ -200,6 +200,20 @@ diff --git a/drivers/vision/npu/core/npu-system.c b/drivers/vision/npu/core/npu-
 +		ret = -EUCLEAN;
 +		goto p_err;
 +	}
++	if (test_bit(NPU_SYS_RESUME_SOC_CPU_ON_UNCERTAIN,
++			&system->resume_soc_steps)) {
++		npu_err("CPU-on outcome is uncertain; preserving firmware and SoC ownership\n");
++		ret = -EUCLEAN;
++		goto p_err;
++	}
++#ifndef CONFIG_NPU_USE_BOOT_IOCTL
++	if (test_bit(NPU_SYS_RESUME_SOC_STM_UNCERTAIN,
++			&system->resume_soc_steps)) {
++		npu_err("STM-enable outcome is uncertain; preserving firmware and SoC ownership\n");
++		ret = -EUCLEAN;
++		goto p_err;
++	}
++#endif
 +
 -	BIT_CHECK_AND_EXECUTE(NPU_SYS_RESUME_COMPLETED, &system->resume_steps, NULL, ;);
 +	clear_bit(NPU_SYS_RESUME_COMPLETED, &system->resume_steps);
