@@ -35,6 +35,10 @@ def load(name: str, path: Path):
 DEPLOY = load("s22_deploy_audio_extra", ROOT / "tools/hardware/deploy-audio-extra-recovery.py")
 BASE = load("s22_deploy_audio_base", ROOT / "tools/hardware/deploy-audio-recovery.py")
 BUILDER = load("s22_build_bt_hci_recovery", ROOT / "tools/hardware/build-bt-hci-recovery.py")
+BT_HCI_RUNNER = load(
+    "s22_run_bt_hci_bridge_once",
+    ROOT / "tools/hardware/run-bt-hci-bridge-once.py",
+)
 
 
 class ArtifactValidationTests(unittest.TestCase):
@@ -86,6 +90,72 @@ class ArtifactValidationTests(unittest.TestCase):
             lineage_path or self.lineage_path,
             **args,
         )
+
+    def test_shared_remote_receipts_reject_equal_but_wrong_json_primitive_types(self):
+        before = "a" * 64
+        candidate = "b" * 64
+        stage = {
+            "mode": "stage", "partition_written": False,
+            "backup_sha256": before, "candidate_sha256": candidate,
+        }
+        for value in (0, 0.0, None, "false", True):
+            receipt = dict(stage, partition_written=value)
+            with self.subTest(mode="stage", value=repr(value)), \
+                 self.assertRaisesRegex(ValueError, "partition_written"):
+                BASE.validate_remote_receipt(
+                    receipt, mode="stage", before_sha=before,
+                    candidate_sha=candidate, size=4096,
+                )
+
+        flash = {
+            "mode": "flash", "partition_written": "recovery", "bytes": 4096,
+            "before_sha256": before, "readback_sha256": candidate,
+            "reboot_performed": False,
+        }
+        for field, values in (
+            ("bytes", (4096.0, True, None, "4096")),
+            ("reboot_performed", (0, 0.0, None, "false", True)),
+        ):
+            for value in values:
+                receipt = dict(flash, **{field: value})
+                with self.subTest(mode="flash", field=field, value=repr(value)), \
+                     self.assertRaisesRegex(ValueError, field):
+                    BASE.validate_remote_receipt(
+                        receipt, mode="flash", before_sha=before,
+                        candidate_sha=candidate, size=4096,
+                    )
+
+    def test_bt_hci_runner_checks_the_helper_under_observer_root(self):
+        actual_helper = ROOT / "tools/hardware/deploy-audio-recovery.py"
+        actual_digest = hashlib.sha256(actual_helper.read_bytes()).hexdigest()
+        self.assertEqual(BT_HCI_RUNNER.EXPECTED_TRUSTED_DEPLOYER_SHA256, actual_digest)
+
+        with tempfile.TemporaryDirectory(prefix="s22-bt-helper-pin-") as directory:
+            temp = Path(directory)
+            trusted = temp / "trusted"
+            helper_root = temp / "observer"
+            wrapper = trusted / "tools/s22-ssh"
+            run_trial = trusted / "tools/gpu-compat/run-trial.py"
+            helper = helper_root / "tools/hardware/deploy-audio-recovery.py"
+            wrapper.parent.mkdir(parents=True)
+            run_trial.parent.mkdir(parents=True)
+            helper.parent.mkdir(parents=True)
+            wrapper.write_bytes(b"test ssh wrapper")
+            run_trial.write_bytes(b"test board runner")
+            helper.write_bytes(actual_helper.read_bytes())
+            observer = SimpleNamespace(
+                ROOT=helper_root,
+                pinned_usb_host_key_alias=mock.Mock(),
+            )
+            with mock.patch.object(
+                BT_HCI_RUNNER, "EXPECTED_SSH_WRAPPER_SHA256",
+                hashlib.sha256(wrapper.read_bytes()).hexdigest(),
+            ), mock.patch.object(
+                BT_HCI_RUNNER, "EXPECTED_TRUSTED_RUN_TRIAL_SHA256",
+                hashlib.sha256(run_trial.read_bytes()).hexdigest(),
+            ):
+                BT_HCI_RUNNER.validate_trusted_transport(observer, trusted)
+            observer.pinned_usb_host_key_alias.assert_called_once_with(project_root=trusted)
 
     def test_valid_exact_size_hashes_and_header_preservation(self):
         self.assertEqual(self.validate(), self.candidate)

@@ -283,6 +283,27 @@ class ReceiptValidationTests(AudioProfileFixture):
                     self.assertEqual(result["target_sha256"], profile["target_sha256"])
                     self.assertFalse(result["reboot_performed"])
 
+    def test_every_receipt_field_requires_its_exact_json_primitive_type(self):
+        for profile_name in ("audio-forward", "audio-reverse"):
+            for mode in ("stage", "flash"):
+                baseline = self._valid_receipt(profile_name, mode)
+                for field, expected in baseline.items():
+                    if type(expected) is bool:
+                        variants = [0, 1, 0.0, 1.0, None, "false", not expected]
+                    elif type(expected) is int:
+                        variants = [False, True, float(expected), None,
+                                    str(expected), expected + 1]
+                    else:
+                        self.assertIs(type(expected), str, field)
+                        variants = [None, False, 0, 0.0, expected + "-wrong"]
+                    for replacement in variants:
+                        with self.subTest(profile=profile_name, mode=mode,
+                                          field=field, replacement=repr(replacement)):
+                            receipt = dict(baseline)
+                            receipt[field] = replacement
+                            with self.assertRaises(ValueError):
+                                PROFILE.validate_receipt(profile_name, receipt)
+
     def test_wrong_profile_trial_image_baseline_or_unknown_outcome_is_rejected(self):
         cases = []
         receipt = self._valid_receipt()
