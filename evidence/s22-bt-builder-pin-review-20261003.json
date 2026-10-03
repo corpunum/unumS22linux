@@ -1,0 +1,85 @@
+{
+  "schema": "s22-bt-builder-pin-independent-review/v1",
+  "evidence_class": "independent host-only provenance and check-only review",
+  "reviewed_utc": "2026-10-03T08:52:59Z",
+  "verdict": "PASS_LIMITED",
+  "scope": "exact legacy-runner pin and isolated read-only preflight only; no candidate build, bridge runtime, or hardware acceptance",
+  "review": {
+    "frozen_head": "4280f1fa5a6c7848af5c525a426464d0e856c1a8",
+    "author_correction_commit": "5deeda5e0e753a92f836a4e07f8093f4014846fc",
+    "builder_sha256": "0949aba84a627bbeb21a5ab99e541de8958bfcdd89653df212beb0ba836c08c2",
+    "test_sha256": "a269607c9e60cf649018c7d9a5922310b10d2be55c8eac47832336d2cb5623fb",
+    "source_commit": "79c539ea55a1663e946ed881606232519873fd93"
+  },
+  "legacy_runner_reconciliation": {
+    "historical_runner_sha256_at_source_commit": "26bbe8bdb5ff687de29d5ce67f17d58cfa460a48fe9fc5be9043dccd54cf9253",
+    "current_runner_sha256": "7696d15fcdd7af33d130cb4cdfa78c823553d84a3eb2d830142c5bbd0a09198a",
+    "current_runner_sha256_matches_builder_pin": true,
+    "runner_diff_from_pinned_source": "one trusted deploy-helper digest line only",
+    "trusted_deploy_helper_old_sha256": "d0c54cc306e3a8a80cb79d79958fceedf6bb5945dabc7606e02b12d27dc00fd3",
+    "trusted_deploy_helper_current_sha256": "4138413c16b9c90c70a46da6ed3b4f60b0f41f1c6c69b4b2047421895903a47f",
+    "helper_change": "exact receipt primitive-type checks added; acceptance narrowed",
+    "stale_hash_fallback": false,
+    "old_hash_negative_control": "current runner rejected when expected digest is set to historical pin"
+  },
+  "consumed_public_trial": {
+    "receipt_path": "evidence/s22-hardware-continuation-20260927.json",
+    "receipt_sha256": "eb8f1963049cb4cdbca7236169bbdc91f2c929227ea995bdbb310972399518dc",
+    "receipt_tracked_at_public_source_commit": true,
+    "receipt_bytes_match_public_source_commit": true,
+    "trial_id": "bt-hci-plain-h4-20260927",
+    "recorded_attempt_count_required": 1,
+    "durable_guard_success_required": true,
+    "legacy_bridge_source_sha256_required": "476f148246dfac8330f7ade2790627b64a38ee7b1cb4f713934b6d438864a7a4",
+    "legacy_artifact_sha256_required": "f4ba76613e1339314898ebbf067338d846ed9ee231907a44306b82f54f2f1684",
+    "legacy_artifact_gnu_build_id_required": "a5be9451d95335ae2a5d292d721a766208f55a87",
+    "candidate_artifact_location_distinct": true,
+    "malformed_receipt_rejected": true,
+    "changed_attempt_count_rejected": true,
+    "private_raw_logs_used": false
+  },
+  "portable_test_matrix": {
+    "runs": [
+      {"command": "python3 -B tools/hardware/test-build-bt-transport-candidate.py", "python_optimize": 0, "passed": 20, "failed": 0, "skipped": 0},
+      {"command": "python3 -O -B tools/hardware/test-build-bt-transport-candidate.py", "python_optimize": 1, "passed": 20, "failed": 0, "skipped": 0},
+      {"command": "PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-build-bt-transport-candidate.py", "python_optimize": 1, "passed": 20, "failed": 0, "skipped": 0}
+    ],
+    "actual_total_passed": 60,
+    "local_compiler_private_fixture_tests_ran_each_mode": 3,
+    "bare_assert_in_builder_or_test": false
+  },
+  "isolated_check_only": {
+    "command": "python3 -I -S -B tools/hardware/build-bt-transport-candidate-20261002.py --check-only",
+    "exit_code": 0,
+    "status": "preflight_only_no_compile",
+    "compiler_target": "aarch64-linux-gnu",
+    "public_input_count": 8,
+    "private_input_checks": 2,
+    "private_header_contents_published": false,
+    "consumed_trial_attempts_preserved": 1,
+    "consumed_receipt_unchanged": true,
+    "candidate_build_invoked": false,
+    "candidate_directory_present_before": true,
+    "candidate_directory_mode_before": "0700",
+    "candidate_directory_present_after": true,
+    "candidate_directory_mode_after": "0700",
+    "candidate_directory_contents_inspected": false,
+    "absent_output_case_demonstrated": false
+  },
+  "no_hardware_actions": {
+    "candidate_build": false,
+    "bridge_or_one_shot_runner_invoked": false,
+    "phone": false,
+    "ssh": false,
+    "adb": false,
+    "usb": false,
+    "hardware_acceptance": false,
+    "trial_retry_authorized": false
+  },
+  "limits": [
+    "no candidate artifact build or link was run",
+    "no Bluetooth controller or physical cleanup behavior was tested",
+    "the existing output directory case was observed; absent-output behavior was not invoked",
+    "no CI run is claimed"
+  ]
+}
