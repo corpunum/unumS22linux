@@ -12,6 +12,7 @@ from contextlib import nullcontext
 import hashlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import shlex
@@ -28,9 +29,11 @@ TRIAL_IDENTITY = 'audio-coherent-20261003-first'
 
 # The stability follow-up is intentionally shorter than a ten-minute trial:
 # one fully ready sample starts the interval, then two fresh samples are taken
-# at 90-second offsets. A bounded 180-second uptime gate (13 probes at 15s
-# offsets), two full-readiness startup polls, and one read-only reconnect total
-# fit inside the hard deadline.
+# at 90-second offsets. The final sample starts no earlier than 195 seconds so
+# its remote capture still covers 180 seconds with up to 15 seconds of capture
+# skew. A bounded 180-second uptime gate (13 probes at 15s offsets), two
+# full-readiness startup polls, and one read-only reconnect total fit inside
+# the hard deadline.
 STABILITY_SAMPLE_OFFSETS_SECONDS = (0, 90, 180)
 STABILITY_MIN_SECONDS = 180
 STABILITY_MIN_SAMPLE_GAP_SECONDS = 60
@@ -40,6 +43,10 @@ STABILITY_STARTUP_POLL_GAP_SECONDS = 15
 STABILITY_STARTUP_POLLS = STABILITY_STARTUP_UPTIME_SECONDS // STABILITY_STARTUP_POLL_GAP_SECONDS + 1
 STABILITY_READINESS_STARTUP_POLLS = 2
 STABILITY_READINESS_QUERY_CAP_SECONDS = 15
+STABILITY_REMOTE_SAMPLE_START_SKEW_SECONDS = STABILITY_READINESS_QUERY_CAP_SECONDS
+STABILITY_REMOTE_FINAL_SAMPLE_OFFSET_SECONDS = (
+    STABILITY_MIN_SECONDS + STABILITY_REMOTE_SAMPLE_START_SKEW_SECONDS)
+STABILITY_REMOTE_UPTIME_MAX_SECONDS = 10_000_000
 STABILITY_IDENTITY_QUERY_CAP_SECONDS = 30
 STABILITY_MAX_RECONNECTS_TOTAL = 1
 STABILITY_RECONNECT_BACKOFF_SECONDS = 2
@@ -793,11 +800,40 @@ def _safe_sample_power(state: object) -> dict:
             (type(value[key]) in (str, int, float, bool) or value[key] is None)}
 
 
+def _safe_sample_remote_uptime(state: object) -> int | float | None:
+    value = state.get('uptime_seconds') if isinstance(state, dict) else None
+    if type(value) not in (int, float):
+        return None
+    try:
+        return value if math.isfinite(value) else None
+    except OverflowError:
+        return None
+
+
+def _validated_remote_uptime(state: object) -> int | float:
+    value = state.get('uptime_seconds') if isinstance(state, dict) else None
+    try:
+        valid = (type(value) in (int, float) and
+                 0 <= value < STABILITY_REMOTE_UPTIME_MAX_SECONDS and
+                 math.isfinite(value))
+    except (OverflowError, TypeError):
+        valid = False
+    if not valid:
+        raise TerminalObservationError(
+            'ambiguous_response',
+            'readiness response uptime must be a finite exact numeric value')
+    return value
+
+
 def _sample_record(*, profile_name: str, kind: str, index: int,
                    operation_started: float, sampled_started: float,
                    state: object, identity: object, status: str,
-                   category: str | None) -> dict:
+                   category: str | None,
+                   remote_interval_seconds: float | None = None,
+                   host_interval_seconds: float | None = None) -> dict:
     logs = state.get('kernel_log_classification') if isinstance(state, dict) else None
+    raw_uptime = state.get('uptime_seconds') if isinstance(state, dict) else None
+    remote_uptime = _safe_sample_remote_uptime(state)
     return {
         'schema': 's22-audio-coherent-stability-sample/v1',
         'profile': profile_name,
@@ -806,6 +842,14 @@ def _sample_record(*, profile_name: str, kind: str, index: int,
         'index': index,
         'sampled_unix_ns': time.time_ns(),
         'elapsed_seconds': round(max(0.0, sampled_started - operation_started), 3),
+        'remote_uptime_seconds': remote_uptime,
+        'remote_uptime_input_type': (
+            type(raw_uptime).__name__ if isinstance(state, dict) and
+            'uptime_seconds' in state else 'missing'),
+        'remote_uptime_valid': remote_uptime is not None,
+        'remote_interval_seconds': remote_interval_seconds,
+        'host_interval_seconds': (round(host_interval_seconds, 3)
+                                  if host_interval_seconds is not None else None),
         'status': status,
         'category': category,
         'readiness': _safe_sample_readiness(state),
@@ -906,6 +950,9 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
     sample_paths = paths['samples']
     all_paths = [paths['started'], paths['result'], paths['failure'],
                  *uptime_probe_paths, *startup_paths, *sample_paths]
+    saved_samples: list[dict] = []
+    accepted_remote_uptimes: list[int | float] = []
+    accepted_sample_starts: list[float] = []
     try:
         for path in all_paths:
             SHARED.ensure_new_receipt(path, directory_fd=directory_fd)
@@ -921,13 +968,18 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
             'startup_readiness_max_polls': STABILITY_READINESS_STARTUP_POLLS,
             'startup_readiness_poll_gap_seconds': STABILITY_STARTUP_READINESS_GAP_SECONDS,
             'sample_offsets_seconds': list(STABILITY_SAMPLE_OFFSETS_SECONDS),
+            'remote_uptime_required': True,
+            'remote_minimum_interval_seconds': STABILITY_MIN_SECONDS,
+            'remote_sample_start_skew_allowance_seconds':
+                STABILITY_REMOTE_SAMPLE_START_SKEW_SECONDS,
+            'remote_final_sample_start_offset_seconds_minimum':
+                STABILITY_REMOTE_FINAL_SAMPLE_OFFSET_SECONDS,
             'maximum_read_only_reconnects': STABILITY_MAX_RECONNECTS_TOTAL,
             'retry_allowed': False,
         }
         SHARED.persist_receipt(paths['started'], started_receipt,
                                directory_fd=directory_fd)
 
-        saved_samples: list[dict] = []
         reconnect_count = 0
         attempt_count = 0
         startup_readiness_poll_count = 0
@@ -1025,16 +1077,24 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
 
             def save_sample(path: Path, *, kind: str, index: int,
                             sample_start: float, state: object, identity: object,
-                            status: str, category: str | None) -> dict:
+                            status: str, category: str | None,
+                            remote_interval_seconds: float | None = None,
+                            host_interval_seconds: float | None = None) -> dict:
                 record = _sample_record(
                     profile_name=profile_name, kind=kind, index=index,
                     operation_started=operation_started, sampled_started=sample_start,
-                    state=state, identity=identity, status=status, category=category)
+                    state=state, identity=identity, status=status, category=category,
+                    remote_interval_seconds=remote_interval_seconds,
+                    host_interval_seconds=host_interval_seconds)
                 SHARED.persist_receipt(path, record, directory_fd=directory_fd)
                 digest = hashlib.sha256(SHARED.read_host_artifact(
                     path, 'durable stability sample receipt')).hexdigest()
                 saved = {'path': path.name, 'sha256': digest, 'status': status,
-                         'elapsed_seconds': record['elapsed_seconds']}
+                         'elapsed_seconds': record['elapsed_seconds'],
+                         'remote_uptime_seconds': record['remote_uptime_seconds'],
+                         'remote_uptime_valid': record['remote_uptime_valid'],
+                         'remote_interval_seconds': record['remote_interval_seconds'],
+                         'host_interval_seconds': record['host_interval_seconds']}
                 saved_samples.append(saved)
                 return saved
 
@@ -1044,20 +1104,38 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
                 sample_start = clock()
                 state = bounded_query('readiness', read_state)
                 identity = bounded_query('identity', read_identity)
+                remote_uptime = _safe_sample_remote_uptime(state)
+                remote_interval = None
+                host_interval = None
                 try:
-                    state_uptime = state.get('uptime_seconds') if isinstance(state, dict) else None
                     status, category = _assess_stability_sample(
                         profile_name, initial['observed_boot_id'], state, identity)
-                    if (status == 'ready' and
-                            (type(state_uptime) not in (int, float) or
-                             not STABILITY_STARTUP_UPTIME_SECONDS <= state_uptime < 10_000_000)):
+                    remote_uptime = _validated_remote_uptime(state)
+                    if status == 'ready' and remote_uptime < STABILITY_STARTUP_UPTIME_SECONDS:
                         status, category = 'unready', 'uptime_gate_not_satisfied'
+                    elif status == 'ready' and accepted_remote_uptimes:
+                        remote_interval = remote_uptime - accepted_remote_uptimes[-1]
+                        host_interval = sample_start - accepted_sample_starts[-1]
+                        if remote_interval <= 0:
+                            raise TerminalObservationError(
+                                'remote_uptime_not_advancing',
+                                'same-boot readiness uptime did not advance between accepted samples')
+                        minimum_remote_gap = max(
+                            0.0, host_interval - STABILITY_REMOTE_SAMPLE_START_SKEW_SECONDS)
+                        maximum_remote_gap = (
+                            host_interval + STABILITY_REMOTE_SAMPLE_START_SKEW_SECONDS)
+                        if not minimum_remote_gap <= remote_interval <= maximum_remote_gap:
+                            raise TerminalObservationError(
+                                'remote_uptime_progression_mismatch',
+                                'remote uptime progression is inconsistent with the host sample interval')
                 except TerminalObservationError as error:
                     save_sample(sample_paths[index] if kind == 'stability' else
                                 (unready_path or startup_paths[index]),
                                 kind=kind, index=index, sample_start=sample_start,
                                 state=state, identity=identity, status='terminal',
-                                category=error.category)
+                                category=error.category,
+                                remote_interval_seconds=remote_interval,
+                                host_interval_seconds=host_interval)
                     raise
                 stable_sample = kind == 'stability' or status == 'ready'
                 sample_path = (sample_paths[index] if kind == 'stability' else
@@ -1067,7 +1145,12 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
                 receipt_index = index if kind == 'stability' else 0 if status == 'ready' else index
                 saved = save_sample(sample_path, kind=receipt_kind, index=receipt_index,
                                     sample_start=sample_start, state=state,
-                                    identity=identity, status=status, category=category)
+                                    identity=identity, status=status, category=category,
+                                    remote_interval_seconds=remote_interval,
+                                    host_interval_seconds=host_interval)
+                if status == 'ready':
+                    accepted_remote_uptimes.append(remote_uptime)
+                    accepted_sample_starts.append(sample_start)
                 return saved, status, category, sample_start
 
             with context as operation:
@@ -1088,10 +1171,7 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
                             raise TerminalObservationError(
                                 'changed_boot',
                                 'startup probe boot ID differs from the bound initial observation')
-                        if (type(probe.get('uptime_seconds')) not in (float, int) or
-                                probe['uptime_seconds'] < 0):
-                            raise TerminalObservationError(
-                                'ambiguous_response', 'startup probe uptime is malformed')
+                        probe_uptime = _validated_remote_uptime(probe)
                         probe_record = {
                             'schema': 's22-audio-coherent-stability-uptime/v1',
                             'profile': profile_name,
@@ -1100,14 +1180,14 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
                             'sampled_unix_ns': time.time_ns(),
                             'elapsed_seconds': round(max(0.0, clock() - operation_started), 3),
                             'boot_id': boot_id,
-                            'uptime_seconds': probe['uptime_seconds'],
-                            'status': ('ready' if probe['uptime_seconds'] >=
+                            'uptime_seconds': probe_uptime,
+                            'status': ('ready' if probe_uptime >=
                                        STABILITY_STARTUP_UPTIME_SECONDS else 'waiting'),
                         }
                         SHARED.persist_receipt(uptime_probe_paths[probe_index], probe_record,
                                                directory_fd=directory_fd)
                         startup_probe_count += 1
-                        if probe['uptime_seconds'] >= STABILITY_STARTUP_UPTIME_SECONDS:
+                        if probe_uptime >= STABILITY_STARTUP_UPTIME_SECONDS:
                             break
                     else:
                         active_category = 'unready_startup'
@@ -1148,6 +1228,10 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
                         target = max(
                             stable_start + STABILITY_SAMPLE_OFFSETS_SECONDS[index],
                             prior_sample_start + STABILITY_MIN_SAMPLE_GAP_SECONDS)
+                        if index == len(STABILITY_SAMPLE_OFFSETS_SECONDS) - 1:
+                            target = max(
+                                target,
+                                stable_start + STABILITY_REMOTE_FINAL_SAMPLE_OFFSET_SECONDS)
                         pause = target - clock()
                         if pause > 0:
                             sleeper(min(pause, remaining_time()))
@@ -1174,6 +1258,13 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
                             observed_seconds < STABILITY_MIN_SECONDS):
                         active_category = 'sample_gap'
                         raise RuntimeError('bounded stability interval was shorter than 180 seconds')
+                    remote_observed_seconds = (
+                        accepted_remote_uptimes[-1] - accepted_remote_uptimes[0]
+                        if len(accepted_remote_uptimes) == len(stable_receipts) else -1)
+                    if remote_observed_seconds < STABILITY_MIN_SECONDS:
+                        active_category = 'remote_interval_short'
+                        raise RuntimeError(
+                            'remote uptime interval was shorter than 180 seconds')
                     receipt = {
                         'schema': 's22-audio-coherent-stability-observation/v1',
                         'profile': profile_name,
@@ -1188,7 +1279,15 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
                         'kernel_gnu_build_id': ADAPTER.RUNNING_KERNEL_BUILD_ID,
                         'audio_module_gnu_build_ids': _expected_profile_modules(profile_name),
                         'stability_seconds': round(observed_seconds, 3),
-                        'sample_offsets_seconds': list(STABILITY_SAMPLE_OFFSETS_SECONDS),
+                        'sample_offsets_seconds': [round(start - stable_start, 3)
+                                                   for start in accepted_sample_starts],
+                        'remote_sample_uptimes_seconds': accepted_remote_uptimes,
+                        'remote_sample_intervals_seconds': [
+                            None, *(current - previous
+                                    for previous, current in zip(
+                                        accepted_remote_uptimes,
+                                        accepted_remote_uptimes[1:]))],
+                        'remote_stability_seconds': remote_observed_seconds,
                         'sample_count': len(stable_receipts),
                         'startup_readiness_polls': startup_readiness_poll_count,
                         'startup_uptime_probes': startup_probe_count,
@@ -1221,6 +1320,18 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
                         'failure_category': active_category,
                         'retry_allowed': False,
                         'sample_receipts': saved_samples,
+                        'remote_sample_uptimes_seconds': accepted_remote_uptimes,
+                        'remote_sample_intervals_seconds': [
+                            None, *(current - previous
+                                    for previous, current in zip(
+                                        accepted_remote_uptimes,
+                                        accepted_remote_uptimes[1:]))],
+                        'remote_stability_seconds': (
+                            accepted_remote_uptimes[-1] - accepted_remote_uptimes[0]
+                            if len(accepted_remote_uptimes) >= 2 else None),
+                        'host_sample_offsets_seconds': [
+                            round(start - accepted_sample_starts[0], 3)
+                            for start in accepted_sample_starts],
                         'read_only_reconnect_attempts': reconnect_count,
                         'remote_query_attempts': attempt_count,
                         'elapsed_seconds': round(max(0.0, clock() - operation_started), 3),
@@ -1241,6 +1352,18 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
                         error, TerminalObservationError) else active_category),
                     'retry_allowed': False,
                     'sample_receipts': saved_samples,
+                    'remote_sample_uptimes_seconds': accepted_remote_uptimes,
+                    'remote_sample_intervals_seconds': [
+                        None, *(current - previous
+                                for previous, current in zip(
+                                    accepted_remote_uptimes,
+                                    accepted_remote_uptimes[1:]))],
+                    'remote_stability_seconds': (
+                        accepted_remote_uptimes[-1] - accepted_remote_uptimes[0]
+                        if len(accepted_remote_uptimes) >= 2 else None),
+                    'host_sample_offsets_seconds': [
+                        round(start - accepted_sample_starts[0], 3)
+                        for start in accepted_sample_starts],
                     'read_only_reconnect_attempts': reconnect_count,
                     'remote_query_attempts': attempt_count,
                     'elapsed_seconds': round(max(0.0, clock() - operation_started), 3),
@@ -1268,6 +1391,9 @@ def build_plan(profile_name: str, *, artifact_root: Path = ARTIFACT_ROOT) -> dic
         'stability_observation_execution': False,
         'stability_observation_total_deadline_seconds': STABILITY_TOTAL_DEADLINE_SECONDS,
         'stability_observation_sample_offsets_seconds': list(STABILITY_SAMPLE_OFFSETS_SECONDS),
+        'stability_observation_minimum_remote_interval_seconds': STABILITY_MIN_SECONDS,
+        'stability_observation_remote_final_sample_start_minimum_seconds':
+            STABILITY_REMOTE_FINAL_SAMPLE_OFFSET_SECONDS,
         'audio_hardware_acceptance': False,
     })
     return plan

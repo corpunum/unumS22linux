@@ -99,25 +99,36 @@ log ring, or other readiness gate remains unready and cannot pass a stability
 sample. No service is restarted and no remote inference is requested.
 
 The first fully ready pair starts the interval. Two more fresh readiness and
-full identity pairs are queried at offsets of at least 90 and 180 seconds from
-that sample start; the minimum pair-start gap is 60 seconds. Success therefore
-requires three separately queried samples and at least 180 seconds from the
-first to last sample start—not eleven samples or ten minutes of evidence. Every
-sample rechecks the same boot ID, RECOVERY record, complete recovery-image
-SHA-256, running kernel GNU Build ID, and exact three profile module GNU Build
-IDs, along with native/model-idle/network/power and current-ring no-indicator
-gates. Each readiness, identity/full-hash, and uptime SSH query gets the
-smaller of its per-query cap (15, 30, or 3 seconds respectively) and actual
-remaining total time. A single read-only reconnect is allowed across the whole
-observer after a bounded 2-second backoff; no second reconnect or reboot is
-attempted. The observer checks the total deadline before every query and
-wait. The capped remote-query/wait path is at most 505 seconds: at most 188
-seconds for the 180-second uptime schedule and a final probe/reconnect, plus
-at most 317 seconds for two readiness polls (including the 15-second gap) and
-the 180-second sample spacing with the last pair/reconnect. This leaves 95
-seconds within the 600-second total for local processing and durable receipts.
-The monotonic deadline remains authoritative if any work consumes that margin;
-no query starts with more than the actual remaining time.
+full identity pairs are scheduled at offsets of at least 90 and 180 seconds
+from that sample start; the minimum pair-start gap is 60 seconds. The readiness
+collector captures `/proc/uptime` during each bounded query, so each accepted
+sample also records its exact finite numeric uptime (booleans and numeric
+strings are rejected). On the same boot, remote uptime must strictly advance
+between samples and each remote interval must agree with its host sample-start
+interval within the 15-second readiness-query cap. To cover the worst-case
+capture skew, the final pair starts no earlier than 195 seconds after the first
+sample. Success therefore requires three separately queried samples, at least
+180 seconds of host time, and at least 180 seconds of remote uptime between the
+first and last samples—not eleven samples or ten minutes of evidence. Identical
+readiness JSON and unchanged quiet `dmesg` fingerprints remain valid only when
+the remote uptime advances consistently. Each sample rechecks the same boot
+ID, RECOVERY record, complete recovery-image SHA-256, running kernel GNU Build
+ID, and exact three profile module GNU Build IDs, along with
+native/model-idle/network/power and current-ring no-indicator gates. Sample
+receipts preserve the exact remote uptime and interval; the final receipt
+repeats the accepted uptime values and remote stability interval. Each
+readiness, identity/full-hash, and uptime SSH query gets the smaller of its
+per-query cap (15, 30, or 3 seconds respectively) and actual remaining total
+time. A single read-only reconnect is allowed across the whole observer after
+a bounded 2-second backoff; no second reconnect or reboot is attempted. The
+observer checks the total deadline before every query and wait. The capped
+remote-query/wait path is at most 520 seconds: at most 188 seconds for the
+180-second uptime schedule and a final probe/reconnect, plus at most 332 seconds
+for two readiness polls (including the 15-second gap), the 195-second final
+sample offset, and the last pair/reconnect. This leaves 80 seconds within the
+600-second total for local processing and durable receipts. The monotonic
+deadline remains authoritative if any work consumes that margin; no query
+starts with more than the actual remaining time.
 
 Transport unavailability, readiness progression, and terminal contradiction
 are recorded separately. One disconnect may consume the single reconnect;
@@ -126,10 +137,38 @@ wrong identity, changed boot, serious fault, malformed response, or consumed
 marker all persist `UNKNOWN` with `retry_allowed=false`. A fatal indicator or
 hung-task assessment/count is terminal; `trace_only` is not relabeled fatal,
 but is insufficient for a sample and may only be followed by another bounded
-read-only startup poll. Duplicate/cached state is not counted as a new sample:
-the observer issues separate collection and identity queries for each sample
-and stores a private fsynced receipt for each. Old receipts and guard markers
-remain exclusive and preserved.
+read-only startup poll. Replayed, decreasing, nonfinite, type-confused, or
+implausibly slow remote uptime remains `UNKNOWN`; separate queries alone are
+not freshness proof. Each sample and failure receipt is private and fsynced.
+Old receipts and guard markers remain exclusive and preserved.
+
+## Remote freshness correction — additive 2026-10-03
+
+The frozen author receipt `evidence/s22-audio-bounded-observer-host-20261003.json`
+and independent `BLOCKED` verdict in
+`docs/research/AUDIO_CAMERA_EXECUTABLE_REVIEW_2026-10-03.md` remain unchanged.
+That review reproduced identical readiness and image/module identity responses
+with remote uptime `240.0` at host sample starts 0, 90, and 180 seconds. The
+pre-correction observer returned `bounded-stability-observed`; its per-sample
+receipts did not contain the remote uptime. The correction preserves this as
+historical failure evidence in
+`evidence/s22-audio-remote-freshness-host-20261003.json` and binds each accepted
+same-boot readiness sample to its exact remote uptime and inter-sample interval.
+
+The candidate final sample start is delayed to at least 195 seconds to allow
+the readiness-query capture skew while retaining a 180-second remote interval.
+The observer still has three samples and a 600-second hard deadline. The
+production authorization remains `false`, the allowlist remains empty, and
+`UNKNOWN` never clears or replays the reboot marker.
+
+The new host evidence receipt spells out both module-role maps. The older
+author receipt's historical `expected_profile_module_ids` field is preserved
+as written; the table below identifies the pre- and post-reboot roles directly.
+
+| Profile | Before reboot module IDs | Postboot target module IDs |
+| --- | --- | --- |
+| `audio-forward` | ABOX `34a5354a75980688ee7dbeb6a848e04a7d54558f`; rainbow `510b984887b640ad4ad3c1e9a556ef16c30b38c9`; offloader `4f35c50b0eca0d22b2060f7b8d84f03359feacd1` | ABOX `26347c3373e155fa6badf7883ff162f1d9f6723f`; rainbow `8a7227b58cb7f4faf73ea92974781d34870bbfac`; offloader `8c9b0d4787ea32eae7de0086a4d662b0f351675d` |
+| `audio-reverse` | ABOX `26347c3373e155fa6badf7883ff162f1d9f6723f`; rainbow `8a7227b58cb7f4faf73ea92974781d34870bbfac`; offloader `8c9b0d4787ea32eae7de0086a4d662b0f351675d` | ABOX `34a5354a75980688ee7dbeb6a848e04a7d54558f`; rainbow `510b984887b640ad4ad3c1e9a556ef16c30b38c9`; offloader `4f35c50b0eca0d22b2060f7b8d84f03359feacd1` |
 
 This follow-up establishes only bounded stability during the observed sample
 interval. Full-boot log coverage still requires an independent source that
@@ -141,7 +180,7 @@ the allowlist remains empty.
 
 ## Verification
 
-The 35-case hardware-free suite passed in normal Python, `python3 -O`, and
+The 37-case hardware-free suite passed in normal Python, `python3 -O`, and
 `PYTHONOPTIMIZE=1 python3 -B`. Each invocation checked the expected
 `sys.flags.optimize` value (`0`, `1`, and `1` respectively); `-I` was not
 combined with the environment mode. The new tests execute the actual rendered
@@ -151,8 +190,11 @@ unavailable captures, exercise malformed boolean/type/assessment fields, and
 verify that incomplete diagnostics leave the one-shot observation marker
 `unknown` with no success observation receipt. Fake-clock/fake-transport tests
 execute the actual bounded stability observer without real waits; they cover
-delayed connection and uptime, delayed readiness, fresh same-boot samples,
-wrong and later-changed boot/image/module identity, fatal and hung-task
+delayed connection and uptime, delayed readiness, advancing remote uptime for
+both forward and reverse profile targets, replayed/decreasing/implausibly slow,
+nonfinite, boolean, and string uptimes, a host interval over 180 seconds with a
+remote interval under 180 seconds, wrong and later-changed boot/image/module
+identity, fatal and hung-task
 diagnostics, trace-only startup gating, later fault, exhausted transport gap,
 deadline exhaustion, empty logs, nonprogressing clock, UNKNOWN reboot
 non-replay, and refusal to reuse old stability receipts/markers. `py_compile`
