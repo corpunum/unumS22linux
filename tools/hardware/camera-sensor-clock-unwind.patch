@@ -1,0 +1,263 @@
+diff --git a/drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is-sensor.c b/drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is-sensor.c
+--- a/drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is-sensor.c
++++ b/drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is-sensor.c
+@@ -36,51 +36,51 @@ static int exynos9925_is_csi_gate(struct device *dev, u32 instance, bool mask)
+ 	pr_debug("%s(instance : %d / mask : %d)\n", __func__, instance, mask);
+ 
+ 	switch (instance) {
+ 	case 0:
+ 		if (mask)
+-			is_disable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS0");
++			ret = is_disable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS0");
+ 		else
+-			is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS0");
++			ret = is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS0");
+ 		break;
+ 	case 1:
+ 		if (mask)
+-			is_disable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS1");
++			ret = is_disable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS1");
+ 		else
+-			is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS1");
++			ret = is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS1");
+ 		break;
+ 	case 2:
+ 		if (mask)
+-			is_disable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS2");
++			ret = is_disable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS2");
+ 		else
+-			is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS2");
++			ret = is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS2");
+ 		break;
+ 	case 3:
+ 		if (mask)
+-			is_disable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS3");
++			ret = is_disable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS3");
+ 		else
+-			is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS3");
++			ret = is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS3");
+ 		break;
+ 	case 4:
+ 		if (mask)
+-			is_disable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS4");
++			ret = is_disable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS4");
+ 		else
+-			is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS4");
++			ret = is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS4");
+ 		break;
+ 	case 5:
+ 		if (mask)
+-			is_disable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS5");
++			ret = is_disable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS5");
+ 		else
+-			is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS5");
++			ret = is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS5");
+ 		break;
+ 	case 6:
+ 		if (mask)
+-			is_disable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS6");
++			ret = is_disable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS6");
+ 		else
+-			is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS6");
++			ret = is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS6");
+ 		break;
+ 	case 7:
+ 		if (mask)
+-			is_disable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS7");
++			ret = is_disable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS7");
+ 		else
+-			is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS7");
++			ret = is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS7");
+ 		break;
+@@ -97,39 +97,112 @@ int exynos9925_is_sensor_iclk_cfg(struct device *dev,
+ 	u32 scenario,
+ 	u32 channel)
+ {
+-	is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS0");
+-	is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS1");
+-	is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS2");
+-	is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS3");
+-	is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS4");
+-	is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS5");
+-	is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS6");
+-	is_enable(dev, "GATE_CSIS_PDP_QCH_DMA");
+-
+-	return  0;
++	static const char * const csis_gate_names[] = {
++		"GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS0",
++		"GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS1",
++		"GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS2",
++		"GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS3",
++		"GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS4",
++		"GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS5",
++		"GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS6",
++	};
++	int i, ret, original_ret, rollback_ret = 0;
++
++	if (channel > 6) {
++		pr_err("channel is invalid(%d)\n", channel);
++		return -EINVAL;
++	}
++
++	for (i = 0; i < (int)ARRAY_SIZE(csis_gate_names); i++) {
++		ret = is_enable(dev, csis_gate_names[i]);
++		if (ret) {
++			pr_err("failed to acquire CSIS%d clock vote: %d; physical state unverified\n",
++				i, ret);
++			goto err_rollback_csis;
++		}
++	}
++
++	ret = is_enable(dev, "GATE_CSIS_PDP_QCH_DMA");
++	if (ret) {
++		pr_err("failed to acquire CSIS DMA clock vote: %d; physical state unverified\n",
++			ret);
++		goto err_rollback_csis;
++	}
++
++	return 0;
++
++err_rollback_csis:
++	/* Undo only gates successfully acquired by this cfg invocation. */
++	original_ret = ret;
++	while (i > 0) {
++		i--;
++		ret = is_disable(dev, csis_gate_names[i]);
++		if (ret) {
++			pr_err("failed to roll back CSIS%d clock vote: %d\n", i, ret);
++			if (!rollback_ret)
++				rollback_ret = ret;
++		}
++	}
++	if (rollback_ret)
++		pr_err("CSIS cfg rollback incomplete after error %d (cleanup %d); clock state unknown\n",
++			original_ret, rollback_ret);
++
++	return original_ret;
+ }
+ 
+ int exynos9925_is_sensor_iclk_on(struct device *dev,
+ 	u32 scenario,
+ 	u32 channel)
+ {
+-	int ret = 0;
++	int i, ret, original_ret, cleanup_ret, rollback_ret = 0;
++	u32 owned_mask = 0x7f;
+ 
+-	exynos9925_is_csi_gate(dev, 0, true);
+-	exynos9925_is_csi_gate(dev, 1, true);
+-	exynos9925_is_csi_gate(dev, 2, true);
+-	exynos9925_is_csi_gate(dev, 3, true);
+-	exynos9925_is_csi_gate(dev, 4, true);
+-	exynos9925_is_csi_gate(dev, 5, true);
+-	exynos9925_is_csi_gate(dev, 6, true);
+-
+ 	if (channel > 6) {
+ 		pr_err("channel is invalid(%d)\n", channel);
+-		ret = -EINVAL;
+-		goto p_err;
+-	} else
+-		exynos9925_is_csi_gate(dev, channel, false);
++		return -EINVAL;
++	}
++
++	/* cfg acquired one vote per gate; track only this caller's remaining votes. */
++	for (i = 0; i <= 6; i++) {
++		ret = exynos9925_is_csi_gate(dev, i, true);
++		if (ret) {
++			pr_err("failed to release CSIS%d setup vote: %d\n", i, ret);
++			goto err_rollback_setup;
++		}
++		owned_mask &= ~(1U << i);
++	}
++
++	ret = exynos9925_is_csi_gate(dev, channel, false);
++	if (ret) {
++		pr_err("failed to acquire selected CSIS%d clock vote: %d; physical state unverified\n",
++			channel, ret);
++		goto err_rollback_setup;
++	}
++
++	return 0;
++
++err_rollback_setup:
++	/* A failed on callback cannot set IS_SENSOR_ICLK_ON; release this cfg's votes. */
++	original_ret = ret;
++	cleanup_ret = is_disable(dev, "GATE_CSIS_PDP_QCH_DMA");
++	if (cleanup_ret) {
++		pr_err("failed to roll back CSIS DMA setup vote: %d\n", cleanup_ret);
++		if (!rollback_ret)
++			rollback_ret = cleanup_ret;
++	}
++	for (i = 6; i >= 0; i--) {
++		if (!(owned_mask & (1U << i)))
++			continue;
++		cleanup_ret = exynos9925_is_csi_gate(dev, i, true);
++		if (cleanup_ret) {
++			pr_err("failed to roll back CSIS%d setup vote: %d\n", i, cleanup_ret);
++			if (!rollback_ret)
++				rollback_ret = cleanup_ret;
++		}
++	}
++	if (rollback_ret)
++		pr_err("CSIS on rollback incomplete after error %d (cleanup %d); clock state unknown\n",
++			original_ret, rollback_ret);
+ 
+-p_err:
+-	return ret;
++	return original_ret;
+ }
+@@ -138,8 +211,27 @@ int exynos9925_is_sensor_iclk_off(struct device *dev,
+ 	u32 scenario,
+ 	u32 channel)
+ {
+-	exynos9925_is_csi_gate(dev, channel, true);
++	int ret, rollback_ret;
++
++	if (channel > 6) {
++		pr_err("channel is invalid(%d)\n", channel);
++		return -EINVAL;
++	}
++
++	ret = exynos9925_is_csi_gate(dev, channel, true);
++	if (ret) {
++		pr_err("failed to release selected CSIS%d clock vote: %d\n", channel, ret);
++		return ret;
++	}
+ 
+-	is_disable(dev, "GATE_CSIS_PDP_QCH_DMA");
++	ret = is_disable(dev, "GATE_CSIS_PDP_QCH_DMA");
++	if (ret) {
++		/* Restore this caller's selected-channel vote before returning failure. */
++		rollback_ret = exynos9925_is_csi_gate(dev, channel, false);
++		if (rollback_ret)
++			pr_err("CSIS off rollback failed after DMA error %d (clock error %d); clock state unknown\n",
++				ret, rollback_ret);
++		return ret;
++	}
+ 
+ 	return 0;
+@@ -185,6 +277,5 @@ int exynos_is_sensor_iclk_cfg(struct device *dev,
+ 	u32 scenario,
+ 	u32 channel)
+ {
+-	exynos9925_is_sensor_iclk_cfg(dev, scenario, channel);
+-	return 0;
++	return exynos9925_is_sensor_iclk_cfg(dev, scenario, channel);
+ }
+@@ -193,6 +284,5 @@ int exynos_is_sensor_iclk_on(struct device *dev,
+ 	u32 scenario,
+ 	u32 channel)
+ {
+-	exynos9925_is_sensor_iclk_on(dev, scenario, channel);
+-	return 0;
++	return exynos9925_is_sensor_iclk_on(dev, scenario, channel);
+ }
+@@ -201,6 +291,5 @@ int exynos_is_sensor_iclk_off(struct device *dev,
+ 	u32 scenario,
+ 	u32 channel)
+ {
+-	exynos9925_is_sensor_iclk_off(dev, scenario, channel);
+-	return 0;
++	return exynos9925_is_sensor_iclk_off(dev, scenario, channel);
+ }
