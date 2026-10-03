@@ -2002,3 +2002,58 @@ remains refused. Independent hardware rescue remains unproven. Bluetooth
 radio, audio, camera, NPU, SIM/data/calls and physical button/touch acceptance
 are not complete. Automatic goal status is `usageLimited`; it has not been
 reset or replaced, and cannot wake this conversation after a final reply.
+# Independent review, full local regressions and continued corrections — 2026-10-03
+
+The NPU report-owner author `3b006ed3…` is imported as `d486351`; independent
+Luna/max reviewer `/root/npu_report_independent_review_20261003` committed
+`a248a22c…`, imported as `0fd2361`. The corrected patch SHA is `9bf6eef3…`,
+composed interface `3e1c9198…`. Eighteen independently executed public-source
+C jobs pass, including the pinned refcount decrement/saturation semantics.
+Root's two corrected configured ARM64 syntax jobs also pass. Kernel waitqueue
+liveness is still unbounded; command/response, static report-store, removal,
+DMA, provider, firmware and hardware acceptance are outside that limited pass.
+
+Independent Luna/max audio reviewer
+`/root/audio_freshness_independent_review_20261003` committed `07d73d99…`,
+imported as `11c14a5`. The remote-freshness fix passes 37 cases in all three
+Python modes, but the strict end-to-end deadline remains **BLOCKED**: delaying
+final durable persistence to 601 seconds still returned success and completed
+the global guard. The remote query schedule itself stays below 600 seconds.
+Actual Luna/max author `/root/audio_remote_freshness_fix_20261003` is reused in
+the separate `audio-observer-deadline-20261003` worktree to fix late acceptance
+and accurately distinguish local durability liveness. Old receipts and guard
+markers are not removed or rewritten; the production trial remains inactive.
+
+The full local matrix at `71575f1…` ran **129 scripts: 126 passed, three
+failed**. Complete private-log SHA-256 is
+`ef0b0514381baa7add8acc8866662117114dc837f97f0e42c397d561edcfad12`.
+Two failures are the existing BT builder's stale exact legacy-runner pin
+(normal and optimized). One optimized NPU publication-drain invocation failed
+during the bounded public TLS fetch, before C execution. A separate fresh
+optimized invocation passed; log SHA-256
+`05009b1ccb19fa8e176d151a8a7706e227b7dbbcc101a8260aa52ec20a5d6cfd`.
+The original failed full matrix is not relabeled as a pass.
+
+A native spawn attempt returned `agent thread limit reached`; the proposed
+new BT worker was **not launched**. Actual completed, explicitly selected
+Luna/max session `/root/npu_provider_independent_review_20261003` is instead
+reused for implementation in the separate `bt-builder-pin-20261003` worktree.
+It is auditing exact historical/current reviewed helper and consumed-receipt
+contracts before changing any fingerprint. No automatic skip or relaxed gate
+is approved. Independent review follows its concrete change.
+
+The three explicit CI lists now contain the two new hardware-free NPU suites:
+**66 normal plus 63 optimized** invocations. All seven policy cases pass in
+flags 0/1/1, independently confirmed. Hosted execution of this exact new code
+is pending; the previous e51 hosted pass is not coverage of these changes.
+
+At 08:11:21 UTC the existing read-only collector verified the same native
+guardian/RECOVERY boot, kernel `b2dda820…`, 325 modules, healthy desktop and
+both Pi sessions, browser terminal, healthy idle model, battery full at
+25.9 C and maximum thermal reading 38 C. Available-ring capture is complete
+and has no indicators; full boot history, measured TrustZone progress and a
+new full RECOVERY readback are not claimed. No phone mutations occurred.
+Host free space is approximately 19.42 GB, below both heavy build gates; no
+owner data was deleted. Audio installation is not newly authorized, NPU
+BOOTUP is refused, independent hardware rescue remains unproven, and master
+and the dirty original checkout are unchanged.
