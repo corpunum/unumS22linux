@@ -2,6 +2,16 @@
 
 ## Continued implementation — 2026-10-03 06:53 UTC
 
+Destination accounting refreshed read-only at 07:02:47 UTC: native root and
+`/var/log` share the nearly full overlay (34,844,672 available bytes), whereas
+`/srv/s22` and the native Arch root share the persistent ext4 filesystem
+(101,570,510,848 available bytes; 1,652,475 free inodes). `/tmp` is a separate
+268,435,456-byte available filesystem. The sanitized destination receipt is
+`evidence/s22-native-storage-continued-20261003.json`; actual mount/root views
+are kept privately. No backing overlay files were changed. Persistent staging
+is not blocked merely by root-overlay space; incidental logging destinations
+still need their own bound and substantial captures remain on the rig.
+
 Coordinator-only read-only snapshot completed 06:54:46 UTC: same native
 RECOVERY boot/guardian, kernel GNU `b2dda820…`, 325 loaded modules, desktop and
 both Pi sessions healthy, model idle; battery full/100% at 26.0 C, maximum
