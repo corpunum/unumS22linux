@@ -2,6 +2,40 @@
 
 Status: bounded host-only source repair candidate and regression evidence. This is not a kernel build, device test, clock-provider acceptance, or authorization to boot or deploy.
 
+## Real frontend correction — 2026-10-03
+
+The coordinator's configured ARM64 frontend check found a concrete defect in
+the prior patch: `is_cleanup()` called `mwarn` with only a format string, but the
+SHA-pinned native macro requires an object argument. The variadic host shim had
+hidden it. This call now uses the existing object-free `warn` macro; the clock
+ownership and quarantine behavior is unchanged. Both host `mwarn` shims now
+retain the real required argument shape. A new executable negative control
+injects the actual pinned macro definition into the extracted shutdown harness,
+then confirms the corrected call compiles and the old objectless call fails at
+both C optimization levels. This is not merely a text assertion.
+
+Before the fix, the stricter ten-case suite failed three cases and the real
+ARM64 `is-core.c` frontend failed. After correction all ten cases pass with
+observed Python optimization flags 0/1/1, and all eight real configured ARM64
+frontend jobs pass: baseline and patched core, video, sensor-v2 and sensor
+clock setup. All 579 local camera headers were mechanically shadowed so nested
+quoted includes see the patched definitions. The initial temporary fixture
+also overmatched the separate `camera-pp` include prefix; that fixture error
+was corrected and rerun before attributing the remaining macro error to source.
+Both failed captures are preserved privately, not rewritten as success.
+
+The frontend uses the preserved clean native-eight source commit
+`872bffb8ea2ea657f94d10b866dc655b5718d6db`, its saved native compiler commands,
+the unchanged configuration SHA-256
+`d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16`, and
+hash-pinned Clang 18. It retains ARM64, `-O2`, warnings-as-errors, KCFI and shadow
+call stack while removing only object/dependency outputs for `-fsyntax-only`.
+Original source/header/config/command bytes are unchanged. No object, module,
+image, link/modpost, CRC acceptance or phone operation was produced. The
+sanitized receipt is `evidence/s22-camera-logging-frontend-host-20261003.json`.
+Independent review of this narrow correction is pending. All concurrency,
+provider, DMA and external teardown limitations below remain in force.
+
 ## Scope and pinned sources
 
 The owning worktree is `codex/s22-camera-shutdown-quarantine-20261003`, based on independent blocker review commit `18502bf`. The patch touches the v10.1 clock helpers, sensor-state and generic caller/PM paths, V4L2 context/open/release paths, and the camera core cleanup/shutdown paths. It does not change MCLK helpers, shared clock APIs, other camera variants, or global reboot policy.

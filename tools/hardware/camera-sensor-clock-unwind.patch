@@ -515,7 +515,7 @@ diff --git a/drivers/media/platform/exynos/camera/is-core.c b/drivers/media/plat
 +			device->reboot = true;
 +			mutex_unlock(&device->mutex_reboot);
 +		}
-+		mwarn("ICLK ownership unknown; skipping shared camera cleanup");
++		warn("ICLK ownership unknown; skipping shared camera cleanup");
 +		return;
 +	}
 +
