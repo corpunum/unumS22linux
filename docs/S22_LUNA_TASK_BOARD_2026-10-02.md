@@ -1,5 +1,55 @@
 # S22 continuation — 2026-10-02
 
+## Reviewed corrections frozen for publication — 2026-10-03 09:27 UTC
+
+The mission remains incomplete; these are host implementations and executable
+regressions, not newly working phone drivers. Three actual reused native
+workers retained accepted explicit `gpt-6-luna` / `max` selection, with no
+backend attestation or silent model substitution. Their previous worktrees and
+reviews remain intact. Only the coordinator accessed the phone, read-only.
+
+| Actual worker | Separate new worktree / frozen change | Result |
+| --- | --- | --- |
+| `/root/npu_provider_independent_review_20261003` | `bt-builder-pin-20261003`, author `5deeda5e…` / integration `4280f1f` | Exact reviewed runner-pin reconciliation, with preserved consumed trial. |
+| `/root/npu_report_independent_review_20261003` | `bt-builder-review-20261003`, review `9f82581d…` / integration `b31deb2` | PASS_LIMITED; 20 cases each flags 0/1/1, no skips, isolated read-only preflight. No candidate build or radio trial. |
+| `/root/audio_remote_freshness_fix_20261003` | `audio-observer-deadline-20261003`, author `fb7f5c5a…` / integration `9472c8b` | Provisional durable result; timely exact guard binding for acceptance; late finalization refuses. 42 cases each flags 0/1/1. |
+| `/root/audio_freshness_independent_review_20261003` | `audio-deadline-review-20261003`, review `5d2ced36…` / integration `6a952c6` | PASS_LIMITED; independent 42 cases each flags 0/1/1, plus wrong completed path/digest/kind/inode, delayed readback and permanently failed demotion controls. |
+
+The audio acceptance contract does not promise bounded local durability or
+method/CLI return time. Permanent demotion-write failure can leave a success
+marker on disk, but the observer throws without accepting; marker-only
+interpretation is unsupported and requires inspection. A delay after timely
+acceptance/real lock cleanup can produce a CLI return at fake time 601 without
+late sampling or late marker completion. Documentation-only `1239c02` makes
+that seam explicit; the independent reviewer checked its exact diff. Old
+BLOCKED reviews and markers are preserved, not reset or hidden.
+
+Coordinator's new full 129-invocation matrix on `9472c8b` returned exit 1:
+65 normal plus 62 optimized passes; two NPU suites failed pinned public-source
+downloads before target C execution. One distinct fresh public check of each,
+using the reviewed command and clean child environment, passed with actual C
+execution. Both full failed matrices remain failed in history. Bluetooth and
+audio corrected suites passed both modes; the exact receipt is
+`evidence/s22-local-driver-regressions-9472c8b-20261003.json`. Final hosted CI is
+not claimed by this pre-publication checkpoint.
+
+Fresh read-only native capture at 09:01:44 UTC: same boot, native guardian,
+kernel GNU `b2dda820…`, 325 modules, healthy desktop/both Pi sessions/browser
+terminal/idle model, battery 100%/Full at 25.9 C, maximum readable sensor 40 C.
+Available ring has no fatal/hung/trace indicators; it is not complete boot
+history, measured TrustZone progress or a new full RECOVERY readback. See
+`evidence/s22-native-health-reviewed-boundary-20261003.json`.
+
+New phone writes, reboots, powered trials, inference and service changes are
+zero. Audio image `6b788b23…` is not installed or newly authorized; its current
+production allowlist remains empty. Independent rescue remains unproven and
+NPU BOOTUP remains refused. Host disk is below the preserved heavy-build gates;
+owner data was not deleted and thresholds were not weakened. Remaining real
+acceptance includes audio, cameras, NPU, Bluetooth radio, SIM data/calls and
+owner-operated physical buttons/touch. The automatic goal tracker remains
+`usageLimited`, not reset, replaced or marked complete; no automatic wakeup is
+claimed.
+
 ## Actual Bluetooth correction reviewed; audio deadline correction active — 2026-10-03 09:01 UTC
 
 The legacy Bluetooth builder failed the actual local regression because its
