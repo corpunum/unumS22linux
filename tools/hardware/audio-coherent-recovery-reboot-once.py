@@ -169,10 +169,24 @@ def validate_readiness_snapshot(state: object, *, post_reboot: bool,
     _require(state.get('serious_fault') is False,
              'serious-fault status is unknown or a fault was recorded')
     logs = state.get('kernel_log_classification')
-    _require(isinstance(logs, dict) and isinstance(logs.get('fatal_indicators'), list) and
-             not logs['fatal_indicators'] and type(logs.get('liveness_unresolved')) is bool and
-             logs['liveness_unresolved'] is False,
-             'available kernel diagnostics report a fatal or unresolved liveness condition')
+    _require(isinstance(logs, dict) and
+             type(logs.get('input_available')) is bool and logs['input_available'] is True and
+             type(logs.get('capture_complete')) is bool and logs['capture_complete'] is True and
+             type(logs.get('coverage_complete')) is bool and logs['coverage_complete'] is True,
+             'kernel diagnostic input/capture/coverage is unavailable or incomplete')
+    fatal = logs.get('fatal_indicators')
+    hung_count = logs.get('hung_task_warning_count')
+    trace_count = logs.get('call_trace_count')
+    _require(isinstance(fatal, list) and not fatal and
+             type(hung_count) is int and hung_count == 0 and
+             type(trace_count) is int and trace_count == 0 and
+             type(logs.get('liveness_unresolved')) is bool and
+             logs['liveness_unresolved'] is False and
+             type(logs.get('assessment')) is str and
+             logs['assessment'] == 'no_indicators',
+             'kernel diagnostics do not meet the no-indicators readiness assessment')
+    _require(type(logs.get('full_boot_log_coverage')) is bool,
+             'kernel diagnostic full-boot coverage status is malformed')
     _require(AUDIO.network_state_valid(state.get('network_state')),
              'network readiness (wlan0 up/carrier) is not established')
     _require(AUDIO.power_state_valid(state.get('power_state')),
@@ -193,6 +207,17 @@ def validate_readiness_snapshot(state: object, *, post_reboot: bool,
 
 def _readiness_script() -> str:
     script = AUDIO.render_snapshot_script()
+    marker = 'print(json.dumps(state))'
+    _require(script.count(marker) == 1,
+             'pinned readiness collector has an ambiguous JSON output boundary')
+    # The pinned collector uses serious_fault=None when the classifier had no
+    # input, but does not otherwise serialize input_available. Export the
+    # classifier's exact value at the existing output boundary; do not infer
+    # availability from a nonempty ring or from a successful dmesg exit.
+    script = script.replace(
+        marker,
+        "state['kernel_log_classification']['input_available']=log_classification.input_available\n" +
+        marker)
     compile(script, 'audio-coherent-native-readiness', 'exec')
     return script
 
@@ -297,7 +322,8 @@ def _redacted_kernel_diagnostics(value: object) -> dict:
         return {'available': False}
     fatal = value.get('fatal_indicators')
     return {
-        'available': True,
+        'available': value.get('input_available'),
+        'assessment': value.get('assessment'),
         'fatal_indicator_count': len(fatal) if isinstance(fatal, list) else None,
         'fatal_indicators': fatal if isinstance(fatal, list) else None,
         'hung_task_warning_count': value.get('hung_task_warning_count'),

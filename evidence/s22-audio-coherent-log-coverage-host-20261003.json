@@ -1,0 +1,122 @@
+{
+  "schema": "s22-audio-coherent-log-coverage-host/v1",
+  "date": "2026-10-03",
+  "status": "implemented_host_tests_passed_pending_independent_review",
+  "scope": "host-only correction of the initial audio RECOVERY observer's incomplete kernel-diagnostic coverage gate",
+  "worktree_base": "5b1c3d0cd4cf91b5395c8bfb0a5886fea35d3e3d",
+  "author_source_commit": "6514d4d7a57911a00207886aee680aa9a181ab4f",
+  "frozen_blocking_review_commit": "5b1c3d0cd4cf91b5395c8bfb0a5886fea35d3e3d",
+  "author_source_import_tree": "40b7cba33ede1798328173b46d3871555bd2a48b",
+  "owned_paths": [
+    "tools/hardware/audio-coherent-recovery-reboot-once.py",
+    "tools/hardware/test-audio-coherent-trial-adapter.py",
+    "docs/research/AUDIO_COHERENT_TRIAL_ADAPTER_2026-10-03.md",
+    "evidence/s22-audio-coherent-log-coverage-host-20261003.json"
+  ],
+  "owned_source_sha256": {
+    "tools/hardware/audio-coherent-recovery-reboot-once.py": "8721b247df2b97b83c56a895f1b26dbb1a588595fae4beef5983cbdf9d3f1cc2",
+    "tools/hardware/test-audio-coherent-trial-adapter.py": "17b1c1a201e979708f106280744ae20dcfb4bba05a3d3ce38dc19519f843b4b2",
+    "docs/research/AUDIO_COHERENT_TRIAL_ADAPTER_2026-10-03.md": "b8f33e65fd2ce355ce23c1982c8e5e2e9f15aa9b5b5f8138cd00ea6d355dffb5"
+  },
+  "unchanged_source_pins_sha256": {
+    "tools/hardware/deploy-audio-coherent-recovery.py": "859047a5018d697e510ef77855c5f841b1ef2e8890fb9890d47ba8dcb2a4aa66",
+    "tools/hardware/audio-recovery-reboot-once.py": "5ec8fec300d514ef9e586dfe5635ca38995718acd0437caefe50c34358bd1ac4",
+    "tools/hardware/trustzone_log_classifier.py": "8faa2cd46d16818ebdd61d7a577b046489083f5c96a6a398ddea769ebbb6619a",
+    "tools/hardware/audio-coherent-recovery-profile.py": "7a24b600d8e8054ce4266a084b7d227a108928eb4319b548a1bc34bd88e407d4"
+  },
+  "pre_fix_reproduction": {
+    "classifier_input": "empty string with capture_complete=true",
+    "classifier_output": {
+      "input_available": true,
+      "assessment": "incomplete",
+      "capture_complete": true,
+      "coverage_complete": false,
+      "fatal_indicators": [],
+      "liveness_unresolved": false
+    },
+    "serious_fault": false,
+    "actual_pre_fix_readiness_validator_result": "accepted",
+    "interpretation_limit": "source-derived host counterexample; no claim about phone kernel-log contents"
+  },
+  "correction": {
+    "rendered_collector_change": "adds the classifier's exact input_available field immediately before the unique JSON output statement",
+    "required_exact_booleans": {
+      "input_available": true,
+      "capture_complete": true,
+      "coverage_complete": true
+    },
+    "assessment_required_for_this_readiness_decision": "no_indicators",
+    "additional_requirements": {
+      "fatal_indicators": "empty list",
+      "hung_task_warning_count": 0,
+      "call_trace_count": 0,
+      "liveness_unresolved": false,
+      "full_boot_log_coverage": "exact JSON boolean, either value accepted and preserved"
+    },
+    "trace_only_interpretation": "not classified as fatal or proven lockup; insufficient for this operation-specific initial-readiness gate",
+    "shared_deployment_or_stage_flash_helpers_modified": false,
+    "authorization_or_trial_allowlist_changed": false
+  },
+  "tests": {
+    "suite": "tools/hardware/test-audio-coherent-trial-adapter.py",
+    "test_count_per_run": 28,
+    "matrix": [
+      {
+        "mode": "normal",
+        "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=0 python3 -I -B tools/hardware/test-audio-coherent-trial-adapter.py",
+        "sys_flags_optimize": 0,
+        "passed": 28,
+        "failed": 0,
+        "exit_code": 0
+      },
+      {
+        "mode": "python_-O",
+        "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=1 python3 -O -I -B tools/hardware/test-audio-coherent-trial-adapter.py",
+        "sys_flags_optimize": 1,
+        "passed": 28,
+        "failed": 0,
+        "exit_code": 0
+      },
+      {
+        "mode": "PYTHONOPTIMIZE_environment",
+        "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=1 PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-audio-coherent-trial-adapter.py",
+        "sys_flags_optimize": 1,
+        "passed": 28,
+        "failed": 0,
+        "exit_code": 0
+      }
+    ],
+    "focused_cases": {
+      "actual_rendered_collector_executed": true,
+      "collector_execution_stubbed": ["dmesg subprocess", "other subprocess calls", "local HTTP probes"],
+      "empty_successful_dmesg_rejected": true,
+      "failed_unavailable_dmesg_rejected": true,
+      "malformed_missing_null_false_integer_zero_float_zero_and_incomplete_fields_rejected": 27,
+      "trace_only_is_not_a_readiness_allowlist": true,
+      "full_boot_boolean_false_and_true_preserved": true,
+      "incomplete_observation_success_receipt_absent": true,
+      "incomplete_observation_guard_marker_status": "unknown",
+      "successful_initial_observation_receipt_written_for_incomplete_logs": false
+    },
+    "syntax_compile": "passed",
+    "git_diff_check": "passed"
+  },
+  "coverage_boundary": {
+    "current_adapter_observation_count": 1,
+    "current_observation_is_stability_interval": false,
+    "current_ring_implies_full_boot_coverage": false,
+    "quiet_classifier_result_implies_trustzone_progress": false,
+    "future_proposed_bounded_window_seconds": 600,
+    "future_proposed_sample_seconds": [0, 60, 120, 180, 240, 300, 360, 420, 480, 540, 600],
+    "future_step_implemented_or_authorized": false
+  },
+  "safety_scope": {
+    "phone_or_ssh_access": false,
+    "partition_write_or_reboot": false,
+    "kernel_build_or_package": false,
+    "audio_pcm_or_hardware_test": false,
+    "owner_authorization_enabled": false,
+    "live_trial_markers_created": false,
+    "historical_blocked_review_modified": false
+  }
+}
