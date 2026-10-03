@@ -64,6 +64,7 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-prepare-camera-modpost-symvers.py",
     "tools/hardware/test-build-camera-module-recovery.py",
     "tools/hardware/test-build-audio-coherent-recovery.py",
+    "tools/hardware/test-audio-coherent-recovery-profile.py",
     "tools/hardware/test-camera-recovery-profile.py",
     "tools/hardware/test-camera-recovery-reboot.py",
     "tools/hardware/test-recovery-deployment-hardening.py",
