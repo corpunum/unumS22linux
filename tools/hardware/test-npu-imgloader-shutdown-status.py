@@ -61,6 +61,7 @@ NATIVE_EIGHT_PATCHES = (
 )
 NPU13_PATCH_SHA256 = "95e63b45d60e0a2611c1f2dcab4428e5658a03ff9954b8197d175ac6fec139cb"
 NPU14_PATCH_SHA256 = "f1af656f9e1b8ca2bf15e934031e0adf828c442267a17761ba64f7d7c611729a"
+STATUS_PATCH_SHA256 = "e7355e8906b22f1decf00de59cd644aac7bfcf6d861d97cdb3ff9bf084428385"
 
 
 def check(condition: bool, message: str) -> None:
@@ -70,6 +71,28 @@ def check(condition: bool, message: str) -> None:
 
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def verify_status_patch(data: bytes) -> None:
+    check(len(data) <= MAX_PATCH_BYTES, "provider-status patch exceeds byte bound")
+    check(digest(data) == STATUS_PATCH_SHA256,
+          "pinned provider-status patch bytes changed")
+
+
+def verify_status_patch_integrity_controls() -> None:
+    original = STATUS_PATCH_PATH.read_bytes()
+    verify_status_patch(original)
+    # A trailing newline leaves the touched paths and applicable diff unchanged.
+    # It must still fail the exact-byte provenance gate, before source fetching.
+    for label, changed in (("applicable diff mutation", original + b"\n"),
+                           ("empty patch", b""),
+                           ("oversized patch", b"x" * (MAX_PATCH_BYTES + 1))):
+        try:
+            verify_status_patch(changed)
+        except RuntimeError:
+            continue
+        raise RuntimeError(f"provider-status integrity control accepted {label}")
+    print("PATCH: provider-status exact pin and three rejection controls passed")
 
 
 def load_module(path: Path, name: str):
@@ -299,6 +322,7 @@ def compose_sources(public: dict[str, bytes], *, skip_default_fixtures: bool
         fixed = root / "fixed"
         copy_sources(npu14_sources, fixed)
         status_patch = STATUS_PATCH_PATH.read_bytes()
+        verify_status_patch(status_patch)
         check(patch_paths(status_patch) == {IMGLOADER_C, IMGLOADER_H, SYSTEM_C},
               "provider-status patch must touch only provider C/header and NPU system C")
         apply_selected_patch(
@@ -477,6 +501,7 @@ def main() -> int:
     )
     args = parser.parse_args()
     print(f"PY: sys.flags.optimize={sys.flags.optimize}")
+    verify_status_patch_integrity_controls()
     public = load_public_sources()
     verify_optional_composed_fixture(
         public, skip_default=args.skip_optional_local_fixtures)
