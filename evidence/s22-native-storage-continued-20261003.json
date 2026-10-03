@@ -1,0 +1,23 @@
+{
+  "schema": "s22-native-destination-storage/v1",
+  "capture_completed_utc": "2026-10-03T07:02:47.116376+00:00",
+  "operator": "coordinator; bounded read-only existing trusted USB SSH route",
+  "pid1": "native-guardian",
+  "destinations": {
+    "/": {"free_bytes_unprivileged": 34844672, "free_inodes_unprivileged": 29780, "filesystem_device": "0:26"},
+    "/srv/s22": {"free_bytes_unprivileged": 101570510848, "free_inodes_unprivileged": 1652475, "filesystem_device": "259:20", "filesystem": "ext4"},
+    "/tmp": {"free_bytes_unprivileged": 268435456, "free_inodes_unprivileged": 830476, "filesystem_device": "0:29"},
+    "/var/log": {"free_bytes_unprivileged": 34844672, "free_inodes_unprivileged": 29780, "filesystem_device": "0:26"},
+    "/mnt/omarchy-trial": {"free_bytes_unprivileged": 101570510848, "free_inodes_unprivileged": 1652475, "filesystem_device": "259:20"}
+  },
+  "private_capture_sha256": "f634aaba7d893a30083aa1726c6a5e356eae6551433f053b9c3a231921db2fc6",
+  "decision": "Use existing persistent /srv/s22 staging; keep substantial diagnostic logs/receipts on rig. No blind overlay cleanup or package installation.",
+  "limitations": [
+    "Point-in-time statvfs and actual mount/namespace evidence; revalidate destination before a newly authorized operation.",
+    "This is not independent hardware rescue, driver acceptance, or new deployment authority.",
+    "No overlay backing data was changed and no directory-size walk was performed."
+  ],
+  "device_writes": 0,
+  "reboot_requests": 0,
+  "powered_hardware_tests": 0
+}
