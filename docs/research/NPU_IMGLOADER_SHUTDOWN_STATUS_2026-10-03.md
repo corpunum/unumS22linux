@@ -55,6 +55,15 @@ selected-path application runs through ordinary `git apply --check` and
 `git apply`; the runner does not query a local Git object as a source
 fallback.
 
+The original author runner at `18709e79…` omitted enforcement of this final
+provider-patch digest despite this description. Independent review caught the
+gap. Coordinator correction `c579158` checks the exact provider-patch bytes
+before fetching source and again immediately before applying them. Its exact,
+apply-equivalent trailing-newline, empty, and oversized controls were
+independently executed with Python flags 0/1/1; the final three are rejected.
+The frozen author receipt is preserved, not relabeled as execution of the
+corrected runner. See the separate independent status review for the findings.
+
 | Order | Selected patch | SHA-256 |
 | ---: | --- | --- |
 | 1 | `npu-session-lifecycle-fix.patch` | `1554436cb6624c542f9e04ac22a3b3545e55f94c59d3025ee6bdc1ec43168251` |

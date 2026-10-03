@@ -1950,3 +1950,55 @@ active. No public-source exit-77/availability skip occurred in that hosted
 run. Its private log SHA-256 is
 `9a22c5305d023cbe1cfe4570e29cc0cba69f3d9ad98abcbc982af651bf18c14d`.
 This follow-up changes only public result documentation, not tested code.
+# Continued implementation and concrete review failures — 2026-10-03
+
+This is an additive record, not a replay of consumed hardware trials. The
+coordinator continues host implementation; master, the dirty original checkout,
+all previous receipts, and the working native phone are preserved.
+
+- Actual Luna/max worker `/root/audio_remote_freshness_fix_20261003` owns the
+  isolated `audio-observer-freshness-20261003` worktree. Independent review
+  `b8947e638f098ae8258121973dcb68c4bdbe05a9` reproduced the frozen observer's
+  acceptance of three identical remote replies while only host time advanced.
+  That observer remains **BLOCKED** pending the advancing native-uptime fix,
+  executable forward/reverse controls, and independent correction review.
+- Actual Luna/max worker `/root/npu_direct_report_ownership_20261003` owns
+  `npu-report-close-ownership-20261003`. Root's configured ARM64 baseline and
+  report-owner frontend jobs both passed for patch SHA `47647d18…` and composed
+  interface SHA `f7fa3b46…`, with no objects or modules produced. Root then
+  inspected the actual pinned `include/linux/refcount.h` and found a semantic
+  defect hidden by the host shim: dropping the sole publication reference with
+  `refcount_dec()` warns and saturates on 1 -> 0, preventing close's wait from
+  completing. That revision is **BLOCKED**, regardless of its syntax/test
+  passes. The worker is correcting the primitive and stricter actual-source
+  regression. The historical frontend receipt remains unchanged.
+- Actual Luna/max independent reviewer
+  `/root/npu_provider_independent_review_20261003`, isolated
+  `npu-provider-review-20261003`, committed review `738ce0bb…`, imported as
+  `4100d18`. All 96 actual extracted-C jobs from the pinned public source passed;
+  the frozen provider patch is **PASS_LIMITED**, not firmware, module or
+  hardware acceptance. The reviewer found the runner's missing exact provider
+  patch hash check. Coordinator correction `c579158` adds the gate before
+  fetch and immediately before application. Independent exact/applicable
+  newline/empty/oversized controls pass under flags 0/1/1; corrected runner
+  SHA is `b5319344c0ac811d4972c6ba221b3b4cb71eecf1cb560b3e54ab86f60fb56426`.
+- Provider and NPU caller configured ARM64 syntax jobs: four pass with the
+  original aarch64/O2/Werror/KCFI/SCS flags. Report-owner interface jobs: two
+  syntax passes, with the separate refcount defect above still blocking it.
+  No link/modpost/import CRC, module, kernel image or hardware result follows
+  from these checks.
+
+All worker selections were actually accepted through supported native
+`gpt-6-luna` / `max` configuration; this is configured-selection evidence,
+not backend identity attestation. Only root accesses the phone. Latest current
+read-only receipts remain 06:54 native health and 07:02 destination storage:
+same RECOVERY boot/kernel `b2dda820…`, native guardian, 325 modules, healthy
+desktop/Pi/idle model, and approximately 101.57 GB available on persistent
+`/srv/s22`; root overlay has approximately 34.84 MB. No cleanup was performed.
+
+New phone writes/reboots/powered tests/inference/service changes are **zero**.
+Audio candidate `6b788b23…` is not installed or newly authorized; NPU BOOTUP
+remains refused. Independent hardware rescue remains unproven. Bluetooth
+radio, audio, camera, NPU, SIM/data/calls and physical button/touch acceptance
+are not complete. Automatic goal status is `usageLimited`; it has not been
+reset or replaced, and cannot wake this conversation after a final reply.
