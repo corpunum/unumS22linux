@@ -1,5 +1,35 @@
 # S22 continuation — 2026-10-02
 
+## Continued implementation — 2026-10-03 06:53 UTC
+
+Coordinator-only read-only snapshot completed 06:54:46 UTC: same native
+RECOVERY boot/guardian, kernel GNU `b2dda820…`, 325 loaded modules, desktop and
+both Pi sessions healthy, model idle; battery full/100% at 26.0 C, maximum
+thermal sensor 42.0 C. Available ring is nonempty/complete with no indicators,
+not full-boot history or measured TrustZone progress. This snapshot did not
+reread RECOVERY. Private capture SHA-256
+`568508b1359dbbb68cba307fc8c31c56537cdffcd53dc4fdcf2fa72288f7282b`.
+Host free space is about 21.0 GB, below preserved heavy-build gates; source
+implementation, small harnesses and frontend checks can continue without
+deleting owner data or relaxing those gates.
+
+Fetched origin without pulling/resetting/stashing; reviewed branch remains
+`e51e13e95607c430a46212e6d4d7e4026fc73a1b`, master and the dirty original
+checkout preserved. Three actual native workers were launched with accepted
+explicit `gpt-6-luna` / `max` configuration, not backend attestation:
+
+| Worker | Separate worktree | Narrow implementation assignment |
+| --- | --- | --- |
+| `/root/audio_bounded_stability_20261003` | `audio-stability-observer-20261003` | Bounded independent host observation with actual deadline/sample validation and fake-clock regressions; production authorization stays inactive. |
+| `/root/npu_direct_report_ownership_20261003` | `npu-report-close-ownership-20261003` | Direct firmware-report reader versus publication/close lifetime, with real extracted-C threaded counterexamples. |
+| `/root/npu_provider_status_20261003` | `npu-provider-status-20261003` | Checked imgloader shutdown status without silently changing the old void API; preserve NPU stage ownership on partial/error outcomes. |
+
+All workers are host-only and have distinct file ownership. Results and
+independent review are pending; no driver functionality is promoted. Only the
+coordinator may access the phone. No new device write, reboot, powered test,
+inference or service change has occurred; old one-shot authorizations remain
+consumed, independent hardware rescue unproven, and NPU BOOTUP refused.
+
 ## Exact expanded hosted result — 2026-10-03 05:51 UTC
 
 Verified published source/review commit
