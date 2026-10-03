@@ -128,11 +128,13 @@ for two readiness polls (including the 15-second gap), the 195-second final
 sample offset, and the last pair/reconnect. This leaves 80 seconds within the
 600-second total for local processing and durable receipts. This is a separate
 remote-query/wait budget, not a hard bound on local filesystem or lock liveness.
-The observer checks the monotonic deadline after local receipt and marker I/O
-returns, and it never starts a remote query with more than the actual remaining
-time. A blocked local write/fsync cannot be interrupted by this adapter; if it
-eventually returns late, the observer fails closed, but this code makes no claim
-that a local durability syscall itself completes within 600 seconds.
+The observer checks the monotonic deadline after local receipt and marker
+finalization I/O returns, and it never starts a remote query with more than the
+actual remaining time. A blocked finalization write/fsync cannot be interrupted
+by this adapter; if it eventually returns late, acceptance fails closed. There
+is no claim that a local durability syscall itself completes within 600 seconds.
+The acceptance point precedes operation-lock cleanup; this is not a 600-second
+bound on method return, CLI output, lock release or descriptor close.
 
 Transport unavailability, readiness progression, and terminal contradiction
 are recorded separately. One disconnect may consume the single reconnect;
@@ -212,12 +214,16 @@ marker.
 
 This is a fail-closed post-I/O check, not preemption: a blocked local write,
 `fsync`, marker update, or lock operation cannot be interrupted by the adapter.
-When local I/O returns after the cutoff, the observer refuses success and
-makes a best-effort identity-checked UNKNOWN update; an I/O failure can still
-leave durable marker state uncertain, in which case no zero-exit acceptance is
-returned and the on-disk state requires separate inspection. The 600-second
-remote observation/query budget is not raised to cover local durability stalls.
-The tests use fake clocks and temporary host files only.
+When receipt/marker finalization I/O returns after the cutoff, the observer
+refuses acceptance and makes a best-effort identity-checked UNKNOWN update; an
+I/O failure can still leave durable marker state uncertain, in which case no
+zero-exit acceptance is returned and the on-disk state requires separate
+inspection. Lock release and descriptor close after the timely acceptance
+point, and subsequent CLI output, are not deadline-checked. A delay there can
+produce a later successful method/CLI return while its sampling and durable
+acceptance were timely. No bounded command-return or cleanup-liveness claim is
+made. The 600-second remote observation/query budget is not raised to cover
+local stalls. The tests use fake clocks and temporary host files only.
 
 ## Verification
 
