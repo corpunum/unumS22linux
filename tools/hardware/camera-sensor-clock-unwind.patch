@@ -325,6 +325,31 @@ diff --git a/drivers/media/platform/exynos/camera/is-device-sensor_v2.c b/driver
 +			set_bit(IS_SENSOR_ICLK_UNKNOWN, &device->state);
  		goto p_err;
  	}
+@@ -1616,1 +1633,15 @@ static void is_sensor_instanton(struct work_struct *data)
++static bool is_sensor_core_clock_ownership_unknown(struct is_core *core,
++	struct is_device_sensor *device)
++{
++	u32 i;
++
++	if (test_bit(IS_SENSOR_ICLK_UNKNOWN, &device->state))
++		return true;
++	if (!core)
++		return false;
++	for (i = 0; i < IS_SENSOR_COUNT; i++)
++		if (test_bit(IS_SENSOR_ICLK_UNKNOWN, &core->sensor[i].state))
++			return true;
++	return false;
++}
+ static void is_sensor_instanton(struct work_struct *data)
+@@ -1636,2 +1667,8 @@ static void is_sensor_instanton(struct work_struct *data)
+ 	mutex_lock(&device->mutex_reboot);
++	if (is_sensor_core_clock_ownership_unknown(core, device)) {
++		merr("ICLK ownership quarantined; suppressing CSI stop/start", device);
++		ret = -EUCLEAN;
++		mutex_unlock(&device->mutex_reboot);
++		goto dont_start_sensor;
++	}
+ 	if (device->reboot) {
 @@ -1729,5 +1729,11 @@ static int is_sensor_probe(struct platform_device *pdev)
  	atomic_set(&dev_id, pdev->id);
  	device = &core->sensor[pdev->id];
@@ -457,3 +482,52 @@ diff --git a/drivers/media/platform/exynos/camera/is-video.c b/drivers/media/pla
 +	}
 +
  	if (iv->video_type == IS_VIDEO_TYPE_LEADER) {
+
+diff --git a/drivers/media/platform/exynos/camera/is-core.c b/drivers/media/platform/exynos/camera/is-core.c
+--- a/drivers/media/platform/exynos/camera/is-core.c
++++ b/drivers/media/platform/exynos/camera/is-core.c
+@@ -1597,1 +1597,15 @@
++static bool is_sensor_clock_ownership_unknown(struct is_core *core)
++{
++	struct is_device_sensor *device;
++	int i;
++
++	for (i = 0; i < IS_SENSOR_COUNT; i++) {
++		device = &core->sensor[i];
++		if (device && test_bit(IS_SENSOR_ICLK_UNKNOWN, &device->state))
++			return true;
++	}
++
++	return false;
++}
++
+ void is_cleanup(struct is_core *core)
+@@ -1603,4 +1617,18 @@
+ 	info("%s enter: shutdown(%d)\n", __func__, core->shutdown);
+ 
++	if (is_sensor_clock_ownership_unknown(core)) {
++		/* Close the start gate, but retain all shared sensor resources. */
++		for (i = 0; i < IS_SENSOR_COUNT; i++) {
++			device = &core->sensor[i];
++			if (!device || !test_bit(IS_SENSOR_PROBE, &device->state))
++				continue;
++			mutex_lock(&device->mutex_reboot);
++			device->reboot = true;
++			mutex_unlock(&device->mutex_reboot);
++		}
++		mwarn("ICLK ownership unknown; skipping shared camera cleanup");
++		return;
++	}
++
+ 	for (i = 0; i < IS_SENSOR_COUNT; i++) {
+ 		device = &core->sensor[i];
+@@ -1642,4 +1670,9 @@
+ 	is_cleanup(core);
+ 
++	if (is_sensor_clock_ownership_unknown(core)) {
++		warn("%s: ICLK ownership unknown; retaining shared sensor workers\n", __func__);
++		return;
++	}
++
+ 	for (i = 0; i < IS_SENSOR_COUNT; i++) {
+ 		device = &core->sensor[i];

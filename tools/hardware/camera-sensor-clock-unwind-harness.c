@@ -1,3 +1,308 @@
+#ifdef CAMERA_SHUTDOWN_ONLY
+/* Host fixture for the exact extracted cleanup/reboot/shutdown functions. */
+#include <errno.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <string.h>
+
+typedef unsigned int u32;
+typedef unsigned long ulong;
+#define IS_SENSOR_COUNT 6
+
+struct notifier_block { int unused; };
+struct platform_device { void *drvdata; };
+struct work_struct { int unused; };
+struct is_device_sensor_peri {
+	struct {
+		struct work_struct global_setting_work;
+		struct work_struct mode_setting_work;
+	} cis;
+};
+struct is_module_enum { void *private_data; };
+struct v4l2_subdev { struct is_module_enum *data; };
+struct is_device_sensor {
+	unsigned long state;
+	int mutex_reboot;
+	bool reboot;
+	struct work_struct instant_work;
+	int instant_cnt;
+	int instant_wait;
+	int instant_ret;
+	int sstream;
+	void *private_data;
+	int device_id;
+	struct v4l2_subdev *subdev_module;
+	struct v4l2_subdev *subdev_csi;
+};
+struct is_core {
+	bool shutdown;
+	struct is_device_sensor sensor[IS_SENSOR_COUNT];
+};
+
+static struct is_core *configured_core;
+static int front_stop_calls;
+static int sensor_thread_deinit_calls;
+static int work_cancel_calls;
+static int csi_stream_calls;
+static int sensor_start_calls;
+static int sensor_start_result;
+static unsigned long fake_jiffies;
+
+static int fake_test_bit(int bit, unsigned long *state)
+{
+	return !!(*state & (1UL << bit));
+}
+
+static void fake_set_bit(int bit, unsigned long *state)
+{
+	*state |= 1UL << bit;
+}
+
+static void fake_clear_bit(int bit, unsigned long *state)
+{
+	*state &= ~(1UL << bit);
+}
+
+static struct is_core *is_get_is_core(void)
+{
+	return configured_core;
+}
+
+static void *platform_get_drvdata(struct platform_device *pdev)
+{
+	return pdev->drvdata;
+}
+
+static struct is_module_enum *v4l2_get_subdevdata(struct v4l2_subdev *subdev)
+{
+	return subdev->data;
+}
+
+static int is_sensor_front_stop(struct is_device_sensor *device, bool force_stop)
+{
+	(void)device;
+	(void)force_stop;
+	front_stop_calls++;
+	return 0;
+}
+
+static int is_sensor_start(struct is_device_sensor *device)
+{
+	(void)device;
+	sensor_start_calls++;
+	return sensor_start_result;
+}
+
+static int fake_v4l2_subdev_call(void)
+{
+	csi_stream_calls++;
+	return 0;
+}
+
+static void is_sensor_deinit_sensor_thread(struct is_device_sensor_peri *sensor_peri)
+{
+	(void)sensor_peri;
+	sensor_thread_deinit_calls++;
+}
+
+static void cancel_work_sync(struct work_struct *work)
+{
+	(void)work;
+	work_cancel_calls++;
+}
+
+#define test_bit(bit, state) fake_test_bit((bit), (state))
+#define set_bit(bit, state) fake_set_bit((bit), (state))
+#define clear_bit(bit, state) fake_clear_bit((bit), (state))
+#define mutex_lock(lock) do { (void)(lock); } while (0)
+#define mutex_unlock(lock) do { (void)(lock); } while (0)
+#define container_of(ptr, type, member) \
+	((type *)((char *)(ptr) - offsetof(type, member)))
+#define FIMC_BUG_VOID(condition) do { if (condition) return; } while (0)
+#define v4l2_subdev_call(subdev, group, operation, ...) fake_v4l2_subdev_call()
+#define IS_DISABLE_STREAM 0
+#define TIME_LAUNCH_STR(point) do { (void)(point); } while (0)
+#define TIME_LAUNCH_END(point) do { (void)(point); } while (0)
+#define LAUNCH_SENSOR_START 0
+#define LAUNCH_FAST_AE 1
+#define LAUNCH_TOTAL 2
+#define IS_FLITE_STOP_TIMEOUT 1
+#define INSTANT_OFF_CNT 0
+#define jiffies fake_jiffies
+#define msecs_to_jiffies(value) (value)
+#define jiffies_to_msecs(value) (value)
+#define wait_event_timeout(wait, condition, timeout) \
+	((void)(wait), (void)(timeout), (condition) ? 1 : 0)
+#define info(...) do { } while (0)
+#define minfo(...) do { } while (0)
+#define mwarn(...) do { } while (0)
+#define warn(...) do { } while (0)
+#define err(...) do { } while (0)
+#define merr(...) do { } while (0)
+
+/* CAMERA_SHUTDOWN_SENSOR_ENUM */
+
+/* CAMERA_SHUTDOWN_FUNCTIONS */
+
+static int check(int condition, const char *message)
+{
+	if (!condition) {
+		fprintf(stderr, "FAIL: %s\n", message);
+		return 1;
+	}
+	return 0;
+}
+
+static void reset_fixture(struct is_core *core, struct platform_device *pdev,
+		struct is_module_enum *modules, struct v4l2_subdev *subdevs,
+		struct is_device_sensor_peri *sensor_peri)
+{
+	int i;
+
+	memset(core, 0, sizeof(*core));
+	memset(pdev, 0, sizeof(*pdev));
+	memset(modules, 0, sizeof(*modules) * IS_SENSOR_COUNT);
+	memset(subdevs, 0, sizeof(*subdevs) * IS_SENSOR_COUNT);
+	memset(sensor_peri, 0, sizeof(*sensor_peri) * IS_SENSOR_COUNT);
+	pdev->drvdata = core;
+	configured_core = core;
+	for (i = 0; i < IS_SENSOR_COUNT; i++) {
+		core->sensor[i].state = 1UL << IS_SENSOR_PROBE;
+		core->sensor[i].private_data = core;
+		modules[i].private_data = &sensor_peri[i];
+		subdevs[i].data = &modules[i];
+		core->sensor[i].subdev_module = &subdevs[i];
+	}
+	front_stop_calls = 0;
+	sensor_thread_deinit_calls = 0;
+	work_cancel_calls = 0;
+	csi_stream_calls = 0;
+	sensor_start_calls = 0;
+	sensor_start_result = 0;
+	fake_jiffies = 0;
+}
+
+#ifdef CAMERA_EXPECT_SHUTDOWN_BASELINE
+int main(void)
+{
+	struct is_core core;
+	struct platform_device pdev;
+	struct is_module_enum modules[IS_SENSOR_COUNT];
+	struct v4l2_subdev subdevs[IS_SENSOR_COUNT];
+	struct is_device_sensor_peri sensor_peri[IS_SENSOR_COUNT];
+	int failures = 0;
+
+	reset_fixture(&core, &pdev, modules, subdevs, sensor_peri);
+	set_bit(IS_SENSOR_FRONT_START, &core.sensor[0].state);
+	set_bit(IS_SENSOR_ICLK_UNKNOWN, &core.sensor[0].state);
+	is_cleanup(&core);
+	is_sensor_instanton(&core.sensor[0].instant_work);
+	failures += check(front_stop_calls == 1,
+		"baseline cleanup stops an unknown-clock front-started sensor");
+	failures += check(csi_stream_calls == 1 && sensor_start_calls == 0 &&
+		core.sensor[0].instant_ret == -EINVAL,
+		"baseline queued worker CSI-stops after cleanup latches reboot");
+
+	reset_fixture(&core, &pdev, modules, subdevs, sensor_peri);
+	set_bit(IS_SENSOR_FRONT_START, &core.sensor[0].state);
+	set_bit(IS_SENSOR_ICLK_UNKNOWN, &core.sensor[0].state);
+	is_reboot_handler(NULL, 0, NULL);
+	failures += check(front_stop_calls == 1,
+		"registered reboot handler reaches the unguarded sensor stop");
+
+	reset_fixture(&core, &pdev, modules, subdevs, sensor_peri);
+	set_bit(IS_SENSOR_FRONT_START, &core.sensor[0].state);
+	set_bit(IS_SENSOR_OPEN, &core.sensor[0].state);
+	set_bit(IS_SENSOR_ICLK_UNKNOWN, &core.sensor[0].state);
+	is_shutdown(&pdev);
+	failures += check(front_stop_calls == 1 && sensor_thread_deinit_calls == 1 &&
+		work_cancel_calls == 2,
+		"baseline platform shutdown stops stream and deinitializes sensor work after uncertainty");
+
+	if (failures)
+		return 1;
+	puts("BASELINE_SHUTDOWN_REPRODUCED: cleanup, reboot, and shutdown bypass clock quarantine");
+	return 0;
+}
+#else
+int main(void)
+{
+	struct is_core core;
+	struct platform_device pdev;
+	struct is_module_enum modules[IS_SENSOR_COUNT];
+	struct v4l2_subdev subdevs[IS_SENSOR_COUNT];
+	struct is_device_sensor_peri sensor_peri[IS_SENSOR_COUNT];
+	int failures = 0;
+
+	/* Any unknown owner retains the shared camera cleanup set. */
+	reset_fixture(&core, &pdev, modules, subdevs, sensor_peri);
+	set_bit(IS_SENSOR_FRONT_START, &core.sensor[0].state);
+	set_bit(IS_SENSOR_ICLK_UNKNOWN, &core.sensor[0].state);
+	set_bit(IS_SENSOR_FRONT_START, &core.sensor[1].state);
+	is_cleanup(&core);
+	is_cleanup(&core);
+	is_sensor_instanton(&core.sensor[0].instant_work);
+	is_sensor_instanton(&core.sensor[1].instant_work);
+	failures += check(front_stop_calls == 0 && core.sensor[0].reboot &&
+		core.sensor[1].reboot && csi_stream_calls == 0 &&
+		sensor_start_calls == 0 && core.sensor[0].instant_ret == -EUCLEAN &&
+		core.sensor[1].instant_ret == -EUCLEAN,
+		"cleanup and queued workers retain unknown and healthy shared sensors without CSI stop/start");
+
+	reset_fixture(&core, &pdev, modules, subdevs, sensor_peri);
+	set_bit(IS_SENSOR_FRONT_START, &core.sensor[0].state);
+	set_bit(IS_SENSOR_ICLK_UNKNOWN, &core.sensor[0].state);
+	is_reboot_handler(NULL, 0, NULL);
+	is_sensor_instanton(&core.sensor[0].instant_work);
+	failures += check(front_stop_calls == 0 && core.sensor[0].reboot,
+		"registered reboot callback enters guarded cleanup without hardware stop");
+	failures += check(csi_stream_calls == 0 && sensor_start_calls == 0,
+		"queued worker after reboot callback performs no CSI stop or sensor start");
+
+	/* Platform shutdown must also retain all shared sensor worker resources. */
+	reset_fixture(&core, &pdev, modules, subdevs, sensor_peri);
+	set_bit(IS_SENSOR_FRONT_START, &core.sensor[0].state);
+	set_bit(IS_SENSOR_OPEN, &core.sensor[0].state);
+	set_bit(IS_SENSOR_ICLK_UNKNOWN, &core.sensor[0].state);
+	set_bit(IS_SENSOR_FRONT_START, &core.sensor[1].state);
+	set_bit(IS_SENSOR_OPEN, &core.sensor[1].state);
+	is_shutdown(&pdev);
+	is_shutdown(&pdev);
+	failures += check(core.shutdown && front_stop_calls == 0 &&
+		sensor_thread_deinit_calls == 0 && work_cancel_calls == 0 &&
+		core.sensor[0].reboot && core.sensor[1].reboot,
+		"unknown ownership prevents stream stop and thread/work teardown idempotently");
+
+	/* With no unknown owner, prior cleanup and shutdown behavior remains. */
+	reset_fixture(&core, &pdev, modules, subdevs, sensor_peri);
+	is_sensor_instanton(&core.sensor[0].instant_work);
+	failures += check(sensor_start_calls == 1 && csi_stream_calls == 0 &&
+		test_bit(IS_SENSOR_FRONT_START, &core.sensor[0].state),
+		"ordinary queued worker still starts sensor when ownership is known");
+
+	reset_fixture(&core, &pdev, modules, subdevs, sensor_peri);
+	set_bit(IS_SENSOR_FRONT_START, &core.sensor[0].state);
+	is_cleanup(&core);
+	failures += check(front_stop_calls == 1 && core.sensor[0].reboot,
+		"ordinary cleanup still stops a known front-started sensor");
+
+	reset_fixture(&core, &pdev, modules, subdevs, sensor_peri);
+	set_bit(IS_SENSOR_FRONT_START, &core.sensor[0].state);
+	set_bit(IS_SENSOR_OPEN, &core.sensor[0].state);
+	is_shutdown(&pdev);
+	failures += check(front_stop_calls == 1 && sensor_thread_deinit_calls == 1 &&
+		work_cancel_calls == 2,
+		"ordinary platform shutdown retains its stop and work-deinit behavior");
+
+	if (failures)
+		return 1;
+	puts("PASS: extracted terminal shutdown quarantine retains shared resources");
+	return 0;
+}
+#endif
+
+#else
 /* Host harness for the exact extracted sensor-clock functions proposed in the
  * camera-sensor-clock-unwind.patch. The Python test inserts function bodies
  * from the pinned baseline or its temporary patched copy at the marker below.
@@ -925,3 +1230,4 @@ int main(void)
 	return 0;
 }
 #endif
+#endif /* CAMERA_SHUTDOWN_ONLY */
