@@ -1,5 +1,17 @@
 # S22 continuation — 2026-10-02
 
+### NPU review receipt finalized — 2026-10-03 05:46 UTC
+
+The receipt pending in the 05:44 checkpoint is now frozen: independent
+`/root/bt_candidate_independent_review_20261002` commit
+`4f5421b393fd3f092ddd7c3209dd446cbea70cfd`, integrated as `95b9f33`.
+Verdict is **PASS_LIMITED for portable fixture handling only**. The public
+source-only 36-job matrix and four pre-fetch fixture rejection controls were
+independently reproduced; explicitly supplied bad source paths also refuse.
+The production NPU provider/release/static-storage limits remain unresolved.
+All three review receipts are now present; the expanded hosted run is still
+pending. This does not authorize deployment or change hardware acceptance.
+
 ## Frozen corrections, independent reviews and expanded CI — 2026-10-03 05:44 UTC
 
 The mission is **not complete**. These are unmerged host-side fixes, not new
