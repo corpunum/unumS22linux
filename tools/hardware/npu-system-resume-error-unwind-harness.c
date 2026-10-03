@@ -771,14 +771,19 @@ static void test_cpu_inverse_failure_retains_ownership(void)
 		&g_device.system.resume_soc_steps) &&
 		test_bit(NPU_SYS_RESUME_SOC, &g_device.system.resume_steps),
 		"failed CPU-off keeps both SoC ownership and parent stage");
+	REQUIRE(g_imgloader_shutdown_calls == 1,
+		"known-on CPU teardown issues the existing shutdown request once before CPU-off");
 	REQUIRE(g_cpu_live && g_clock_disable_calls == 0 && g_wake_source.active,
 		"lower resources remain live and wake lock is retained");
 	{
 		unsigned int cpu_off_calls = g_cpu_off_calls;
+		unsigned int shutdown_calls = g_imgloader_shutdown_calls;
 		REQUIRE(npu_system_suspend(&g_device.system) == -EUCLEAN,
 			"second suspend quarantines an ambiguous CPU-off");
-		REQUIRE(g_cpu_off_calls == cpu_off_calls && g_clock_disable_calls == 0,
-			"ambiguous CPU-off is not retried and clocks remain owned");
+		REQUIRE(g_cpu_off_calls == cpu_off_calls &&
+			g_imgloader_shutdown_calls == shutdown_calls &&
+			g_clock_disable_calls == 0,
+			"ambiguous CPU-off does not repeat shutdown/inverse and clocks remain owned");
 	}
 	REQUIRE(npu_system_resume(&g_device.system, 0) == -EBUSY,
 		"resume cannot erase failed-off ownership");
@@ -918,12 +923,112 @@ static void test_ambiguous_cpu_acquisition_quarantines(void)
 	REQUIRE(g_device.system.resume_soc_steps != 0 &&
 		g_device.system.resume_steps != 0,
 		"uncertain acquisition keeps ownership markers and upper stages");
+	{
+		unsigned int shutdown_calls = g_imgloader_shutdown_calls;
+		unsigned int cpu_off_calls = g_cpu_off_calls;
+		unsigned long resume_steps = g_device.system.resume_steps;
+		unsigned long soc_steps = g_device.system.resume_soc_steps;
+		REQUIRE(npu_system_suspend(&g_device.system) == -EUCLEAN,
+			"repeated suspend quarantines unknown CPU-on without retry");
+		REQUIRE(g_imgloader_shutdown_calls == shutdown_calls &&
+			g_cpu_off_calls == cpu_off_calls && g_cpu_live &&
+			g_wake_source.active && g_wake_unlock_calls == 0,
+			"repeat does not unload firmware, invert CPU, or release its wake dependency");
+		REQUIRE(g_device.system.resume_steps == resume_steps &&
+			g_device.system.resume_soc_steps == soc_steps,
+			"repeated unknown-state check retains exact ownership markers");
+	}
 	REQUIRE(npu_system_close(&g_device.system) == -EBUSY &&
 		g_memory_close_calls == 0,
 		"unknown CPU outcome blocks teardown of firmware memory");
 	printf("PASS: uncertain CPU acquisition is quarantined without guessed inverse\n");
 #endif
 }
+
+#ifndef EXPECT_BASELINE
+static void test_unknown_soc_state_precedes_firmware_teardown(void)
+{
+	int ret;
+	fixture_reset(1);
+#ifdef CONFIG_NPU_USE_BOOT_IOCTL
+	g_cpu_on_result = -ETIMEDOUT;
+	g_cpu_on_partial = 1;
+	ret = npu_system_resume(&g_device.system, 0);
+	REQUIRE(ret == -ETIMEDOUT && g_cpu_live &&
+		test_bit(NPU_SYS_RESUME_SOC_CPU_ON_UNCERTAIN,
+			&g_device.system.resume_soc_steps),
+		"configured CPU_ON failure retains its original errno and uncertain marker");
+#else
+	g_stm_on_result = -EIO;
+	g_stm_on_partial = 1;
+	ret = npu_system_resume(&g_device.system, 0);
+	REQUIRE(ret == -EIO && g_cpu_live && g_stm_live &&
+		test_bit(NPU_SYS_RESUME_SOC_STM_UNCERTAIN,
+			&g_device.system.resume_soc_steps),
+		"non-BOOT_IOCTL STM failure retains its original errno and uncertain marker");
+#endif
+	REQUIRE(g_imgloader_shutdown_calls == 0 && g_cpu_off_calls == 0 &&
+		g_stm_off_calls == 0 && g_interface_close_calls == 0,
+		"unknown SoC state is checked before loader, interface, or inverse operations");
+	REQUIRE(test_bit(NPU_SYS_RESUME_FW_LOAD, &g_device.system.resume_steps) &&
+		g_wake_source.active && g_wake_unlock_calls == 0,
+		"firmware ownership and wake dependency remain held while SoC may be live");
+#ifndef CONFIG_NPU_USE_BOOT_IOCTL
+	REQUIRE(g_clock_live && g_clock_disable_calls == 0,
+		"clock dependency remains owned while STM/CPU state may be live");
+#endif
+	{
+		unsigned long resume_steps = g_device.system.resume_steps;
+		unsigned long soc_steps = g_device.system.resume_soc_steps;
+		REQUIRE(npu_system_suspend(&g_device.system) == -EUCLEAN,
+			"repeat rejects uncertain acquisition before teardown");
+		REQUIRE(g_imgloader_shutdown_calls == 0 && g_cpu_off_calls == 0 &&
+			g_stm_off_calls == 0 && g_interface_close_calls == 0 &&
+			g_clock_disable_calls == 0 && g_wake_source.active &&
+			g_device.system.resume_steps == resume_steps &&
+			g_device.system.resume_soc_steps == soc_steps,
+			"repeat preserves dependency ownership and does not retry inverses");
+	}
+#ifdef CONFIG_NPU_USE_BOOT_IOCTL
+	printf("PASS: partial CPU_ON failure preserves firmware and wake ownership before quarantine\n");
+#else
+	printf("PASS: partial STM-enable failure preserves firmware and wake ownership before quarantine\n");
+#endif
+}
+#endif
+
+#ifdef EXPECT_PRECORRECTION
+static void test_pre_correction_teardown_order_negative_control(void)
+{
+	int ret;
+	fixture_reset(1);
+#ifdef CONFIG_NPU_USE_BOOT_IOCTL
+	g_cpu_on_result = -ETIMEDOUT;
+	g_cpu_on_partial = 1;
+	ret = npu_system_resume(&g_device.system, 0);
+	REQUIRE(ret == -ETIMEDOUT && g_cpu_live && g_cpu_off_calls == 0 &&
+		g_imgloader_shutdown_calls == 1,
+		"pre-correction NPU14 must reproduce shutdown-before-CPU_ON quarantine");
+	REQUIRE(!test_bit(NPU_SYS_RESUME_FW_LOAD, &g_device.system.resume_steps) &&
+		test_bit(NPU_SYS_RESUME_SOC_CPU_ON_UNCERTAIN,
+			&g_device.system.resume_soc_steps) && g_wake_source.active,
+		"negative control records loader ownership lost while CPU remains uncertain");
+#else
+	g_stm_on_result = -EIO;
+	g_stm_on_partial = 1;
+	ret = npu_system_resume(&g_device.system, 0);
+	REQUIRE(ret == -EIO && g_cpu_live && g_stm_live &&
+		g_cpu_off_calls == 0 && g_stm_off_calls == 0 &&
+		g_imgloader_shutdown_calls == 1,
+		"pre-correction NPU14 must reproduce shutdown before STM quarantine");
+	REQUIRE(!test_bit(NPU_SYS_RESUME_FW_LOAD, &g_device.system.resume_steps) &&
+		test_bit(NPU_SYS_RESUME_SOC_STM_UNCERTAIN,
+			&g_device.system.resume_soc_steps) && g_wake_source.active,
+		"negative control records loader ownership lost while STM/CPU remain live");
+#endif
+	printf("REPRO: pre-correction NPU14 requests firmware shutdown before unknown-SoC quarantine\n");
+}
+#endif
 
 static void test_actual_hwdev_callback_pm_transaction(void)
 {
@@ -1098,6 +1203,9 @@ static void test_actual_runtime_suspend_caller_propagates_cleanup_error(void)
 
 int main(void)
 {
+#ifdef EXPECT_PRECORRECTION
+	test_pre_correction_teardown_order_negative_control();
+#else
 	test_resume_failure_through_real_runtime_caller();
 	test_interface_failure_and_direct_bootup_close();
 	test_inverse_failure_quarantines_and_retry_is_blocked();
@@ -1108,12 +1216,16 @@ int main(void)
 	test_success_roundtrip_and_free_error();
 	test_ambiguous_cpu_acquisition_quarantines();
 	test_actual_hwdev_callback_pm_transaction();
+#ifndef EXPECT_BASELINE
+	test_unknown_soc_state_precedes_firmware_teardown();
+#endif
 #ifndef CONFIG_NPU_USE_BOOT_IOCTL
 	test_clock_prepare_failure_cleans_only_prior_stages();
 	test_stm_enable_failure_quarantines_unknown_outcome();
 	test_stm_disable_failure_preserves_ref_ownership();
 	test_transactional_runtime_pm_reference();
 	test_actual_runtime_suspend_caller_propagates_cleanup_error();
+#endif
 #endif
 	return 0;
 }
