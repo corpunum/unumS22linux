@@ -1,5 +1,39 @@
 # S22 continuation — 2026-10-02
 
+## Actual Bluetooth correction reviewed; audio deadline correction active — 2026-10-03 09:01 UTC
+
+The legacy Bluetooth builder failed the actual local regression because its
+runner pin was stale after a previously reviewed deployment-helper change.
+Author `/root/npu_provider_independent_review_20261003` implemented the exact
+current pin in separate `bt-builder-pin-20261003`, commit `5deeda5e…`, integrated
+as `4280f1f`. The full runner difference is one helper-digest line; the helper
+change narrows JSON primitive-type acceptance. There is no stale-pin fallback,
+force load, bridge run, candidate build or replay of the consumed trial.
+
+Independent `/root/npu_report_independent_review_20261003`, in separate
+`bt-builder-review-20261003`, committed `9f82581d…`, integrated as `b31deb2`.
+Verdict **PASS_LIMITED**: 20 tests passed in each flags-0/1/1 mode with no skips;
+real isolated read-only check-only passed. The existing mode-0700 output
+directory was unchanged, not inspected or recreated; its absent-output case
+was not demonstrated. The pinned public consumed receipt and one-attempt
+invariants remain unchanged. Both actual reused workers retain their accepted
+explicit `gpt-6-luna` / `max` selection; this is not backend attestation.
+
+Hosted run `37110523421` verified source `907eb049…`: 66 normal plus 63 optimized
+script passes, zero script failures, 28 explicit optional-fixture skip lines and
+three normal-only optimized skips. That hosted result predates the Bluetooth
+pin correction and pending audio correction. The earlier local 126-pass /
+three-failure matrix remains preserved, not relabeled after fresh rechecks.
+
+Audio `/root/audio_remote_freshness_fix_20261003` is implementing in new separate
+`audio-observer-deadline-20261003`. Its previous independent review reproduced
+late local final persistence at 601 seconds still reporting success. The
+correction must fail closed and preserve history; independent review is still
+required. Production audio authorization is false with an empty trial allowlist.
+No additional phone write, reboot, powered trial, inference or service change
+has occurred. The current native installation, dirty original checkout, master,
+historical markers and existing worktrees remain preserved.
+
 ## Frozen implementation and active independent review — 2026-10-03 07:30 UTC
 
 - Audio author `/root/audio_bounded_stability_20261003` committed `7249f1e5…`,
