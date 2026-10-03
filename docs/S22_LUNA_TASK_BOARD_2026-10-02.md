@@ -1,5 +1,67 @@
 # S22 continuation — 2026-10-02
 
+## Executable review counterexamples and continued implementation — 2026-10-03 02:47 UTC
+
+The running phone remains on the camera-baseline native RECOVERY image, not
+the newly packaged audio candidate. This checkpoint does not authorize any
+powered experiment or turn host coverage into working hardware.
+
+- Exact published `c92dd131e19e77e2aaaf5ba77f120dd605b46fcd` hosted run
+  `37088704753` succeeded: 61 normal and 58 optimized script invocations,
+  seven policy cases, zero runner failures. Complete private-log SHA-256 is
+  `11e579fa5b247296e743a2dcc54ceba6f9c669b1a7f10b39d36cff03c6a7d9e3`.
+  The 26 optional-fixture skip lines and three normal-only scripts remain
+  explicit. New audio execution, NPU14 and camera clock suites are not yet
+  in that allowlist.
+- Fresh coordinator-only read-only evidence at 02:08/02:11 UTC established
+  the same boot, native guardian, kernel GNU build ID `b2dda820…`, 325 loaded
+  modules, healthy desktop/both Pi sessions/idle model API, battery full at
+  26.0 C and maximum thermal sensor 39.0 C. A no-follow read-only descriptor
+  independently read all 100,663,296 bytes of `/dev/sda16` (`259:0`), matching
+  RECOVERY SHA-256 `b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f`.
+  All three loaded audio-module GNU identities match the old baseline, not
+  the candidate. The nonempty available ring has no serious/hung/trace
+  indicator; it is not full-boot coverage or measured TrustZone progress.
+- NPU14 corrected author `9553c8b7`, imported `208cdd8`, received independent
+  review `752c8773`, imported `75ac8e8`. The narrow uncertainty-before-cleanup
+  ordering passes, but an isolated public-source run fails before C because
+  it requests an unpublished local Git object. The 72 passing local/shared
+  public-route C jobs do not resolve that portable-runner defect. Worker
+  `/root/audio_driver_path_next_20261002` is actually correcting it in
+  `npu14-portable-fixture-20261003`, with an explicitly approved, hash-pinned
+  already-public historical software patch as a negative fixture. No provider
+  completion, remove/release lifetime, static log-buffer lifetime or BOOTUP
+  acceptance is inferred.
+- Root separately ran four complete ARM64 frontend jobs on original and
+  corrected `npu-system.c` and `npu-device.c`, using the saved native commands,
+  preserved headers/config and hash-pinned Clang 18 with original O2/Werror/
+  KCFI/SCS flags. All returned zero with empty diagnostics; original source,
+  config and saved commands were unchanged. An initial bare-compiler-path
+  preparation refusal occurred before compiler execution and is retained.
+  `-fsyntax-only` produced no object, module or Image. This is not a new
+  native module build, linking/modpost proof or hardware result.
+- Camera revision review `3d24675b`, imported `18d913c`, is **BLOCKED** for
+  enabled reboot/platform shutdown paths bypassing sticky unknown ownership.
+  Worker `/root/bt_candidate_independent_review_20261002` is actually fixing
+  those specific paths in `camera-shutdown-quarantine-20261003`; clean-path,
+  mixed-sensor, repeated and actual extracted shutdown-C checks are being
+  executed. Asynchronous/DMA quiescence and physical acceptance remain
+  unresolved, and the historical camera result stays `not_accepted`.
+- Inactive audio adapter author `a3f93495`, imported `d604b61`, received
+  independent **BLOCKED** review `8b42d94e`, imported `15790d5`: the actual
+  classifier marks a successful empty dmesg capture incomplete, but the
+  post-reboot validator accepts it. All 20 existing tests pass in flags
+  0/1/1, demonstrating missing coverage, not clearance. Worker
+  `/root/autonomous_driver_review_20261002` is actually implementing the
+  coverage gate and counterexample regression in `audio-log-coverage-20261003`.
+  The adapter remains unauthorized, with no real markers or environment/CLI
+  authorization override. Its initial snapshot is not a stability interval.
+- These actual workers retain accepted explicit `gpt-6-luna` / `max`
+  configuration, not backend attestation. New phone writes, reboots, powered
+  trials, inference and application changes are zero. Historical evidence and
+  the dirty original checkout are preserved; master remains unchanged and
+  independent hardware rescue remains unproven.
+
 ## Published WIP sources, real review blocker and stronger host check — 2026-10-03 02:04 UTC
 
 This is an unmerged **review** branch. The source candidates below are not

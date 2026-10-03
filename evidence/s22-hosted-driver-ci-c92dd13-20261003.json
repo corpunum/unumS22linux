@@ -1,0 +1,27 @@
+{
+  "schema": "s22-hosted-driver-ci/v1",
+  "repository": "corpunum/unumS22linux",
+  "branch": "s22/luna-driver-completion-20260923",
+  "tested_commit": "c92dd131e19e77e2aaaf5ba77f120dd605b46fcd",
+  "run_id": 37088704753,
+  "run_url": "https://github.com/corpunum/unumS22linux/actions/runs/37088704753",
+  "conclusion": "success",
+  "job_started_utc": "2026-10-03T02:07:53Z",
+  "job_completed_utc": "2026-10-03T02:10:27Z",
+  "normal_script_invocations_passed": 61,
+  "optimized_script_invocations_passed": 58,
+  "runner_failures": 0,
+  "runner_policy_cases": 7,
+  "explicit_optional_fixture_skip_log_lines": 26,
+  "complete_private_log_sha256": "11e579fa5b247296e743a2dcc54ceba6f9c669b1a7f10b39d36cff03c6a7d9e3",
+  "limitations": [
+    "Host-only tests are not working hardware or deployment acceptance.",
+    "Three standalone scripts remain intentionally normal-only; optional private and verified-public-tool fixtures retain explicit skips.",
+    "NPU14 and the camera clock ownership revision are not registered in this tested allowlist.",
+    "The unpublished audio execution adapter is not covered by this hosted run.",
+    "A later GitHub API read failure did not change the successfully completed run; final metadata and full log were reconciled."
+  ],
+  "phone_operations": 0,
+  "hardware_acceptance": false,
+  "master_changed": false
+}

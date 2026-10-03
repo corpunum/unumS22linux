@@ -1,0 +1,67 @@
+{
+  "schema": "s22-native-readonly-baseline/v1",
+  "capture_window_utc": "2026-10-03T02:08:00Z/2026-10-03T02:12:00Z",
+  "operator": "coordinator-only; strict-host-key existing USB route",
+  "device_model": "SM-S901B",
+  "boot_hardware": "s5e9925",
+  "pid1": "native-guardian",
+  "same_nonempty_boot_id_as_previous_capture": true,
+  "uptime_seconds": 485300.31,
+  "kernel_gnu_build_id": "b2dda820b18d410d9bf12f1bd2584567d545991d",
+  "loaded_modules_count": 325,
+  "recovery": {
+    "partition": "RECOVERY",
+    "block_target": "/dev/sda16",
+    "rdev": [259, 0],
+    "capacity": 100663296,
+    "bytes_read": 100663296,
+    "sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+    "fd_readonly": true,
+    "alias_resolved_and_fstat_identity_rechecked": true,
+    "no_extra_byte_after_pinned_capacity": true,
+    "baseline_matches": true
+  },
+  "running_audio_module_build_ids": {
+    "snd_soc_samsung_abox": "34a5354a75980688ee7dbeb6a848e04a7d54558f",
+    "rainbow_prince": "510b984887b640ad4ad3c1e9a556ef16c30b38c9",
+    "exynos_usb_audio_offloading": "4f35c50b0eca0d22b2060f7b8d84f03359feacd1"
+  },
+  "readiness": {
+    "kernel_remote_control": true,
+    "desktop_environment": true,
+    "desktop_pi_status": "ready",
+    "browser_terminal_status": "ready",
+    "dedicated_pi_session_status": "ready",
+    "model_api_health": true,
+    "model_idle": true
+  },
+  "power": {
+    "battery_capacity_percent": 100,
+    "battery_status": "Full",
+    "battery_temperature_celsius": 26.0,
+    "maximum_thermal_zone_celsius": 39.0,
+    "readable_zones": 9
+  },
+  "available_kernel_log": {
+    "bytes": 255777,
+    "serious_fault": false,
+    "fatal_indicators": [],
+    "hung_task_warning_count": 0,
+    "call_trace_count": 0,
+    "full_boot_log_coverage": false,
+    "TrustZone_progress_measured": false
+  },
+  "private_complete_snapshot_sha256": "2afb8ed95fba30b0f5daf0e4bd8c77d521d4f3547191ef031858e0810ad1b7d6",
+  "private_complete_readback_receipt_sha256": "eecce95e66dc34355b332141b08046537dee8668ffdc7e32bdded685ba14799d",
+  "limitations": [
+    "Available ring coverage is not full boot history or a physical liveness test.",
+    "Current-kernel USB SSH does not demonstrate independent hardware rescue.",
+    "Audio candidate 6b788b23 is not installed or owner-authorized.",
+    "No raw-HCI, controller, NPU BOOTUP, audio, camera or physical-button experiment occurred."
+  ],
+  "partition_writes": 0,
+  "reboot_requests": 0,
+  "inference_requests": 0,
+  "application_changes": 0,
+  "independent_hardware_rescue": "unproven"
+}
