@@ -1,5 +1,63 @@
 # S22 continuation — 2026-10-02
 
+## Published WIP sources, real review blocker and stronger host check — 2026-10-03 02:04 UTC
+
+This is an unmerged **review** branch. The source candidates below are not
+device-accepted fixes, deployment authorization, or changes to master.
+
+- Exact hosted run `37086783857` at `1784035960d264ab8406049ab11d397568c84546`
+  passed **61 normal plus 58 optimized** script invocations and seven
+  runner-policy cases, zero runner failures. There are 26 explicit optional
+  fixture-skip log lines plus three normal-only scripts; these are not hidden
+  coverage. The sanitized receipt records complete private-log SHA-256
+  `9749aa8490eb92cb0982d1667f4b70cfcaa65550f66f3e38c2ae79b0d0339671`.
+- Root executed one lightweight NPU13 **complete ARM64 translation-unit
+  frontend** check, reusing preserved NPU12 generated headers/config and the
+  saved compiler command. Pinned Clang 18, original O2/Werror/KCFI/SCS flags
+  and ordinary patch application passed with empty diagnostics. `-fsyntax-only`
+  produced no object, module or Image; source/config/command stayed unchanged.
+  The separate receipt does not claim linking, modpost, CRC validation of a
+  new module, a new kernel build, NPU14 clearance, or hardware operation.
+- NPU14 author `4a229481`, imported `23e6f6c`, is **BLOCKED**. Independent
+  Luna review `8848a486`, imported `290f704`, reproduced the configured
+  BOOT_IOCTL CPU-on partial-error path calling image-loader shutdown before
+  CPU uncertainty quarantine. The modeled CPU stayed live. The pinned provider
+  can release S2MPU firmware permissions and has a void API; no provider or
+  device operation was performed. Thirty-two extracted-C jobs passed the
+  existing tests, but the independent negative control failed the missing
+  ordering oracle. The review separately records normal CPU-off sequencing,
+  unobservable provider errors, remove/release limits, static-buffer no-op
+  ownership and private-fixture/tempdir harness defects.
+- `/root/audio_driver_path_next_20261002` is actually implementing the NPU14
+  correction in `npu-system-resume-correction-20261003`, based on the frozen
+  author. Its four owned source/test/doc paths and optional host receipt are
+  isolated from the frozen blocking review. The fix must protect uncertain
+  CPU dependencies and improve portable actual-C coverage without inventing
+  provider success, kernel acceptance or BOOTUP authorization.
+- Camera initial author `cfcd4a5d`, imported `3e47e36`, and blocking review
+  `8f05cd5a`, imported `e4ee2ff`, remain in history. Revised author `296441ec`,
+  imported `044fcaf`, now propagates errors and quarantines uncertain clock
+  ownership across sensor/ischain contexts. Its terminal retention explicitly
+  leaks the context/queue/buffers plus one module and V4L2-node reference;
+  VFS still closes the file. Eight tests passed in forced-public and local
+  optimization-mode runs. `/root/camera_clock_independent_review_20261003`
+  is actually independently reviewing `camera-clock-ownership-review-20261003`.
+  Shutdown/reboot, external teardown and asynchronous/DMA liveness are **not
+  cleared**; the physical camera remains `not_accepted`.
+- `/root/autonomous_driver_review_20261002` continues the small audio trial
+  adapter in its isolated worktree. Current production authorization is false
+  with an empty execution-authorized allowlist; no ACK or CLI option grants
+  permission. Reserved audio trial data has created no real markers. A new
+  exact audio deployment remains separately owner-authorized work, not a
+  replay of consumed HCI/camera trials.
+- These actual workers retain accepted explicit `gpt-6-luna` / `max`
+  configuration, not backend attestation. Only root accesses the phone;
+  new writes, reboots, powered trials, inference and application changes
+  remain **zero**. The existing running native environment and historical
+  receipts are preserved, independent hardware rescue remains unproven,
+  and master is unchanged. Host code/tests continue while physical and
+  operation-specific authorization items remain queued.
+
 ## Reviewed receipt fix and next implementation wave — 2026-10-03 01:36 UTC
 
 Historical receipts, blocked reviews and consumed trials remain preserved.

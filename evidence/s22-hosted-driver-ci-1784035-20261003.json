@@ -1,0 +1,28 @@
+{
+  "schema": "s22-hosted-driver-ci/v1",
+  "repository": "corpunum/unumS22linux",
+  "branch": "s22/luna-driver-completion-20260923",
+  "tested_commit": "1784035960d264ab8406049ab11d397568c84546",
+  "run_id": 37086783857,
+  "run_url": "https://github.com/corpunum/unumS22linux/actions/runs/37086783857",
+  "conclusion": "success",
+  "job_started_utc": "2026-10-03T01:37:15Z",
+  "job_completed_utc": "2026-10-03T01:40:03Z",
+  "normal_script_invocations_passed": 61,
+  "optimized_script_invocations_passed": 58,
+  "runner_failures": 0,
+  "runner_policy_cases": 7,
+  "explicit_optional_fixture_skip_log_lines": 26,
+  "audio_profile_normal_and_optimized_passed": true,
+  "complete_private_log_sha256": "9749aa8490eb92cb0982d1667f4b70cfcaa65550f66f3e38c2ae79b0d0339671",
+  "limitations": [
+    "Host-only source and fake-operation tests are not device acceptance.",
+    "Private artifact fixtures and unavailable verified AVB-tool fixtures retain explicit skips, including the new optional audio artifact fixture in each mode.",
+    "Three assert-only or optimization-refusing standalone scripts remain intentionally normal-only.",
+    "Expected baseline failures and negative patch-application controls in the log are part of passing regressions, not hardware events.",
+    "The blocked NPU14 and camera ownership revisions are not part of this CI allowlist or accepted hardware."
+  ],
+  "phone_access_or_mutations": false,
+  "hardware_acceptance": false,
+  "master_changed": false
+}
