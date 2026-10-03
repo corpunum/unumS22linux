@@ -126,9 +126,13 @@ remote-query/wait path is at most 520 seconds: at most 188 seconds for the
 180-second uptime schedule and a final probe/reconnect, plus at most 332 seconds
 for two readiness polls (including the 15-second gap), the 195-second final
 sample offset, and the last pair/reconnect. This leaves 80 seconds within the
-600-second total for local processing and durable receipts. The monotonic
-deadline remains authoritative if any work consumes that margin; no query
-starts with more than the actual remaining time.
+600-second total for local processing and durable receipts. This is a separate
+remote-query/wait budget, not a hard bound on local filesystem or lock liveness.
+The observer checks the monotonic deadline after local receipt and marker I/O
+returns, and it never starts a remote query with more than the actual remaining
+time. A blocked local write/fsync cannot be interrupted by this adapter; if it
+eventually returns late, the observer fails closed, but this code makes no claim
+that a local durability syscall itself completes within 600 seconds.
 
 Transport unavailability, readiness progression, and terminal contradiction
 are recorded separately. One disconnect may consume the single reconnect;
@@ -178,9 +182,46 @@ implied by a quiet current ring, a recognized thread name, or a call trace.
 The new evidence is host-only: the production authorization remains false and
 the allowlist remains empty.
 
+## Deadline-completion correction — additive 2026-10-03
+
+The frozen deadline review and its `BLOCKED` verdict remain preserved at
+`docs/research/AUDIO_REMOTE_FRESHNESS_REVIEW_2026-10-03.md` and
+`evidence/s22-audio-remote-freshness-review-20261003.json`. Its pre-correction
+counterexample is retained in
+`evidence/s22-audio-deadline-completion-host-20261003.json`: the actual frozen
+observer persisted its result and completed the matching guard marker, then a
+fake clock advanced to 601 seconds during final receipt persistence. The old
+path returned `bounded-stability-observed` with a matching complete/success
+marker and would have let the CLI exit zero.
+
+The corrected on-disk stability result is now explicitly
+`provisional-bounded-stability-observed`; the receipt says that the file alone
+is not acceptance and names the exact required stability marker identity. It
+can be accepted only through a successful observer return/CLI exit after the
+durable receipt digest, active operation identity, complete/success marker,
+receipt path and digest, and final monotonic-deadline check all match. An
+UNKNOWN reboot request has no stability operation marker, so its read-only
+candidate remains provisional and the CLI exits nonzero. A late result write
+never completes the still-pending stability marker. If completion itself
+returns after the deadline, the code rechecks that exact in-flight operation
+while its lock remains held, demotes only its matching completion to UNKNOWN,
+and nests the original success fields and provisional receipt reference for
+audit. It does not rewrite older markers, remove receipts, or make the consumed
+operation retryable. A wrong marker identity is refused without updating that
+marker.
+
+This is a fail-closed post-I/O check, not preemption: a blocked local write,
+`fsync`, marker update, or lock operation cannot be interrupted by the adapter.
+When local I/O returns after the cutoff, the observer refuses success and
+makes a best-effort identity-checked UNKNOWN update; an I/O failure can still
+leave durable marker state uncertain, in which case no zero-exit acceptance is
+returned and the on-disk state requires separate inspection. The 600-second
+remote observation/query budget is not raised to cover local durability stalls.
+The tests use fake clocks and temporary host files only.
+
 ## Verification
 
-The 37-case hardware-free suite passed in normal Python, `python3 -O`, and
+The 42-case hardware-free suite passed in normal Python, `python3 -O`, and
 `PYTHONOPTIMIZE=1 python3 -B`. Each invocation checked the expected
 `sys.flags.optimize` value (`0`, `1`, and `1` respectively); `-I` was not
 combined with the environment mode. The new tests execute the actual rendered
@@ -197,8 +238,12 @@ remote interval under 180 seconds, wrong and later-changed boot/image/module
 identity, fatal and hung-task
 diagnostics, trace-only startup gating, later fault, exhausted transport gap,
 deadline exhaustion, empty logs, nonprogressing clock, UNKNOWN reboot
-non-replay, and refusal to reuse old stability receipts/markers. `py_compile`
-and `git diff --check` also passed.
+non-replay, refusal to reuse old stability receipts/markers, delayed final
+receipt persistence, delayed guard completion, identity-checked UNKNOWN
+demotion with a transient update failure, refusal on a wrong marker, late
+failure-receipt persistence, and nonzero CLI handling for a provisional result
+without a guard marker. In-memory source compilation and `git diff --check` also
+passed.
 
 The fake-filesystem tests execute the actual rendered remote code for both
 profile directions with a 4,096-byte synthetic image. Stage produced zero

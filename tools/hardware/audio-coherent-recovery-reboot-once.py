@@ -614,6 +614,145 @@ def _stability_marker_id(profile_name: str) -> str:
     return f'{profile["trial_identity"]}-{_direction(profile_name)}-stability'
 
 
+def _stability_marker_kind(profile_name: str) -> str:
+    return f'audio-coherent-{_direction(profile_name)}-stability'
+
+
+def _read_stability_operation_marker(operation, *, profile_name: str,
+                                     state_root: Path, project_root: Path) -> dict:
+    marker_id = _stability_marker_id(profile_name)
+    marker_kind = _stability_marker_kind(profile_name)
+    expected_path = Path(state_root) / f'{marker_id}.json'
+    expected_root = Path(state_root)
+    expected_project = str(Path(project_root).resolve())
+
+    def refuse(message: str, error: BaseException | None = None):
+        # Do not let the context manager rewrite a marker whose identity could
+        # not be proved against this exact in-flight operation.
+        if operation is not None and getattr(operation, 'started', False):
+            operation.finished = True
+        raise TerminalObservationError('ambiguous_marker', message) from error
+
+    if (operation is None or operation.trial_id != marker_id or
+            operation.operation_kind != marker_kind or
+            Path(operation.state_root) != expected_root or
+            Path(operation.marker_path) != expected_path or
+            operation.started is not True or operation.marker_fd is None):
+        refuse('active stability operation does not match the expected guard identity')
+    try:
+        operation._verify_marker_identity()
+        marker = GUARD._read_marker(expected_path)
+        operation._verify_marker_identity()
+    except Exception as error:
+        refuse('active stability guard marker identity cannot be verified', error)
+    if (marker.get('trial_id') != marker_id or
+            marker.get('operation_kind') != marker_kind):
+        refuse('active stability guard marker fields do not match this operation')
+    if marker.get('status') in ('pending', 'unknown') and (
+            marker.get('project_root') != expected_project or
+            marker.get('pid') != os.getpid()):
+        refuse('active stability guard marker origin does not match this process')
+    return marker
+
+
+def _require_stability_marker_phase(marker: dict, *, phase: str,
+                                    result_path: Path | None = None,
+                                    result_sha256: str | None = None,
+                                    operation=None) -> None:
+    if phase == 'pending':
+        valid = (marker.get('status') == 'pending' and
+                 'outcome' not in marker and 'receipt_path' not in marker and
+                 'receipt_sha256' not in marker)
+    elif phase == 'complete':
+        valid = (marker.get('status') == 'complete' and
+                 marker.get('outcome') == 'success' and
+                 marker.get('receipt_path') == str(result_path) and
+                 marker.get('receipt_sha256') == result_sha256 and
+                 type(marker.get('completed_unix_ns')) is int)
+    else:
+        raise ValueError('unsupported stability marker phase')
+    if not valid:
+        if operation is not None and getattr(operation, 'started', False):
+            operation.finished = True
+        raise TerminalObservationError(
+            'ambiguous_marker',
+            f'active stability guard marker does not match the {phase} phase')
+
+
+def _demote_late_stability_completion(operation, *, profile_name: str,
+                                      state_root: Path, project_root: Path,
+                                      result_path: Path, result_sha256: str,
+                                      completed_marker: dict,
+                                      timeout_error: TimeoutError) -> None:
+    """Preserve this operation's late completion, but leave its guard unresolved."""
+    marker_id = _stability_marker_id(profile_name)
+    marker_kind = _stability_marker_kind(profile_name)
+    marker_path = Path(state_root) / f'{marker_id}.json'
+    provisional_receipt = {
+        'path': str(result_path),
+        'sha256': result_sha256,
+        'status': 'provisional-bounded-stability-observed',
+        'accepted': False,
+    }
+    unknown_marker = {
+        'trial_id': marker_id,
+        'operation_kind': marker_kind,
+        'project_root': str(Path(project_root).resolve()),
+        'pid': os.getpid(),
+        'status': 'unknown',
+        'outcome': 'UNKNOWN',
+        'reason': (f'{type(timeout_error).__name__}: stability finalization exceeded '
+                   f'{STABILITY_TOTAL_DEADLINE_SECONDS} seconds')[:512],
+        'late_success_completion': completed_marker,
+        'provisional_result_receipt': provisional_receipt,
+        'updated_unix_ns': time.time_ns(),
+    }
+
+    # The lock remains held. Verify the same open marker, operation IDs, and
+    # result digest immediately before the only permitted late-state update.
+    current = _read_stability_operation_marker(
+        operation, profile_name=profile_name, state_root=state_root,
+        project_root=project_root)
+    _require_stability_marker_phase(current, phase='complete',
+                                    result_path=result_path,
+                                    result_sha256=result_sha256)
+    if current != completed_marker:
+        operation.finished = True
+        raise TerminalObservationError(
+            'ambiguous_marker',
+            'late stability completion changed before the unresolved-state update')
+
+    last_error = None
+    for _attempt in range(2):
+        try:
+            operation._verify_marker_identity()
+            current = GUARD._read_marker(marker_path)
+            if current not in (completed_marker, unknown_marker):
+                operation.finished = True
+                raise TerminalObservationError(
+                    'ambiguous_marker',
+                    'refusing to alter a guard marker that is no longer this completion')
+            # Reapply and fsync even if the prior attempt made UNKNOWN visible
+            # before reporting an I/O error; visibility alone is not durability.
+            operation._update(unknown_marker)
+            operation._verify_marker_identity()
+            persisted = GUARD._read_marker(marker_path)
+            if persisted != unknown_marker:
+                raise RuntimeError('late completion UNKNOWN marker did not verify after update')
+            operation.finished = True
+            return
+        except TerminalObservationError:
+            raise
+        except Exception as error:
+            last_error = error
+
+    # Give the guard context one final best-effort UNKNOWN update on unwind.
+    # This path always raises; an uncertain local marker update is never success.
+    operation.finished = False
+    raise RuntimeError(
+        'late stability success marker could not be durably changed to UNKNOWN') from last_error
+
+
 def _stability_receipt_paths(profile_name: str,
                              receipts_root: Path = RECEIPTS_ROOT) -> dict[str, object]:
     directory = _receipt_paths(profile_name, receipts_root)['directory']
@@ -953,6 +1092,10 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
     saved_samples: list[dict] = []
     accepted_remote_uptimes: list[int | float] = []
     accepted_sample_starts: list[float] = []
+    final_result_persist_started = False
+    final_result_persist_returned = False
+    final_result_sha256: str | None = None
+    late_completed_marker: dict | None = None
     try:
         for path in all_paths:
             SHARED.ensure_new_receipt(path, directory_fd=directory_fd)
@@ -1012,7 +1155,7 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
             if request['outcome'] == 'ACKNOWLEDGED':
                 context = GUARD.acquire_operation_lock(
                     project_root, _stability_marker_id(profile_name),
-                    f'audio-coherent-{_direction(profile_name)}-stability',
+                    _stability_marker_kind(profile_name),
                     state_root=state_root)
             else:
                 # The unresolved reboot marker already blocks every guarded
@@ -1269,10 +1412,19 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
                         'schema': 's22-audio-coherent-stability-observation/v1',
                         'profile': profile_name,
                         'trial_identity': profile['trial_identity'],
-                        'status': 'bounded-stability-observed',
+                        # This durable file is only a candidate. Its digest is
+                        # bound into the exact timely global marker below; the
+                        # file alone must never be treated as acceptance.
+                        'status': 'provisional-bounded-stability-observed',
                         'reboot_request_outcome': request['outcome'],
                         'reboot_requests': 1,
                         'retry_allowed': False,
+                        'acceptance_binding': {
+                            'requires_matching_global_guard_marker': True,
+                            'marker_id': _stability_marker_id(profile_name),
+                            'operation_kind': _stability_marker_kind(profile_name),
+                            'receipt_alone_is_acceptance': False,
+                        },
                         'baseline_boot_id': flash['prewrite_identity']['boot_id'],
                         'observed_boot_id': initial['observed_boot_id'],
                         'recovery_sha256': profile['target_sha256'],
@@ -1298,12 +1450,90 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
                         'bootability_claim': False,
                         'full_boot_log_coverage_claimed': False,
                     }
+                    final_result_persist_started = True
                     SHARED.persist_receipt(paths['result'], receipt,
                                            directory_fd=directory_fd)
+                    final_result_persist_returned = True
+                    remaining_time()
+                    final_result_sha256 = hashlib.sha256(SHARED.read_host_artifact(
+                        paths['result'], 'durable stability result receipt')).hexdigest()
+                    remaining_time()
                     if operation is not None:
+                        pending_marker = _read_stability_operation_marker(
+                            operation, profile_name=profile_name, state_root=state_root,
+                            project_root=project_root)
+                        _require_stability_marker_phase(
+                            pending_marker, phase='pending', operation=operation)
+                        remaining_time()
                         operation.complete(paths['result'], outcome='success',
                                            cleanup_confirmed=True)
-                    return receipt
+                        try:
+                            remaining_time()
+                        except TimeoutError as timeout_error:
+                            active_category = 'timeout'
+                            completed_marker = _read_stability_operation_marker(
+                                operation, profile_name=profile_name,
+                                state_root=state_root, project_root=project_root)
+                            _require_stability_marker_phase(
+                                completed_marker, phase='complete',
+                                result_path=paths['result'],
+                                result_sha256=final_result_sha256)
+                            late_completed_marker = completed_marker
+                            _demote_late_stability_completion(
+                                operation, profile_name=profile_name, state_root=state_root,
+                                project_root=project_root, result_path=paths['result'],
+                                result_sha256=final_result_sha256,
+                                completed_marker=completed_marker,
+                                timeout_error=timeout_error)
+                            raise
+                        completed_marker = _read_stability_operation_marker(
+                            operation, profile_name=profile_name, state_root=state_root,
+                            project_root=project_root)
+                        _require_stability_marker_phase(
+                            completed_marker, phase='complete',
+                            result_path=paths['result'],
+                            result_sha256=final_result_sha256)
+                        try:
+                            remaining_time()
+                        except TimeoutError as timeout_error:
+                            active_category = 'timeout'
+                            late_completed_marker = completed_marker
+                            _demote_late_stability_completion(
+                                operation, profile_name=profile_name, state_root=state_root,
+                                project_root=project_root, result_path=paths['result'],
+                                result_sha256=final_result_sha256,
+                                completed_marker=completed_marker,
+                                timeout_error=timeout_error)
+                            raise
+                        # Return a finalization view only after the exact
+                        # receipt/marker binding and deadline have both been
+                        # read back successfully. The on-disk receipt remains
+                        # the provisional candidate whose digest is guarded.
+                        return {
+                            **receipt,
+                            'status': 'bounded-stability-observed',
+                            'persisted_receipt_status': receipt['status'],
+                            'finalization': {
+                                'accepted': True,
+                                'basis': 'timely-matching-global-guard-marker',
+                                'marker_id': _stability_marker_id(profile_name),
+                                'operation_kind': _stability_marker_kind(profile_name),
+                                'receipt_path': str(paths['result']),
+                                'receipt_sha256': final_result_sha256,
+                            },
+                        }
+                    # An UNKNOWN reboot request deliberately has no stability
+                    # operation marker to complete. Keep its read-only result
+                    # provisional and let the CLI report non-acceptance.
+                    return {
+                        **receipt,
+                        'finalization': {
+                            'accepted': False,
+                            'basis': 'unresolved-reboot-marker-no-stability-guard',
+                            'receipt_path': str(paths['result']),
+                            'receipt_sha256': final_result_sha256,
+                        },
+                    }
                 except Exception as error:
                     if isinstance(error, ReadOnlyTransportGap):
                         active_category = 'transport_gap'
@@ -1319,6 +1549,14 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
                         'outcome': 'UNKNOWN',
                         'failure_category': active_category,
                         'retry_allowed': False,
+                        'provisional_result_receipt': ({
+                            'path': str(paths['result']),
+                            'sha256': final_result_sha256,
+                            'persist_started': final_result_persist_started,
+                            'persist_returned': final_result_persist_returned,
+                            'accepted': False,
+                        } if final_result_persist_started else None),
+                        'late_success_completion': late_completed_marker,
                         'sample_receipts': saved_samples,
                         'remote_sample_uptimes_seconds': accepted_remote_uptimes,
                         'remote_sample_intervals_seconds': [
@@ -1351,6 +1589,14 @@ def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
                     'failure_category': (error.category if isinstance(
                         error, TerminalObservationError) else active_category),
                     'retry_allowed': False,
+                    'provisional_result_receipt': ({
+                        'path': str(paths['result']),
+                        'sha256': final_result_sha256,
+                        'persist_started': final_result_persist_started,
+                        'persist_returned': final_result_persist_returned,
+                        'accepted': False,
+                    } if final_result_persist_started else None),
+                    'late_success_completion': late_completed_marker,
                     'sample_receipts': saved_samples,
                     'remote_sample_uptimes_seconds': accepted_remote_uptimes,
                     'remote_sample_intervals_seconds': [
@@ -1431,6 +1677,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         result = observe_stability(args.profile)
     print(json.dumps(result, indent=2, sort_keys=True))
+    if operation == 'stability' and result.get('finalization', {}).get('accepted') is not True:
+        return 2
     return 0
 
 

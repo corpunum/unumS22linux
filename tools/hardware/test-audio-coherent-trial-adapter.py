@@ -989,10 +989,16 @@ class AudioOperationFixture(unittest.TestCase):
                 state_root=self.state_root, project_root=ROOT,
                 transport=transport, clock=clock, sleeper=clock.sleep)
             self.assertEqual(result['status'], 'bounded-stability-observed')
+            self.assertEqual(result['persisted_receipt_status'],
+                             'provisional-bounded-stability-observed')
+            self.assertTrue(result['finalization']['accepted'])
+            self.assertEqual(result['finalization']['basis'],
+                             'timely-matching-global-guard-marker')
             self.assertEqual(result['reboot_request_outcome'], 'ACKNOWLEDGED')
             self.assertEqual(result['sample_count'], 3)
             self.assertEqual(result['stability_seconds'], 195.0)
             self.assertEqual(result['sample_offsets_seconds'], [0.0, 90.0, 195.0])
+            self.assertLess(clock.now, OBSERVER.STABILITY_TOTAL_DEADLINE_SECONDS)
             self.assertAlmostEqual(result['remote_stability_seconds'], 195.0)
             self.assertGreaterEqual(result['remote_stability_seconds'], 180.0)
             self.assertEqual(result['startup_readiness_polls'], 2)
@@ -1037,6 +1043,24 @@ class AudioOperationFixture(unittest.TestCase):
                                 OBSERVER._expected_profile_modules('audio-forward')
                                 for sample in sample_files))
             self.assertEqual(len({item['sha256'] for item in result['samples']}), 3)
+            self.assertEqual(result['acceptance_binding'], {
+                'requires_matching_global_guard_marker': True,
+                'marker_id': OBSERVER._stability_marker_id('audio-forward'),
+                'operation_kind': 'audio-coherent-forward-stability',
+                'receipt_alone_is_acceptance': False,
+            })
+            result_path = receipt_paths['result']
+            persisted = json.loads(result_path.read_text())
+            self.assertEqual(persisted['status'],
+                             'provisional-bounded-stability-observed')
+            self.assertFalse(persisted['acceptance_binding']['receipt_alone_is_acceptance'])
+            marker_path = self.state_root / (
+                f'{OBSERVER._stability_marker_id("audio-forward")}.json')
+            marker = ADAPTER.GUARD._read_marker(marker_path)
+            self.assertEqual(marker['status'], 'complete')
+            self.assertEqual(marker['outcome'], 'success')
+            self.assertEqual(marker['receipt_path'], str(result_path))
+            self.assertEqual(marker['receipt_sha256'], sha(result_path.read_bytes()))
         finally:
             sandbox.close()
 
@@ -1051,6 +1075,9 @@ class AudioOperationFixture(unittest.TestCase):
                 'audio-reverse', receipts_root=self.root / 'receipts',
                 state_root=self.state_root, project_root=ROOT,
                 transport=transport, clock=clock, sleeper=clock.sleep)
+            self.assertTrue(result['finalization']['accepted'])
+            self.assertEqual(result['finalization']['basis'],
+                             'timely-matching-global-guard-marker')
             expected_before = ADAPTER.expected_profile_modules('audio-reverse', before=True)
             expected_after = ADAPTER.expected_profile_modules('audio-reverse', before=False)
             flash = json.loads(OBSERVER._receipt_paths(
@@ -1149,6 +1176,290 @@ class AudioOperationFixture(unittest.TestCase):
                         self.assertEqual(failure['remote_stability_seconds'], 165.0)
                 finally:
                     sandbox.close()
+
+    def test_deadline_after_final_receipt_persist_keeps_candidate_unknown_and_refused(self):
+        sandbox, boot_id, _ = self._completed_forward_initial_observation()
+        clock = FakeClock()
+        transport, calls, _counts = self._stability_transport(
+            boot_id, startup_uptimes=[180.0], clock=clock, advancing_uptime=True)
+        paths = OBSERVER._stability_receipt_paths('audio-forward', self.root / 'receipts')
+        original_persist = OBSERVER.SHARED.persist_receipt
+        late_result_writes = []
+        complete_calls = []
+        original_complete = ADAPTER.GUARD.Operation.complete
+
+        def delayed_persist(path, receipt, **kwargs):
+            result = original_persist(path, receipt, **kwargs)
+            if Path(path) == paths['result']:
+                clock.now = OBSERVER.STABILITY_TOTAL_DEADLINE_SECONDS + 1
+                late_result_writes.append(str(path))
+            return result
+
+        def counted_complete(operation, receipt_path, **kwargs):
+            complete_calls.append(str(receipt_path))
+            return original_complete(operation, receipt_path, **kwargs)
+
+        marker_path = self.state_root / f'{OBSERVER._stability_marker_id("audio-forward")}.json'
+        try:
+            with mock.patch.object(OBSERVER.SHARED, 'persist_receipt',
+                                   side_effect=delayed_persist), \
+                    mock.patch.object(ADAPTER.GUARD.Operation, 'complete',
+                                      counted_complete):
+                with self.assertRaisesRegex(TimeoutError, 'deadline exhausted'):
+                    OBSERVER.observe_stability(
+                        'audio-forward', receipts_root=self.root / 'receipts',
+                        state_root=self.state_root, project_root=ROOT,
+                        transport=transport, clock=clock, sleeper=clock.sleep)
+            self.assertEqual(late_result_writes, [str(paths['result'])])
+            self.assertEqual(complete_calls, [])
+            self.assertEqual(clock.now, OBSERVER.STABILITY_TOTAL_DEADLINE_SECONDS + 1)
+            self.assertTrue(paths['result'].is_file())
+            candidate = json.loads(paths['result'].read_text())
+            self.assertEqual(candidate['status'],
+                             'provisional-bounded-stability-observed')
+            self.assertTrue(candidate['acceptance_binding'][
+                'requires_matching_global_guard_marker'])
+            self.assertFalse(candidate['acceptance_binding'][
+                'receipt_alone_is_acceptance'])
+            self.assertTrue(paths['failure'].is_file())
+            failure = json.loads(paths['failure'].read_text())
+            self.assertEqual(failure['status'], 'UNKNOWN')
+            self.assertEqual(failure['failure_category'], 'timeout')
+            self.assertFalse(failure['retry_allowed'])
+            self.assertEqual(failure['provisional_result_receipt'], {
+                'path': str(paths['result']), 'sha256': None,
+                'persist_started': True, 'persist_returned': True, 'accepted': False,
+            })
+            self.assertIsNone(failure['late_success_completion'])
+            marker = ADAPTER.GUARD._read_marker(marker_path)
+            self.assertEqual(marker['status'], 'unknown')
+            self.assertNotEqual(marker.get('outcome'), 'success')
+            candidate_before = sha(paths['result'].read_bytes())
+            failure_before = sha(paths['failure'].read_bytes())
+            marker_before = marker_path.read_bytes()
+            retry_calls = []
+            with self.assertRaises((ValueError, RuntimeError)):
+                OBSERVER.observe_stability(
+                    'audio-forward', receipts_root=self.root / 'receipts',
+                    state_root=self.state_root, project_root=ROOT,
+                    transport=lambda *_args, **_kwargs: retry_calls.append('remote'),
+                    clock=FakeClock(), sleeper=lambda _seconds: None)
+            self.assertEqual(retry_calls, [])
+            self.assertEqual(sha(paths['result'].read_bytes()), candidate_before)
+            self.assertEqual(sha(paths['failure'].read_bytes()), failure_before)
+            self.assertEqual(marker_path.read_bytes(), marker_before)
+            self.assertEqual(len(calls), 7)
+        finally:
+            sandbox.close()
+
+    def test_deadline_after_guard_completion_demotes_only_matching_marker_and_preserves_history(self):
+        sandbox, boot_id, _ = self._completed_forward_initial_observation()
+        clock = FakeClock()
+        transport, calls, _counts = self._stability_transport(
+            boot_id, startup_uptimes=[180.0], clock=clock, advancing_uptime=True)
+        original_complete = ADAPTER.GUARD.Operation.complete
+        original_update = ADAPTER.GUARD.Operation._update
+        completion_calls = []
+        demotion_faults = {'remaining': 1}
+
+        def delayed_complete(operation, receipt_path, **kwargs):
+            result = original_complete(operation, receipt_path, **kwargs)
+            completion_calls.append(str(receipt_path))
+            clock.now = OBSERVER.STABILITY_TOTAL_DEADLINE_SECONDS + 1
+            return result
+
+        def fail_first_demotion(operation, fields):
+            if 'late_success_completion' in fields and demotion_faults['remaining']:
+                demotion_faults['remaining'] -= 1
+                raise OSError('synthetic first demotion write failure')
+            return original_update(operation, fields)
+
+        paths = OBSERVER._stability_receipt_paths('audio-forward', self.root / 'receipts')
+        marker_path = self.state_root / f'{OBSERVER._stability_marker_id("audio-forward")}.json'
+        try:
+            with mock.patch.object(ADAPTER.GUARD.Operation, 'complete', delayed_complete), \
+                    mock.patch.object(ADAPTER.GUARD.Operation, '_update', fail_first_demotion):
+                with self.assertRaisesRegex(TimeoutError, 'deadline exhausted'):
+                    OBSERVER.observe_stability(
+                        'audio-forward', receipts_root=self.root / 'receipts',
+                        state_root=self.state_root, project_root=ROOT,
+                        transport=transport, clock=clock, sleeper=clock.sleep)
+            self.assertEqual(completion_calls, [str(paths['result'])])
+            self.assertEqual(demotion_faults['remaining'], 0)
+            self.assertEqual(clock.now, OBSERVER.STABILITY_TOTAL_DEADLINE_SECONDS + 1)
+            self.assertTrue(paths['result'].is_file())
+            result_bytes = paths['result'].read_bytes()
+            result_sha = sha(result_bytes)
+            self.assertEqual(json.loads(result_bytes)['acceptance_binding'], {
+                'requires_matching_global_guard_marker': True,
+                'marker_id': OBSERVER._stability_marker_id('audio-forward'),
+                'operation_kind': 'audio-coherent-forward-stability',
+                'receipt_alone_is_acceptance': False,
+            })
+            self.assertEqual(json.loads(result_bytes)['status'],
+                             'provisional-bounded-stability-observed')
+            self.assertTrue(paths['failure'].is_file())
+            failure = json.loads(paths['failure'].read_text())
+            self.assertEqual(failure['status'], 'UNKNOWN')
+            self.assertEqual(failure['failure_category'], 'timeout')
+            self.assertEqual(failure['provisional_result_receipt'], {
+                'path': str(paths['result']), 'sha256': result_sha,
+                'persist_started': True, 'persist_returned': True, 'accepted': False,
+            })
+            self.assertEqual(failure['late_success_completion']['receipt_sha256'], result_sha)
+            marker = ADAPTER.GUARD._read_marker(marker_path)
+            self.assertEqual(marker['status'], 'unknown')
+            self.assertEqual(marker['outcome'], 'UNKNOWN')
+            self.assertEqual(marker['provisional_result_receipt'], {
+                'path': str(paths['result']), 'sha256': result_sha,
+                'status': 'provisional-bounded-stability-observed',
+                'accepted': False,
+            })
+            prior_completion = marker['late_success_completion']
+            self.assertEqual(prior_completion['status'], 'complete')
+            self.assertEqual(prior_completion['outcome'], 'success')
+            self.assertEqual(prior_completion['receipt_path'], str(paths['result']))
+            self.assertEqual(prior_completion['receipt_sha256'], result_sha)
+            marker_before = marker_path.read_bytes()
+            retry_calls = []
+            with self.assertRaises((ValueError, RuntimeError)):
+                OBSERVER.observe_stability(
+                    'audio-forward', receipts_root=self.root / 'receipts',
+                    state_root=self.state_root, project_root=ROOT,
+                    transport=lambda *_args, **_kwargs: retry_calls.append('remote'),
+                    clock=FakeClock(), sleeper=lambda _seconds: None)
+            self.assertEqual(retry_calls, [])
+            self.assertEqual(marker_path.read_bytes(), marker_before)
+            self.assertEqual(sha(paths['result'].read_bytes()), result_sha)
+            self.assertEqual(len(calls), 7)
+        finally:
+            sandbox.close()
+
+    def test_late_completion_refuses_to_demote_wrong_pending_marker_identity(self):
+        sandbox, boot_id, _ = self._completed_forward_initial_observation()
+        clock = FakeClock()
+        transport, calls, _counts = self._stability_transport(
+            boot_id, startup_uptimes=[180.0], clock=clock, advancing_uptime=True)
+        marker_path = self.state_root / f'{OBSERVER._stability_marker_id("audio-forward")}.json'
+        original_read_marker = ADAPTER.GUARD._read_marker
+        original_complete = ADAPTER.GUARD.Operation.complete
+        complete_calls = []
+        pending_reads = []
+
+        def wrong_pending_identity(path):
+            value = original_read_marker(path)
+            if Path(path) == marker_path and value.get('status') == 'pending':
+                pending_reads.append(value.copy())
+                value = dict(value, operation_kind='unrelated-operation')
+            return value
+
+        def counted_complete(operation, receipt_path, **kwargs):
+            complete_calls.append(str(receipt_path))
+            return original_complete(operation, receipt_path, **kwargs)
+
+        try:
+            with mock.patch.object(ADAPTER.GUARD, '_read_marker', side_effect=wrong_pending_identity), \
+                    mock.patch.object(ADAPTER.GUARD.Operation, 'complete', counted_complete):
+                with self.assertRaisesRegex(RuntimeError, 'marker fields do not match'):
+                    OBSERVER.observe_stability(
+                        'audio-forward', receipts_root=self.root / 'receipts',
+                        state_root=self.state_root, project_root=ROOT,
+                        transport=transport, clock=clock, sleeper=clock.sleep)
+            self.assertTrue(pending_reads)
+            self.assertEqual(complete_calls, [])
+            self.assertEqual(len(calls), 7)
+            paths = OBSERVER._stability_receipt_paths(
+                'audio-forward', self.root / 'receipts')
+            self.assertTrue(paths['result'].is_file())
+            self.assertTrue(json.loads(paths['result'].read_text())['acceptance_binding'][
+                'requires_matching_global_guard_marker'])
+            failure = json.loads(paths['failure'].read_text())
+            self.assertEqual(failure['failure_category'], 'ambiguous_marker')
+            self.assertIsNone(failure['late_success_completion'])
+            marker = original_read_marker(marker_path)
+            self.assertEqual(marker['status'], 'pending')
+            self.assertEqual(marker['operation_kind'],
+                             'audio-coherent-forward-stability')
+            marker_before = marker_path.read_bytes()
+            retry_calls = []
+            with self.assertRaises((ValueError, RuntimeError)):
+                OBSERVER.observe_stability(
+                    'audio-forward', receipts_root=self.root / 'receipts',
+                    state_root=self.state_root, project_root=ROOT,
+                    transport=lambda *_args, **_kwargs: retry_calls.append('remote'),
+                    clock=FakeClock(), sleeper=lambda _seconds: None)
+            self.assertEqual(retry_calls, [])
+            self.assertEqual(marker_path.read_bytes(), marker_before)
+        finally:
+            sandbox.close()
+
+    def test_failure_receipt_delayed_past_deadline_remains_unknown_not_success(self):
+        sandbox, boot_id, _ = self._completed_forward_initial_observation()
+        clock = FakeClock()
+        states = [readiness(boot_id) for _ in range(3)]
+        states[1]['serious_fault'] = True
+        states[1]['kernel_log_classification']['fatal_indicators'] = ['Oops']
+        profile = ADAPTER.PROFILE.resolve_profile('audio-forward')
+        identities = [identity(profile, profile['target_sha256'], boot_id=boot_id,
+                                module_role='candidate') for _ in states]
+        transport, calls, _counts = self._stability_transport(
+            boot_id, startup_uptimes=[180.0], states=states, identities=identities,
+            clock=clock, advancing_uptime=True)
+        paths = OBSERVER._stability_receipt_paths('audio-forward', self.root / 'receipts')
+        original_persist = OBSERVER.SHARED.persist_receipt
+        delayed_failures = []
+        marker_path = self.state_root / f'{OBSERVER._stability_marker_id("audio-forward")}.json'
+
+        def persist_late_failure(path, receipt, **kwargs):
+            result = original_persist(path, receipt, **kwargs)
+            if Path(path) == paths['failure']:
+                clock.now = OBSERVER.STABILITY_TOTAL_DEADLINE_SECONDS + 1
+                delayed_failures.append(str(path))
+            return result
+
+        try:
+            with mock.patch.object(OBSERVER.SHARED, 'persist_receipt',
+                                   side_effect=persist_late_failure):
+                with self.assertRaises((RuntimeError, ValueError)):
+                    OBSERVER.observe_stability(
+                        'audio-forward', receipts_root=self.root / 'receipts',
+                        state_root=self.state_root, project_root=ROOT,
+                        transport=transport, clock=clock, sleeper=clock.sleep)
+            self.assertEqual(delayed_failures, [str(paths['failure'])])
+            self.assertEqual(clock.now, OBSERVER.STABILITY_TOTAL_DEADLINE_SECONDS + 1)
+            self.assertTrue(paths['failure'].is_file())
+            self.assertEqual(json.loads(paths['failure'].read_text())['failure_category'],
+                             'serious_fault')
+            self.assertIsNone(json.loads(paths['failure'].read_text())[
+                'provisional_result_receipt'])
+            self.assertFalse(paths['result'].exists())
+            marker = ADAPTER.GUARD._read_marker(marker_path)
+            self.assertEqual(marker['status'], 'unknown')
+            self.assertNotEqual(marker.get('outcome'), 'success')
+            self.assertEqual(len(calls), 5)
+        finally:
+            sandbox.close()
+
+    def test_cli_returns_nonzero_for_unbound_provisional_stability_candidate(self):
+        candidate = {
+            'status': 'provisional-bounded-stability-observed',
+            'finalization': {
+                'accepted': False,
+                'basis': 'unresolved-reboot-marker-no-stability-guard',
+            },
+        }
+        output = io.StringIO()
+        with mock.patch.object(OBSERVER.ADAPTER, 'require_execution_authorized'), \
+                mock.patch.object(OBSERVER, 'observe_stability', return_value=candidate), \
+                contextlib.redirect_stdout(output):
+            exit_code = OBSERVER.main([
+                '--observe-stability', '--profile', 'audio-forward', '--execute',
+                '--trial-identity', ADAPTER.PROFILE.TRIAL_IDENTITY,
+            ])
+        self.assertEqual(exit_code, 2)
+        printed = json.loads(output.getvalue())
+        self.assertEqual(printed['status'], 'provisional-bounded-stability-observed')
+        self.assertFalse(printed['finalization']['accepted'])
 
     def test_stability_rejects_changed_boot_and_wrong_image_or_module_identity(self):
         for mismatch_index, mismatch in enumerate(
@@ -1351,6 +1662,15 @@ class AudioOperationFixture(unittest.TestCase):
                 state_root=self.state_root, project_root=ROOT,
                 transport=transport, clock=clock, sleeper=clock.sleep)
             self.assertEqual(result['reboot_request_outcome'], 'UNKNOWN')
+            self.assertEqual(result['status'],
+                             'provisional-bounded-stability-observed')
+            self.assertFalse(result['finalization']['accepted'])
+            self.assertEqual(result['finalization']['basis'],
+                             'unresolved-reboot-marker-no-stability-guard')
+            provisional_path = OBSERVER._stability_receipt_paths(
+                'audio-forward', self.root / 'receipts')['result']
+            self.assertEqual(json.loads(provisional_path.read_text())['status'],
+                             'provisional-bounded-stability-observed')
             self.assertEqual(reboot_marker.read_bytes(), before)
             self.assertEqual(len(reboot_commands), 1)
             self.assertFalse(any('s22-reboot' in call['command'] for call in calls))
