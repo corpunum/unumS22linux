@@ -644,10 +644,13 @@ class AudioOperationFixture(unittest.TestCase):
             sandbox.close()
 
     def _completed_forward_flash(self):
-        sandbox, target = self.make_sandbox('audio-forward')
+        return self._completed_profile_flash('audio-forward')
+
+    def _completed_profile_flash(self, profile_name):
+        sandbox, target = self.make_sandbox(profile_name)
         calls = []
-        self.stage('audio-forward', sandbox, target, calls)
-        self.flash('audio-forward', sandbox, target, calls)
+        self.stage(profile_name, sandbox, target, calls)
+        self.flash(profile_name, sandbox, target, calls)
         return sandbox, target, calls
 
     def _restart_workspace(self):
@@ -655,10 +658,16 @@ class AudioOperationFixture(unittest.TestCase):
         self.setUp()
 
     def _completed_forward_initial_observation(self, reboot_outcome='ACKNOWLEDGED'):
-        sandbox, _target, _calls = self._completed_forward_flash()
+        return self._completed_initial_observation('audio-forward', reboot_outcome)
+
+    def _completed_reverse_initial_observation(self):
+        return self._completed_initial_observation('audio-reverse')
+
+    def _completed_initial_observation(self, profile_name, reboot_outcome='ACKNOWLEDGED'):
+        sandbox, _target, _calls = self._completed_profile_flash(profile_name)
         original_boot = '11111111-1111-4111-8111-111111111111'
         new_boot = '33333333-3333-4333-8333-333333333333'
-        profile = ADAPTER.PROFILE.resolve_profile('audio-forward')
+        profile = ADAPTER.PROFILE.resolve_profile(profile_name)
         reboot_commands = []
 
         def reboot_remote(_ssh_path, command, **kwargs):
@@ -667,12 +676,16 @@ class AudioOperationFixture(unittest.TestCase):
                 raise subprocess.TimeoutExpired(command, kwargs.get('timeout'))
             return subprocess.CompletedProcess(command, 0, b'', b'')
 
+        before_role = ('candidate' if profile['before_role'] == 'audio_candidate'
+                       else 'baseline')
+        target_role = ('candidate' if profile['target_role'] == 'audio_candidate'
+                       else 'baseline')
         current = lambda expected: identity(
-            profile, expected, boot_id=original_boot, module_role='baseline')
+            profile, expected, boot_id=original_boot, module_role=before_role)
         if reboot_outcome == 'UNKNOWN':
             with self.assertRaisesRegex(RuntimeError, 'never retry'):
                 OBSERVER.request_recovery_once(
-                    'audio-forward', receipts_root=self.root / 'receipts',
+                    profile_name, receipts_root=self.root / 'receipts',
                     state_root=self.state_root, project_root=ROOT,
                     transport=reboot_remote,
                     snapshotter=lambda: readiness(original_boot),
@@ -680,34 +693,40 @@ class AudioOperationFixture(unittest.TestCase):
                     helper_reader=OBSERVER._expected_helpers)
         else:
             OBSERVER.request_recovery_once(
-                'audio-forward', receipts_root=self.root / 'receipts',
+                profile_name, receipts_root=self.root / 'receipts',
                 state_root=self.state_root, project_root=ROOT,
                 transport=reboot_remote,
                 snapshotter=lambda: readiness(original_boot),
                 identity_reader=current,
                 helper_reader=OBSERVER._expected_helpers)
         target_identity = lambda expected: identity(
-            profile, expected, boot_id=new_boot, module_role='candidate')
+            profile, expected, boot_id=new_boot, module_role=target_role)
         OBSERVER.observe_reboot_once(
-            'audio-forward', receipts_root=self.root / 'receipts',
+            profile_name, receipts_root=self.root / 'receipts',
             state_root=self.state_root, project_root=ROOT,
             snapshotter=lambda: readiness(new_boot), identity_reader=target_identity)
         return sandbox, new_boot, reboot_commands
 
     def _stability_transport(self, boot_id, *, startup_uptimes=None, states=None,
                              identities=None, failures=None, clock=None,
-                             query_cost=0.0):
-        profile = ADAPTER.PROFILE.resolve_profile('audio-forward')
+                             query_cost=0.0, profile_name='audio-forward',
+                             advancing_uptime=False):
+        profile = ADAPTER.PROFILE.resolve_profile(profile_name)
+        target_role = ('candidate' if profile['target_role'] == 'audio_candidate'
+                       else 'baseline')
         startup_values = list(startup_uptimes or [180.0])
         state_values = list(states or [readiness(boot_id)] * 3)
         identity_values = list(identities or [
             identity(profile, profile['target_sha256'], boot_id=boot_id,
-                     module_role='candidate') for _ in range(3)])
+                     module_role=target_role) for _ in range(3)])
         failed_attempts = {key: set(value) for key, value in (failures or {}).items()}
         counts = {'startup': 0, 'readiness': 0, 'identity': 0}
         calls = []
+        remote_uptime_anchor = None
+        remote_uptime_anchor_host = None
 
         def transport(_ssh_path, command, *, input_data, timeout, project_root):
+            nonlocal remote_uptime_anchor, remote_uptime_anchor_host
             if 'audio_modules' in command:
                 label = 'identity'
             elif 'kernel_log_classification' in command:
@@ -727,12 +746,20 @@ class AudioOperationFixture(unittest.TestCase):
             if label == 'startup':
                 uptime = startup_values.pop(0) if startup_values else 180.0
                 value = {'boot_id': boot_id, 'uptime_seconds': uptime}
+                if advancing_uptime and clock is not None:
+                    remote_uptime_anchor = uptime
+                    remote_uptime_anchor_host = clock.now
             elif label == 'readiness':
-                value = state_values.pop(0) if state_values else readiness(boot_id)
+                value = dict(state_values.pop(0) if state_values else readiness(boot_id))
+                if advancing_uptime and clock is not None:
+                    if remote_uptime_anchor is None or remote_uptime_anchor_host is None:
+                        raise AssertionError('advancing fake uptime has no startup clock anchor')
+                    value['uptime_seconds'] = (
+                        remote_uptime_anchor + clock.now - remote_uptime_anchor_host)
             else:
                 value = identity_values.pop(0) if identity_values else identity(
                     profile, profile['target_sha256'], boot_id=boot_id,
-                    module_role='candidate')
+                    module_role=target_role)
             return subprocess.CompletedProcess(command, 0, json.dumps(value), '')
 
         return transport, calls, counts
@@ -955,7 +982,7 @@ class AudioOperationFixture(unittest.TestCase):
         transport, calls, counts = self._stability_transport(
             boot_id, startup_uptimes=[120.0, 180.0], states=states,
             identities=identities, failures={'startup': {1}}, clock=clock,
-            query_cost=0.1)
+            query_cost=0.1, advancing_uptime=True)
         try:
             result = OBSERVER.observe_stability(
                 'audio-forward', receipts_root=self.root / 'receipts',
@@ -964,7 +991,10 @@ class AudioOperationFixture(unittest.TestCase):
             self.assertEqual(result['status'], 'bounded-stability-observed')
             self.assertEqual(result['reboot_request_outcome'], 'ACKNOWLEDGED')
             self.assertEqual(result['sample_count'], 3)
-            self.assertEqual(result['stability_seconds'], 180.0)
+            self.assertEqual(result['stability_seconds'], 195.0)
+            self.assertEqual(result['sample_offsets_seconds'], [0.0, 90.0, 195.0])
+            self.assertAlmostEqual(result['remote_stability_seconds'], 195.0)
+            self.assertGreaterEqual(result['remote_stability_seconds'], 180.0)
             self.assertEqual(result['startup_readiness_polls'], 2)
             self.assertEqual(result['startup_uptime_probes'], 2)
             self.assertEqual(result['read_only_reconnect_attempts'], 1)
@@ -986,6 +1016,21 @@ class AudioOperationFixture(unittest.TestCase):
             sample_files = [json.loads(path.read_text()) for path in receipt_paths['samples']]
             self.assertEqual([sample['index'] for sample in sample_files], [0, 1, 2])
             self.assertTrue(all(sample['status'] == 'ready' for sample in sample_files))
+            self.assertTrue(all(sample['remote_uptime_valid'] is True
+                                for sample in sample_files))
+            sample_uptimes = [sample['remote_uptime_seconds'] for sample in sample_files]
+            self.assertEqual(result['remote_sample_uptimes_seconds'], sample_uptimes)
+            self.assertEqual([item['remote_uptime_seconds'] for item in result['samples']],
+                             sample_uptimes)
+            sample_remote_intervals = [sample['remote_interval_seconds']
+                                       for sample in sample_files]
+            result_remote_intervals = result['remote_sample_intervals_seconds']
+            self.assertIsNone(sample_remote_intervals[0])
+            self.assertIsNone(result_remote_intervals[0])
+            for actual in (sample_remote_intervals[1:] + result_remote_intervals[1:]):
+                self.assertAlmostEqual(actual, 90.0 if actual < 100 else 105.0)
+            self.assertEqual([sample['host_interval_seconds'] for sample in sample_files],
+                             [None, 90.0, 105.0])
             self.assertTrue(all(sample['identity']['recovery_sha256'] == profile['target_sha256']
                                 for sample in sample_files))
             self.assertTrue(all(sample['identity']['audio_module_gnu_build_ids'] ==
@@ -994,6 +1039,116 @@ class AudioOperationFixture(unittest.TestCase):
             self.assertEqual(len({item['sha256'] for item in result['samples']}), 3)
         finally:
             sandbox.close()
+
+    def test_bounded_stability_succeeds_for_reverse_profile_target_module_role(self):
+        sandbox, boot_id, reboot_commands = self._completed_reverse_initial_observation()
+        clock = FakeClock()
+        transport, calls, counts = self._stability_transport(
+            boot_id, startup_uptimes=[180.0], clock=clock,
+            profile_name='audio-reverse', advancing_uptime=True)
+        try:
+            result = OBSERVER.observe_stability(
+                'audio-reverse', receipts_root=self.root / 'receipts',
+                state_root=self.state_root, project_root=ROOT,
+                transport=transport, clock=clock, sleeper=clock.sleep)
+            expected_before = ADAPTER.expected_profile_modules('audio-reverse', before=True)
+            expected_after = ADAPTER.expected_profile_modules('audio-reverse', before=False)
+            flash = json.loads(OBSERVER._receipt_paths(
+                'audio-reverse', self.root / 'receipts')['flash'].read_text())
+            preboot_modules = {
+                name: item['gnu_build_id']
+                for name, item in flash['prewrite_identity']['audio_modules'].items()}
+            self.assertEqual(preboot_modules, expected_before)
+            self.assertEqual(result['status'], 'bounded-stability-observed')
+            self.assertEqual(result['audio_module_gnu_build_ids'], expected_after)
+            self.assertNotEqual(expected_before, expected_after)
+            self.assertGreaterEqual(result['remote_stability_seconds'], 180.0)
+            receipt_paths = OBSERVER._stability_receipt_paths(
+                'audio-reverse', self.root / 'receipts')
+            sample_files = [json.loads(path.read_text()) for path in receipt_paths['samples']]
+            self.assertTrue(all(sample['identity']['audio_module_gnu_build_ids'] == expected_after
+                                for sample in sample_files))
+            self.assertEqual(counts, {'startup': 1, 'readiness': 3, 'identity': 3})
+            self.assertEqual(len(reboot_commands), 1)
+            self.assertEqual(result['remote_query_attempts'], len(calls))
+        finally:
+            sandbox.close()
+
+    def test_stability_requires_fresh_finite_exact_remote_uptime(self):
+        cases = (
+            ('replayed', [240.0, 240.0, 240.0], 'remote_uptime_not_advancing'),
+            ('decreasing', [240.0, 239.0, 238.0], 'remote_uptime_not_advancing'),
+            ('implausibly_slow', [240.0, 250.0, 260.0],
+             'remote_uptime_progression_mismatch'),
+            ('nonfinite', [float('nan'), 240.0, 240.0], 'ambiguous_response'),
+            ('boolean_type', [True, 240.0, 240.0], 'ambiguous_response'),
+            ('string_type', ['240.0', 240.0, 240.0], 'ambiguous_response'),
+            ('host_interval_long_remote_interval_short',
+             [240.0, 315.0, 405.0], 'remote_interval_short'),
+        )
+        for case_index, (case, uptimes, expected_category) in enumerate(cases):
+            if case_index:
+                self._restart_workspace()
+            with self.subTest(case=case):
+                sandbox, boot_id, _ = self._completed_forward_initial_observation()
+                profile = ADAPTER.PROFILE.resolve_profile('audio-forward')
+                clock = FakeClock()
+                states = []
+                for uptime in uptimes:
+                    state = readiness(boot_id)
+                    state['uptime_seconds'] = uptime
+                    states.append(state)
+                if case == 'replayed':
+                    replayed = readiness(boot_id)
+                    states = [replayed] * 3
+                repeated_identity = identity(
+                    profile, profile['target_sha256'], boot_id=boot_id,
+                    module_role='candidate')
+                identities = ([repeated_identity] * 3 if case == 'replayed' else None)
+                transport, _calls, _counts = self._stability_transport(
+                    boot_id, startup_uptimes=[180.0], states=states,
+                    identities=identities, clock=clock, query_cost=0.1)
+                try:
+                    with self.assertRaises((RuntimeError, ValueError)):
+                        OBSERVER.observe_stability(
+                            'audio-forward', receipts_root=self.root / 'receipts',
+                            state_root=self.state_root, project_root=ROOT,
+                            transport=transport, clock=clock, sleeper=clock.sleep)
+                    paths = OBSERVER._stability_receipt_paths(
+                        'audio-forward', self.root / 'receipts')
+                    failure = json.loads(paths['failure'].read_text())
+                    self.assertEqual(failure['failure_category'], expected_category)
+                    self.assertFalse(paths['result'].exists())
+                    sample_paths = [*paths['startup'], *paths['samples']]
+                    sample_records = [json.loads(path.read_text()) for path in sample_paths
+                                      if path.is_file()]
+                    self.assertTrue(sample_records)
+                    if case == 'replayed':
+                        replayed_sample = next(
+                            sample for sample in sample_records
+                            if sample['remote_uptime_seconds'] == 240.0 and
+                            sample['remote_interval_seconds'] == 0.0)
+                        self.assertEqual(replayed_sample['remote_uptime_valid'], True)
+                    elif case == 'decreasing':
+                        decreasing_sample = next(
+                            sample for sample in sample_records
+                            if sample['remote_uptime_seconds'] == 239.0)
+                        self.assertEqual(decreasing_sample['remote_interval_seconds'], -1.0)
+                    elif case in ('nonfinite', 'boolean_type', 'string_type'):
+                        invalid = sample_records[-1]
+                        self.assertIsNone(invalid['remote_uptime_seconds'])
+                        self.assertFalse(invalid['remote_uptime_valid'])
+                        expected_type = {'nonfinite': 'float', 'boolean_type': 'bool',
+                                         'string_type': 'str'}[case]
+                        self.assertEqual(invalid['remote_uptime_input_type'], expected_type)
+                    elif case == 'host_interval_long_remote_interval_short':
+                        self.assertEqual(failure['host_sample_offsets_seconds'],
+                                         [0.0, 90.0, 195.0])
+                        self.assertEqual(failure['remote_sample_uptimes_seconds'],
+                                         [240.0, 315.0, 405.0])
+                        self.assertEqual(failure['remote_stability_seconds'], 165.0)
+                finally:
+                    sandbox.close()
 
     def test_stability_rejects_changed_boot_and_wrong_image_or_module_identity(self):
         for mismatch_index, mismatch in enumerate(
@@ -1096,7 +1251,7 @@ class AudioOperationFixture(unittest.TestCase):
                                 module_role='candidate') for _ in states]
         transport, _calls, counts = self._stability_transport(
             boot_id, startup_uptimes=[180.0], states=states,
-            identities=identities, clock=clock)
+            identities=identities, clock=clock, advancing_uptime=True)
         try:
             result = OBSERVER.observe_stability(
                 'audio-forward', receipts_root=self.root / 'receipts',
@@ -1167,7 +1322,8 @@ class AudioOperationFixture(unittest.TestCase):
         sandbox, boot_id, _ = self._completed_forward_initial_observation()
         clock = FakeClock()
         transport, calls, _ = self._stability_transport(
-            boot_id, startup_uptimes=[180.0], clock=clock, query_cost=0.1)
+            boot_id, startup_uptimes=[180.0], clock=clock, query_cost=0.1,
+            advancing_uptime=True)
         try:
             with self.assertRaises(RuntimeError):
                 OBSERVER.observe_stability(
@@ -1187,7 +1343,8 @@ class AudioOperationFixture(unittest.TestCase):
         reboot_marker = self.state_root / f'{OBSERVER._reboot_marker_id("audio-forward")}.json'
         before = reboot_marker.read_bytes()
         clock = FakeClock()
-        transport, calls, _ = self._stability_transport(boot_id, clock=clock)
+        transport, calls, _ = self._stability_transport(
+            boot_id, clock=clock, advancing_uptime=True)
         try:
             result = OBSERVER.observe_stability(
                 'audio-forward', receipts_root=self.root / 'receipts',
@@ -1213,7 +1370,8 @@ class AudioOperationFixture(unittest.TestCase):
     def test_old_stability_receipt_and_consumed_marker_are_preserved_and_refused(self):
         sandbox, boot_id, _ = self._completed_forward_initial_observation()
         clock = FakeClock()
-        transport, calls, _ = self._stability_transport(boot_id, clock=clock)
+        transport, calls, _ = self._stability_transport(
+            boot_id, clock=clock, advancing_uptime=True)
         try:
             OBSERVER.observe_stability(
                 'audio-forward', receipts_root=self.root / 'receipts',
