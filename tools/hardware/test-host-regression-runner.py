@@ -36,6 +36,8 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-npu-fw-report-lock-unwind.py",
     "tools/hardware/test-npu-interface-open-unwind.py",
     "tools/hardware/test-npu-system-resume-error-unwind.py",
+    "tools/hardware/test-npu-report-close-lifetime.py",
+    "tools/hardware/test-npu-imgloader-shutdown-status.py",
     "tools/hardware/test-npu-publication-ownership.py",
     "tools/hardware/test-npu-publication-drain-ownership.py",
     "tools/hardware/test-build-npu-six-profile.py",

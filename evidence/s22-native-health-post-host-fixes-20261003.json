@@ -1,0 +1,23 @@
+{
+  "schema": "s22-native-readonly-health/v1",
+  "executor": "coordinator only",
+  "capture_completed_utc": "2026-10-03T08:11:21.641834+00:00",
+  "private_capture_sha256": "6313696b2f95e6fa7c52d6e078206001611166dd0f64d6a3131fcc298ec324af",
+  "collector_sha256": "5ec8fec300d514ef9e586dfe5635ca38995718acd0437caefe50c34358bd1ac4",
+  "scope": "existing reviewed read-only collector; no full RECOVERY readback",
+  "same_boot_as_previous": true,
+  "uptime_seconds": 507054.87,
+  "pid1": "native-guardian",
+  "kernel_gnu_build_id": "b2dda820b18d410d9bf12f1bd2584567d545991d",
+  "loaded_modules": 325,
+  "readiness": {"kernel_remote_control": true, "desktop_environment": true, "desktop_pi_status": "ready", "browser_terminal_status": "ready", "dedicated_pi_session_status": "ready", "model_api_health": true, "model_idle": true},
+  "power": {"battery_capacity_percent": 100, "battery_status": "Full", "battery_temperature_celsius": 25.9, "thermal_zone_count": 9, "thermal_all_readable": true, "thermal_max_temperature_celsius": 38.0},
+  "available_kernel_ring": {"assessment": "no_indicators", "bytes": 255730, "capture_complete": true, "coverage_complete": true, "full_boot_log_coverage": false, "fatal_indicator_count": 0, "hung_task_warning_count": 0, "call_trace_count": 0, "liveness_unresolved": false, "TrustZone_progress_measured": false},
+  "phone_mutations": 0,
+  "new_image_installed": false,
+  "audio_candidate_new_owner_authorization": false,
+  "NPU_BOOTUP_authorized": false,
+  "independent_hardware_rescue": "unproven",
+  "new_driver_hardware_acceptance": false,
+  "private_boot_id_network_identifiers_and_raw_trace_published": false
+}
