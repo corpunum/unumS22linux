@@ -1,0 +1,136 @@
+{
+  "schema": "s22.host-only-evidence.v1",
+  "task": "NPU image-loader shutdown status propagation",
+  "status": "host extracted-C regression passed; no kernel or device acceptance",
+  "worktree": {
+    "branch": "codex/s22-npu-provider-status-20261003",
+    "base_commit": "e51e13e95607c430a46212e6d4d7e4026fc73a1b",
+    "initial_worktree_clean": true
+  },
+  "public_source": {
+    "repository": "LineageOS/android_kernel_samsung_s5e9925",
+    "commit": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+    "source_fetch": "SHA-pinned HTTPS, bounded source helper, no local git-show fallback",
+    "raw_sha256": {
+      "drivers/soc/samsung/imgloader.c": "e9898c3ac9b0c5210603028b7c0b7bc3623869762a99f35438d3d480d33e27f7",
+      "include/soc/samsung/imgloader.h": "5b000a5eba96435dc011f239ea867334385c5ca94541d31b190e25b296440cec",
+      "drivers/vision/npu/core/npu-system.c": "96eaa6bf1511f3e6414e3e376d62592229454a2ea1687d760b7bb8e5952b1a05",
+      "drivers/vision/npu/core/npu-binary.c": "87b08d398d3468de827853544177af5a1264a35ee69a4648a728e35306ef5d36",
+      "drivers/media/platform/exynos/mfc/mfc_core_ops.c": "99c26285e07223a26625f006f89241c8b07b19772b0c4f9f49c965798778c669"
+    },
+    "optional_npu12_fixture": {
+      "commit": "e9c3016233a72ceccb13e537f0b7ef72426582b9",
+      "result": "present, clean, selected raw source files matched",
+      "role": "read-only corroboration; not required by the public-source test route"
+    }
+  },
+  "selected_composition": {
+    "order": [
+      "native-eight profile (eight SHA-pinned patch inputs)",
+      "NPU13 npu-interface-open-unwind.patch",
+      "corrected NPU14 npu-system-resume-error-unwind.patch",
+      "npu-imgloader-shutdown-status.patch"
+    ],
+    "native_eight_patch_sha256": [
+      ["npu-session-lifecycle-fix.patch", "1554436cb6624c542f9e04ac22a3b3545e55f94c59d3025ee6bdc1ec43168251"],
+      ["npu-refcount-lifecycle-profile.patch", "8385e4210a807f96f972757cd6ca74a8077b0127ab112d8b877d012ccdc3cb7b"],
+      ["npu-default-boot-callback-fix.patch", "f5ce216e34df11d8c6adee4a99c36d63f73593cf379e29de3a9de828ec2ee1e7"],
+      ["npu-probe-unwind-fix.patch", "d3e2e590d4d3c956b10c724a15db996dacd07def204332f50a1c0513f56b4948"],
+      ["npu-shutdown-lifecycle-profile.patch", "b986e1896305fda55f1d702ed6f12dde646e4a84b3ce91009203b9d77b7a00e7"],
+      ["npu-shutdown-error-propagation.patch", "08374e96792f24d1e0e4fbca594bfce35537af8acace9296b66f27b531564e43"],
+      ["npu-mailbox-missing-callback-reclaim.patch", "f109b57381b3f2afcf2638b518f50db59ef8c9f784debd949488c74f8ea5c39b"],
+      ["npu-mailbox-debug-walk-bounds.patch", "20c700bfa11f13836c76c88cca28a4f8dfa459e5cf146292a814880cd5850b29"]
+    ],
+    "npu13_sha256": "95e63b45d60e0a2611c1f2dcab4428e5658a03ff9954b8197d175ac6fec139cb",
+    "npu14_sha256": "f1af656f9e1b8ca2bf15e934031e0adf828c442267a17761ba64f7d7c611729a",
+    "status_patch_sha256": "e7355e8906b22f1decf00de59cd644aac7bfcf6d861d97cdb3ff9bf084428385",
+    "status_patch_paths": [
+      "drivers/soc/samsung/imgloader.c",
+      "include/soc/samsung/imgloader.h",
+      "drivers/vision/npu/core/npu-system.c"
+    ],
+    "affected_header": "include/soc/samsung/imgloader.h",
+    "composed_sha256": {
+      "drivers/soc/samsung/imgloader.c": "5904d2ef6a27e9f27d7fe337a7dd47b59d5298cbb864c4e193a9f68fa14ba928",
+      "include/soc/samsung/imgloader.h": "b0c41549fd3781a00fca1c4257fe376876093f91e489b24cb16950116abbb76f",
+      "drivers/vision/npu/core/npu-system.c": "c9305d36ce64ffe4f683dcaccdabc6a664a926e79cafba90f43ddddaa6862dd1"
+    }
+  },
+  "api_and_order_checks": {
+    "legacy_exported_void_signature_retained": true,
+    "imgloader_desc_and_ops_struct_layouts_unchanged": true,
+    "new_checked_export_requires_future_matched_provider_and_npu_modules": true,
+    "mfc_direct_legacy_call_sites": 2,
+    "npu_ops_shutdown_callback": null,
+    "npu_provider_success_claims_cpu_or_remote_firmware_quiescence": false,
+    "cpu_uncertainty_precedes_interface_and_provider_calls": true,
+    "runtime_bootup_resume_rejects_residual_ownership_before_firmware_work": true,
+    "permission_claim_is_atomic_and_made_before_provider_call": true,
+    "firmware_stage_cleared_before_successful_claim_release": true,
+    "provider_failure_preserves_fw_and_lower_stage_ownership": true,
+    "provider_failure_repeat_suspend_open_close_rejected_without_retry": true,
+    "positive_provider_step_result_normalized_to_eio": true,
+    "known_on_order_preserved": [
+      "interface close",
+      "checked imgloader provider call",
+      "runtime-PM STM disable when configured",
+      "separate CPU_OFF request",
+      "existing clocks, firmware-buffer, and wake-lock cleanup"
+    ]
+  },
+  "host_environment": {
+    "compiler": "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "kernel_build": false,
+    "module_build_or_crc_generation": false,
+    "device_or_provider_operation": false,
+    "phone_ssh_adb_usb_bootup": false,
+    "firmware_s2mpu_trustzone_operation": false
+  },
+  "tests": [
+    {
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 tools/hardware/test-npu-imgloader-shutdown-status.py --skip-optional-local-fixtures",
+      "python_optimize": 0,
+      "extracted_c_compile_run_jobs": 32,
+      "result": "passed"
+    },
+    {
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 -O tools/hardware/test-npu-imgloader-shutdown-status.py --skip-optional-local-fixtures",
+      "python_optimize": 1,
+      "extracted_c_compile_run_jobs": 32,
+      "result": "passed"
+    },
+    {
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONOPTIMIZE=1 python3 tools/hardware/test-npu-imgloader-shutdown-status.py --skip-optional-local-fixtures",
+      "python_optimize": 1,
+      "extracted_c_compile_run_jobs": 32,
+      "result": "passed"
+    },
+    {
+      "check": "optional read-only NPU12 fixture verification",
+      "result": "passed"
+    }
+  ],
+  "total_extracted_c_compile_run_jobs": 96,
+  "coverage": [
+    "reproduce baseline false-success after permission-release failure, callback failure, and notify failure",
+    "preserve negative errno and map unexpected positive permission/callback/notify results to -EIO",
+    "quarantine post-permission partial failure and reject repeated suspend/open/close without repeating provider calls",
+    "reentrant suspend during outstanding permission-release call is rejected by the atomic claim",
+    "clean S2MPU, non-S2MPU, config-disabled, secure warm-boot skip, BOOT_IOCTL, and runtime-PM routes",
+    "CPU_ON uncertainty refusal and legacy void API behavior",
+    "ordered provider/STM/CPU_OFF/clock/buffer/wake cleanup in the host control"
+  ],
+  "limitations": [
+    "notify failure is controlled at the provider helper seam because the pinned notify implementation is a no-op",
+    "callback failure is injected through a controlled ops callback; the actual pinned NPU ops callback is NULL",
+    "reentrant ownership test is deterministic and does not constitute threaded race stress",
+    "host stubs do not verify kernel locking, module linking/CRC, provider execution, firmware, CPU/STM state, DMA, TrustZone, or device acceptance",
+    "parallel Python test starts initially hit the bounded five-second upstream fetch timeout; sequential runs in all required modes passed"
+  ],
+  "artifact_sha256": {
+    "tools/hardware/npu-imgloader-shutdown-status.patch": "e7355e8906b22f1decf00de59cd644aac7bfcf6d861d97cdb3ff9bf084428385",
+    "tools/hardware/npu-imgloader-shutdown-status-harness.c": "748eae416333f6aafa3926155e1e756c9152e6630360c6db89c3f840c548882e",
+    "tools/hardware/test-npu-imgloader-shutdown-status.py": "fe970bf5c8b224d594e28e09850ed9f877ade1f523044d51c940f4a3f0c0cbee",
+    "docs/research/NPU_IMGLOADER_SHUTDOWN_STATUS_2026-10-03.md": "1564bc73acb658b2be852623f67fedd3a377fd8d3a500461940f5579f8ed5fd3"
+  }
+}
