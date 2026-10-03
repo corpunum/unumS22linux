@@ -69,7 +69,7 @@ diff --git a/drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is-se
 -			is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS7");
 +			ret = is_enable(dev, "GATE_MIPI_PHY_LINK_WRAP_QCH_CSIS7");
  		break;
-@@ -97,39 +97,112 @@ int exynos9925_is_sensor_iclk_cfg(struct device *dev,
+@@ -97,39 +97,116 @@ int exynos9925_is_sensor_iclk_cfg(struct device *dev,
  	u32 scenario,
  	u32 channel)
  {
@@ -129,9 +129,11 @@ diff --git a/drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is-se
 +				rollback_ret = ret;
 +		}
 +	}
-+	if (rollback_ret)
-+		pr_err("CSIS cfg rollback incomplete after error %d (cleanup %d); clock state unknown\n",
++	if (rollback_ret) {
++		pr_err("CSIS cfg rollback incomplete after original error %d (cleanup %d); ownership unknown\n",
 +			original_ret, rollback_ret);
++		return -EUCLEAN;
++	}
 +
 +	return original_ret;
  }
@@ -199,15 +201,17 @@ diff --git a/drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is-se
 +				rollback_ret = cleanup_ret;
 +		}
 +	}
-+	if (rollback_ret)
-+		pr_err("CSIS on rollback incomplete after error %d (cleanup %d); clock state unknown\n",
++	if (rollback_ret) {
++		pr_err("CSIS on rollback incomplete after original error %d (cleanup %d); ownership unknown\n",
 +			original_ret, rollback_ret);
++		return -EUCLEAN;
++	}
  
 -p_err:
 -	return ret;
 +	return original_ret;
  }
-@@ -138,8 +211,27 @@ int exynos9925_is_sensor_iclk_off(struct device *dev,
+@@ -138,8 +215,29 @@ int exynos9925_is_sensor_iclk_off(struct device *dev,
  	u32 scenario,
  	u32 channel)
  {
@@ -230,14 +234,16 @@ diff --git a/drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is-se
 +	if (ret) {
 +		/* Restore this caller's selected-channel vote before returning failure. */
 +		rollback_ret = exynos9925_is_csi_gate(dev, channel, false);
-+		if (rollback_ret)
-+			pr_err("CSIS off rollback failed after DMA error %d (clock error %d); clock state unknown\n",
++		if (rollback_ret) {
++			pr_err("CSIS off restore incomplete: original DMA error %d, selected-clock restore error %d; ownership unknown\n",
 +				ret, rollback_ret);
++			return -EUCLEAN;
++		}
 +		return ret;
 +	}
  
  	return 0;
-@@ -185,6 +277,5 @@ int exynos_is_sensor_iclk_cfg(struct device *dev,
+@@ -185,6 +283,5 @@ int exynos_is_sensor_iclk_cfg(struct device *dev,
  	u32 scenario,
  	u32 channel)
  {
@@ -245,7 +251,7 @@ diff --git a/drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is-se
 -	return 0;
 +	return exynos9925_is_sensor_iclk_cfg(dev, scenario, channel);
  }
-@@ -193,6 +284,5 @@ int exynos_is_sensor_iclk_on(struct device *dev,
+@@ -193,6 +291,5 @@ int exynos_is_sensor_iclk_on(struct device *dev,
  	u32 scenario,
  	u32 channel)
  {
@@ -253,7 +259,7 @@ diff --git a/drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is-se
 -	return 0;
 +	return exynos9925_is_sensor_iclk_on(dev, scenario, channel);
  }
-@@ -201,6 +291,5 @@ int exynos_is_sensor_iclk_off(struct device *dev,
+@@ -201,6 +299,5 @@ int exynos_is_sensor_iclk_off(struct device *dev,
  	u32 scenario,
  	u32 channel)
  {
@@ -261,3 +267,193 @@ diff --git a/drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is-se
 -	return 0;
 +	return exynos9925_is_sensor_iclk_off(dev, scenario, channel);
  }
+diff --git a/drivers/media/platform/exynos/camera/is-device-sensor.h b/drivers/media/platform/exynos/camera/is-device-sensor.h
+--- a/drivers/media/platform/exynos/camera/is-device-sensor.h
++++ b/drivers/media/platform/exynos/camera/is-device-sensor.h
+@@ -153,3 +153,5 @@ enum is_sensor_state {
+ 	IS_SENSOR_S_POWER,
+ 	IS_SENSOR_START,
++	/* ICLK rollback left this caller's clock-vote ownership unknown. */
++	IS_SENSOR_ICLK_UNKNOWN,
+ };
+diff --git a/drivers/media/platform/exynos/camera/is-device-sensor_v2.c b/drivers/media/platform/exynos/camera/is-device-sensor_v2.c
+--- a/drivers/media/platform/exynos/camera/is-device-sensor_v2.c
++++ b/drivers/media/platform/exynos/camera/is-device-sensor_v2.c
+@@ -454,7 +454,12 @@ static int is_sensor_iclk_on(struct is_device_sensor *device)
+ 	core = device->private_data;
+ 	pdata = device->pdata;
+ 
++	if (test_bit(IS_SENSOR_ICLK_UNKNOWN, &device->state)) {
++		merr("ICLK ownership quarantined; refusing acquisition", device);
++		ret = -EUCLEAN;
++		goto p_err;
++	}
+ 	if (test_bit(IS_SENSOR_ICLK_ON, &device->state)) {
+ 		merr("%s : already clk on", device, __func__);
+ 		goto p_err;
+ 	}
+@@ -470,4 +475,6 @@ static int is_sensor_iclk_on(struct is_device_sensor *device)
+ 	if (ret) {
+ 		merr("iclk_cfg is fail(%d)", device, ret);
++		if (ret == -EUCLEAN)
++			set_bit(IS_SENSOR_ICLK_UNKNOWN, &device->state);
+ 		goto p_err;
+ 	}
+@@ -478,4 +485,6 @@ static int is_sensor_iclk_on(struct is_device_sensor *device)
+ 	if (ret) {
+ 		merr("iclk_on is fail(%d)", device, ret);
++		if (ret == -EUCLEAN)
++			set_bit(IS_SENSOR_ICLK_UNKNOWN, &device->state);
+ 		goto p_err;
+ 	}
+@@ -503,5 +512,11 @@ int is_sensor_iclk_off(struct is_device_sensor *device)
+ 	core = device->private_data;
+ 	pdata = device->pdata;
+ 
++	if (test_bit(IS_SENSOR_ICLK_UNKNOWN, &device->state)) {
++		merr("ICLK ownership quarantined; refusing release", device);
++		ret = -EUCLEAN;
++		goto p_err;
++	}
++
+ 	if (!test_bit(IS_SENSOR_ICLK_ON, &device->state)) {
+ 		merr("%s : already clk off", device, __func__);
+@@ -517,4 +532,6 @@ int is_sensor_iclk_off(struct is_device_sensor *device)
+ 	if (ret) {
+ 		merr("iclk_off is fail(%d)", device, ret);
++		if (ret == -EUCLEAN)
++			set_bit(IS_SENSOR_ICLK_UNKNOWN, &device->state);
+ 		goto p_err;
+ 	}
+@@ -1729,5 +1729,11 @@ static int is_sensor_probe(struct platform_device *pdev)
+ 	atomic_set(&dev_id, pdev->id);
+ 	device = &core->sensor[pdev->id];
+ 
++	/* Never clear a prior quarantine when this sensor object is reprobed. */
++	if (test_bit(IS_SENSOR_ICLK_UNKNOWN, &device->state)) {
++		ret = -EUCLEAN;
++		goto p_err;
++	}
++
+ 	/* v4l2 device and device init */
+ 	memset(&device->v4l2_dev, 0, sizeof(struct v4l2_device));
+@@ -1879,5 +1885,10 @@ int is_sensor_open(struct is_device_sensor *device,
+ 	FIMC_BUG(!vctx);
+ 	FIMC_BUG(!GET_VIDEO(vctx));
+ 
++	if (test_bit(IS_SENSOR_ICLK_UNKNOWN, &device->state)) {
++		merr("ICLK ownership quarantined; refusing sensor open", device);
++		return -EUCLEAN;
++	}
++
+ 	mutex_lock(&device->mlock_state);
+ 	if (test_bit(IS_SENSOR_OPEN, &device->state)) {
+@@ -2006,6 +2018,11 @@ int is_sensor_close(struct is_device_sensor *device)
+ 
+ 	FIMC_BUG(!device);
+ 
++	if (test_bit(IS_SENSOR_ICLK_UNKNOWN, &device->state)) {
++		merr("ICLK ownership quarantined; refusing sensor teardown", device);
++		return -EUCLEAN;
++	}
++
+ 	core = device->private_data;
+ 
+ 	if (!device->vctx) {
+@@ -3914,6 +3931,12 @@ static int is_sensor_suspend(struct device *dev)
+ 	struct is_device_sensor *device;
+ 	struct exynos_platform_is_sensor *pdata;
+ 
++	if (!is_sensor_g_device(pdev, &device) &&
++	    test_bit(IS_SENSOR_ICLK_UNKNOWN, &device->state)) {
++		err("ICLK ownership quarantined; refusing system suspend", device);
++		return -EUCLEAN;
++	}
++
+ 	is_vendor_sensor_suspend(pdev);
+ 
+ 	if (!is_sensor_g_device(pdev, &device)) {
+@@ -3935,5 +3958,10 @@ int is_sensor_runtime_suspend(struct device *dev)
+ 		err("is_sensor_g_device is fail(%d)", ret);
+ 		return -EINVAL;
+ 	}
+ 
++	if (test_bit(IS_SENSOR_ICLK_UNKNOWN, &device->state)) {
++		err("ICLK ownership quarantined; refusing runtime suspend", device);
++		return -EUCLEAN;
++	}
++
+ 	ret = is_sensor_runtime_suspend_pre(dev);
+@@ -3980,4 +4005,6 @@ int is_sensor_runtime_suspend(struct device *dev)
+ 	if (ret)
+ 		mwarn("is_sensor_iclk_off is fail(%d)", device, ret);
++	if (ret)
++		return ret;
+ 
+ 	v4l2_device_unregister_subdev(device->subdev_module);
+@@ -4015,5 +4061,10 @@ int is_sensor_runtime_resume(struct device *dev)
+ 		err("is_sensor_g_device is fail(%d)", ret);
+ 		return -EINVAL;
+ 	}
+ 
++	if (test_bit(IS_SENSOR_ICLK_UNKNOWN, &device->state)) {
++		err("ICLK ownership quarantined; refusing runtime resume", device);
++		return -EUCLEAN;
++	}
++
+ 	subdev_csi = device->subdev_csi;
+diff --git a/drivers/media/platform/exynos/camera/include/is-video.h b/drivers/media/platform/exynos/camera/include/is-video.h
+--- a/drivers/media/platform/exynos/camera/include/is-video.h
++++ b/drivers/media/platform/exynos/camera/include/is-video.h
+@@ -251,5 +251,6 @@ struct is_video_ctx {
+ 	struct is_video			*video;
+ 	struct is_video_ops		vops;
++	bool				iclk_quarantine_retained;
+ 
+ #if defined(MEASURE_TIME) && defined(MONITOR_TIME)
+ 	unsigned long long		time[TMQ_END];
+diff --git a/drivers/media/platform/exynos/camera/is-video.c b/drivers/media/platform/exynos/camera/is-video.c
+--- a/drivers/media/platform/exynos/camera/is-video.c
++++ b/drivers/media/platform/exynos/camera/is-video.c
+@@ -2685,6 +2685,7 @@ int is_video_open(struct file *file)
+ 	if (iv->device_type == IS_DEVICE_ISCHAIN) {
+ 		idi = (struct is_device_ischain *)device;
++		ids = idi->sensor;
+ 		instance = idi->instance;
+ 
+ 		minfo("[%s]%s\n", idi, vn_name[iv->id], __func__);
+ 	} else {
+@@ -2702,3 +2703,8 @@ int is_video_open(struct file *file)
+ 	}
++	if (ids && test_bit(IS_SENSOR_ICLK_UNKNOWN, &ids->state)) {
++		merr("ICLK ownership quarantined; refusing video open", ids);
++		ret = -EUCLEAN;
++		goto err_invalid_device;
++	}
+ 
+ 	ivc = is_vctx_open(file, iv, instance, iv->subdev_id, vn_name[iv->id]);
+@@ -2783,9 +2789,24 @@ int is_video_close(struct file *file)
+ 	if (iv->device_type == IS_DEVICE_ISCHAIN) {
+ 		idi = (struct is_device_ischain *)ivc->device;
+ 		instance = idi->instance;
+ 	} else {
+ 		ids = (struct is_device_sensor *)ivc->device;
+ 		instance = ids->instance;
+ 	}
+ 
++	if (iv->device_type == IS_DEVICE_ISCHAIN ?
++		(idi->sensor && test_bit(IS_SENSOR_ICLK_UNKNOWN, &idi->sensor->state)) :
++		test_bit(IS_SENSOR_ICLK_UNKNOWN, &ids->state)) {
++		/* A duplicate direct invocation must not accumulate lifetime pins. */
++		if (ivc->iclk_quarantine_retained)
++			return -EUCLEAN;
++
++		/* VFS/V4L2 drop their refs after .release; retain node and module. */
++		ivc->iclk_quarantine_retained = true;
++		get_device(&iv->vd.dev);
++		__module_get(THIS_MODULE);
++		mierr("sensor ICLK ownership quarantined; preserving video context", instance);
++		return -EUCLEAN;
++	}
++
+ 	if (iv->video_type == IS_VIDEO_TYPE_LEADER) {

@@ -6,6 +6,7 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef unsigned int u32;
@@ -18,16 +19,46 @@ struct platform_device {
 	struct device dev;
 };
 
+struct v4l2_subdev { int unused; };
+struct vb2_queue { void *drv_priv; void *owner; };
+struct video_device { struct device dev; };
+struct is_video {
+	int device_type;
+	int video_type;
+	int id;
+	struct video_device vd;
+};
+struct is_video_ctx {
+	struct {
+		struct vb2_queue *vbq;
+	} queue;
+	void *device;
+	void *group;
+	struct is_video *video;
+	unsigned long state;
+	bool iclk_quarantine_retained;
+};
+struct file {
+	void *private_data;
+	struct is_video *video;
+};
+struct is_device_sensor;
+struct is_device_ischain { int instance; int open_cnt; struct is_device_sensor *sensor; };
+struct is_resourcemgr { int qos_refcount; };
+struct is_module_enum;
+
 struct exynos_platform_is_sensor {
 	int (*iclk_cfg)(struct device *dev, u32 scenario, u32 channel);
 	int (*iclk_on)(struct device *dev, u32 scenario, u32 channel);
 	int (*iclk_off)(struct device *dev, u32 scenario, u32 channel);
 	u32 scenario;
 	u32 csi_ch;
+	int (*mclk_force_off)(struct device *dev, u32 scenario);
 };
 
 struct is_core {
 	struct platform_device *pdev;
+	struct is_resourcemgr resourcemgr;
 };
 
 struct is_device_sensor {
@@ -36,6 +67,11 @@ struct is_device_sensor {
 	void *private_data;
 	unsigned long state;
 	int device_id;
+	int instance;
+	struct is_video_ctx *vctx;
+	struct v4l2_subdev *subdev_csi;
+	struct v4l2_subdev *subdev_module;
+	struct is_resourcemgr *resourcemgr;
 };
 
 int exynos_is_sensor_iclk_cfg(struct device *dev, u32 scenario, u32 channel);
@@ -43,6 +79,204 @@ int exynos_is_sensor_iclk_on(struct device *dev, u32 scenario, u32 channel);
 int exynos_is_sensor_iclk_off(struct device *dev, u32 scenario, u32 channel);
 static int is_sensor_iclk_on(struct is_device_sensor *device);
 int is_sensor_iclk_off(struct is_device_sensor *device);
+static int is_sensor_suspend(struct device *dev);
+int is_sensor_runtime_suspend(struct device *dev);
+int is_sensor_runtime_resume(struct device *dev);
+int is_video_close(struct file *file);
+
+static struct is_device_sensor *active_sensor;
+static int runtime_suspend_pre_calls;
+static int runtime_resume_pre_calls;
+static int module_lookup_calls;
+static int gpio_off_calls;
+static int unregister_calls;
+static int vendor_suspend_calls;
+static int mclk_force_off_calls;
+static int secure_cleanup_calls;
+static int qos_cleanup_calls;
+static int sensor_close_calls;
+static int queue_release_calls;
+static int vctx_close_calls;
+static int module_pin_calls;
+static int video_device_pin_calls;
+static int configured_runtime_suspend_pre_ret;
+static int configured_runtime_resume_pre_ret;
+static int configured_gpio_off_ret;
+static int configured_module_lookup_ret;
+
+static const int THIS_MODULE_TOKEN;
+
+static struct platform_device *to_platform_device(struct device *dev);
+static int is_sensor_g_device(struct platform_device *pdev,
+		struct is_device_sensor **device);
+static int is_sensor_runtime_suspend_pre(struct device *dev);
+static int is_sensor_runtime_resume_pre(struct device *dev);
+static int is_sensor_g_module(struct is_device_sensor *device,
+		struct is_module_enum **module);
+static int is_sensor_gpio_off(struct is_device_sensor *device);
+static int is_secure_func(void *a, struct is_device_sensor *device,
+		int b, u32 c, int d);
+static int atomic_dec_return(int *value);
+static void is_remove_dvfs(struct is_core *core, int level);
+static void is_vendor_sensor_suspend(struct platform_device *pdev);
+static void v4l2_device_unregister_subdev(struct v4l2_subdev *subdev);
+static void __module_get(const void *module);
+static struct device *get_device(struct device *dev);
+static struct is_video *video_drvdata(struct file *file);
+static int is_sensor_close(struct is_device_sensor *device);
+static int is_ischain_group_close(struct is_device_ischain *device,
+		struct is_video_ctx *ivc, void *group);
+static int is_ischain_subdev_close(struct is_device_ischain *device,
+		struct is_video_ctx *ivc);
+static int is_sensor_subdev_close(struct is_device_sensor *device,
+		struct is_video_ctx *ivc);
+static int __is_video_close(struct is_video_ctx *ivc);
+static int is_vctx_close(struct file *file, struct is_video *video,
+		struct is_video_ctx *vctx);
+
+static int fake_mclk_force_off(struct device *dev, u32 scenario)
+{
+	(void)dev;
+	(void)scenario;
+	mclk_force_off_calls++;
+	return 0;
+}
+
+static struct platform_device *to_platform_device(struct device *dev)
+{
+	(void)dev;
+	return active_sensor ? active_sensor->pdev : NULL;
+}
+
+static int is_sensor_g_device(struct platform_device *pdev,
+		struct is_device_sensor **device)
+{
+	(void)pdev;
+	*device = active_sensor;
+	return active_sensor ? 0 : -EINVAL;
+}
+
+static int is_sensor_runtime_suspend_pre(struct device *dev)
+{
+	(void)dev;
+	runtime_suspend_pre_calls++;
+	return configured_runtime_suspend_pre_ret;
+}
+
+static int is_sensor_runtime_resume_pre(struct device *dev)
+{
+	(void)dev;
+	runtime_resume_pre_calls++;
+	return configured_runtime_resume_pre_ret;
+}
+
+static int is_sensor_g_module(struct is_device_sensor *device,
+		struct is_module_enum **module)
+{
+	(void)device;
+	module_lookup_calls++;
+	*module = NULL;
+	return configured_module_lookup_ret;
+}
+
+static int is_sensor_gpio_off(struct is_device_sensor *device)
+{
+	(void)device;
+	gpio_off_calls++;
+	return configured_gpio_off_ret;
+}
+
+static int is_secure_func(void *a, struct is_device_sensor *device,
+		int b, u32 c, int d)
+{
+	(void)a; (void)device; (void)b; (void)c; (void)d;
+	secure_cleanup_calls++;
+	return 0;
+}
+
+static int atomic_dec_return(int *value)
+{
+	return --*value;
+}
+
+static void is_remove_dvfs(struct is_core *core, int level)
+{
+	(void)core; (void)level;
+	qos_cleanup_calls++;
+}
+
+static void is_vendor_sensor_suspend(struct platform_device *pdev)
+{
+	(void)pdev;
+	vendor_suspend_calls++;
+}
+
+static void v4l2_device_unregister_subdev(struct v4l2_subdev *subdev)
+{
+	(void)subdev;
+	unregister_calls++;
+}
+
+static void __module_get(const void *module)
+{
+	if (module == &THIS_MODULE_TOKEN)
+		module_pin_calls++;
+}
+
+static struct device *get_device(struct device *dev)
+{
+	video_device_pin_calls++;
+	return dev;
+}
+
+static struct is_video *video_drvdata(struct file *file)
+{
+	return file->video;
+}
+
+static int is_sensor_close(struct is_device_sensor *device)
+{
+	(void)device;
+	sensor_close_calls++;
+	return 0;
+}
+
+static int is_ischain_group_close(struct is_device_ischain *device,
+		struct is_video_ctx *ivc, void *group)
+{
+	(void)device; (void)ivc; (void)group;
+	return 0;
+}
+
+static int is_ischain_subdev_close(struct is_device_ischain *device,
+		struct is_video_ctx *ivc)
+{
+	(void)device; (void)ivc;
+	return 0;
+}
+
+static int is_sensor_subdev_close(struct is_device_sensor *device,
+		struct is_video_ctx *ivc)
+{
+	(void)device; (void)ivc;
+	return 0;
+}
+
+static int __is_video_close(struct is_video_ctx *ivc)
+{
+	(void)ivc;
+	queue_release_calls++;
+	return 0;
+}
+
+static int is_vctx_close(struct file *file, struct is_video *video,
+		struct is_video_ctx *vctx)
+{
+	(void)video; (void)vctx;
+	vctx_close_calls++;
+	file->private_data = NULL;
+	return 0;
+}
 
 static int clock_votes[8];
 static int physical_on[8];
@@ -158,6 +392,24 @@ static void reset_clocks(int shared_vote)
 	disable_calls = 0;
 	diagnostics[0] = '\0';
 	memset(disable_order, 0xff, sizeof(disable_order));
+	runtime_suspend_pre_calls = 0;
+	runtime_resume_pre_calls = 0;
+	module_lookup_calls = 0;
+	gpio_off_calls = 0;
+	unregister_calls = 0;
+	vendor_suspend_calls = 0;
+	mclk_force_off_calls = 0;
+	secure_cleanup_calls = 0;
+	qos_cleanup_calls = 0;
+	sensor_close_calls = 0;
+	queue_release_calls = 0;
+	vctx_close_calls = 0;
+	module_pin_calls = 0;
+	video_device_pin_calls = 0;
+	configured_runtime_suspend_pre_ret = 0;
+	configured_runtime_resume_pre_ret = 0;
+	configured_gpio_off_ret = 0;
+	configured_module_lookup_ret = 0;
 }
 
 static int count_votes(void)
@@ -206,23 +458,44 @@ static void setup_sensor(struct is_device_sensor *sensor,
 	pdata->iclk_off = exynos_is_sensor_iclk_off;
 	pdata->scenario = 0;
 	pdata->csi_ch = 3;
+	pdata->mclk_force_off = fake_mclk_force_off;
 	core->pdev = pdev;
 	sensor->pdev = pdev;
 	sensor->pdata = pdata;
 	sensor->private_data = core;
+	sensor->instance = 0;
+	sensor->subdev_csi = (struct v4l2_subdev *)1;
+	sensor->subdev_module = (struct v4l2_subdev *)2;
+	sensor->resourcemgr = &core->resourcemgr;
+	active_sensor = sensor;
 }
 
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
-#define IS_SENSOR_ICLK_ON 3
+#define IS_DEVICE_ISCHAIN 1
+#define IS_VIDEO_TYPE_LEADER 1
+#define USE_OFFLINE_PROCESSING 1
+#define SECURE_CAMERA_IRIS 0
+#define IS_SECURE_CAMERA_IRIS 1
+#define SMC_SECCAM_UNPREPARE 2
+#define START_DVFS_LEVEL 0
+#define THIS_MODULE (&THIS_MODULE_TOKEN)
+#define IS_ENABLED(option) 0
 #define FIMC_BUG(condition) do { if (condition) return -EINVAL; } while (0)
 #define test_bit(bit, state) fake_test_bit((bit), (state))
 #define set_bit(bit, state) fake_set_bit((bit), (state))
 #define clear_bit(bit, state) fake_clear_bit((bit), (state))
-#define merr(...) do { } while (0)
 #define is_enable fake_is_enable
 #define is_disable fake_is_disable
 #define pr_debug(...) do { } while (0)
 #define pr_err(...) fake_pr_err(__VA_ARGS__)
+#define merr(...) do { } while (0)
+#define mwarn(...) do { } while (0)
+#define err(...) do { } while (0)
+#define info(...) do { } while (0)
+#define minfo(...) do { } while (0)
+#define mierr(...) do { } while (0)
+
+/* CAMERA_SENSOR_STATE_ENUM */
 
 /* CAMERA_SENSOR_CLOCK_FUNCTIONS */
 
@@ -235,6 +508,13 @@ int main(void)
 	struct is_core core;
 	struct platform_device pdev;
 	int i, ret, failures = 0;
+
+	reset_clocks(0);
+	setup_sensor(&sensor, &pdata, &core, &pdev);
+	ret = is_sensor_suspend(&pdev.dev);
+	failures += check(ret == 0 && vendor_suspend_calls == 1 &&
+		mclk_force_off_calls == 1,
+		"baseline system suspend retains its existing vendor/MCLK path");
 
 	/* The actual generic caller sees false success and sets its ON bit. */
 	for (i = 0; i < 8; i++) {
@@ -349,11 +629,24 @@ int main(void)
 	fail_disable_id = 3;
 	fail_disable_remaining = 1;
 	ret = is_sensor_iclk_on(&sensor);
-	failures += check(ret == -EIO, "cfg rollback failure does not replace acquire error");
+	failures += check(ret == -EUCLEAN, "cfg rollback failure quarantines unknown ownership");
 	failures += check(disable_calls == 7 && count_votes() == 9 && clock_votes[3] == 2,
 		"cfg cleanup continues after one failed disable and preserves both votes");
-	failures += check(strstr(diagnostics, "clock state unknown") != NULL,
+	failures += check(strstr(diagnostics, "ownership unknown") != NULL &&
+		strstr(diagnostics, "original error -5 (cleanup -22)") != NULL,
 		"incomplete cfg rollback reports uncertainty rather than physical success");
+	failures += check(fake_test_bit(IS_SENSOR_ICLK_UNKNOWN, &sensor.state) &&
+		!fake_test_bit(IS_SENSOR_ICLK_ON, &sensor.state),
+		"cfg cleanup failure quarantines while leaving logical ON clear");
+	{
+		int enables = enable_calls;
+		int disables = disable_calls;
+		int votes = count_votes();
+		ret = is_sensor_iclk_on(&sensor);
+		failures += check(ret == -EUCLEAN && enable_calls == enables &&
+			disable_calls == disables && count_votes() == votes,
+			"cfg quarantine prevents an unsafe repeated acquisition");
+	}
 
 	/* Invalid channels are rejected before any clock is acquired. */
 	reset_clocks(0);
@@ -377,6 +670,15 @@ int main(void)
 		"actual caller's cfg/on adds only its shared votes");
 	failures += check(fake_test_bit(IS_SENSOR_ICLK_ON, &sensor.state),
 		"actual caller sets ICLK_ON after both callbacks succeed");
+	{
+		int enables = enable_calls;
+		int disables = disable_calls;
+		int votes = count_votes();
+		ret = is_sensor_iclk_on(&sensor);
+		failures += check(ret == 0 && enable_calls == enables &&
+			disable_calls == disables && count_votes() == votes,
+			"repeated on is idempotent and preserves shared votes");
+	}
 	for (i = 0; i < 7; i++)
 		failures += check(clock_votes[i] == (i == 3 ? 2 : 1),
 			"on converts only this caller's gate votes and preserves shared votes");
@@ -388,6 +690,15 @@ int main(void)
 	for (i = 0; i < 8; i++)
 		failures += check(clock_votes[i] == 1,
 			"off releases only this caller's votes and preserves shared votes");
+	{
+		int enables = enable_calls;
+		int disables = disable_calls;
+		int votes = count_votes();
+		ret = is_sensor_iclk_off(&sensor);
+		failures += check(ret == 0 && enable_calls == enables &&
+			disable_calls == disables && count_votes() == votes,
+			"repeated off is idempotent and preserves shared votes");
+	}
 
 	/* Inject a disable failure at each channel position while converting cfg votes.
 	 * The on callback drains only the votes left by its own cfg after failure.
@@ -444,11 +755,15 @@ int main(void)
 	fail_disable_id = 5;
 	fail_disable_remaining = 2;
 	ret = is_sensor_iclk_on(&sensor);
-	failures += check(ret == -EINVAL, "on cleanup error cannot replace first gate error");
+	failures += check(ret == -EUCLEAN, "on cleanup failure quarantines unknown ownership");
 	failures += check(count_votes() == 9 && clock_votes[5] == 2,
 		"persistently failed cleanup leaves its vote while preserving shared votes");
-	failures += check(strstr(diagnostics, "clock state unknown") != NULL,
-		"incomplete on cleanup is explicitly uncertain");
+	failures += check(strstr(diagnostics, "ownership unknown") != NULL &&
+		strstr(diagnostics, "original error -22 (cleanup -22)") != NULL,
+		"incomplete on cleanup records initiating and cleanup errors separately");
+	failures += check(fake_test_bit(IS_SENSOR_ICLK_UNKNOWN, &sensor.state) &&
+		!fake_test_bit(IS_SENSOR_ICLK_ON, &sensor.state),
+		"on cleanup failure quarantines before logical ON is set");
 
 	/* Off failure on the channel has no mutation; DMA failure restores channel. */
 	reset_clocks(1);
@@ -482,17 +797,131 @@ int main(void)
 	fail_enable_id = 3;
 	fail_enable_remaining = 1;
 	ret = is_sensor_iclk_off(&sensor);
-	failures += check(ret == -EINVAL, "off restore failure preserves the DMA error");
+	failures += check(ret == -EUCLEAN, "off restore failure latches unknown ownership");
 	failures += check(clock_votes[3] == 1 && clock_votes[7] == 2 && count_votes() == 9,
 		"failed restore leaves partial ownership while preserving shared references");
-	failures += check(strstr(diagnostics, "clock state unknown") != NULL,
-		"failed off restoration reports uncertainty");
+	failures += check(strstr(diagnostics, "ownership unknown") != NULL &&
+		strstr(diagnostics, "original DMA error -22") != NULL &&
+		strstr(diagnostics, "selected-clock restore error -5") != NULL,
+		"failed off restoration reports both initiating and cleanup errors");
 	failures += check(fake_test_bit(IS_SENSOR_ICLK_ON, &sensor.state),
 		"actual caller retains logical ON state after failed physical unwind");
+	failures += check(fake_test_bit(IS_SENSOR_ICLK_UNKNOWN, &sensor.state),
+		"actual caller latches ICLK quarantine after incomplete restoration");
+
+	/* A quarantine is terminal for this sensor object: no retry can consume
+	 * another caller's shared gate vote or run PM/close teardown past it.
+	 */
+	{
+		int enables = enable_calls;
+		int disables = disable_calls;
+		int votes = count_votes();
+		struct is_video video;
+		struct is_device_ischain ischain;
+		struct is_video_ctx ivc;
+		struct vb2_queue queue;
+		struct file file;
+
+		ret = is_sensor_iclk_off(&sensor);
+		failures += check(ret == -EUCLEAN && enable_calls == enables &&
+			disable_calls == disables && count_votes() == votes,
+			"quarantined off retry is refused before clock operations");
+		ret = is_sensor_iclk_on(&sensor);
+		failures += check(ret == -EUCLEAN && enable_calls == enables &&
+			disable_calls == disables && count_votes() == votes,
+			"quarantined on retry is refused before clock operations");
+		ret = is_sensor_runtime_suspend(&pdev.dev);
+		failures += check(ret == -EUCLEAN && runtime_suspend_pre_calls == 0 &&
+			module_lookup_calls == 0 && gpio_off_calls == 0 &&
+			unregister_calls == 0 && secure_cleanup_calls == 0 &&
+			qos_cleanup_calls == 0,
+			"runtime suspend refuses before other sensor teardown");
+		ret = is_sensor_runtime_resume(&pdev.dev);
+		failures += check(ret == -EUCLEAN && runtime_resume_pre_calls == 0 &&
+			enable_calls == enables && disable_calls == disables,
+			"runtime resume refuses before ICLK reacquisition");
+		ret = is_sensor_suspend(&pdev.dev);
+		failures += check(ret == -EUCLEAN && vendor_suspend_calls == 0 &&
+			mclk_force_off_calls == 0,
+			"system suspend refuses before vendor/MCLK side effects");
+
+		memset(&video, 0, sizeof(video));
+		memset(&ivc, 0, sizeof(ivc));
+		memset(&queue, 0, sizeof(queue));
+		memset(&file, 0, sizeof(file));
+		video.device_type = 0;
+		video.video_type = 2; /* sensor capture node, not the leader node */
+		ivc.device = &sensor;
+		ivc.video = &video;
+		ivc.queue.vbq = &queue;
+		file.private_data = &ivc;
+		file.video = &video;
+		ret = is_video_close(&file);
+		failures += check(ret == -EUCLEAN && module_pin_calls == 1 &&
+			video_device_pin_calls == 1,
+			"outer release pins exactly one module and V4L2-node reference");
+		ret = is_video_close(&file);
+		failures += check(ret == -EUCLEAN && module_pin_calls == 1 &&
+			video_device_pin_calls == 1,
+			"duplicate direct release does not accumulate lifetime pins");
+		failures += check(sensor_close_calls == 0 && queue_release_calls == 0 &&
+			vctx_close_calls == 0 && file.private_data == &ivc &&
+			ivc.queue.vbq == &queue && queue.drv_priv == NULL,
+			"sensor capture close retains context and queue instead of freeing live state");
+
+		memset(&video, 0, sizeof(video));
+		memset(&ischain, 0, sizeof(ischain));
+		memset(&ivc, 0, sizeof(ivc));
+		memset(&queue, 0, sizeof(queue));
+		memset(&file, 0, sizeof(file));
+		video.device_type = IS_DEVICE_ISCHAIN;
+		video.video_type = 2; /* pipeline capture context tied to the quarantined sensor */
+		ischain.sensor = &sensor;
+		ivc.device = &ischain;
+		ivc.video = &video;
+		ivc.queue.vbq = &queue;
+		file.private_data = &ivc;
+		file.video = &video;
+		ret = is_video_close(&file);
+		failures += check(ret == -EUCLEAN && module_pin_calls == 2 &&
+			video_device_pin_calls == 2,
+			"ischain context follows its sensor and pins module plus V4L2 node");
+		failures += check(queue_release_calls == 0 && vctx_close_calls == 0 &&
+			file.private_data == &ivc && ivc.queue.vbq == &queue,
+			"ischain capture context also retains its queue and V4L2 context");
+	}
+
+	/* A cleanly restored ordinary lookup failure remains retryable, but PM must
+	 * propagate it rather than unregistering the subdevice or reporting success.
+	 */
+	reset_clocks(1);
+	setup_sensor(&sensor, &pdata, &core, &pdev);
+	ret = is_sensor_iclk_on(&sensor);
+	fail_disable_id = 7;
+	fail_disable_remaining = 1;
+	ret = is_sensor_runtime_suspend(&pdev.dev);
+	failures += check(ret == -EINVAL && fake_test_bit(IS_SENSOR_ICLK_ON, &sensor.state),
+		"ordinary restored DMA-off error remains visible and retains ON bit");
+	failures += check(unregister_calls == 0,
+		"runtime suspend does not unregister after an ICLK-off error");
+	failures += check(!fake_test_bit(IS_SENSOR_ICLK_UNKNOWN, &sensor.state),
+		"successful selected-clock restoration does not latch quarantine");
+
+	/* Success path still performs ordinary suspend/resume and close operations. */
+	reset_clocks(1);
+	setup_sensor(&sensor, &pdata, &core, &pdev);
+	ret = is_sensor_iclk_on(&sensor);
+	ret = is_sensor_runtime_suspend(&pdev.dev);
+	failures += check(ret == 0 && unregister_calls == 1 &&
+		!fake_test_bit(IS_SENSOR_ICLK_ON, &sensor.state),
+		"successful runtime suspend unregisters only after clock release");
+	ret = is_sensor_runtime_resume(&pdev.dev);
+	failures += check(ret == 0 && fake_test_bit(IS_SENSOR_ICLK_ON, &sensor.state),
+		"successful runtime resume reacquires clocks");
 
 	if (failures)
 		return 1;
-	puts("PASS: extracted sensor clock callbacks propagate and unwind owned votes");
+	puts("PASS: extracted clock quarantine lifecycle propagates and retains owned state");
 	return 0;
 }
 #endif
