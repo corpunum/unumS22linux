@@ -17,6 +17,8 @@ HELPER_PATH = ROOT / "tools/hardware/test-npu-probe-unwind.py"
 BUILD_PROFILE_PATH = ROOT / "tools/hardware/build-npu-six-profile.py"
 PATCH_PATH = ROOT / "tools/hardware/npu-system-resume-error-unwind.patch"
 NPU13_PATCH_PATH = ROOT / "tools/hardware/npu-interface-open-unwind.patch"
+PRECORRECTION_PATCH_PATH = (
+    ROOT / "tools/hardware/fixtures/npu14-pre-correction.patch")
 HARNESS_PATH = ROOT / "tools/hardware/npu-system-resume-error-unwind-harness.c"
 
 SOURCE_TREE_ENV = "S22_NPU_PROBE_SOURCE_TREE"
@@ -39,7 +41,6 @@ INTERFACE_SHA256 = "c2deaa0abd990184b64373bb13983f048b925e0f5f421f6623de7de85f66
 RAW_HWDEV_SHA256 = "14617a6f8e5b08e1bb169618daa8544f2680ad6709cb9f3b9730919d4dc8e16f"
 RAW_INTERFACE_SHA256 = INTERFACE_SHA256
 NPU13_PATCH_SHA256 = "95e63b45d60e0a2611c1f2dcab4428e5658a03ff9954b8197d175ac6fec139cb"
-FROZEN_NPU14_COMMIT = "4a22948184f101f2bd80d2f44eef44b46004b790"
 FROZEN_NPU14_PATCH_SHA256 = "464a78b43f7ef0cc7e26b5f69075980460211f9c789d0a418b36d44be548968e"
 MAX_PATCH_BYTES = 512 * 1024
 
@@ -210,39 +211,50 @@ def read_selected_sources(tree: Path) -> dict[str, bytes]:
 
 
 def legacy_npu14_patch() -> bytes:
-    relative = str(PATCH_PATH.relative_to(ROOT))
-    result = subprocess.run(
-        ["git", "-C", str(ROOT), "show",
-         f"{FROZEN_NPU14_COMMIT}:{relative}"],
-        capture_output=True, check=False, timeout=10,
-    )
-    check(result.returncode == 0,
-          "frozen pre-correction NPU14 patch commit is unavailable")
-    check(digest(result.stdout) == FROZEN_NPU14_PATCH_SHA256,
-          "frozen pre-correction NPU14 patch digest changed")
-    return result.stdout
+    path = PRECORRECTION_PATCH_PATH
+    check(not path.is_symlink(),
+          f"pre-correction NPU14 fixture must not be a symlink: {path}")
+    check(path.parent.is_dir() and not path.parent.is_symlink(),
+          "pre-correction NPU14 fixture directory is missing or a symlink: "
+          f"{path.parent}")
+    check(path.is_file(),
+          f"pinned pre-correction NPU14 fixture is missing: {path}")
+    check(path.stat().st_size <= MAX_PATCH_BYTES,
+          "pre-correction NPU14 fixture exceeds bounded patch size")
+    data = path.read_bytes()
+    check(digest(data) == FROZEN_NPU14_PATCH_SHA256,
+          "pinned pre-correction NPU14 fixture digest changed")
+    print("SOURCE: tracked unsafe historical negative-control fixture "
+          f"SHA-256 {FROZEN_NPU14_PATCH_SHA256}")
+    return data
 
 
-def verify_optional_local_fixtures(public: dict[str, bytes]) -> None:
+def verify_optional_local_fixtures(public: dict[str, bytes], *,
+                                   skip_default_paths: bool = False) -> None:
     raw_paths = ((SYSTEM_C, SYSTEM_SHA256), (DEVICE_C, DEVICE_SHA256),
                  (HWDEV_C, RAW_HWDEV_SHA256),
                  (INTERFACE_C, RAW_INTERFACE_SHA256))
     configured_derived = os.environ.get(SOURCE_TREE_ENV)
-    derived_root = Path(configured_derived).expanduser() if configured_derived else DEFAULT_DERIVED_TREE
-    if configured_derived or derived_root.exists() or derived_root.is_symlink():
+    derived_root = (Path(configured_derived).expanduser()
+                    if configured_derived else DEFAULT_DERIVED_TREE)
+    if configured_derived or (not skip_default_paths and
+                              (derived_root.exists() or derived_root.is_symlink())):
         derived = read_pinned_local(derived_root, DERIVED_COMMIT, raw_paths,
                                     "optional clean 3fca-derived fixture")
         check(derived == public,
               "public raw-pinned sources differ from supplied clean-derived fixture")
         print(f"SOURCE: optional clean derived fixture {DERIVED_COMMIT} verified")
     else:
-        print("SOURCE: optional clean derived fixture absent; public route continues")
+        state = "skipped by --skip-optional-local-fixtures" if skip_default_paths else "absent"
+        print(f"SOURCE: optional clean derived fixture {state}; public route continues")
 
     configured_composed = os.environ.get(COMPOSED_TREE_ENV)
-    composed_root = Path(configured_composed).expanduser() if configured_composed else DEFAULT_COMPOSED_TREE
+    composed_root = (Path(configured_composed).expanduser()
+                     if configured_composed else DEFAULT_COMPOSED_TREE)
     npu12_paths = ((SYSTEM_C, SYSTEM_SHA256), (DEVICE_C, COMPOSED_DEVICE_SHA256),
                    (HWDEV_C, HWDEV_SHA256), (INTERFACE_C, INTERFACE_SHA256))
-    if configured_composed or composed_root.exists() or composed_root.is_symlink():
+    if configured_composed or (not skip_default_paths and
+                               (composed_root.exists() or composed_root.is_symlink())):
         composed = read_pinned_local(composed_root, COMPOSED12_COMMIT,
                                      npu12_paths,
                                      "optional clean composed NPU12 fixture")
@@ -256,10 +268,12 @@ def verify_optional_local_fixtures(public: dict[str, bytes]) -> None:
               "NPU9-12 source history unexpectedly changes a selected NPU source input")
         print("SOURCE: optional NPU12 fixture and NPU8-to-NPU12 selected-path history verified")
     else:
-        print("SOURCE: optional composed NPU12 fixture absent; public composition hash checks remain active")
+        state = "skipped by --skip-optional-local-fixtures" if skip_default_paths else "absent"
+        print(f"SOURCE: optional composed NPU12 fixture {state}; public composition hash checks remain active")
 
 
-def compose_public_source(public: dict[str, bytes]) -> dict[str, dict[str, bytes]]:
+def compose_public_source(public: dict[str, bytes], legacy_patch: bytes,
+                          *, skip_default_paths: bool = False) -> dict[str, dict[str, bytes]]:
     selected = (SYSTEM_C, DEVICE_C, HWDEV_C, INTERFACE_C)
     npu12_hashes = {
         SYSTEM_C: SYSTEM_SHA256,
@@ -307,7 +321,7 @@ def compose_public_source(public: dict[str, bytes]) -> dict[str, dict[str, bytes
 
         legacy = parent / "legacy-npu14"
         copy_sources(before_npu14, legacy)
-        apply_selected_patch(legacy, legacy_npu14_patch(),
+        apply_selected_patch(legacy, legacy_patch,
                              "frozen pre-correction NPU14 patch after NPU13",
                              selected)
         prior_npu14 = read_selected_sources(legacy)
@@ -329,10 +343,14 @@ def compose_public_source(public: dict[str, bytes]) -> dict[str, dict[str, bytes
 
     # Optional fixture checks are corroboration only; public composition above
     # is the runnable source route and does not depend on either private tree.
-    verify_optional_local_fixtures(public)
+    verify_optional_local_fixtures(public,
+                                   skip_default_paths=skip_default_paths)
     with tempfile.TemporaryDirectory(prefix="npu-system-resume-derived-") as temp:
-        derived_root = Path(os.environ.get(SOURCE_TREE_ENV, str(DEFAULT_DERIVED_TREE)))
-        if derived_root.exists() or derived_root.is_symlink():
+        configured_derived = os.environ.get(SOURCE_TREE_ENV)
+        derived_root = (Path(configured_derived).expanduser()
+                        if configured_derived else DEFAULT_DERIVED_TREE)
+        if configured_derived or (not skip_default_paths and
+                                  (derived_root.exists() or derived_root.is_symlink())):
             derived = read_pinned_local(
                 derived_root, DERIVED_COMMIT,
                 ((SYSTEM_C, SYSTEM_SHA256), (DEVICE_C, DEVICE_SHA256)),
@@ -428,8 +446,13 @@ def main() -> int:
         "--local-only", action="store_true",
         help="use the exact SHA-pinned clean derived source when public fetch is unavailable",
     )
+    parser.add_argument(
+        "--skip-optional-local-fixtures", action="store_true",
+        help="skip probing host-default private fixtures; explicit fixture env paths remain mandatory",
+    )
     args = parser.parse_args()
     print(f"PY: sys.flags.optimize={sys.flags.optimize}")
+    legacy_patch = legacy_npu14_patch()
     if args.local_only:
         derived_root = Path(os.environ.get(SOURCE_TREE_ENV,
                                            str(DEFAULT_DERIVED_TREE)))
@@ -443,7 +466,9 @@ def main() -> int:
         print("SOURCE: --local-only; four clean-derived source files match raw pinned SHA-256 values")
     else:
         public = load_public_source()
-    composed = compose_public_source(public)
+    composed = compose_public_source(
+        public, legacy_patch,
+        skip_default_paths=args.skip_optional_local_fixtures)
     template = HARNESS_PATH.read_text(encoding="utf-8")
     baseline = render_harness(template, composed["before"][SYSTEM_C],
                               composed["before"][DEVICE_C],

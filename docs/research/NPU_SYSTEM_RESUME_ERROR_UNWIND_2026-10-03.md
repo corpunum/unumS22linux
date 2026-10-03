@@ -19,8 +19,8 @@ path.
 
 Evidence is pinned-source inspection and actual extracted-C execution with
 controlled helper shims. No kernel build, firmware action, device run, or NPU
-acceptance occurred. This follow-up is frozen for independent review; it is
-not yet independently cleared.
+acceptance occurred. This portability follow-up does not alter the source
+patch or the prior independent source-review BLOCKED outcome.
 
 ## Pinned inputs and patch order
 
@@ -34,8 +34,8 @@ NPU14. Nonselected patch hunks are filtered with `git apply --include`; the
 actual source worktrees are not modified.
 
 The ordered selected-file composition inputs are pinned below. Rows 1–8 are
-the existing native-eight builder profile; rows 9–10 are applied afterward
-for this regression:
+the existing native-eight builder profile. Row 9 creates the NPU13 state; row
+10 is applied only to a separate NPU14 pre-correction negative-control copy:
 
 | Order | Patch | SHA-256 |
 | --- | --- | --- |
@@ -48,12 +48,15 @@ for this regression:
 | 7 | `npu-mailbox-missing-callback-reclaim.patch` | `f109b57381b3f2afcf2638b518f50db59ef8c9f784debd949488c74f8ea5c39b` |
 | 8 | `npu-mailbox-debug-walk-bounds.patch` | `20c700bfa11f13836c76c88cca28a4f8dfa459e5cf146292a814880cd5850b29` |
 | 9 | `npu-interface-open-unwind.patch` (NPU13) | `95e63b45d60e0a2611c1f2dcab4428e5658a03ff9954b8197d175ac6fec139cb` |
-| 10 | `npu-system-resume-error-unwind.patch` (NPU14 predecessor) | `464a78b43f7ef0cc7e26b5f69075980460211f9c789d0a418b36d44be548968e` |
+| 10 | tracked unsafe NPU14 pre-correction fixture (negative control only) | `464a78b43f7ef0cc7e26b5f69075980460211f9c789d0a418b36d44be548968e` |
 
 The current NPU14 patch keeps that filename and adds the early uncertainty
-guard; its final SHA-256 is recorded in the host evidence receipt. The older
-patch bytes in row 10 are retrieved from the frozen author commit and used only
-as the fail-before control.
+guard; its final SHA-256 is recorded in the host evidence receipt. Row 10 is
+the tracked file `tools/hardware/fixtures/npu14-pre-correction.patch`, read
+directly from the checkout and accepted only at the hash above. It is an unsafe
+historical fail-before fixture, never a current deployment input. The runner
+rejects missing, symlinked, oversized, or digest-mismatched fixture files and
+does not query any Git commit/object as a fallback.
 
 The public-route checks reproduce the exact selected NPU12 input hashes after
 the eight-patch stack. The optional clean composed fixture at
@@ -148,9 +151,8 @@ optional, exact-pin corroboration. All source composition occurs in a scoped
 temporary directory with ordinary selected-path `git apply --check` followed
 by `git apply`.
 
-The new negative control compiles the frozen pre-correction NPU14 patch
-(`4a22948184f101f2bd80d2f44eef44b46004b790`, patch SHA
-`464a78b43f7ef0cc7e26b5f69075980460211f9c789d0a418b36d44be548968e`). In the
+The negative control compiles the tracked pre-correction patch fixture
+(SHA-256 `464a78b43f7ef0cc7e26b5f69075980460211f9c789d0a418b36d44be548968e`). In the
 configured BOOT_IOCTL case, injected `CPU_ON=-ETIMEDOUT` with modeled partial
 CPU-live state reproduces one image-loader shutdown-wrapper call before the
 later quarantine. In the alternate runtime-PM/STM configuration, partial
@@ -167,28 +169,45 @@ bootup/runtime-PM callers, and refcount outcomes. Those earlier source
 controls remain separate from the new ordering regression.
 
 Each runner invocation compiles and runs 12 actual extracted-C fixtures:
-pre-NPU14 baseline, frozen pre-correction NPU14, and corrected NPU14 at C
-`-O0` and `-O2` for both BOOT_IOCTL and runtime-PM/STM configurations. The
-public-source and local-fixture routes both passed in all three Python modes:
+pre-NPU14 baseline, fixture-backed pre-correction NPU14, and corrected NPU14
+at C `-O0` and `-O2` for both BOOT_IOCTL and runtime-PM/STM configurations.
+The public-source route is runnable from an ordinary source-only checkout with
+no Git history. `--skip-optional-local-fixtures` skips only auto-discovery of
+the two host-default private trees; explicit `S22_NPU_PROBE_SOURCE_TREE` or
+`S22_NPU_SYSTEM_COMPOSED_SOURCE_TREE` values are still verified and fail closed
+when wrong or absent. Results for the fixture-portability correction:
 
 | Source route | Python mode | `sys.flags.optimize` | Result |
 | --- | --- | ---: | --- |
-| Public pinned fetch | normal | 0 | 12 C compile/run jobs passed |
-| Public pinned fetch | `-O` | 1 | 12 C compile/run jobs passed |
-| Public pinned fetch | `PYTHONOPTIMIZE=1` | 1 | 12 C compile/run jobs passed |
-| `--local-only` | normal | 0 | 12 C compile/run jobs passed |
-| `--local-only` | `-O` | 1 | 12 C compile/run jobs passed |
-| `--local-only` | `PYTHONOPTIMIZE=1` | 1 | 12 C compile/run jobs passed |
+| Source-only checkout, public pinned fetch, optional private defaults skipped | normal | 0 | 12 C compile/run jobs passed |
+| Source-only checkout, public pinned fetch, optional private defaults skipped | `-O` | 1 | 12 C compile/run jobs passed |
+| Source-only checkout, public pinned fetch, optional private defaults skipped | `PYTHONOPTIMIZE=1` | 1 | 12 C compile/run jobs passed |
 
-Total: 72 host C compile/run jobs. Public raw fetch succeeded at the pinned
-`4e5c5ad7d950e4de0688b5663965f2075654b2ad` URL. The local run additionally
-verified the clean derived and composed NPU12 fixtures and their selected-path
-history; default public execution does not require those private paths.
-The optional-fixture selector also skipped simulated absent default paths while
-keeping public composition active; explicitly supplied missing derived or
-composed paths failed closed.
-Compiler: `cc (Ubuntu 13.3.0-6ubuntu2~24.04.1)`; `/usr/bin/cc` SHA-256
-`1b99826121ae6682a634e5efe09bd3e3df58ce58e0b28f849114ab5b89139c26`.
+Total: 36 host actual-C compile/run jobs. Each runner invocation fetched the
+four raw files from the pinned
+`4e5c5ad7d950e4de0688b5663965f2075654b2ad` public URL, reproduced NPU12
+selected hashes, and applied the explicit NPU13/NPU14 selected patches. The
+matrix ran from a temporary 15-file source-only checkout with no `.git`
+directory or private kernel tree. It used the public default source route plus
+`--skip-optional-local-fixtures`; both host-default private fixture paths were
+skipped while explicit fixture inputs remain mandatory. All three Python
+modes reported their effective `sys.flags.optimize` values as shown.
+
+Before the matrix, the prior runner from source revision `9553c8b` was imported
+from a no-history temporary checkout and its old negative-control loader was
+called directly; its `git show` lookup failed because no Git object database
+was present, before any source fetch or C compile. The new runner was checked
+in the same source-only layout: missing, digest-tampered, and symlinked
+historical fixtures each failed before public fetch or C compile. An explicitly
+supplied malformed derived fixture also failed despite
+`--skip-optional-local-fixtures`. These are host runner/source controls, not
+kernel validation. Exact commands, fixture SHA, and compiler identity are
+recorded in the accompanying sanitized host evidence receipt.
+
+Source and patch selection remains explicit: the existing native-eight source
+patch tuple, followed by the named NPU13/NPU14 paths, is used. No source patch
+or fixture is discovered through a wildcard; the native module builder's
+output-artifact search is separate and is not an input-selection path.
 
 These host shims are not a kernel environment: image-loader/provider calls,
 S2MPU permission release, CPU/STM state, wakeup-source semantics, clocks,
