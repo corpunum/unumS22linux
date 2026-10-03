@@ -84,7 +84,9 @@ def readiness(boot_id='11111111-1111-4111-8111-111111111111'):
         },
         'serious_fault': False,
         'kernel_log_classification': {
-            'fatal_indicators': [], 'liveness_unresolved': False,
+            'input_available': True, 'assessment': 'no_indicators',
+            'fatal_indicators': [], 'hung_task_warning_count': 0,
+            'call_trace_count': 0, 'liveness_unresolved': False,
             'capture_complete': True, 'coverage_complete': True,
             'full_boot_log_coverage': False,
         },
@@ -106,6 +108,138 @@ def readiness(boot_id='11111111-1111-4111-8111-111111111111'):
         'tmux_server_running': False,
         'uptime_seconds': 8.0,
     }
+
+
+def run_rendered_readiness_collector(dmesg_text: str, *, dmesg_returncode: int = 0) -> dict:
+    """Execute the actual rendered collector locally with only dmesg stubbed."""
+    script = OBSERVER._readiness_script()
+    output = io.StringIO()
+
+    def fake_run(argv, **kwargs):
+        if argv == ['dmesg']:
+            return subprocess.CompletedProcess(argv, dmesg_returncode,
+                                                dmesg_text if dmesg_returncode == 0 else '', '')
+        # The rendered snapshot may ask whether the optional Pi tmux socket is
+        # live. No process is launched during this source-only test.
+        return subprocess.CompletedProcess(argv, 1, '', 'test-only subprocess stub')
+
+    with mock.patch.object(subprocess, 'run', side_effect=fake_run), \
+            mock.patch('urllib.request.build_opener', side_effect=OSError('local HTTP disabled')):
+        with contextlib.redirect_stdout(output):
+            exec(compile(script, 'rendered-audio-readiness-test', 'exec'),
+                 {'__name__': '__main__'})
+    return json.loads(output.getvalue())
+
+
+def readiness_from_rendered_collector(boot_id: str, dmesg_text: str,
+                                      *, dmesg_returncode: int = 0) -> dict:
+    collected = run_rendered_readiness_collector(
+        dmesg_text, dmesg_returncode=dmesg_returncode)
+    state = readiness(boot_id)
+    state['serious_fault'] = collected['serious_fault']
+    state['kernel_log_classification'] = collected['kernel_log_classification']
+    return state
+
+
+class KernelDiagnosticCoverageTests(unittest.TestCase):
+    def test_python_optimization_flag_matches_requested_mode(self):
+        expected = os.environ.get('AUDIO_EXPECT_PYTHONOPTIMIZE')
+        if expected is not None:
+            self.assertIn(expected, ('0', '1', '2'))
+            self.assertEqual(sys.flags.optimize, int(expected))
+
+    def test_actual_rendered_empty_collector_output_is_rejected_without_fatal_text(self):
+        script = OBSERVER._readiness_script()
+        self.assertEqual(script.count(
+            "state['kernel_log_classification']['input_available']="), 1)
+        self.assertIn('log_classification.input_available', script)
+        state = readiness_from_rendered_collector(
+            '55555555-5555-4555-8555-555555555555', '')
+        logs = state['kernel_log_classification']
+        self.assertIs(state['serious_fault'], False)
+        self.assertEqual(logs['fatal_indicators'], [])
+        self.assertIs(logs['input_available'], True)
+        self.assertEqual(logs['assessment'], 'incomplete')
+        self.assertIs(logs['capture_complete'], True)
+        self.assertIs(logs['coverage_complete'], False)
+        with self.assertRaisesRegex(ValueError, 'input/capture/coverage'):
+            OBSERVER.validate_readiness_snapshot(state, post_reboot=True)
+
+    def test_actual_rendered_unavailable_collector_input_is_not_ready(self):
+        state = readiness_from_rendered_collector(
+            '55555555-5555-4555-8555-555555555555', '', dmesg_returncode=1)
+        logs = state['kernel_log_classification']
+        self.assertIsNone(state['serious_fault'])
+        self.assertIs(logs['input_available'], False)
+        self.assertEqual(logs['assessment'], 'incomplete')
+        self.assertIs(logs['capture_complete'], False)
+        self.assertIs(logs['coverage_complete'], False)
+        with self.assertRaisesRegex(ValueError, 'serious-fault|input/capture/coverage'):
+            OBSERVER.validate_readiness_snapshot(state, post_reboot=True)
+
+    def test_complete_current_ring_is_not_promoted_to_full_boot_or_progress(self):
+        state = readiness_from_rendered_collector(
+            '55555555-5555-4555-8555-555555555555',
+            '[    0.000000] Linux boot diagnostic sample\n')
+        logs = state['kernel_log_classification']
+        self.assertIs(logs['input_available'], True)
+        self.assertEqual(logs['assessment'], 'no_indicators')
+        self.assertIs(logs['capture_complete'], True)
+        self.assertIs(logs['coverage_complete'], True)
+        self.assertIs(logs['full_boot_log_coverage'], False)
+        self.assertNotIn('tz_progress_measured', logs)
+        accepted = OBSERVER.validate_readiness_snapshot(state, post_reboot=True)
+        redacted = OBSERVER._redacted_kernel_diagnostics(
+            accepted['kernel_log_classification'])
+        self.assertIs(redacted['available'], True)
+        self.assertEqual(redacted['assessment'], 'no_indicators')
+        self.assertIs(redacted['full_boot_log_coverage'], False)
+
+    def test_full_boot_coverage_is_retained_as_an_exact_boolean_either_way(self):
+        for value in (False, True):
+            with self.subTest(full_boot_log_coverage=value):
+                state = readiness()
+                state['kernel_log_classification']['full_boot_log_coverage'] = value
+                accepted = OBSERVER.validate_readiness_snapshot(state, post_reboot=True)
+                self.assertIs(accepted['kernel_log_classification'][
+                    'full_boot_log_coverage'], value)
+                redacted = OBSERVER._redacted_kernel_diagnostics(
+                    accepted['kernel_log_classification'])
+                self.assertIs(redacted['full_boot_log_coverage'], value)
+
+    def test_missing_null_numeric_and_incomplete_coverage_fields_fail_closed(self):
+        base = readiness()
+        variants = []
+        for field in ('input_available', 'capture_complete', 'coverage_complete'):
+            variants.append((field, 'missing', None))
+            for value in (None, False, 0, 0.0):
+                variants.append((field, repr(value), value))
+        for value in ('missing', None, 'incomplete', 'fatal', 'hung_task_warning', 0, 0.0):
+            variants.append(('assessment', repr(value), value))
+        for value in ('missing', None, 0, 0.0, 1):
+            variants.append(('full_boot_log_coverage', repr(value), value))
+        for field, label, value in variants:
+            with self.subTest(field=field, value=label):
+                state = json.loads(json.dumps(base))
+                if value == 'missing':
+                    state['kernel_log_classification'].pop(field)
+                else:
+                    state['kernel_log_classification'][field] = value
+                self.assertEqual(state['kernel_log_classification']['fatal_indicators'], [])
+                self.assertIs(state['serious_fault'], False)
+                with self.assertRaises(ValueError):
+                    OBSERVER.validate_readiness_snapshot(state, post_reboot=True)
+
+    def test_trace_only_assessment_is_not_a_readiness_allowlist(self):
+        state = readiness_from_rendered_collector(
+            '55555555-5555-4555-8555-555555555555',
+            '[    0.000000] Call Trace:\n')
+        logs = state['kernel_log_classification']
+        self.assertEqual(logs['assessment'], 'trace_only')
+        self.assertEqual(logs['call_trace_count'], 1)
+        self.assertEqual(logs['fatal_indicators'], [])
+        with self.assertRaisesRegex(ValueError, 'no-indicators'):
+            OBSERVER.validate_readiness_snapshot(state, post_reboot=True)
 
 
 class InactiveByDefaultTests(unittest.TestCase):
@@ -644,6 +778,49 @@ class AudioOperationFixture(unittest.TestCase):
             marker = ADAPTER.GUARD._read_marker(
                 self.state_root / f'{OBSERVER._reboot_marker_id("audio-forward")}.json')
             self.assertEqual(marker['status'], 'unknown')
+        finally:
+            sandbox.close()
+
+    def test_incomplete_rendered_log_cannot_complete_initial_observation(self):
+        sandbox, _target, _calls = self._completed_forward_flash()
+        remote_calls = []
+        original_boot = '11111111-1111-4111-8111-111111111111'
+        new_boot = '66666666-6666-4666-8666-666666666666'
+
+        def remote(_ssh_path, command, **kwargs):
+            remote_calls.append(command)
+            return subprocess.CompletedProcess(command, 0, b'', b'')
+
+        profile = ADAPTER.PROFILE.resolve_profile('audio-forward')
+        try:
+            OBSERVER.request_recovery_once(
+                'audio-forward', receipts_root=self.root / 'receipts',
+                state_root=self.state_root, project_root=ROOT, transport=remote,
+                snapshotter=lambda: readiness(original_boot),
+                identity_reader=lambda expected: identity(
+                    profile, expected, boot_id=original_boot, module_role='baseline'),
+                helper_reader=OBSERVER._expected_helpers)
+            self.assertEqual(len(remote_calls), 1)
+
+            bad_snapshot = readiness_from_rendered_collector(new_boot, '')
+            target_identity = lambda expected: identity(
+                profile, expected, boot_id=new_boot, module_role='candidate')
+            with self.assertRaisesRegex(ValueError, 'input/capture/coverage'):
+                OBSERVER.observe_reboot_once(
+                    'audio-forward', receipts_root=self.root / 'receipts',
+                    state_root=self.state_root, project_root=ROOT,
+                    snapshotter=lambda: bad_snapshot, identity_reader=target_identity)
+
+            paths = OBSERVER._receipt_paths('audio-forward', self.root / 'receipts')
+            self.assertFalse(paths['observation'].exists())
+            failure_path = paths['directory'] / 'audio-forward-initial-observation-failure.json'
+            self.assertTrue(failure_path.is_file())
+            failure = json.loads(failure_path.read_text())
+            self.assertEqual(failure['status'], 'UNKNOWN')
+            marker_path = self.state_root / f'{OBSERVER._observation_marker_id("audio-forward")}.json'
+            marker = ADAPTER.GUARD._read_marker(marker_path)
+            self.assertEqual(marker['status'], 'unknown')
+            self.assertNotEqual(marker.get('outcome'), 'success')
         finally:
             sandbox.close()
 

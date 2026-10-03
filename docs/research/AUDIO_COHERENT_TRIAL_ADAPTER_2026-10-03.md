@@ -57,12 +57,50 @@ request, the observation is linked to the guard marker; for an unknown request,
 observation does not take or clear the unresolved reboot marker. The result is
 only one initial snapshot, not a stability interval.
 
+The initial snapshot's kernel diagnostics are a readiness gate, not just
+receipt decoration. The adapter extends the rendered, pinned collector at its
+unique JSON output point to export the classifier's actual
+`input_available` value. Readiness requires exact boolean `true` for input,
+capture completion, and coverage completion; an empty successful `dmesg`
+therefore fails because the classifier reports `assessment="incomplete"` and
+`coverage_complete=false`. This operation-specific gate also requires the
+classifier assessment `no_indicators`, no fatal/hung-task/call-trace counts,
+and no unresolved liveness. A `trace_only` assessment is not called fatal or a
+proven lockup, but it is not sufficient for this first-observation readiness
+decision. The receipt preserves the classifier assessment, availability,
+counts, and the exact boolean `full_boot_log_coverage`. That field is retained,
+not promoted or required to be either value; the current pinned collector
+reports `false`, and a nonempty complete current ring does not imply full-boot
+coverage. A future pinned collector may report `true` only if it has an
+independent basis for that claim.
+
+The observer still takes exactly one initial post-reboot sample. A separate,
+future, owner-authorized and independently reviewed stability observation would
+need a fixed ten-minute read-only window with samples at elapsed seconds
+`0, 60, 120, ..., 600` (11 samples), each bound to the same boot ID, recovery
+image, kernel build ID, and three direction-specific audio module IDs. Every
+sample would need the same complete-coverage/fault gates plus the current
+service, network, and power checks; the final receipt would summarize all
+timestamped samples and their diagnostic byte counts/fingerprints. That would
+establish only bounded stability during the observed window. Full-boot log
+coverage still requires an independent source that proves collection from
+boot start without truncation/overrun, and TrustZone progress still requires a
+separate relevant progress signal; neither is implied by a quiet current ring,
+a recognized thread name, or a call trace. This follow-up is not implemented
+or authorized by the current adapter.
+
 ## Verification
 
-The 20-case hardware-free suite passed in normal Python, `python3 -O`, and
-`PYTHONOPTIMIZE=1 python3 -B`. Each optimized invocation explicitly checked
-`sys.flags.optimize == 1`; `-I` was not combined with the environment mode.
-`py_compile` and `git diff --check` also passed.
+The 28-case hardware-free suite passed in normal Python, `python3 -O`, and
+`PYTHONOPTIMIZE=1 python3 -B`. Each invocation checked the expected
+`sys.flags.optimize` value (`0`, `1`, and `1` respectively); `-I` was not
+combined with the environment mode. The new tests execute the actual rendered
+collector with `dmesg` and local HTTP/process probes stubbed, feed its
+classifier output through the actual readiness validator, reject empty and
+unavailable captures, exercise malformed boolean/type/assessment fields, and
+verify that incomplete diagnostics leave the one-shot observation marker
+`unknown` with no success observation receipt. `py_compile` and
+`git diff --check` also passed.
 
 The fake-filesystem tests execute the actual rendered remote code for both
 profile directions with a 4,096-byte synthetic image. Stage produced zero
