@@ -129,4 +129,3 @@ existing host model as proof of Linux concurrency behavior.
 - No native kernel/module build, device access, SSH/ADB, firmware/IRQ/PM/DMA
   runtime test, package, or NPU BOOTUP was performed or authorized by this
   review.
-

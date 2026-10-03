@@ -1,5 +1,56 @@
 # S22 continuation — 2026-10-02
 
+## Continued implementation and independent review — 2026-10-03 00:32 UTC
+
+Historical results below remain unchanged. Master and the dirty original
+checkout are preserved. Exact reviewed branch `d18459a5591ec64322263fa1cd56aa36d164d153`
+was fetched and reconciled without a reset, pull or stash.
+
+- Hosted run `37081635954` completed successfully at that exact SHA: **60
+  normal plus 57 optimized** script invocations, seven runner-policy tests,
+  zero runner failures. Its complete private-log digest and explicit fixture
+  limitations are in `s22-hosted-driver-ci-d18459a-20261003.json`. This now
+  includes the independently reviewed NPU13 interface source suite, but no
+  native NPU13 build or NPU BOOTUP.
+- NPU13 author `3f14b7ba`, integrated `d6772e1`, and independent Luna review
+  `c9636e51`, integrated `9122d7c`, are clear only for their recorded source
+  and actual extracted-C scope. Direct firmware-report lifetime, caller
+  resume-error handling, uncertain publication drainage and hardware gates
+  remain explicit. `/root/audio_driver_path_next_20261002` is implementing
+  the resume/cleanup ownership correction in isolated
+  `npu-system-resume-error-20261003`, with four new narrow patch/test/doc paths.
+- The actual audio artifact review `7fedb5ba`, integrated `d18459a`, verified
+  image/header/CPIO/ELF/module-version integrity with a limited host verdict.
+  Root subsequently located and inspected the retained capture: recorded
+  launch `201c9d90-71a0-48a9-a8d5-46edea60004f` exited zero in 13.281 seconds;
+  its 22,166-byte JSON stdout and empty stderr match the earlier receipt.
+  Existing image and manifest were rehashed, not rebuilt. See the separate
+  capture-reconciliation receipt; the historical review's capture gap is
+  preserved rather than retroactively hidden.
+- Audio host-only forward/reverse profile author `/root/autonomous_driver_review_20261002`
+  froze `bddb66ac` in `audio-coherent-profile-20261003`: 13 tests passed in
+  normal, `-O` and effective environment optimization, including actual
+  rendered forward/reverse fake-filesystem staging with zero partition writes.
+  `/root/camera_clock_independent_review_20261003` now independently reviews
+  that frozen code in `audio-profile-independent-review-20261003`. The tool
+  has no SSH, flash, reboot or marker execution path. Its proposed
+  `audio-coherent-20261003-first` identity is not a created or authorized trial.
+- Camera clock author `cfcd4a5d` is **blocked**, not integrated as a cleared
+  fix. Independent review `8f05cd5a` reproduced an actual extracted-C retry
+  that consumes another sensor's shared clock vote after a failed off
+  restoration; runtime PM also masks the error. Root additionally found
+  the suite's unconditional private-fixture dependency. The author worker
+  `/root/bt_candidate_independent_review_20261002` is now correcting ownership,
+  executable retry coverage and public-source test portability in separate
+  `camera-clock-ownership-revision-20261003`; prior author/review trees stay
+  frozen. The old physical camera result remains `not_accepted`.
+- These are actual reused/spawned Luna workers with accepted explicit
+  `gpt-6-luna`/`max` configuration, not a claim of backend attestation. Narrow
+  file ownership and coordinator-only phone access continue. Heavy builds
+  are serialized, and none is active. New partition writes, reboots, powered
+  trials, inference and application/service changes remain **zero**. Independent
+  hardware rescue remains unproven and consumed trials are not replayed.
+
 ## Actual corrected audio package — 2026-10-02 23:51 UTC
 
 The historical failure and checkpoints below are preserved, not relabelled.
