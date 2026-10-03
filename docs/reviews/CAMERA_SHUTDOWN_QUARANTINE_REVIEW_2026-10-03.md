@@ -34,3 +34,9 @@ The UNKNOWN bit is set by a runtime-PM path without `mutex_reboot`; the new scan
 No proof was made about already-running asynchronous work, DMA or physical clock/provider state, parent-device teardown, external system power removal, or real kernel lock/workqueue behavior. References retained by the broader candidate are a terminal quarantine policy, not a tested teardown solution. The host result does not clear the earlier retry-ownership blocker, authorize kernel compilation, or establish device/stream acceptance.
 
 No kernel build, source-tree mutation, phone/SSH access, firmware action, module load, camera stream, reboot, or deployment occurred.
+
+## Reconciliation addendum — 2026-10-03
+
+This addendum supersedes the earlier statements above that the modeled per-caller retry/shared-vote defect remains open. The independent revision review at commit `3d24675` (`CAMERA_CLOCK_OWNERSHIP_REVISION_REVIEW_2026-10-03.md`, finding F1) verifies that frozen revision `296441ec81caf3e2ed8f4d2a2764c3e9efee8056` latches UNKNOWN after failed selected-gate restoration, preserves the ON bit, and refuses a later retry before clock callbacks; its extracted-C shared-vote retry case passed. The original `CAMERA_SENSOR_CLOCK_UNWIND_REVIEW_2026-10-03.md` finding remains historical, not an active modeled sequential retry blocker.
+
+I compared the revision-296 patch with this review's unchanged candidate patch. The added patch hunks are the queued-worker guard and core cleanup/shutdown guards; the prior clock callbacks and ordinary ICLK-caller quarantine hunks are unchanged. I found no new sequential retry/shared-vote defect in this delta. This is a source-delta reconciliation, not a fresh retry-test run. Clock-provider/physical behavior, asynchronous races, DMA quiescence, and external teardown remain unproven, and the PASS_LIMITED verdict above still does not imply broad camera or device acceptance.

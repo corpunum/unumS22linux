@@ -70,5 +70,26 @@
     "No proof of DMA stop, physical clock state, parent/external teardown, or global reboot/power-removal behavior.",
     "Earlier per-caller clock-vote retry-ownership review remains blocked and is not cleared by this scoped shutdown review.",
     "No kernel build, device or phone access, firmware, module load, camera streaming, reboot, or deployment."
-  ]
+  ],
+  "reconciliation_addendum": {
+    "date": "2026-10-03",
+    "prior_independent_review_commit": "3d24675",
+    "prior_review_file": "docs/reviews/CAMERA_CLOCK_OWNERSHIP_REVISION_REVIEW_2026-10-03.md",
+    "finding": "F1 verified the modeled sequential shared-vote retry fix in revision 296441ec81caf3e2ed8f4d2a2764c3e9efee8056; the earlier retry defect report is historical, not an active modeled blocker.",
+    "revision_296_patch_sha256": "0d206b54b6d65d5e530d15cf2c2e21f9632defff154f459107645b3079abe8ba",
+    "current_candidate_patch_sha256": "7808ac0cabc806270a0d07aa2bb974bfd0fc924d3fef33035ba50bf494e768bd",
+    "source_delta_review": "Current patch adds the queued-worker and core cleanup/shutdown guards; earlier clock callback and ordinary caller quarantine hunks are unchanged.",
+    "new_sequential_retry_defect_found": false,
+    "tests_repeated_for_addendum": false,
+    "supersedes_prior_statements": [
+      "Opening verdict sentence that called the earlier ICLK retry-ownership blocker open.",
+      "limits entry asserting the earlier sequential retry-ownership blocker remains unresolved."
+    ],
+    "still_unproven": [
+      "Clock provider and physical gate behavior.",
+      "Concurrency and asynchronous work quiescence.",
+      "DMA safety and external teardown behavior.",
+      "Device or camera acceptance."
+    ]
+  }
 }
