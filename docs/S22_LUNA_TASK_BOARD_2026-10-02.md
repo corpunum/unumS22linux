@@ -1,5 +1,34 @@
 # S22 continuation — 2026-10-02
 
+## Frozen implementation and active independent review — 2026-10-03 07:30 UTC
+
+- Audio author `/root/audio_bounded_stability_20261003` committed `7249f1e5…`,
+  integrated as `da92be3`. The actual observer has three fresh, identity-bound
+  samples spanning at least 180 seconds, a 600-second total operational deadline,
+  bounded startup and one read-only reconnect. Author 35 cases each flags 0/1/1
+  pass; coordinator independently reran the normal 35 cases. Production
+  authorization remains false with an empty allowlist. This is host simulation,
+  not observed phone stability or audio acceptance.
+- Coordinator camera correction `5c9c56d7…`, integrated `c9119f4`, fixes an actual
+  ARM64 compile error: objectless `mwarn` in cleanup, hidden by the broad logging
+  shim. Ten cases each flags 0/1/1 and all eight real ARM64 syntax jobs pass;
+  forced public route has nine passes and one explicit optional fixture skip.
+  No object/module/image, CRC result, powered test or hardware acceptance follows.
+- Actual independent `/root/audio_camera_independent_review_20261003` is running
+  accepted explicit `gpt-6-luna` / `max` in `audio-camera-review-20261003` on frozen
+  `da92be3`, owning only two new review files. Verdict is pending. A possible
+  author-receipt module-role ambiguity has been sent for review; the code's
+  post-boot module gate is checked separately from receipt wording.
+- `/root/npu_direct_report_ownership_20261003` and
+  `/root/npu_provider_status_20261003` remain active host-only implementation
+  workers; no frozen NPU commit or hardware result is claimed yet.
+
+Original checkout/master/history/native installation remain preserved. New
+phone writes, reboots, powered tests, inference and application changes are zero.
+The automatic goal tracker reports `usageLimited`; it has not been reset or
+replaced, and no automatic wakeup is claimed. This active user-requested turn
+continues host implementation and review instead of replaying consumed trials.
+
 ## Continued implementation — 2026-10-03 06:53 UTC
 
 Destination accounting refreshed read-only at 07:02:47 UTC: native root and
