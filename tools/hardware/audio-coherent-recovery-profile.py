@@ -16,7 +16,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 SHARED_DEPLOYER = ROOT / "tools/hardware/deploy-audio-recovery.py"
-SHARED_DEPLOYER_SHA256 = "d0c54cc306e3a8a80cb79d79958fceedf6bb5945dabc7606e02b12d27dc00fd3"
+SHARED_DEPLOYER_SHA256 = "4138413c16b9c90c70a46da6ed3b4f60b0f41f1c6c69b4b2047421895903a47f"
 
 PARTITION_SIZE = 100663296
 TRIAL_IDENTITY = "audio-coherent-20261003-first"
@@ -281,9 +281,11 @@ def validate_receipt(profile_name: str, receipt: object) -> dict[str, object]:
         raise ValueError("operation receipt mode is unknown or ambiguous")
     require(set(receipt) == expected_keys,
             "operation receipt has missing or unrecognized fields; outcome is ambiguous")
-    require(receipt.get("profile") == profile_name,
+    require(type(receipt.get("profile")) is str and
+            receipt.get("profile") == profile_name,
             "operation receipt profile identity mismatch")
-    require(receipt.get("trial_identity") == TRIAL_IDENTITY,
+    require(type(receipt.get("trial_identity")) is str and
+            receipt.get("trial_identity") == TRIAL_IDENTITY,
             "operation receipt trial identity mismatch")
     DEPLOY.validate_remote_receipt(
         receipt,

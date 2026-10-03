@@ -720,7 +720,8 @@ def run_approved_ssh_wrapper(path, remote_command, *, input_data, timeout=100, p
 
 
 def validate_remote_receipt(receipt, *, mode, before_sha, candidate_sha, size):
-    if not isinstance(receipt,dict) or receipt.get('mode')!=mode:
+    if (not isinstance(receipt,dict) or type(receipt.get('mode')) is not str
+            or receipt.get('mode')!=mode):
         raise ValueError('remote deployment receipt has an invalid mode or shape')
     if mode=='stage':
         expected={'partition_written':False,'backup_sha256':before_sha,
@@ -732,7 +733,8 @@ def validate_remote_receipt(receipt, *, mode, before_sha, candidate_sha, size):
     else:
         raise ValueError(f'unsupported receipt mode: {mode}')
     for key,value in expected.items():
-        if receipt.get(key)!=value:
+        actual=receipt.get(key)
+        if type(actual) is not type(value) or actual!=value:
             raise ValueError(f'remote deployment receipt mismatch for {key}')
     return receipt
 
