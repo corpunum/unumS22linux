@@ -498,6 +498,30 @@ class CameraSensorClockUnwindTests(unittest.TestCase):
                 extract_function(self.baseline_text, "exynos9925_is_sensor_mclk_off"),
             )
 
+    def test_pinned_logging_macro_rejects_objectless_warning(self) -> None:
+        common = self.sources[COMMON_CONFIG_RELATIVE].decode("utf-8")
+        matched = re.search(r"^#define mwarn\(fmt, object, args\.\.\.\) \\\n[^\n]+",
+                            common, re.MULTILINE)
+        self.assertIsNotNone(matched, "pinned mwarn signature changed")
+        source = shutdown_harness_source(self.sources, patched=True)
+        shim = "#define mwarn(fmt, object, args...) do { (void)(object); } while (0)"
+        self.assertEqual(source.count(shim), 2)
+        source = source.replace(shim, "#define mwarn_common(...) do { } while (0)\n" +
+                                matched.group(0))
+        good = '\t\twarn("ICLK ownership unknown; skipping shared camera cleanup");'
+        bad = '\t\tmwarn("ICLK ownership unknown; skipping shared camera cleanup");'
+        self.assertEqual(source.count(good), 1)
+        for optimization in ("-O0", "-O2"):
+            command = [self.compiler, "-std=gnu89", "-Werror", optimization,
+                       "-DCAMERA_SHUTDOWN_ONLY", "-fsyntax-only", "-x", "c", "-"]
+            valid = subprocess.run(command, input=source, capture_output=True,
+                                   text=True, check=False, timeout=30)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+            invalid = subprocess.run(command, input=source.replace(good, bad, 1),
+                                     capture_output=True, text=True, check=False, timeout=30)
+            self.assertNotEqual(invalid.returncode, 0)
+            self.assertIn("mwarn", invalid.stderr)
+
     def test_optional_private_derived_tree_apply_check(self) -> None:
         if not PINNED_DERIVED.is_dir():
             self.skipTest("private derived source tree unavailable; public pinned fixtures remain tested")
