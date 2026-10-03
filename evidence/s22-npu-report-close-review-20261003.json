@@ -1,0 +1,149 @@
+{
+  "schema": "s22-npu-report-close-independent-review/v1",
+  "evidence_class": "independent host-only source, harness, and integration review",
+  "reviewed_utc": "2026-10-03T08:27:31Z",
+  "verdict": "PASS_LIMITED",
+  "scope": "report-ring direct-reader storage lifetime in pinned public composition and extracted-C regressions; not kernel or hardware acceptance",
+  "reviewer_worktree": {
+    "branch": "codex/s22-npu-report-review-20261003",
+    "frozen_head": "d486351e2c6e371565e2954b163f4c4b20459377",
+    "author_commit": "3b006ed3637985f66fedbb2ee830a2798436632e",
+    "author_report_sha256": "c34dde351108156d6d3ebc54d37bd828570c840fd078b454072660f268b35124",
+    "author_host_receipt_sha256": "1f5229c7f9036b4f386f5889132de1b222e7b4bf4bc06471a652dc5a95717114"
+  },
+  "source": {
+    "public_base_commit": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+    "report_owner_patch_sha256": "9bf6eef33be3b8f2c49744e362dada21613a0969576ef78a725d356cdebb0060",
+    "final_interface_sha256": "3e1c9198f8317beb05f0e978f08c270fbc6e25cb73224784ccd92e959a0c4ef7",
+    "refcount_header_sha256": "82f75597f6899f61e9a2b4097ad6f4bf1ac53d8ace1113426e708f0da6316692",
+    "refcount_library_sha256": "b8d08fc1f8a678a54587149ff084b3ef15e9173df1dde1a0282027ac5b999d56",
+    "composition_order_verified": [
+      "native-eight",
+      "NPU12 msgid and report-lock patches",
+      "NPU13 interface lifecycle patch",
+      "NPU14 system-resume correction",
+      "report-owner patch"
+    ],
+    "optional_report_source_fixture": "absent in every successful matrix invocation; public route mandatory"
+  },
+  "required_matrix": {
+    "runs": [
+      {
+        "command": "python3 tools/hardware/test-npu-report-close-lifetime.py --expect-opt 0",
+        "exit_code": 0,
+        "python_optimize": 0,
+        "actual_c_compile_run_jobs": 6,
+        "c_levels": ["-O0", "-O2"],
+        "public_composition": "PASS"
+      },
+      {
+        "command": "python3 -O tools/hardware/test-npu-report-close-lifetime.py --expect-opt 1",
+        "exit_code": 0,
+        "python_optimize": 1,
+        "actual_c_compile_run_jobs": 6,
+        "c_levels": ["-O0", "-O2"],
+        "public_composition": "PASS"
+      },
+      {
+        "command": "PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-npu-report-close-lifetime.py --expect-opt 1",
+        "exit_code": 0,
+        "python_optimize": 1,
+        "actual_c_compile_run_jobs": 6,
+        "c_levels": ["-O0", "-O2"],
+        "public_composition": "PASS"
+      }
+    ],
+    "actual_c_compile_run_jobs_total": 18,
+    "baseline_races_reproduced": [
+      "direct npu-log reader passes old pre-lock check before close deinit",
+      "interrupt-context profiler reader outlives old pre-lock check before close deinit"
+    ],
+    "fixed_cases": [
+      "pre-probe and pre-open refusal",
+      "mailbox initialization failure",
+      "duplicate probe and duplicate open",
+      "both direct log callers",
+      "debug report reader",
+      "interrupt-context profiler reader pin lifetime",
+      "post-detach refusal",
+      "reopen and repeated close",
+      "no-reader close reaches zero and deinitializes once",
+      "underflow and saturation fail closed"
+    ]
+  },
+  "negative_controls": {
+    "pre_fix_refcount": {
+      "extracted_call": "refcount_dec on sole publication reference",
+      "observed": "one warning; REFCOUNT_SATURATED; wait condition remains unsatisfied",
+      "mock_escape_compiled_only_for_control": true,
+      "escape_claimed_as_close_liveness": false
+    },
+    "explicit_wrong_fixtures": [
+      {
+        "kind": "absent path",
+        "exit_code": 1,
+        "public_composition_completed": true,
+        "rejection": "supplied composed source fixture is absent"
+      },
+      {
+        "kind": "wrong HEAD",
+        "supplied_head": "d486351e2c6e371565e2954b163f4c4b20459377",
+        "required_head": "e9c3016233a72ceccb13e537f0b7ef72426582b9",
+        "exit_code": 1,
+        "public_composition_completed": true,
+        "rejection": "optional composed fixture must match pinned commit"
+      }
+    ]
+  },
+  "failed_invocations": [
+    {
+      "phase": "explicit absent-fixture validation retry 1",
+      "exit_code": 1,
+      "reason": "bounded public source fetch failed with Network is unreachable",
+      "public_composition_completed": false,
+      "fixture_validation_reached": false,
+      "compile_run_jobs": 0,
+      "counted_as_pass": false
+    }
+  ],
+  "review_findings": {
+    "publication_after_mailbox_init": true,
+    "close_drains_irq_and_work_before_reader_wait": true,
+    "lifecycle_mutex_readers_and_drainers_do_not_acquire": true,
+    "owner_and_interface_reader_locks_released_before_wait": true,
+    "publication_busy_unwind_checked_source_only": "unwinds queue and IRQ resources and avoids deinit; higher-level recovery may be needed",
+    "refcount_one_to_zero": "pinned dec_and_test old==1 path completes without saturation warning; fixed no-reader close reached zero",
+    "refcount_underflow": "actual extracted decrement/test and warning bodies saturate rather than produce a false zero",
+    "refcount_increment_overflow": "executed via host C11 shim; pinned helper inspected but not extracted into regression",
+    "unbounded_wait": "close can wait indefinitely for a reader that never exits; host timeouts are failure leashes only",
+    "command_response_dma_provider_removal": "outside report-owner scope"
+  },
+  "integration_allowlist_review": {
+    "commit": "71575f1d4440f3a394fdb53fd8e2d67eec49c6a0",
+    "runner_diff_scope": "two explicit path additions in runner tuples and matching independent expected tuple; no runner policy implementation change",
+    "policy_test_runs": [
+      {"mode": "normal", "tests": 7, "passed": 7},
+      {"mode": "python -O", "tests": 7, "passed": 7},
+      {"mode": "PYTHONOPTIMIZE=1", "tests": 7, "passed": 7}
+    ],
+    "runner_counts": {"normal": 66, "optimized": 63},
+    "full_129_matrix_executed_by_reviewer": false,
+    "allowlist_remains_explicit_and_sequential": true,
+    "test_discovery_added": false,
+    "child_environment_unchanged": true,
+    "child_environment_keys": ["PATH", "HOME", "TMPDIR", "TMP", "TEMP", "LANG", "LC_ALL", "TZ"],
+    "device_commands_added": false,
+    "imgloader_optional_fixed_source_tree": "present and clean at expected source commit in this environment; read-only corroboration"
+  },
+  "hardware_and_build_operations": {
+    "phone": 0,
+    "ssh": 0,
+    "adb": 0,
+    "usb": 0,
+    "firmware_or_provider": 0,
+    "module_or_image_build": false,
+    "bootup_authorized": false,
+    "hardware_acceptance": false
+  },
+  "separate_coordinator_frontend_result": "not independently rerun or counted in this review; frontend-only and not module, link, CRC, or hardware evidence"
+}
