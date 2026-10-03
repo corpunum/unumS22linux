@@ -1,5 +1,62 @@
 # S22 continuation — 2026-10-02
 
+## Reviewed receipt fix and next implementation wave — 2026-10-03 01:36 UTC
+
+Historical receipts, blocked reviews and consumed trials remain preserved.
+Origin was fetched without pulling, resetting or stashing; master is untouched.
+
+- Audio profile author `bddb66ac`, integrated `a7fa1ef`, received a blocking
+  independent review `fdcc817f`, integrated `a01000f`: JSON `0`/`0.0` could
+  compare equal to a required `false`. The actual ten pre-fix regression
+  failures are retained. Author `/root/autonomous_driver_review_20261002`
+  corrected exact receipt types in `f2d1b41f`, integrated `192f018`, including
+  the narrow actual-source digest consumer update. Independent Luna reviewer
+  `/root/camera_clock_independent_review_20261003` froze `2c4541d3`, integrated
+  `a58cf72`, with a limited host-only pass. The rendered remote guards/body,
+  SSH wrapper, partition-write and reboot control were unchanged.
+- The author and independent reviewer each ran normal, `-O` and effective
+  environment optimization: audio profile 13 pass / one private-fixture
+  skip, deployment hardening 44 pass / three explicit AVB-tool skips, and
+  HCI profile 22 pass. No remote transport or phone operation occurred; the
+  shared suite includes only a local `ssh -V` selection probe. The portable
+  audio profile is now registered in all three fixed CI policy lists: the
+  intended matrix is **61 normal plus 58 optimized** invocations. All seven
+  runner-policy cases pass in each of the three Python modes. Hosted testing
+  of the newly registered matrix is pending, not claimed complete.
+- Exact prior hosted run `37083080925` at `61bf29031ff9d4200fbed0292f663bf23719ed52`
+  succeeded: 60 normal plus 57 optimized invocations, zero runner failures;
+  complete private-log SHA-256 is
+  `67750fb1a772601f1fc41c70ad8807d34c78e2b3f61513feb732d5e008760785`.
+- NPU14 author `/root/audio_driver_path_next_20261002` froze four source,
+  actual-C harness, test and documentation paths at `4a22948184f101f2bd80d2f44eef44b46004b790`.
+  Eight extracted-C jobs passed in each Python mode. The public download
+  timeout before compilation is explicitly not a pass. Independent reviewer
+  `/root/camera_clock_independent_review_20261003` has actually been assigned
+  the frozen tree in `npu-system-resume-review-20261003`. Original resume
+  errors, cleanup ownership, partial static firmware-buffer allocation and
+  failed inverses remain under review. No NPU14 native build or BOOTUP occurred.
+- `/root/autonomous_driver_review_20261002` has actually been assigned
+  `audio-execution-adapter-20261003`, based on reviewed `a58cf72`, for a small
+  host-tested forward/reverse deployment and one-shot reboot observer adapter.
+  Only new adapter/test/doc/receipt paths are owned. Future audio trial
+  `audio-coherent-20261003-first` remains reserved data, **not owner-authorized**;
+  no real trial markers, partition writes or reboot requests may be made.
+- Camera author `/root/bt_candidate_independent_review_20261002` continues
+  in `camera-clock-ownership-revision-20261003`. Unknown clock ownership must
+  prevent repeat operations and unsafe associated V4L2 context cleanup; a
+  release error does not veto VFS close. Actual lifetime/caller tests and
+  portable pinned-source coverage are being implemented. The earlier
+  `8f05cd5a` blocking review and physical `not_accepted` result stay unchanged.
+- Accepted explicit `gpt-6-luna` / `max` configuration is recorded for these
+  actual workers, with no claim of backend attestation or silent model
+  substitution. Only root accesses the phone. The 00:35 UTC read-only capture
+  still identifies the existing kernel `b2dda820…`, same boot, 325 modules,
+  guardian, desktop, both Pi sessions and idle healthy model API. Battery
+  was Full/100%, 26.1 C; maximum zone 38 C. Available log evidence is not full
+  boot coverage or hardware acceptance. New writes, reboots, powered tests,
+  inference and application changes remain **zero**. Independent physical
+  rescue remains unproven; consumed permissions are not replayed.
+
 ## Continued implementation and independent review — 2026-10-03 00:32 UTC
 
 Historical results below remain unchanged. Master and the dirty original

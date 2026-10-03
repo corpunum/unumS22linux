@@ -1,5 +1,17 @@
 # Audio coherent RECOVERY profiles — 2026-10-03
 
+## Additive receipt correction
+
+The implementation below describes the initial frozen profile. Independent
+review subsequently reproduced a JSON boolean/numeric type confusion. The
+reviewed correction now requires exact primitive types and pins the shared
+helper at SHA-256
+`4138413c16b9c90c70a46da6ed3b4f60b0f41f1c6c69b4b2047421895903a47f`.
+See `AUDIO_RECEIPT_JSON_TYPE_CORRECTION_2026-10-03.md` and the separate
+independent correction review. The initial digest and receipts below remain
+historical evidence; the remote rendered scripts and write/reboot operations
+were not changed by that correction. No deployment authority follows.
+
 ## Result and boundary
 
 Added a host-only validator for the reviewed audio recovery candidate and its
