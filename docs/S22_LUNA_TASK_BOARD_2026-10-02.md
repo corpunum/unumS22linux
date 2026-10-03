@@ -3,7 +3,7 @@
 ## Reviewed corrections frozen for publication — 2026-10-03 09:27 UTC
 
 The mission remains incomplete; these are host implementations and executable
-regressions, not newly working phone drivers. Three actual reused native
+regressions, not newly working phone drivers. Four actual reused native
 workers retained accepted explicit `gpt-6-luna` / `max` selection, with no
 backend attestation or silent model substitution. Their previous worktrees and
 reviews remain intact. Only the coordinator accessed the phone, read-only.
