@@ -1,5 +1,55 @@
 # S22 continuation — 2026-10-02
 
+## Frozen corrections, independent reviews and expanded CI — 2026-10-03 05:44 UTC
+
+The mission is **not complete**. These are unmerged host-side fixes, not new
+device acceptance. The original dirty checkout, completed one-shot trials and
+master are preserved.
+
+| Workstream | Frozen author / integration | Actual independent Luna reviewer | Observed result |
+| --- | --- | --- | --- |
+| NPU14 portable historical negative fixture | `bddd5921` / `7986c05` | `/root/bt_candidate_independent_review_20261002`, `npu14-portable-review-20261003` | 36 public-source extracted-C jobs pass in a no-Git/no-private-tree checkout; missing/tampered/symlink/oversize and explicit wrong fixtures reject. Final review receipt is being frozen, not yet cited as a published commit. |
+| Audio actual collector coverage refusal | `473de37b` / `6028839` | `/root/camera_clock_independent_review_20261003`, review `0ad27986` / integration `e1553b2` | PASS_LIMITED: 28 cases each flags 0/1/1, plus 12 independent count-type controls; pre-fix empty-log acceptance reproduced, corrected collector/validator refuses without success receipt. |
+| Camera shutdown/reboot/queued-worker quarantine | `010caf9b` / `d06bb09` | `/root/autonomous_driver_review_20261002`, review `62474592` / `522bbc2`, addendum `bd64fa90` / `fcb6529` | PASS_LIMITED sequential paths: 9 cases each flags 0/1/1, public route 8 pass / one optional private skip, explicit wrong tree rejects. |
+
+All three actual reviewers retain accepted explicit `gpt-6-luna` / `max`
+configuration, not backend attestation. Each writes only its separate review
+files in an isolated worktree; only the coordinator accesses the phone.
+Frozen blocking reviews remain in history. The camera addendum explicitly
+corrects stale wording: revision 296 and prior review 3d24675/F1 already fixed
+the modeled sequential shared-vote retry; provider/physical behavior, races,
+in-flight work/DMA and external teardown are still unproven.
+
+The historical NPU negative-control patch is tracked software-only test data
+at SHA-256 `464a78b43f7ef0cc7e26b5f69075980460211f9c789d0a418b36d44be548968e`,
+not a deployment input. Public composition still verifies all selected source
+hashes and explicit patches. No local Git object or private source fixture is
+required for the actual-C matrix; malformed explicitly supplied fixtures still
+fail. Provider void completion, remove/release ownership and static log-buffer
+lifetime remain separate unresolved NPU work. BOOTUP is refused.
+
+The three hardware-free suites are added to both explicit runner lists and
+the independent policy list: **64 normal plus 61 optimized** script invocations.
+Seven policy cases pass in each flags 0/1/1. Hosted execution of this expanded
+matrix is **pending**; earlier 119-run CI is not coverage of these new suites.
+
+The coordinator's latest read-only snapshot, completed 05:30:43 UTC, shows
+the same RECOVERY boot, native guardian, kernel GNU `b2dda820…`, 325 modules,
+healthy desktop and both Pi sessions, idle model, WLAN link readiness, battery
+full at 25.9 C and maximum thermal sensor 38 C. Current-ring diagnostics are
+complete/nonempty with no indicators, not full-boot history or measured
+TrustZone progress. The separate earlier full RECOVERY readback remains
+`b1041271…`; its exact capture time is preserved rather than presented as a
+new readback. New writes/reboots/powered tests/inference/application changes
+are **zero**. Current USB access is not independent hardware rescue.
+
+The audio candidate is still not installed or newly owner-authorized. Its
+adapter remains inactive and takes only one initial snapshot: a separate
+bounded stability observer still needs implementation/review before a new
+controlled hardware session. NPU hardware, audio, camera, Bluetooth radio,
+SIM/data/calls and physical button/touch acceptance remain distinct pending
+milestones. No images, firmware, credentials or private traces are published.
+
 ## Executable review counterexamples and continued implementation — 2026-10-03 02:47 UTC
 
 The running phone remains on the camera-baseline native RECOVERY image, not
