@@ -201,6 +201,79 @@ class CandidateBuilderPortableTests(unittest.TestCase):
         self.assertEqual(command[-1], str(Path("/tmp/bt-safe-check") / BUILDER.ARTIFACT_NAME))
         self.assertNotIn("--execute", command)
 
+    def test_current_legacy_runner_and_consumed_receipt_pins_are_exact(self):
+        receipt = BUILDER.verify_legacy_trial_guards()
+        self.assertEqual(receipt["legacy_runner_sha256"],
+                         "7696d15fcdd7af33d130cb4cdfa78c823553d84a3eb2d830142c5bbd0a09198a")
+        self.assertEqual(receipt["legacy_source_pin_sha256"],
+                         "476f148246dfac8330f7ade2790627b64a38ee7b1cb4f713934b6d438864a7a4")
+        self.assertEqual(receipt["legacy_artifact_sha256"],
+                         "f4ba76613e1339314898ebbf067338d846ed9ee231907a44306b82f54f2f1684")
+        self.assertEqual(receipt["legacy_artifact_build_id"],
+                         "a5be9451d95335ae2a5d292d721a766208f55a87")
+        self.assertEqual(receipt["trial_identity"], "bt-hci-plain-h4-20260927")
+        self.assertEqual(receipt["trial_attempts_preserved"], 1)
+        self.assertEqual(receipt["trial_receipt_sha256"],
+                         "eb8f1963049cb4cdbca7236169bbdc91f2c929227ea995bdbb310972399518dc")
+        self.assertTrue(receipt["trial_receipt_unchanged"])
+        self.assertTrue(receipt["candidate_artifact_is_distinct"])
+
+    def test_previous_legacy_runner_pin_does_not_accept_current_runner(self):
+        with patch.object(
+                BUILDER, "LEGACY_RUNNER_SHA256",
+                "26bbe8bdb5ff687de29d5ce67f17d58cfa460a48fe9fc5be9043dccd54cf9253"):
+            with self.assertRaisesRegex(BUILDER.GateError,
+                                        "legacy runner fingerprint mismatch"):
+                BUILDER.verify_legacy_trial_guards()
+
+    def _verify_legacy_fixture(self, evidence_bytes: bytes) -> dict:
+        with tempfile.TemporaryDirectory(prefix="bt-legacy-receipt-") as temporary:
+            root = Path(temporary)
+            runner_path = root / BUILDER.LEGACY_RUNNER
+            runner_path.parent.mkdir(parents=True)
+            runner_path.write_text(
+                "\n".join((
+                    BUILDER.LEGACY_BRIDGE_SHA256,
+                    BUILDER.LEGACY_ARTIFACT_SHA256,
+                    BUILDER.LEGACY_ARTIFACT_BUILD_ID,
+                )) + "\n",
+                encoding="ascii",
+            )
+            evidence_path = root / BUILDER.TRIAL_EVIDENCE
+            evidence_path.parent.mkdir(parents=True)
+            evidence_path.write_bytes(evidence_bytes)
+            candidate = root / "new-output" / "candidate"
+            old_artifact = root / "old-output" / "bridge"
+            with patch.multiple(
+                    BUILDER,
+                    ROOT=root,
+                    LEGACY_RUNNER_SHA256=hashlib.sha256(
+                        runner_path.read_bytes()).hexdigest(),
+                    TRIAL_EVIDENCE_SHA256=hashlib.sha256(evidence_bytes).hexdigest(),
+                    ARTIFACT_PATH=candidate,
+                    OUTPUT_DIR=candidate.parent,
+                    LEGACY_ARTIFACT_PATH=old_artifact):
+                return BUILDER.verify_legacy_trial_guards()
+
+    def test_malformed_consumed_receipt_is_rejected(self):
+        with self.assertRaisesRegex(BUILDER.GateError,
+                                    "consumed trial evidence cannot be validated"):
+            self._verify_legacy_fixture(b"{not-json\n")
+
+    def test_wrong_consumed_receipt_cannot_change_identity_or_attempt_count(self):
+        evidence = {
+            "bluetooth_after_transport_fix": {
+                "trial_id": BUILDER.TRIAL_ID,
+                "attempts_for_this_identity": 2,
+                "durable_guard_outcome": "success",
+                "artifact_sha256": BUILDER.LEGACY_ARTIFACT_SHA256,
+                "artifact_gnu_build_id": BUILDER.LEGACY_ARTIFACT_BUILD_ID,
+            },
+        }
+        with self.assertRaisesRegex(BUILDER.GateError,
+                                    "consumed trial identity/receipt differs"):
+            self._verify_legacy_fixture(json.dumps(evidence).encode("utf-8"))
+
 
 class CandidateBuilderLocalFixtureTests(unittest.TestCase):
     """Exact private/profile/compiler checks are optional outside the host fixture."""

@@ -1,0 +1,53 @@
+{
+  "schema": "s22-bt-builder-legacy-pin-host-review/v1",
+  "status": "PASS_LIMITED",
+  "scope": "host source-pin reconciliation and check-only preflight; no bridge runtime or hardware",
+  "frozen_review_head": "71575f1d4440f3a394fdb53fd8e2d67eec49c6a0",
+  "builder_source_commit": "79c539ea55a1663e946ed881606232519873fd93",
+  "legacy_runner": {
+    "historical_sha256_at_builder_source_commit": "26bbe8bdb5ff687de29d5ce67f17d58cfa460a48fe9fc5be9043dccd54cf9253",
+    "current_sha256": "7696d15fcdd7af33d130cb4cdfa78c823553d84a3eb2d830142c5bbd0a09198a",
+    "diff_from_builder_source_commit": "one trusted deployment-helper digest constant; exact JSON primitive-type validation is stricter",
+    "accepted_digest_policy": "exact current digest only; historical digest is rejected"
+  },
+  "consumed_trial": {
+    "trial_id": "bt-hci-plain-h4-20260927",
+    "attempts_preserved": 1,
+    "durable_guard_outcome": "success",
+    "public_evidence_sha256": "eb8f1963049cb4cdbca7236169bbdc91f2c929227ea995bdbb310972399518dc",
+    "bridge_source_sha256": "476f148246dfac8330f7ade2790627b64a38ee7b1cb4f713934b6d438864a7a4",
+    "legacy_artifact_sha256": "f4ba76613e1339314898ebbf067338d846ed9ee231907a44306b82f54f2f1684",
+    "legacy_artifact_gnu_build_id": "a5be9451d95335ae2a5d292d721a766208f55a87"
+  },
+  "portable_tests": {
+    "normal": {"passed": 20, "failed": 0, "skipped": 0},
+    "python_O": {"passed": 20, "failed": 0, "skipped": 0},
+    "PYTHONOPTIMIZE_1": {"passed": 20, "failed": 0, "skipped": 0},
+    "local_private_compiler_fixture_present": true,
+    "local_fixture_tests_ran_each_mode": 3
+  },
+  "check_only": {
+    "exit_code": 0,
+    "status": "preflight_only_no_compile",
+    "compiler_target": "aarch64-linux-gnu",
+    "public_source_count": 8,
+    "private_input_count": 2,
+    "legacy_runner_sha256": "7696d15fcdd7af33d130cb4cdfa78c823553d84a3eb2d830142c5bbd0a09198a",
+    "trial_attempts_preserved": 1,
+    "consumed_receipt_unchanged": true,
+    "output_directory_present_before": true,
+    "output_directory_present_after": true,
+    "output_presence_unchanged": true,
+    "absent_output_directory_case_demonstrated": false
+  },
+  "negative_controls": {
+    "old_runner_pin_rejects_current_runner": true,
+    "malformed_consumed_receipt_rejected": true,
+    "two_attempt_consumed_receipt_rejected": true
+  },
+  "not_established": [
+    "candidate artifact compilation or link",
+    "Bluetooth bridge execution or controller behavior",
+    "physical transport, cleanup, or hardware acceptance"
+  ]
+}
