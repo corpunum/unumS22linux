@@ -1,5 +1,25 @@
 # S22 continuation — 2026-10-02
 
+## Exact expanded hosted result — 2026-10-03 05:51 UTC
+
+Verified published source/review commit
+`4587c6a3efeb32cdfd3d2aeec2d92822111540f3` passed hosted run
+[`37100910426`](https://github.com/corpunum/unumS22linux/actions/runs/37100910426):
+**64 normal plus 61 optimized** script invocations, seven runner-policy cases,
+zero runner failures. All three newly registered driver suites passed in both
+modes. The 28 optional-fixture skip lines and three normal-only standalone
+scripts remain explicit. Complete private-log SHA-256 is
+`ee9bae867aee9d9028a26c9ef6718480f1c05899ebefc89d339cf0d423a73de2`;
+the sanitized receipt is published, not the raw capture.
+
+This closes the hosted-coverage item pending below. It does not close hardware
+acceptance or authorize another one-shot trial. The running native baseline is
+preserved; no new partition write, reboot, powered test, inference or service
+change occurred. The next audio route still requires the separate bounded
+stability observer and fresh exact operation authority. NPU provider/lifetime,
+camera concurrency/DMA, Bluetooth radio, SIM/calls and physical-input acceptance
+remain pending. Master is unchanged.
+
 ### NPU review receipt finalized — 2026-10-03 05:46 UTC
 
 The receipt pending in the 05:44 checkpoint is now frozen: independent
