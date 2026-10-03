@@ -46,11 +46,18 @@ SENSOR_VIDEO_NODE_RELATIVE = Path(
     "drivers/media/platform/exynos/camera/is-video-sensor.c")
 ISCHAIN_VIDEO_NODE_RELATIVE = Path(
     "drivers/media/platform/exynos/camera/is-video-byrp.c")
+IS_CONFIG_RELATIVE = Path(
+    "drivers/media/platform/exynos/camera/ischain/is-v10_1_0/is-config.h")
+COMMON_CONFIG_RELATIVE = Path(
+    "drivers/media/platform/exynos/camera/include/is-common-config.h")
 PINNED_SOURCE = Path(
     "/home/corpunum/s22-linux/lineage/android_kernel_samsung_s5e9925")
 PINNED_COMMIT = "4e5c5ad7d950e4de0688b5663965f2075654b2ad"
 PINNED_TREE = "5c46cbe12dadbcdb64eec4344c9e8ff0f8a75dee"
-PINNED_DERIVED = Path("/home/corpunum/s22-workers/camera-kernel-build-20260927")
+PINNED_DERIVED = Path(os.environ.get(
+    "CAMERA_CLOCK_DERIVED_ROOT",
+    "/home/corpunum/s22-workers/camera-kernel-build-20260927",
+)).expanduser()
 DERIVED_COMMIT = "3fca50941422439b2019db2e4a3dc1016b2138a1"
 DERIVED_TREE = "5aad5cf1dbaa0f430377737141f0547e971b0a2d"
 SOURCE_SHA256 = "be9ea9769e2b1678cea68f1a86514aa0ccd559bfa9316840a1a83268bfef1182"
@@ -72,6 +79,8 @@ CORE_SHA256 = "2f81e7342a74098e284cef0679afce4ef7e8be34bd81bac9c215bf7f695e1594"
 CORE_HEADER_SHA256 = "3b7183a980cd053510726011f3d73eba5ef03622f1657f55ecefc5a70f483518"
 SENSOR_VIDEO_NODE_SHA256 = "62ad8e2eddea8bccf5e18b91d14dc90c49ee452d0ff8bea90f69a2b18db31a40"
 ISCHAIN_VIDEO_NODE_SHA256 = "4f8f21136765d3368804340e8559fc129c8fd4180684df35d87e2b75a68d3f0e"
+IS_CONFIG_SHA256 = "5f06bf13d9f626c084a88cf3f1e045e7d709e26d86efcd6cf74ef7806ee52738"
+COMMON_CONFIG_SHA256 = "88bc87df5cc2050a6342952ecfe6ebdae5724980544572ba17f0fda6a1973726"
 PINNED_FILES = {
     SOURCE_RELATIVE: SOURCE_SHA256,
     CALLER_RELATIVE: CALLER_SHA256,
@@ -92,6 +101,8 @@ PINNED_FILES = {
     CORE_HEADER_RELATIVE: CORE_HEADER_SHA256,
     SENSOR_VIDEO_NODE_RELATIVE: SENSOR_VIDEO_NODE_SHA256,
     ISCHAIN_VIDEO_NODE_RELATIVE: ISCHAIN_VIDEO_NODE_SHA256,
+    IS_CONFIG_RELATIVE: IS_CONFIG_SHA256,
+    COMMON_CONFIG_RELATIVE: COMMON_CONFIG_SHA256,
 }
 SOURCE_URL = "https://raw.githubusercontent.com/LineageOS/android_kernel_samsung_s5e9925"
 MAX_SOURCE_BYTES = 512 * 1024
@@ -186,7 +197,7 @@ def fetch_pinned_source(relative: Path) -> bytes:
 def load_pinned_sources() -> tuple[dict[Path, bytes], str]:
     configured = os.environ.get("CAMERA_CLOCK_SOURCE_TREE")
     force_public = os.environ.get("CAMERA_CLOCK_FORCE_PUBLIC") == "1"
-    if configured:
+    if configured and not force_public:
         repository = Path(configured).expanduser()
         checked_revision(repository, PINNED_COMMIT, PINNED_TREE)
         return {
@@ -301,7 +312,7 @@ def extract_void_or_int_function(source: str, declaration: str) -> str:
 
 PATCHED_SOURCE_FILES = (
     SOURCE_RELATIVE, HEADER_RELATIVE, CALLER_RELATIVE, VIDEO_HEADER_RELATIVE,
-    VIDEO_RELATIVE,
+    VIDEO_RELATIVE, CORE_RELATIVE,
 )
 
 
@@ -353,6 +364,42 @@ def harness_source(sources: dict[Path, bytes], *, patched: bool) -> str:
     return template.replace(marker, "\n\n".join(functions))
 
 
+def shutdown_harness_source(sources: dict[Path, bytes], *, patched: bool) -> str:
+    with tempfile.TemporaryDirectory(prefix="camera-clock-shutdown-source-") as temporary:
+        proposed = apply_patch_to_temporary_source(sources, Path(temporary))
+    current = proposed if patched else sources
+    core = current[CORE_RELATIVE].decode("utf-8")
+    functions = []
+    if patched:
+        functions.append(extract_void_or_int_function(
+            core, "static bool is_sensor_clock_ownership_unknown(struct is_core *core)"))
+        caller = current[CALLER_RELATIVE].decode("utf-8")
+        functions.append(extract_void_or_int_function(
+            caller,
+            "static bool is_sensor_core_clock_ownership_unknown(struct is_core *core,\n\tstruct is_device_sensor *device)"))
+    functions.extend((
+        extract_void_or_int_function(core, "void is_cleanup(struct is_core *core)"),
+        extract_void_or_int_function(core,
+                                     "static void is_shutdown(struct platform_device *pdev)"),
+        extract_function(sources[RESOURCEMGR_RELATIVE].decode("utf-8"),
+                         "is_reboot_handler"),
+        extract_void_or_int_function(
+            current[CALLER_RELATIVE].decode("utf-8"),
+            "static void is_sensor_instanton(struct work_struct *data)"),
+    ))
+    template = HARNESS.read_text(encoding="utf-8")
+    marker = "/* CAMERA_SHUTDOWN_FUNCTIONS */"
+    if template.count(marker) != 1:
+        raise AssertionError("shutdown harness extraction marker must appear exactly once")
+    enum_marker = "/* CAMERA_SHUTDOWN_SENSOR_ENUM */"
+    if template.count(enum_marker) != 1:
+        raise AssertionError("shutdown sensor enum marker must appear exactly once")
+    state_enum = extract_enum(proposed[HEADER_RELATIVE].decode("utf-8"),
+                              "enum is_sensor_state")
+    template = template.replace(enum_marker, state_enum)
+    return template.replace(marker, "\n\n".join(functions))
+
+
 def compile_and_run(source: str, compiler: str, temp_root: Path,
                     *, baseline: bool, optimization: str) -> str:
     c_source = temp_root / ("camera-clock-baseline.c" if baseline else "camera-clock-patched.c")
@@ -379,6 +426,35 @@ def compile_and_run(source: str, compiler: str, temp_root: Path,
     return run.stdout.strip()
 
 
+def compile_shutdown_and_run(source: str, compiler: str, temp_root: Path,
+                              *, baseline: bool, optimization: str) -> str:
+    c_source = temp_root / "camera-shutdown-quarantine.c"
+    c_source.write_text(source, encoding="utf-8")
+    binary = temp_root / (("shutdown-baseline-" if baseline else "shutdown-patched-")
+                          + optimization[2:])
+    command = [
+        compiler, "-std=gnu89", "-Wall", "-Wextra", "-Werror",
+        "-Wno-unused-parameter", "-Wno-unused-function",
+        "-Wno-unused-but-set-variable", optimization,
+        "-DCAMERA_SHUTDOWN_ONLY",
+    ]
+    if baseline:
+        command.append("-DCAMERA_EXPECT_SHUTDOWN_BASELINE")
+    command.extend([str(c_source), "-o", str(binary)])
+    build = subprocess.run(command, capture_output=True, text=True, check=False)
+    if build.returncode:
+        raise AssertionError(f"shutdown extracted C compile failed ({optimization}): {build.stderr}")
+    run = subprocess.run([str(binary)], capture_output=True, text=True, check=False)
+    expected = ("BASELINE_SHUTDOWN_REPRODUCED" if baseline
+                else "PASS: extracted terminal shutdown quarantine")
+    if run.returncode or expected not in run.stdout:
+        raise AssertionError(
+            f"shutdown extracted C run failed ({optimization}, baseline={baseline}): "
+            f"stdout={run.stdout!r}, stderr={run.stderr!r}"
+        )
+    return run.stdout.strip()
+
+
 class CameraSensorClockUnwindTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -397,6 +473,8 @@ class CameraSensorClockUnwindTests(unittest.TestCase):
 
     def test_pinned_source_and_patch_apply(self) -> None:
         self.assertIn(PINNED_COMMIT, self.source_description)
+        if os.environ.get("CAMERA_CLOCK_FORCE_PUBLIC") == "1":
+            self.assertIn("public source fixtures", self.source_description)
         patch_headers = re.findall(
             r"^diff --git (.+)$", PATCH.read_text(encoding="utf-8"), re.MULTILINE,
         )
@@ -466,6 +544,7 @@ class CameraSensorClockUnwindTests(unittest.TestCase):
         self.assertLess(off.index("IS_SENSOR_ICLK_UNKNOWN"), off.index("pdata->iclk_off("))
         self.assertIn("if (ret == -EUCLEAN)\n\t\t\tset_bit(IS_SENSOR_ICLK_UNKNOWN", on)
         self.assertIn("if (ret == -EUCLEAN)\n\t\t\tset_bit(IS_SENSOR_ICLK_UNKNOWN", off)
+        self.assertNotIn("mutex_lock(&device->mutex_reboot)", off)
 
         probe = extract_function(caller, "is_sensor_probe")
         opened = extract_function(caller, "is_sensor_open")
@@ -473,6 +552,8 @@ class CameraSensorClockUnwindTests(unittest.TestCase):
         suspend = extract_function(caller, "is_sensor_suspend")
         runtime_suspend = extract_function(caller, "is_sensor_runtime_suspend")
         runtime_resume = extract_function(caller, "is_sensor_runtime_resume")
+        sensor_start_worker = extract_void_or_int_function(
+            caller, "static void is_sensor_instanton(struct work_struct *data)")
         self.assertLess(probe.index("IS_SENSOR_ICLK_UNKNOWN"), probe.index("memset(&device->v4l2_dev"))
         self.assertLess(opened.index("IS_SENSOR_ICLK_UNKNOWN"), opened.index("mutex_lock("))
         self.assertLess(closed.index("IS_SENSOR_ICLK_UNKNOWN"), closed.index("is_sensor_front_stop("))
@@ -484,6 +565,21 @@ class CameraSensorClockUnwindTests(unittest.TestCase):
                         runtime_suspend.index("v4l2_device_unregister_subdev("))
         self.assertLess(runtime_resume.index("IS_SENSOR_ICLK_UNKNOWN"),
                         runtime_resume.index("is_sensor_runtime_resume_pre("))
+        self.assertLess(sensor_start_worker.index("mutex_lock(&device->mutex_reboot)"),
+                        sensor_start_worker.index("if (device->reboot)"))
+        worker_quarantine = sensor_start_worker.index(
+            "is_sensor_core_clock_ownership_unknown(core, device)")
+        self.assertLess(sensor_start_worker.index("mutex_lock(&device->mutex_reboot)"),
+                        worker_quarantine)
+        self.assertLess(worker_quarantine,
+                        sensor_start_worker.index("if (device->reboot)"))
+        self.assertLess(worker_quarantine,
+                        sensor_start_worker.index("v4l2_subdev_call(device->subdev_csi"))
+        core_worker_guard = extract_void_or_int_function(
+            caller,
+            "static bool is_sensor_core_clock_ownership_unknown(struct is_core *core,\n\tstruct is_device_sensor *device)")
+        self.assertIn("for (i = 0; i < IS_SENSOR_COUNT; i++)", core_worker_guard)
+        self.assertIn("&core->sensor[i].state", core_worker_guard)
 
         close_video = extract_function(video, "is_video_close")
         quarantine = close_video.index("IS_SENSOR_ICLK_UNKNOWN")
@@ -590,18 +686,36 @@ class CameraSensorClockUnwindTests(unittest.TestCase):
             r"static struct platform_driver is_driver = \{.*?\n\};", core, re.S)
         self.assertTrue(drivers)
         self.assertTrue(all(".remove" not in driver for driver in drivers))
+        with tempfile.TemporaryDirectory(prefix="camera-clock-shutdown-source-") as temporary:
+            patched = apply_patch_to_temporary_source(self.sources, Path(temporary))
+        patched_core = patched[CORE_RELATIVE].decode("utf-8")
+        ownership_unknown = extract_void_or_int_function(
+            patched_core,
+            "static bool is_sensor_clock_ownership_unknown(struct is_core *core)")
+        self.assertIn("for (i = 0; i < IS_SENSOR_COUNT; i++)", ownership_unknown)
+        self.assertIn("test_bit(IS_SENSOR_ICLK_UNKNOWN, &device->state)", ownership_unknown)
         cleanup = extract_void_or_int_function(
-            core, "void is_cleanup(struct is_core *core)")
-        self.assertIn("is_sensor_front_stop(device, true);", cleanup)
-        self.assertNotIn("IS_SENSOR_ICLK_UNKNOWN", cleanup)
+            patched_core, "void is_cleanup(struct is_core *core)")
+        self.assertLess(cleanup.index("is_sensor_clock_ownership_unknown(core)"),
+                        cleanup.index("is_sensor_front_stop(device, true);"))
+        self.assertIn("device->reboot = true;", cleanup)
+        self.assertIn("retain all shared sensor resources", cleanup)
         shutdown = extract_void_or_int_function(
-            core, "static void is_shutdown(struct platform_device *pdev)")
+            patched_core, "static void is_shutdown(struct platform_device *pdev)")
         self.assertIn("is_cleanup(core);", shutdown)
-        self.assertIn("is_sensor_deinit_sensor_thread(sensor_peri);", shutdown)
-        self.assertNotIn("IS_SENSOR_ICLK_UNKNOWN", shutdown)
+        self.assertLess(shutdown.index("is_sensor_clock_ownership_unknown(core)"),
+                        shutdown.index("is_sensor_deinit_sensor_thread(sensor_peri);"))
+        self.assertLess(shutdown.index("is_sensor_clock_ownership_unknown(core)"),
+                        shutdown.index("cancel_work_sync("))
+        config_switches = self.sources[COMMON_CONFIG_RELATIVE].decode("utf-8")
+        self.assertIn("#define ENABLE_REBOOT_HANDLER", config_switches)
+        resource_source = self.sources[RESOURCEMGR_RELATIVE].decode("utf-8")
         reboot_handler = extract_function(
-            self.sources[RESOURCEMGR_RELATIVE].decode("utf-8"), "is_reboot_handler")
+            resource_source, "is_reboot_handler")
         self.assertIn("is_cleanup(core);", reboot_handler)
+        self.assertIn("register_reboot_notifier(&notify_reboot_block);", resource_source)
+        is_config = self.sources[IS_CONFIG_RELATIVE].decode("utf-8")
+        self.assertIn("#define IS_SENSOR_COUNT\t\t6", is_config)
         core_header = self.sources[CORE_HEADER_RELATIVE].decode("utf-8")
         self.assertIn("struct is_device_sensor\t\tsensor[IS_SENSOR_COUNT];", core_header)
         self.assertIn("struct is_video\t\t\tvideo_byrp;", core_header)
@@ -641,6 +755,25 @@ class CameraSensorClockUnwindTests(unittest.TestCase):
                         optimization=optimization,
                     )
                 self.assertIn("PASS: extracted clock quarantine lifecycle", output)
+
+    def test_actual_cleanup_reboot_and_shutdown_guards_at_O0_O2(self) -> None:
+        baseline = shutdown_harness_source(self.sources, patched=False)
+        patched = shutdown_harness_source(self.sources, patched=True)
+        for optimization in ("-O0", "-O2"):
+            with self.subTest(optimization=optimization, baseline=True):
+                with tempfile.TemporaryDirectory(prefix="camera-shutdown-baseline-") as temporary:
+                    output = compile_shutdown_and_run(
+                        baseline, self.compiler, Path(temporary), baseline=True,
+                        optimization=optimization,
+                    )
+                self.assertIn("BASELINE_SHUTDOWN_REPRODUCED", output)
+            with self.subTest(optimization=optimization, baseline=False):
+                with tempfile.TemporaryDirectory(prefix="camera-shutdown-patched-") as temporary:
+                    output = compile_shutdown_and_run(
+                        patched, self.compiler, Path(temporary), baseline=False,
+                        optimization=optimization,
+                    )
+                self.assertIn("PASS: extracted terminal shutdown quarantine", output)
 
     def test_effective_python_optimization_is_reported(self) -> None:
         expected = os.environ.get("CAMERA_EXPECT_PYTHONOPTIMIZE")
