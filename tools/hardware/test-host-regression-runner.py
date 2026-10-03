@@ -34,6 +34,7 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-npu-mailbox-debug-walk-bounds.py",
     "tools/hardware/test-npu-mailbox-msgid-validation.py",
     "tools/hardware/test-npu-fw-report-lock-unwind.py",
+    "tools/hardware/test-npu-interface-open-unwind.py",
     "tools/hardware/test-npu-publication-ownership.py",
     "tools/hardware/test-npu-publication-drain-ownership.py",
     "tools/hardware/test-build-npu-six-profile.py",
