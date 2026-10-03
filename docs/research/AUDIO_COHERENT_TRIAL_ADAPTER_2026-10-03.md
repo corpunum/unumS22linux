@@ -74,24 +74,74 @@ reports `false`, and a nonempty complete current ring does not imply full-boot
 coverage. A future pinned collector may report `true` only if it has an
 independent basis for that claim.
 
-The observer still takes exactly one initial post-reboot sample. A separate,
-future, owner-authorized and independently reviewed stability observation would
-need a fixed ten-minute read-only window with samples at elapsed seconds
-`0, 60, 120, ..., 600` (11 samples), each bound to the same boot ID, recovery
-image, kernel build ID, and three direction-specific audio module IDs. Every
-sample would need the same complete-coverage/fault gates plus the current
-service, network, and power checks; the final receipt would summarize all
-timestamped samples and their diagnostic byte counts/fingerprints. That would
-establish only bounded stability during the observed window. Full-boot log
-coverage still requires an independent source that proves collection from
-boot start without truncation/overrun, and TrustZone progress still requires a
-separate relevant progress signal; neither is implied by a quiet current ring,
-a recognized thread name, or a call trace. This follow-up is not implemented
-or authorized by the current adapter.
+The observer still takes exactly one initial post-reboot sample. A separate
+host-side bounded stability follow-up is now implemented, but remains
+unauthorized by the production adapter. It requires the already successful
+one-shot initial-observation receipt and revalidates its boot, image, kernel,
+module, readiness, and log fields before starting. The initial sample is not
+reused as an interval sample. A successful initial receipt can follow an ACK
+or an UNKNOWN reboot outcome; in the latter case the reboot marker remains
+unresolved and unchanged, the observer performs read-only queries only, and no
+guard marker is cleared or replayed.
+
+The observer has a hard 600-second monotonic total deadline. It first polls
+only boot ID and `/proc/uptime` at 15-second offsets from 0 through 180
+seconds (at most 13 probes), each with a 3-second query cap. Every probe must
+match the boot ID in the successful initial receipt; a contradictory boot is
+terminal, not a startup wait. The uptime gate is at least 180 seconds. If the
+initial receipt itself was collected after that uptime, the first probe can
+pass immediately; otherwise the observer waits for the gate, within the same
+600-second budget. After the uptime gate it makes up to two complete,
+read-only readiness/full-identity poll pairs, separated by 15 seconds. This
+allows ordinary native/model startup progression without calling an absent
+service a transport failure. A missing expected service, incomplete current
+log ring, or other readiness gate remains unready and cannot pass a stability
+sample. No service is restarted and no remote inference is requested.
+
+The first fully ready pair starts the interval. Two more fresh readiness and
+full identity pairs are queried at offsets of at least 90 and 180 seconds from
+that sample start; the minimum pair-start gap is 60 seconds. Success therefore
+requires three separately queried samples and at least 180 seconds from the
+first to last sample start—not eleven samples or ten minutes of evidence. Every
+sample rechecks the same boot ID, RECOVERY record, complete recovery-image
+SHA-256, running kernel GNU Build ID, and exact three profile module GNU Build
+IDs, along with native/model-idle/network/power and current-ring no-indicator
+gates. Each readiness, identity/full-hash, and uptime SSH query gets the
+smaller of its per-query cap (15, 30, or 3 seconds respectively) and actual
+remaining total time. A single read-only reconnect is allowed across the whole
+observer after a bounded 2-second backoff; no second reconnect or reboot is
+attempted. The observer checks the total deadline before every query and
+wait. The capped remote-query/wait path is at most 505 seconds: at most 188
+seconds for the 180-second uptime schedule and a final probe/reconnect, plus
+at most 317 seconds for two readiness polls (including the 15-second gap) and
+the 180-second sample spacing with the last pair/reconnect. This leaves 95
+seconds within the 600-second total for local processing and durable receipts.
+The monotonic deadline remains authoritative if any work consumes that margin;
+no query starts with more than the actual remaining time.
+
+Transport unavailability, readiness progression, and terminal contradiction
+are recorded separately. One disconnect may consume the single reconnect;
+exhausted transport failures, startup timeout, later readiness regression,
+wrong identity, changed boot, serious fault, malformed response, or consumed
+marker all persist `UNKNOWN` with `retry_allowed=false`. A fatal indicator or
+hung-task assessment/count is terminal; `trace_only` is not relabeled fatal,
+but is insufficient for a sample and may only be followed by another bounded
+read-only startup poll. Duplicate/cached state is not counted as a new sample:
+the observer issues separate collection and identity queries for each sample
+and stores a private fsynced receipt for each. Old receipts and guard markers
+remain exclusive and preserved.
+
+This follow-up establishes only bounded stability during the observed sample
+interval. Full-boot log coverage still requires an independent source that
+proves collection from boot start without truncation/overrun, and TrustZone
+progress still requires a separate relevant progress signal; neither is
+implied by a quiet current ring, a recognized thread name, or a call trace.
+The new evidence is host-only: the production authorization remains false and
+the allowlist remains empty.
 
 ## Verification
 
-The 28-case hardware-free suite passed in normal Python, `python3 -O`, and
+The 35-case hardware-free suite passed in normal Python, `python3 -O`, and
 `PYTHONOPTIMIZE=1 python3 -B`. Each invocation checked the expected
 `sys.flags.optimize` value (`0`, `1`, and `1` respectively); `-I` was not
 combined with the environment mode. The new tests execute the actual rendered
@@ -99,8 +149,14 @@ collector with `dmesg` and local HTTP/process probes stubbed, feed its
 classifier output through the actual readiness validator, reject empty and
 unavailable captures, exercise malformed boolean/type/assessment fields, and
 verify that incomplete diagnostics leave the one-shot observation marker
-`unknown` with no success observation receipt. `py_compile` and
-`git diff --check` also passed.
+`unknown` with no success observation receipt. Fake-clock/fake-transport tests
+execute the actual bounded stability observer without real waits; they cover
+delayed connection and uptime, delayed readiness, fresh same-boot samples,
+wrong and later-changed boot/image/module identity, fatal and hung-task
+diagnostics, trace-only startup gating, later fault, exhausted transport gap,
+deadline exhaustion, empty logs, nonprogressing clock, UNKNOWN reboot
+non-replay, and refusal to reuse old stability receipts/markers. `py_compile`
+and `git diff --check` also passed.
 
 The fake-filesystem tests execute the actual rendered remote code for both
 profile directions with a 4,096-byte synthetic image. Stage produced zero
@@ -112,9 +168,10 @@ unknown transport, reboot helper mismatch, one-request disconnect handling,
 and rejection of wrong boot/hash/module IDs during observation.
 
 Read-only local plan validation against the actual candidate, baseline, and
-manifest passed for both directions. All four default CLI plans (stage/flash
-observer, forward/reverse) exited zero and reported `authorized: false`, an
-empty allowlist, and no execution, marker, write, reboot, or audio acceptance.
+manifest passed for both directions. All four default deploy plans and both
+observer plans (forward/reverse) exited zero and reported `authorized: false`,
+an empty allowlist, and no execution, marker, write, reboot, or audio
+acceptance.
 The checked candidate manifest remains the one previously reviewed at
 SHA-256 `f78bbaddf94ef6d1ae37b059b7455b24a15cbb7c2fab1ec9bbc4e1df5fd1edf8`.
 

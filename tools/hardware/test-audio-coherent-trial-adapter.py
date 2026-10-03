@@ -37,6 +37,19 @@ REMOTE_FIXTURES = load('s22_audio_coherent_remote_fixtures',
                        ROOT / 'tools/hardware/test-recovery-deployment-hardening.py')
 
 
+class FakeClock:
+    def __init__(self, now=0.0):
+        self.now = float(now)
+        self.sleeps = []
+
+    def __call__(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+
 def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -70,6 +83,7 @@ def identity(profile, recovery_sha, boot_id='11111111-1111-4111-8111-11111111111
 def readiness(boot_id='11111111-1111-4111-8111-111111111111'):
     return {
         'boot_id': boot_id,
+        'uptime_seconds': 240.0,
         'pid1': 'native-guardian',
         'native_ready': True,
         'persistent_ready': {'ready': True, 'mount_ready': True},
@@ -89,6 +103,7 @@ def readiness(boot_id='11111111-1111-4111-8111-111111111111'):
             'call_trace_count': 0, 'liveness_unresolved': False,
             'capture_complete': True, 'coverage_complete': True,
             'full_boot_log_coverage': False,
+            'bytes': 37, 'sha256': sha(b'complete current kernel ring fixture'),
         },
         'network_state': {'ready': True, 'interfaces': [
             {'name': 'wlan0', 'operstate': 'up', 'carrier': '1'}]},
@@ -106,7 +121,6 @@ def readiness(boot_id='11111111-1111-4111-8111-111111111111'):
         'kernel_release': '5.10.260-g4e5c5ad7d950',
         'boot_reset_first_record': '[  1] / R / INFORM3(12345674) > RECOVERY > native',
         'tmux_server_running': False,
-        'uptime_seconds': 8.0,
     }
 
 
@@ -266,6 +280,8 @@ class InactiveByDefaultTests(unittest.TestCase):
                 ['--profile', 'audio-forward', '--request-reboot', '--execute',
                  '--trial-identity', ADAPTER.TRIAL_IDENTITY],
                 ['--profile', 'audio-forward', '--observe-once', '--execute',
+                 '--trial-identity', ADAPTER.TRIAL_IDENTITY],
+                ['--profile', 'audio-forward', '--observe-stability', '--execute',
                  '--trial-identity', ADAPTER.TRIAL_IDENTITY],
             ):
                 with self.subTest(args=args), self.assertRaises(PermissionError):
@@ -634,6 +650,93 @@ class AudioOperationFixture(unittest.TestCase):
         self.flash('audio-forward', sandbox, target, calls)
         return sandbox, target, calls
 
+    def _restart_workspace(self):
+        self.tearDown()
+        self.setUp()
+
+    def _completed_forward_initial_observation(self, reboot_outcome='ACKNOWLEDGED'):
+        sandbox, _target, _calls = self._completed_forward_flash()
+        original_boot = '11111111-1111-4111-8111-111111111111'
+        new_boot = '33333333-3333-4333-8333-333333333333'
+        profile = ADAPTER.PROFILE.resolve_profile('audio-forward')
+        reboot_commands = []
+
+        def reboot_remote(_ssh_path, command, **kwargs):
+            reboot_commands.append(command)
+            if reboot_outcome == 'UNKNOWN':
+                raise subprocess.TimeoutExpired(command, kwargs.get('timeout'))
+            return subprocess.CompletedProcess(command, 0, b'', b'')
+
+        current = lambda expected: identity(
+            profile, expected, boot_id=original_boot, module_role='baseline')
+        if reboot_outcome == 'UNKNOWN':
+            with self.assertRaisesRegex(RuntimeError, 'never retry'):
+                OBSERVER.request_recovery_once(
+                    'audio-forward', receipts_root=self.root / 'receipts',
+                    state_root=self.state_root, project_root=ROOT,
+                    transport=reboot_remote,
+                    snapshotter=lambda: readiness(original_boot),
+                    identity_reader=current,
+                    helper_reader=OBSERVER._expected_helpers)
+        else:
+            OBSERVER.request_recovery_once(
+                'audio-forward', receipts_root=self.root / 'receipts',
+                state_root=self.state_root, project_root=ROOT,
+                transport=reboot_remote,
+                snapshotter=lambda: readiness(original_boot),
+                identity_reader=current,
+                helper_reader=OBSERVER._expected_helpers)
+        target_identity = lambda expected: identity(
+            profile, expected, boot_id=new_boot, module_role='candidate')
+        OBSERVER.observe_reboot_once(
+            'audio-forward', receipts_root=self.root / 'receipts',
+            state_root=self.state_root, project_root=ROOT,
+            snapshotter=lambda: readiness(new_boot), identity_reader=target_identity)
+        return sandbox, new_boot, reboot_commands
+
+    def _stability_transport(self, boot_id, *, startup_uptimes=None, states=None,
+                             identities=None, failures=None, clock=None,
+                             query_cost=0.0):
+        profile = ADAPTER.PROFILE.resolve_profile('audio-forward')
+        startup_values = list(startup_uptimes or [180.0])
+        state_values = list(states or [readiness(boot_id)] * 3)
+        identity_values = list(identities or [
+            identity(profile, profile['target_sha256'], boot_id=boot_id,
+                     module_role='candidate') for _ in range(3)])
+        failed_attempts = {key: set(value) for key, value in (failures or {}).items()}
+        counts = {'startup': 0, 'readiness': 0, 'identity': 0}
+        calls = []
+
+        def transport(_ssh_path, command, *, input_data, timeout, project_root):
+            if 'audio_modules' in command:
+                label = 'identity'
+            elif 'kernel_log_classification' in command:
+                label = 'readiness'
+            elif "/proc/uptime" in command:
+                label = 'startup'
+            else:
+                raise AssertionError('unexpected remote command in stability observer')
+            counts[label] += 1
+            calls.append({'label': label, 'timeout': timeout, 'command': command,
+                          'remaining_at_start': (OBSERVER.STABILITY_TOTAL_DEADLINE_SECONDS -
+                                                clock.now) if clock is not None else None})
+            if clock is not None and query_cost:
+                clock.now += query_cost
+            if counts[label] in failed_attempts.get(label, set()):
+                raise subprocess.TimeoutExpired(command, timeout)
+            if label == 'startup':
+                uptime = startup_values.pop(0) if startup_values else 180.0
+                value = {'boot_id': boot_id, 'uptime_seconds': uptime}
+            elif label == 'readiness':
+                value = state_values.pop(0) if state_values else readiness(boot_id)
+            else:
+                value = identity_values.pop(0) if identity_values else identity(
+                    profile, profile['target_sha256'], boot_id=boot_id,
+                    module_role='candidate')
+            return subprocess.CompletedProcess(command, 0, json.dumps(value), '')
+
+        return transport, calls, counts
+
     def test_reboot_ack_uses_guarded_helper_once_and_initial_observation_is_profile_bound(self):
         sandbox, target, calls = self._completed_forward_flash()
         remote_calls = []
@@ -838,6 +941,324 @@ class AudioOperationFixture(unittest.TestCase):
             ADAPTER.validate_audio_identity(
                 wrong, expected_recovery_sha=profile['target_sha256'],
                 expected_modules=OBSERVER._expected_profile_modules('audio-forward'))
+
+    def test_bounded_stability_waits_for_uptime_and_delayed_readiness_then_samples_freshly(self):
+        sandbox, boot_id, reboot_commands = self._completed_forward_initial_observation()
+        profile = ADAPTER.PROFILE.resolve_profile('audio-forward')
+        clock = FakeClock()
+        not_ready = json.loads(json.dumps(readiness(boot_id)))
+        not_ready['health']['status'] = 'starting'
+        not_ready['readiness']['model_api_health'] = False
+        states = [not_ready, readiness(boot_id), readiness(boot_id), readiness(boot_id)]
+        identities = [identity(profile, profile['target_sha256'], boot_id=boot_id,
+                                module_role='candidate') for _ in states]
+        transport, calls, counts = self._stability_transport(
+            boot_id, startup_uptimes=[120.0, 180.0], states=states,
+            identities=identities, failures={'startup': {1}}, clock=clock,
+            query_cost=0.1)
+        try:
+            result = OBSERVER.observe_stability(
+                'audio-forward', receipts_root=self.root / 'receipts',
+                state_root=self.state_root, project_root=ROOT,
+                transport=transport, clock=clock, sleeper=clock.sleep)
+            self.assertEqual(result['status'], 'bounded-stability-observed')
+            self.assertEqual(result['reboot_request_outcome'], 'ACKNOWLEDGED')
+            self.assertEqual(result['sample_count'], 3)
+            self.assertEqual(result['stability_seconds'], 180.0)
+            self.assertEqual(result['startup_readiness_polls'], 2)
+            self.assertEqual(result['startup_uptime_probes'], 2)
+            self.assertEqual(result['read_only_reconnect_attempts'], 1)
+            self.assertEqual(result['remote_query_attempts'], len(calls))
+            self.assertFalse(result['audio_hardware_acceptance'])
+            self.assertFalse(result['bootability_claim'])
+            self.assertEqual(counts, {'startup': 3, 'readiness': 4, 'identity': 4})
+            self.assertEqual(len(reboot_commands), 1)
+            self.assertTrue(all(0 < call['timeout'] <= {
+                'startup': OBSERVER.STABILITY_STARTUP_QUERY_CAP_SECONDS,
+                'readiness': OBSERVER.STABILITY_READINESS_QUERY_CAP_SECONDS,
+                'identity': OBSERVER.STABILITY_IDENTITY_QUERY_CAP_SECONDS,
+            }[call['label']] for call in calls))
+            self.assertTrue(all(call['timeout'] <= call['remaining_at_start']
+                                for call in calls))
+            self.assertLess(clock.now, OBSERVER.STABILITY_TOTAL_DEADLINE_SECONDS)
+            receipt_paths = OBSERVER._stability_receipt_paths(
+                'audio-forward', self.root / 'receipts')
+            sample_files = [json.loads(path.read_text()) for path in receipt_paths['samples']]
+            self.assertEqual([sample['index'] for sample in sample_files], [0, 1, 2])
+            self.assertTrue(all(sample['status'] == 'ready' for sample in sample_files))
+            self.assertTrue(all(sample['identity']['recovery_sha256'] == profile['target_sha256']
+                                for sample in sample_files))
+            self.assertTrue(all(sample['identity']['audio_module_gnu_build_ids'] ==
+                                OBSERVER._expected_profile_modules('audio-forward')
+                                for sample in sample_files))
+            self.assertEqual(len({item['sha256'] for item in result['samples']}), 3)
+        finally:
+            sandbox.close()
+
+    def test_stability_rejects_changed_boot_and_wrong_image_or_module_identity(self):
+        for mismatch_index, mismatch in enumerate(
+                ('startup_boot', 'later_boot', 'image', 'module')):
+            if mismatch_index:
+                self._restart_workspace()
+            with self.subTest(mismatch=mismatch):
+                sandbox, boot_id, _ = self._completed_forward_initial_observation()
+                profile = ADAPTER.PROFILE.resolve_profile('audio-forward')
+                clock = FakeClock()
+                transport, calls, _ = self._stability_transport(
+                    boot_id, startup_uptimes=[180.0], clock=clock)
+                if mismatch == 'startup_boot':
+                    transport, calls, _ = self._stability_transport(
+                        '99999999-9999-4999-8999-999999999999',
+                        startup_uptimes=[180.0], clock=clock)
+                elif mismatch == 'later_boot':
+                    changed_boot = '99999999-9999-4999-8999-999999999999'
+                    changed_state = readiness(changed_boot)
+                    changed_identity = identity(
+                        profile, profile['target_sha256'], boot_id=changed_boot,
+                        module_role='candidate')
+                    transport, calls, _ = self._stability_transport(
+                        boot_id, startup_uptimes=[180.0],
+                        states=[readiness(boot_id), changed_state],
+                        identities=[identity(profile, profile['target_sha256'],
+                                             boot_id=boot_id, module_role='candidate'),
+                                    changed_identity], clock=clock)
+                elif mismatch == 'image':
+                    wrong = identity(profile, '0' * 64, boot_id=boot_id,
+                                     module_role='candidate')
+                    transport, calls, _ = self._stability_transport(
+                        boot_id, startup_uptimes=[180.0],
+                        identities=[wrong], clock=clock)
+                else:
+                    wrong = identity(profile, profile['target_sha256'],
+                                     boot_id=boot_id, module_role='baseline')
+                    transport, calls, _ = self._stability_transport(
+                        boot_id, startup_uptimes=[180.0],
+                        identities=[wrong], clock=clock)
+                try:
+                    with self.assertRaises((ValueError, RuntimeError)):
+                        OBSERVER.observe_stability(
+                            'audio-forward', receipts_root=self.root / 'receipts',
+                            state_root=self.state_root, project_root=ROOT,
+                            transport=transport, clock=clock, sleeper=clock.sleep)
+                    receipt_paths = OBSERVER._stability_receipt_paths(
+                        'audio-forward', self.root / 'receipts')
+                    failure = json.loads(receipt_paths['failure'].read_text())
+                    expected = {'startup_boot': 'changed_boot',
+                                'later_boot': 'changed_boot',
+                                'image': 'wrong_identity',
+                                'module': 'wrong_identity'}[mismatch]
+                    self.assertEqual(failure['failure_category'], expected)
+                    self.assertFalse(receipt_paths['result'].exists())
+                    self.assertTrue(len(calls) <= (5 if mismatch == 'later_boot' else 3))
+                finally:
+                    sandbox.close()
+
+    def test_fatal_and_hung_task_diagnostics_are_terminal_not_startup_waits(self):
+        cases = ('fatal_assessment', 'hung_task')
+        for case_index, case in enumerate(cases):
+            if case_index:
+                self._restart_workspace()
+            with self.subTest(case=case):
+                sandbox, boot_id, _ = self._completed_forward_initial_observation()
+                state = readiness(boot_id)
+                if case == 'fatal_assessment':
+                    state['kernel_log_classification']['assessment'] = 'fatal'
+                else:
+                    state['kernel_log_classification']['assessment'] = 'hung_task_warning'
+                    state['kernel_log_classification']['hung_task_warning_count'] = 1
+                clock = FakeClock()
+                transport, _calls, counts = self._stability_transport(
+                    boot_id, startup_uptimes=[180.0], states=[state], clock=clock)
+                try:
+                    with self.assertRaises(RuntimeError):
+                        OBSERVER.observe_stability(
+                            'audio-forward', receipts_root=self.root / 'receipts',
+                            state_root=self.state_root, project_root=ROOT,
+                            transport=transport, clock=clock, sleeper=clock.sleep)
+                    receipt_paths = OBSERVER._stability_receipt_paths(
+                        'audio-forward', self.root / 'receipts')
+                    failure = json.loads(receipt_paths['failure'].read_text())
+                    self.assertEqual(failure['failure_category'], 'serious_fault')
+                    self.assertEqual(counts, {'startup': 1, 'readiness': 1, 'identity': 1})
+                    self.assertFalse(receipt_paths['result'].exists())
+                finally:
+                    sandbox.close()
+
+    def test_trace_only_is_unready_not_terminal_and_requires_fresh_ready_poll(self):
+        sandbox, boot_id, reboot_commands = self._completed_forward_initial_observation()
+        trace_only = readiness(boot_id)
+        trace_only['kernel_log_classification']['assessment'] = 'trace_only'
+        trace_only['kernel_log_classification']['call_trace_count'] = 1
+        profile = ADAPTER.PROFILE.resolve_profile('audio-forward')
+        clock = FakeClock()
+        states = [trace_only, readiness(boot_id), readiness(boot_id), readiness(boot_id)]
+        identities = [identity(profile, profile['target_sha256'], boot_id=boot_id,
+                                module_role='candidate') for _ in states]
+        transport, _calls, counts = self._stability_transport(
+            boot_id, startup_uptimes=[180.0], states=states,
+            identities=identities, clock=clock)
+        try:
+            result = OBSERVER.observe_stability(
+                'audio-forward', receipts_root=self.root / 'receipts',
+                state_root=self.state_root, project_root=ROOT,
+                transport=transport, clock=clock, sleeper=clock.sleep)
+            self.assertEqual(result['status'], 'bounded-stability-observed')
+            self.assertEqual(result['startup_readiness_polls'], 2)
+            self.assertEqual(counts, {'startup': 1, 'readiness': 4, 'identity': 4})
+            startup_path = OBSERVER._stability_receipt_paths(
+                'audio-forward', self.root / 'receipts')['startup'][0]
+            startup = json.loads(startup_path.read_text())
+            self.assertEqual(startup['kernel_diagnostics']['assessment'], 'trace_only')
+            self.assertEqual(len(reboot_commands), 1)
+        finally:
+            sandbox.close()
+
+    def test_later_fault_transport_gap_timeout_and_empty_log_all_remain_unknown(self):
+        cases = ('later_fault', 'transport_gap', 'timeout', 'empty_log')
+        for case_index, case in enumerate(cases):
+            if case_index:
+                self._restart_workspace()
+            with self.subTest(case=case):
+                sandbox, boot_id, _ = self._completed_forward_initial_observation()
+                profile = ADAPTER.PROFILE.resolve_profile('audio-forward')
+                clock = FakeClock()
+                state_values = [readiness(boot_id) for _ in range(3)]
+                identities = [identity(profile, profile['target_sha256'], boot_id=boot_id,
+                                        module_role='candidate') for _ in range(3)]
+                failures = None
+                query_cost = 0.0
+                if case == 'later_fault':
+                    state_values[1]['serious_fault'] = True
+                    state_values[1]['kernel_log_classification']['fatal_indicators'] = ['Oops']
+                elif case == 'transport_gap':
+                    failures = {'readiness': {2, 3}}
+                elif case == 'timeout':
+                    query_cost = OBSERVER.STABILITY_TOTAL_DEADLINE_SECONDS + 1
+                else:
+                    empty = readiness_from_rendered_collector(boot_id, '')
+                    state_values = [empty, empty]
+                    identities = identities[:2]
+                transport, calls, _ = self._stability_transport(
+                    boot_id, startup_uptimes=[180.0], states=state_values,
+                    identities=identities, failures=failures, clock=clock,
+                    query_cost=query_cost)
+                try:
+                    with self.assertRaises((ValueError, RuntimeError, TimeoutError)):
+                        OBSERVER.observe_stability(
+                            'audio-forward', receipts_root=self.root / 'receipts',
+                            state_root=self.state_root, project_root=ROOT,
+                            transport=transport, clock=clock, sleeper=clock.sleep)
+                    receipt_paths = OBSERVER._stability_receipt_paths(
+                        'audio-forward', self.root / 'receipts')
+                    failure = json.loads(receipt_paths['failure'].read_text())
+                    expected = {
+                        'later_fault': 'serious_fault',
+                        'transport_gap': 'transport_gap',
+                        'timeout': 'timeout',
+                        'empty_log': 'unready_startup',
+                    }[case]
+                    self.assertEqual(failure['failure_category'], expected)
+                    self.assertEqual(failure['retry_allowed'], False)
+                    self.assertFalse(receipt_paths['result'].exists())
+                finally:
+                    sandbox.close()
+
+    def test_stability_requires_clock_progress_and_never_reboots_after_unknown(self):
+        sandbox, boot_id, _ = self._completed_forward_initial_observation()
+        clock = FakeClock()
+        transport, calls, _ = self._stability_transport(
+            boot_id, startup_uptimes=[180.0], clock=clock, query_cost=0.1)
+        try:
+            with self.assertRaises(RuntimeError):
+                OBSERVER.observe_stability(
+                    'audio-forward', receipts_root=self.root / 'receipts',
+                    state_root=self.state_root, project_root=ROOT,
+                    transport=transport, clock=clock, sleeper=lambda _seconds: None)
+            failure = json.loads(OBSERVER._stability_receipt_paths(
+                'audio-forward', self.root / 'receipts')['failure'].read_text())
+            self.assertEqual(failure['failure_category'], 'sample_gap')
+            self.assertFalse(OBSERVER._stability_receipt_paths(
+                'audio-forward', self.root / 'receipts')['result'].exists())
+        finally:
+            sandbox.close()
+
+        self._restart_workspace()
+        sandbox, boot_id, reboot_commands = self._completed_forward_initial_observation('UNKNOWN')
+        reboot_marker = self.state_root / f'{OBSERVER._reboot_marker_id("audio-forward")}.json'
+        before = reboot_marker.read_bytes()
+        clock = FakeClock()
+        transport, calls, _ = self._stability_transport(boot_id, clock=clock)
+        try:
+            result = OBSERVER.observe_stability(
+                'audio-forward', receipts_root=self.root / 'receipts',
+                state_root=self.state_root, project_root=ROOT,
+                transport=transport, clock=clock, sleeper=clock.sleep)
+            self.assertEqual(result['reboot_request_outcome'], 'UNKNOWN')
+            self.assertEqual(reboot_marker.read_bytes(), before)
+            self.assertEqual(len(reboot_commands), 1)
+            self.assertFalse(any('s22-reboot' in call['command'] for call in calls))
+            with self.assertRaises((ValueError, FileExistsError)):
+                OBSERVER.request_recovery_once(
+                    'audio-forward', receipts_root=self.root / 'receipts',
+                    state_root=self.state_root, project_root=ROOT,
+                    transport=lambda *_args, **_kwargs: self.fail('reboot was replayed'),
+                    snapshotter=lambda: readiness(boot_id),
+                    identity_reader=lambda expected: identity(
+                        ADAPTER.PROFILE.resolve_profile('audio-forward'), expected,
+                        boot_id=boot_id, module_role='baseline'),
+                    helper_reader=OBSERVER._expected_helpers)
+        finally:
+            sandbox.close()
+
+    def test_old_stability_receipt_and_consumed_marker_are_preserved_and_refused(self):
+        sandbox, boot_id, _ = self._completed_forward_initial_observation()
+        clock = FakeClock()
+        transport, calls, _ = self._stability_transport(boot_id, clock=clock)
+        try:
+            OBSERVER.observe_stability(
+                'audio-forward', receipts_root=self.root / 'receipts',
+                state_root=self.state_root, project_root=ROOT,
+                transport=transport, clock=clock, sleeper=clock.sleep)
+            paths = OBSERVER._stability_receipt_paths(
+                'audio-forward', self.root / 'receipts')
+            old_hash = sha(paths['result'].read_bytes())
+            replay_calls = []
+            with self.assertRaises(ValueError):
+                OBSERVER.observe_stability(
+                    'audio-forward', receipts_root=self.root / 'receipts',
+                    state_root=self.state_root, project_root=ROOT,
+                    transport=lambda *_args, **_kwargs: replay_calls.append('called'),
+                    clock=FakeClock(), sleeper=lambda _seconds: None)
+            self.assertEqual(replay_calls, [])
+            self.assertEqual(sha(paths['result'].read_bytes()), old_hash)
+        finally:
+            sandbox.close()
+
+        self._restart_workspace()
+        sandbox, boot_id, _ = self._completed_forward_initial_observation()
+        marker_id = OBSERVER._stability_marker_id('audio-forward')
+        marker_kind = 'audio-coherent-forward-stability'
+        with ADAPTER.GUARD.acquire_operation_lock(
+                ROOT, marker_id, marker_kind, state_root=self.state_root) as operation:
+            operation.begin(project_root=ROOT)
+        marker_path = self.state_root / f'{marker_id}.json'
+        marker_before = marker_path.read_bytes()
+        paths = OBSERVER._stability_receipt_paths(
+            'audio-forward', self.root / 'receipts')
+        replay_calls = []
+        try:
+            with self.assertRaises(RuntimeError):
+                OBSERVER.observe_stability(
+                    'audio-forward', receipts_root=self.root / 'receipts',
+                    state_root=self.state_root, project_root=ROOT,
+                    transport=lambda *_args, **_kwargs: replay_calls.append('called'),
+                    clock=FakeClock(), sleeper=lambda _seconds: None)
+            failure = json.loads(paths['failure'].read_text())
+            self.assertEqual(failure['failure_category'], 'ambiguous_marker')
+            self.assertEqual(replay_calls, [])
+            self.assertEqual(marker_path.read_bytes(), marker_before)
+        finally:
+            sandbox.close()
 
 
 if __name__ == '__main__':

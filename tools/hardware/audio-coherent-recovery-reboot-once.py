@@ -18,6 +18,7 @@ import shlex
 import stat
 import subprocess
 import sys
+import time
 
 ROOT = Path(__file__).resolve().parents[2]
 ARTIFACT_ROOT = Path('/home/corpunum/s22-linux')
@@ -25,10 +26,42 @@ RECEIPTS_ROOT = Path.home() / '.local/state/s22-audio-coherent-trial/receipts'
 STATE_ROOT = Path('/home/corpunum/.local/state/s22-device-trial-guard')
 TRIAL_IDENTITY = 'audio-coherent-20261003-first'
 
+# The stability follow-up is intentionally shorter than a ten-minute trial:
+# one fully ready sample starts the interval, then two fresh samples are taken
+# at 90-second offsets. A bounded 180-second uptime gate (13 probes at 15s
+# offsets), two full-readiness startup polls, and one read-only reconnect total
+# fit inside the hard deadline.
+STABILITY_SAMPLE_OFFSETS_SECONDS = (0, 90, 180)
+STABILITY_MIN_SECONDS = 180
+STABILITY_MIN_SAMPLE_GAP_SECONDS = 60
+STABILITY_TOTAL_DEADLINE_SECONDS = 600
+STABILITY_STARTUP_UPTIME_SECONDS = 180
+STABILITY_STARTUP_POLL_GAP_SECONDS = 15
+STABILITY_STARTUP_POLLS = STABILITY_STARTUP_UPTIME_SECONDS // STABILITY_STARTUP_POLL_GAP_SECONDS + 1
+STABILITY_READINESS_STARTUP_POLLS = 2
+STABILITY_READINESS_QUERY_CAP_SECONDS = 15
+STABILITY_IDENTITY_QUERY_CAP_SECONDS = 30
+STABILITY_MAX_RECONNECTS_TOTAL = 1
+STABILITY_RECONNECT_BACKOFF_SECONDS = 2
+STABILITY_STARTUP_QUERY_CAP_SECONDS = 3
+STABILITY_STARTUP_READINESS_GAP_SECONDS = 15
+
 # Set to the frozen deployment-adapter source digest when this two-file unit is
 # frozen. Empty is development-only and is never accepted by the CLI's source
 # gate after commit.
 DEPLOY_ADAPTER_SHA256 = '859047a5018d697e510ef77855c5f841b1ef2e8890fb9890d47ba8dcb2a4aa66'
+
+
+class ReadOnlyTransportGap(RuntimeError):
+    """A bounded read-only query could not reach or receive the target."""
+
+
+class TerminalObservationError(RuntimeError):
+    """An identity, boot, serious-fault, or marker contradiction was observed."""
+
+    def __init__(self, category: str, message: str):
+        super().__init__(message)
+        self.category = category
 
 
 def _require(condition: bool, message: str) -> None:
@@ -174,6 +207,12 @@ def validate_readiness_snapshot(state: object, *, post_reboot: bool,
              type(logs.get('capture_complete')) is bool and logs['capture_complete'] is True and
              type(logs.get('coverage_complete')) is bool and logs['coverage_complete'] is True,
              'kernel diagnostic input/capture/coverage is unavailable or incomplete')
+    diagnostic_bytes = logs.get('bytes')
+    diagnostic_sha256 = logs.get('sha256')
+    _require(type(diagnostic_bytes) is int and 0 < diagnostic_bytes <= 4_194_304 and
+             type(diagnostic_sha256) is str and len(diagnostic_sha256) == 64 and
+             all(character in '0123456789abcdef' for character in diagnostic_sha256),
+             'kernel diagnostic byte count or fingerprint is unavailable or malformed')
     fatal = logs.get('fatal_indicators')
     hung_count = logs.get('hung_task_warning_count')
     trace_count = logs.get('call_trace_count')
@@ -217,20 +256,22 @@ def _readiness_script() -> str:
     script = script.replace(
         marker,
         "state['kernel_log_classification']['input_available']=log_classification.input_available\n" +
+        "state['kernel_log_classification']['sha256']=(hashlib.sha256(log.encode('utf-8','replace')).hexdigest() if isinstance(log,str) else None)\n" +
         marker)
     compile(script, 'audio-coherent-native-readiness', 'exec')
     return script
 
 
-def capture_readiness_snapshot(*, project_root: Path = ROOT, transport=None) -> dict:
+def capture_readiness_snapshot(*, project_root: Path = ROOT, transport=None,
+                               timeout: float = 20) -> dict:
     command = 'python3 -I -B -c ' + shlex.quote(_readiness_script())
     try:
-        result = ADAPTER._remote_json(command, input_data=b'', timeout=20,
+        result = ADAPTER._remote_json(command, input_data=b'', timeout=timeout,
                                       project_root=project_root, transport=transport)
     except (OSError, subprocess.TimeoutExpired) as error:
-        raise RuntimeError('native readiness query outcome is unknown; no retry') from error
+        raise ReadOnlyTransportGap('native readiness query outcome is unknown') from error
     if result.returncode != 0:
-        raise RuntimeError('native readiness query failed; no retry')
+        raise ReadOnlyTransportGap('native readiness query failed')
     try:
         value = json.loads(result.stdout, object_pairs_hook=PROFILE._unique_json_object)
     except (TypeError, ValueError, json.JSONDecodeError) as error:
@@ -332,6 +373,8 @@ def _redacted_kernel_diagnostics(value: object) -> dict:
         'capture_complete': value.get('capture_complete'),
         'coverage_complete': value.get('coverage_complete'),
         'full_boot_log_coverage': value.get('full_boot_log_coverage'),
+        'bytes': value.get('bytes'),
+        'sha256': value.get('sha256'),
     }
 
 
@@ -559,6 +602,660 @@ def observe_reboot_once(profile_name: str, *, receipts_root: Path = RECEIPTS_ROO
         os.close(directory_fd)
 
 
+def _stability_marker_id(profile_name: str) -> str:
+    profile = PROFILE.resolve_profile(profile_name)
+    return f'{profile["trial_identity"]}-{_direction(profile_name)}-stability'
+
+
+def _stability_receipt_paths(profile_name: str,
+                             receipts_root: Path = RECEIPTS_ROOT) -> dict[str, object]:
+    directory = _receipt_paths(profile_name, receipts_root)['directory']
+    return {
+        'directory': directory,
+        'started': directory / f'{profile_name}-stability-started.json',
+        'result': directory / f'{profile_name}-stability-result.json',
+        'failure': directory / f'{profile_name}-stability-failure.json',
+        'uptime_probes': [directory / f'{profile_name}-stability-uptime-{index:02d}.json'
+                          for index in range(STABILITY_STARTUP_POLLS)],
+        'startup': [directory / f'{profile_name}-stability-startup-{index:02d}.json'
+                    for index in range(STABILITY_READINESS_STARTUP_POLLS)],
+        'samples': [directory / f'{profile_name}-stability-sample-{index:02d}.json'
+                    for index in range(len(STABILITY_SAMPLE_OFFSETS_SECONDS))],
+    }
+
+
+def capture_stability_identity(profile_name: str, *, timeout: float,
+                               project_root: Path = ROOT, transport=None) -> dict:
+    """Read the full recovery hash and exact profile module IDs with a deadline."""
+    profile = PROFILE.resolve_profile(profile_name)
+    command = 'python3 -I -B -c ' + shlex.quote(ADAPTER.identity_snapshot_script())
+    try:
+        result = ADAPTER._remote_json(command, input_data=b'', timeout=timeout,
+                                      project_root=project_root, transport=transport)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ReadOnlyTransportGap('read-only recovery identity query is unavailable') from error
+    if result.returncode != 0:
+        raise ReadOnlyTransportGap('read-only recovery identity query failed')
+    try:
+        value = json.loads(result.stdout, object_pairs_hook=PROFILE._unique_json_object)
+    except (TypeError, ValueError, json.JSONDecodeError) as error:
+        raise RuntimeError('read-only recovery identity response is malformed') from error
+    try:
+        return ADAPTER.validate_audio_identity(
+            value, expected_recovery_sha=profile['target_sha256'],
+            expected_modules=_expected_profile_modules(profile_name))
+    except (TypeError, ValueError) as error:
+        raise TerminalObservationError('wrong_identity',
+                                       'recovery image or loaded audio module identity mismatch') from error
+
+
+def capture_stability_startup_probe(*, timeout: float, project_root: Path = ROOT,
+                                    transport=None) -> dict:
+    """Read only boot ID and uptime while waiting for the normal 180s gate."""
+    script = r'''from pathlib import Path
+import json
+boot_id=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+uptime=float(Path('/proc/uptime').read_text().split()[0])
+print(json.dumps({'boot_id':boot_id,'uptime_seconds':uptime}))
+'''
+    command = 'python3 -I -B -c ' + shlex.quote(script)
+    try:
+        result = ADAPTER._remote_json(command, input_data=b'', timeout=timeout,
+                                      project_root=project_root, transport=transport)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ReadOnlyTransportGap('read-only startup probe is unavailable') from error
+    if result.returncode != 0:
+        raise ReadOnlyTransportGap('read-only startup probe failed')
+    try:
+        value = json.loads(result.stdout, object_pairs_hook=PROFILE._unique_json_object)
+    except (TypeError, ValueError, json.JSONDecodeError) as error:
+        raise RuntimeError('read-only startup probe response is malformed') from error
+    if (not isinstance(value, dict) or type(value.get('boot_id')) is not str or
+            not value['boot_id'] or type(value.get('uptime_seconds')) not in (float, int) or
+            not 0 <= value['uptime_seconds'] < 10_000_000):
+        raise RuntimeError('read-only startup probe fields are malformed')
+    return value
+
+
+def _stability_initial_observation(profile_name: str, request: dict, flash: dict,
+                                   initial: object) -> dict:
+    """Revalidate the earlier one-shot receipt before treating it as interval t=0."""
+    profile = PROFILE.resolve_profile(profile_name)
+    message = 'initial observation receipt or marker is ambiguous'
+    try:
+        _require(isinstance(initial, dict) and
+                 initial.get('schema') == 's22-audio-coherent-initial-observation/v1' and
+                 initial.get('profile') == profile_name and
+                 initial.get('trial_identity') == profile['trial_identity'] and
+                 initial.get('status') == 'initial-observation-complete' and
+                 initial.get('reboot_request_outcome') == request['outcome'] and
+                 type(initial.get('reboot_requests')) is int and
+                 initial['reboot_requests'] == 1 and
+                 initial.get('retry_allowed') is False and
+                 initial.get('baseline_boot_id') == flash['prewrite_identity']['boot_id'] and
+                 type(initial.get('observed_boot_id')) is str and
+                 bool(initial['observed_boot_id']) and
+                 initial['observed_boot_id'] != initial['baseline_boot_id'] and
+                 initial.get('mode') == 'RECOVERY' and
+                 initial.get('recovery_sha256') == profile['target_sha256'] and
+                 initial.get('kernel_gnu_build_id') == ADAPTER.RUNNING_KERNEL_BUILD_ID and
+                 initial.get('audio_module_gnu_build_ids') ==
+                 _expected_profile_modules(profile_name), message)
+        readiness = {
+            'model_api_health': initial.get('model_api_health'),
+            'model_idle': initial.get('model_idle'),
+            'desktop_environment': initial.get('desktop_environment'),
+        }
+        _require(initial.get('native_ready') is True and
+                 AUDIO.ready_value(initial.get('persistent_ready')) and
+                 readiness['model_api_health'] is True and
+                 readiness['model_idle'] is True and
+                 readiness['desktop_environment'] is True and
+                 AUDIO.network_state_valid(initial.get('network_state')) and
+                 AUDIO.power_state_valid(initial.get('power_state')),
+                 message)
+        diagnostics = initial.get('kernel_diagnostics')
+        _require(isinstance(diagnostics, dict) and
+                 diagnostics.get('available') is True and
+                 diagnostics.get('assessment') == 'no_indicators' and
+                 diagnostics.get('fatal_indicators') == [] and
+                 type(diagnostics.get('hung_task_warning_count')) is int and
+                 diagnostics['hung_task_warning_count'] == 0 and
+                 type(diagnostics.get('call_trace_count')) is int and
+                 diagnostics['call_trace_count'] == 0 and
+                 diagnostics.get('liveness_unresolved') is False and
+                 diagnostics.get('capture_complete') is True and
+                 diagnostics.get('coverage_complete') is True and
+                 type(diagnostics.get('full_boot_log_coverage')) is bool and
+                 type(diagnostics.get('bytes')) is int and diagnostics['bytes'] > 0 and
+                 type(diagnostics.get('sha256')) is str and
+                 len(diagnostics['sha256']) == 64 and
+                 all(character in '0123456789abcdef' for character in diagnostics['sha256']),
+                 message)
+        return initial
+    except TerminalObservationError:
+        raise
+    except (TypeError, ValueError, KeyError) as error:
+        raise TerminalObservationError('ambiguous_marker', message) from error
+
+
+def _safe_sample_readiness(state: object) -> dict:
+    if not isinstance(state, dict):
+        return {'boot_id': None}
+    ready = state.get('readiness')
+    ready = ready if isinstance(ready, dict) else {}
+    persistent = state.get('persistent_ready')
+    persistent = persistent if isinstance(persistent, dict) else {}
+    health = state.get('health')
+    health = health if isinstance(health, dict) else {}
+    slots = state.get('slots')
+    slots = slots if isinstance(slots, dict) else {}
+    return {
+        'boot_id': state.get('boot_id') if type(state.get('boot_id')) is str else None,
+        'native_ready': state.get('native_ready') if type(state.get('native_ready')) is bool else None,
+        'persistent_ready': persistent.get('ready') if type(persistent.get('ready')) is bool else None,
+        'persistent_mount_ready': persistent.get('mount_ready') if type(persistent.get('mount_ready')) is bool else None,
+        'health_status': health.get('status') if type(health.get('status')) is str else None,
+        'slot_count': slots.get('count') if type(slots.get('count')) is int else None,
+        'assistant_idle': state.get('assistant_idle') if type(state.get('assistant_idle')) is bool else None,
+        'model_api_health': ready.get('model_api_health') if type(ready.get('model_api_health')) is bool else None,
+        'model_idle': ready.get('model_idle') if type(ready.get('model_idle')) is bool else None,
+        'desktop_environment': ready.get('desktop_environment') if type(ready.get('desktop_environment')) is bool else None,
+    }
+
+
+def _safe_sample_identity(identity: object) -> dict:
+    if not isinstance(identity, dict):
+        return {}
+    modules = identity.get('audio_modules')
+    module_ids = {}
+    if isinstance(modules, dict):
+        for name, item in modules.items():
+            if (type(name) is str and isinstance(item, dict) and
+                    type(item.get('gnu_build_id')) is str):
+                module_ids[name] = item['gnu_build_id']
+    return {
+        'boot_id': identity.get('boot_id') if type(identity.get('boot_id')) is str else None,
+        'recovery_sha256': identity.get('recovery_sha256') if type(identity.get('recovery_sha256')) is str else None,
+        'kernel_gnu_build_id': identity.get('kernel_gnu_build_id') if type(identity.get('kernel_gnu_build_id')) is str else None,
+        'audio_module_gnu_build_ids': module_ids,
+    }
+
+
+def _safe_sample_power(state: object) -> dict:
+    value = state.get('power_state') if isinstance(state, dict) else None
+    if not isinstance(value, dict):
+        return {}
+    allowed = ('battery_status', 'battery_capacity_percent',
+               'battery_temperature_celsius', 'thermal_all_readable',
+               'thermal_zone_count', 'thermal_max_temperature_celsius')
+    return {key: value[key] for key in allowed if key in value and
+            (type(value[key]) in (str, int, float, bool) or value[key] is None)}
+
+
+def _sample_record(*, profile_name: str, kind: str, index: int,
+                   operation_started: float, sampled_started: float,
+                   state: object, identity: object, status: str,
+                   category: str | None) -> dict:
+    logs = state.get('kernel_log_classification') if isinstance(state, dict) else None
+    return {
+        'schema': 's22-audio-coherent-stability-sample/v1',
+        'profile': profile_name,
+        'trial_identity': PROFILE.resolve_profile(profile_name)['trial_identity'],
+        'kind': kind,
+        'index': index,
+        'sampled_unix_ns': time.time_ns(),
+        'elapsed_seconds': round(max(0.0, sampled_started - operation_started), 3),
+        'status': status,
+        'category': category,
+        'readiness': _safe_sample_readiness(state),
+        'identity': _safe_sample_identity(identity),
+        'network_state': _redacted_network(
+            state.get('network_state') if isinstance(state, dict) else {}),
+        'power_state': _safe_sample_power(state),
+        'kernel_diagnostics': _redacted_kernel_diagnostics(logs),
+    }
+
+
+def _assess_stability_sample(profile_name: str, expected_boot_id: str,
+                             state: object, identity: object) -> tuple[str, str | None]:
+    if not isinstance(state, dict):
+        raise TerminalObservationError('ambiguous_response',
+                                       'readiness response is not an object')
+    boot_id = state.get('boot_id')
+    if type(boot_id) is not str or not boot_id:
+        raise TerminalObservationError('wrong_identity',
+                                       'readiness response has no boot identity')
+    if boot_id != expected_boot_id:
+        raise TerminalObservationError('changed_boot',
+                                       'boot ID changed during bounded observation')
+    if not isinstance(identity, dict):
+        raise TerminalObservationError('ambiguous_response',
+                                       'recovery identity response is not an object')
+    if identity.get('boot_id') != expected_boot_id:
+        raise TerminalObservationError('changed_boot',
+                                       'readiness and recovery identity boot IDs disagree')
+    if state.get('serious_fault') is True:
+        raise TerminalObservationError('serious_fault',
+                                       'serious kernel fault was reported')
+    logs = state.get('kernel_log_classification')
+    if isinstance(logs, dict):
+        fatal = logs.get('fatal_indicators')
+        assessment = logs.get('assessment')
+        hung_count = logs.get('hung_task_warning_count')
+        if ((isinstance(fatal, list) and fatal) or
+                assessment in ('fatal', 'hung_task_warning') or
+                (type(hung_count) is int and hung_count > 0)):
+            raise TerminalObservationError('serious_fault',
+                                           'fatal or hung-task kernel diagnostic was reported')
+    profile = PROFILE.resolve_profile(profile_name)
+    try:
+        identity = ADAPTER.validate_audio_identity(
+            identity, expected_recovery_sha=profile['target_sha256'],
+            expected_modules=_expected_profile_modules(profile_name))
+    except (TypeError, ValueError) as error:
+        raise TerminalObservationError('wrong_identity',
+                                       'recovery image or loaded audio module identity mismatch') from error
+    if identity['boot_id'] != boot_id or state.get('gnu_build_id') != identity['kernel_gnu_build_id']:
+        raise TerminalObservationError('changed_boot',
+                                       'readiness and recovery identity came from different boots')
+    if (not AUDIO.target_identity_valid(state) or
+            state.get('gnu_build_id') != ADAPTER.RUNNING_KERNEL_BUILD_ID or
+            type(state.get('kernel_release')) is not str or
+            not state['kernel_release'].strip() or
+            not AUDIO.recovery_record(state.get('boot_reset_first_record'))):
+        raise TerminalObservationError('wrong_identity',
+                                       'device, kernel, or RECOVERY identity is not pinned')
+    try:
+        validate_readiness_snapshot(state, post_reboot=True,
+                                    expected_boot_id=expected_boot_id)
+    except ValueError:
+        # Incomplete startup, services, network, power, current-ring coverage,
+        # and trace-only classifications may wait at startup. They cannot pass
+        # a later stability sample.
+        return 'unready', 'readiness_gate_not_satisfied'
+    return 'ready', None
+
+
+def _stability_capture_identity(profile_name: str, *, project_root: Path,
+                                transport, remaining: float) -> dict:
+    return capture_stability_identity(
+        profile_name, timeout=min(STABILITY_IDENTITY_QUERY_CAP_SECONDS, remaining),
+        project_root=project_root, transport=transport)
+
+
+def observe_stability(profile_name: str, *, receipts_root: Path = RECEIPTS_ROOT,
+                      state_root: Path = STATE_ROOT, project_root: Path = ROOT,
+                      transport=None, snapshotter=None, identity_reader=None,
+                      clock=time.monotonic, sleeper=time.sleep) -> dict:
+    """Observe three fresh same-boot samples over at least 180 seconds.
+
+    Only the approved read-only readiness and full-hash identity queries run.
+    A successful ACK or unresolved UNKNOWN reboot result is accepted as the
+    prior one-shot context; neither path can send or repeat a reboot.
+    """
+    operation_started = clock()
+    deadline = operation_started + STABILITY_TOTAL_DEADLINE_SECONDS
+    profile = PROFILE.resolve_profile(profile_name)
+    ADAPTER.require_execution_authorized(profile['trial_identity'])
+    verify_source_pins(project_root)
+    paths = _stability_receipt_paths(profile_name, receipts_root)
+    directory, directory_fd = _ensure_receipt_directory(paths['directory'])
+    startup_paths = paths['startup']
+    uptime_probe_paths = paths['uptime_probes']
+    sample_paths = paths['samples']
+    all_paths = [paths['started'], paths['result'], paths['failure'],
+                 *uptime_probe_paths, *startup_paths, *sample_paths]
+    try:
+        for path in all_paths:
+            SHARED.ensure_new_receipt(path, directory_fd=directory_fd)
+        started_receipt = {
+            'schema': 's22-audio-coherent-stability-started/v1',
+            'profile': profile_name,
+            'trial_identity': profile['trial_identity'],
+            'total_deadline_seconds': STABILITY_TOTAL_DEADLINE_SECONDS,
+            'startup_uptime_gate_seconds': STABILITY_STARTUP_UPTIME_SECONDS,
+            'startup_uptime_poll_offsets_seconds': [
+                index * STABILITY_STARTUP_POLL_GAP_SECONDS
+                for index in range(STABILITY_STARTUP_POLLS)],
+            'startup_readiness_max_polls': STABILITY_READINESS_STARTUP_POLLS,
+            'startup_readiness_poll_gap_seconds': STABILITY_STARTUP_READINESS_GAP_SECONDS,
+            'sample_offsets_seconds': list(STABILITY_SAMPLE_OFFSETS_SECONDS),
+            'maximum_read_only_reconnects': STABILITY_MAX_RECONNECTS_TOTAL,
+            'retry_allowed': False,
+        }
+        SHARED.persist_receipt(paths['started'], started_receipt,
+                               directory_fd=directory_fd)
+
+        saved_samples: list[dict] = []
+        reconnect_count = 0
+        attempt_count = 0
+        startup_readiness_poll_count = 0
+        active_category = 'ambiguous_marker'
+        operation = None
+        try:
+            flash, _ = _load_flash(profile_name, receipts_root=receipts_root,
+                                   state_root=Path(state_root))
+            reboot_path = _receipt_paths(profile_name, receipts_root)['reboot_result']
+            request, _ = ADAPTER._read_private_json(reboot_path)
+            _validate_request_outcome(request, profile_name)
+            _validate_reboot_marker_for_observation(
+                profile_name, request, reboot_path, Path(state_root))
+            observation_paths = _receipt_paths(profile_name, receipts_root)
+            initial, _ = ADAPTER._read_private_json(observation_paths['observation'])
+            initial = _stability_initial_observation(profile_name, request, flash, initial)
+            observe_marker = Path(state_root) / f'{_observation_marker_id(profile_name)}.json'
+            if request['outcome'] == 'ACKNOWLEDGED':
+                _validate_receipt_marker(profile_name, 'observe',
+                                         observation_paths['observation'], Path(state_root))
+            elif observe_marker.exists() or observe_marker.is_symlink():
+                raise TerminalObservationError(
+                    'ambiguous_marker',
+                    'UNKNOWN reboot must retain an unmarked read-only initial observation')
+
+            stability_marker = Path(state_root) / f'{_stability_marker_id(profile_name)}.json'
+            if stability_marker.exists() or stability_marker.is_symlink():
+                raise TerminalObservationError('ambiguous_marker',
+                                               'stability marker was already consumed')
+            if request['outcome'] == 'ACKNOWLEDGED':
+                context = GUARD.acquire_operation_lock(
+                    project_root, _stability_marker_id(profile_name),
+                    f'audio-coherent-{_direction(profile_name)}-stability',
+                    state_root=state_root)
+            else:
+                # The unresolved reboot marker already blocks every guarded
+                # write. Keep it unknown and do not attempt the global lock.
+                context = nullcontext(None)
+            active_category = 'ambiguous_response'
+
+            def remaining_time() -> float:
+                remaining = deadline - clock()
+                if remaining <= 0:
+                    raise TimeoutError('bounded observation deadline exhausted')
+                return remaining
+
+            if snapshotter is None:
+                read_state = lambda cap: capture_readiness_snapshot(
+                    project_root=project_root, transport=transport,
+                    timeout=min(STABILITY_READINESS_QUERY_CAP_SECONDS, cap))
+            else:
+                read_state = lambda _cap: snapshotter()
+            if identity_reader is None:
+                read_identity = lambda cap: _stability_capture_identity(
+                    profile_name, project_root=project_root, transport=transport,
+                    remaining=cap)
+            else:
+                read_identity = lambda cap: identity_reader(profile['target_sha256'])
+            if transport is None:
+                read_startup_probe = lambda cap: capture_stability_startup_probe(
+                    timeout=min(STABILITY_STARTUP_QUERY_CAP_SECONDS, cap),
+                    project_root=project_root)
+            else:
+                read_startup_probe = lambda cap: capture_stability_startup_probe(
+                    timeout=min(STABILITY_STARTUP_QUERY_CAP_SECONDS, cap),
+                    project_root=project_root, transport=transport)
+
+            def bounded_query(label: str, reader) -> object:
+                nonlocal reconnect_count, attempt_count
+                cap = {
+                    'startup': STABILITY_STARTUP_QUERY_CAP_SECONDS,
+                    'readiness': STABILITY_READINESS_QUERY_CAP_SECONDS,
+                    'identity': STABILITY_IDENTITY_QUERY_CAP_SECONDS,
+                }[label]
+                while True:
+                    timeout = min(float(cap), remaining_time())
+                    attempt_count += 1
+                    try:
+                        value = reader(timeout)
+                    except (ReadOnlyTransportGap, OSError,
+                            subprocess.TimeoutExpired) as error:
+                        if reconnect_count >= STABILITY_MAX_RECONNECTS_TOTAL:
+                            raise ReadOnlyTransportGap(
+                                f'{label} query failed after its bounded reconnect') from error
+                        reconnect_count += 1
+                        pause = min(float(STABILITY_RECONNECT_BACKOFF_SECONDS),
+                                    remaining_time())
+                        if pause > 0:
+                            sleeper(pause)
+                        remaining_time()
+                        continue
+                    if clock() > deadline:
+                        raise TimeoutError('bounded observation deadline exhausted during query')
+                    return value
+
+            def save_sample(path: Path, *, kind: str, index: int,
+                            sample_start: float, state: object, identity: object,
+                            status: str, category: str | None) -> dict:
+                record = _sample_record(
+                    profile_name=profile_name, kind=kind, index=index,
+                    operation_started=operation_started, sampled_started=sample_start,
+                    state=state, identity=identity, status=status, category=category)
+                SHARED.persist_receipt(path, record, directory_fd=directory_fd)
+                digest = hashlib.sha256(SHARED.read_host_artifact(
+                    path, 'durable stability sample receipt')).hexdigest()
+                saved = {'path': path.name, 'sha256': digest, 'status': status,
+                         'elapsed_seconds': record['elapsed_seconds']}
+                saved_samples.append(saved)
+                return saved
+
+            def collect_pair(*, kind: str, index: int,
+                             unready_path: Path | None = None
+                             ) -> tuple[dict, str, str | None, float]:
+                sample_start = clock()
+                state = bounded_query('readiness', read_state)
+                identity = bounded_query('identity', read_identity)
+                try:
+                    state_uptime = state.get('uptime_seconds') if isinstance(state, dict) else None
+                    status, category = _assess_stability_sample(
+                        profile_name, initial['observed_boot_id'], state, identity)
+                    if (status == 'ready' and
+                            (type(state_uptime) not in (int, float) or
+                             not STABILITY_STARTUP_UPTIME_SECONDS <= state_uptime < 10_000_000)):
+                        status, category = 'unready', 'uptime_gate_not_satisfied'
+                except TerminalObservationError as error:
+                    save_sample(sample_paths[index] if kind == 'stability' else
+                                (unready_path or startup_paths[index]),
+                                kind=kind, index=index, sample_start=sample_start,
+                                state=state, identity=identity, status='terminal',
+                                category=error.category)
+                    raise
+                stable_sample = kind == 'stability' or status == 'ready'
+                sample_path = (sample_paths[index] if kind == 'stability' else
+                               sample_paths[0] if status == 'ready' else
+                               (unready_path or startup_paths[index]))
+                receipt_kind = 'stability' if stable_sample else 'startup'
+                receipt_index = index if kind == 'stability' else 0 if status == 'ready' else index
+                saved = save_sample(sample_path, kind=receipt_kind, index=receipt_index,
+                                    sample_start=sample_start, state=state,
+                                    identity=identity, status=status, category=category)
+                return saved, status, category, sample_start
+
+            with context as operation:
+                if operation is not None:
+                    operation.begin(project_root=project_root)
+                try:
+                    uptime_probe_origin = clock()
+                    startup_probe_count = 0
+                    boot_id = initial['observed_boot_id']
+                    for probe_index in range(STABILITY_STARTUP_POLLS):
+                        target = (uptime_probe_origin +
+                                  probe_index * STABILITY_STARTUP_POLL_GAP_SECONDS)
+                        pause = target - clock()
+                        if pause > 0:
+                            sleeper(min(pause, remaining_time()))
+                        probe = bounded_query('startup', read_startup_probe)
+                        if probe.get('boot_id') != boot_id:
+                            raise TerminalObservationError(
+                                'changed_boot',
+                                'startup probe boot ID differs from the bound initial observation')
+                        if (type(probe.get('uptime_seconds')) not in (float, int) or
+                                probe['uptime_seconds'] < 0):
+                            raise TerminalObservationError(
+                                'ambiguous_response', 'startup probe uptime is malformed')
+                        probe_record = {
+                            'schema': 's22-audio-coherent-stability-uptime/v1',
+                            'profile': profile_name,
+                            'trial_identity': profile['trial_identity'],
+                            'index': probe_index,
+                            'sampled_unix_ns': time.time_ns(),
+                            'elapsed_seconds': round(max(0.0, clock() - operation_started), 3),
+                            'boot_id': boot_id,
+                            'uptime_seconds': probe['uptime_seconds'],
+                            'status': ('ready' if probe['uptime_seconds'] >=
+                                       STABILITY_STARTUP_UPTIME_SECONDS else 'waiting'),
+                        }
+                        SHARED.persist_receipt(uptime_probe_paths[probe_index], probe_record,
+                                               directory_fd=directory_fd)
+                        startup_probe_count += 1
+                        if probe['uptime_seconds'] >= STABILITY_STARTUP_UPTIME_SECONDS:
+                            break
+                    else:
+                        active_category = 'unready_startup'
+                        raise RuntimeError(
+                            'boot uptime did not reach 180 seconds within the bounded startup phase')
+
+                    stable_start = None
+                    first_sample = None
+                    for poll in range(STABILITY_READINESS_STARTUP_POLLS):
+                        startup_readiness_poll_count += 1
+                        if poll:
+                            target = clock() + STABILITY_STARTUP_READINESS_GAP_SECONDS
+                            pause = target - clock()
+                            if pause > 0:
+                                sleeper(min(pause, remaining_time()))
+                        try:
+                            sample, status, category, sample_start = collect_pair(
+                                kind='startup', index=poll,
+                                unready_path=startup_paths[poll])
+                        except ReadOnlyTransportGap as error:
+                            active_category = 'transport_gap'
+                            raise error
+                        if status == 'ready':
+                            first_sample = sample
+                            stable_start = sample_start
+                            break
+                        if poll + 1 == STABILITY_READINESS_STARTUP_POLLS:
+                            active_category = 'unready_startup'
+                            raise RuntimeError(
+                                'native/model/network/log readiness remained incomplete after a bounded startup poll')
+
+                    if stable_start is None or first_sample is None:
+                        active_category = 'unready_startup'
+                        raise RuntimeError('no complete startup sample started the stability interval')
+                    stable_receipts = [first_sample]
+                    prior_sample_start = stable_start
+                    for index in range(1, len(STABILITY_SAMPLE_OFFSETS_SECONDS)):
+                        target = max(
+                            stable_start + STABILITY_SAMPLE_OFFSETS_SECONDS[index],
+                            prior_sample_start + STABILITY_MIN_SAMPLE_GAP_SECONDS)
+                        pause = target - clock()
+                        if pause > 0:
+                            sleeper(min(pause, remaining_time()))
+                        try:
+                            sample, status, category, sample_start = collect_pair(
+                                kind='stability', index=index)
+                        except ReadOnlyTransportGap as error:
+                            active_category = 'transport_gap'
+                            raise error
+                        if status != 'ready':
+                            active_category = 'later_gate_failure'
+                            raise RuntimeError(
+                                'a later stability sample did not meet every readiness gate')
+                        gap = sample_start - prior_sample_start
+                        if gap < STABILITY_MIN_SAMPLE_GAP_SECONDS:
+                            active_category = 'sample_gap'
+                            raise RuntimeError('fresh stability samples were not sufficiently spaced')
+                        stable_receipts.append(sample)
+                        prior_sample_start = sample_start
+
+                    remaining_time()
+                    observed_seconds = prior_sample_start - stable_start
+                    if (len(stable_receipts) != 3 or
+                            observed_seconds < STABILITY_MIN_SECONDS):
+                        active_category = 'sample_gap'
+                        raise RuntimeError('bounded stability interval was shorter than 180 seconds')
+                    receipt = {
+                        'schema': 's22-audio-coherent-stability-observation/v1',
+                        'profile': profile_name,
+                        'trial_identity': profile['trial_identity'],
+                        'status': 'bounded-stability-observed',
+                        'reboot_request_outcome': request['outcome'],
+                        'reboot_requests': 1,
+                        'retry_allowed': False,
+                        'baseline_boot_id': flash['prewrite_identity']['boot_id'],
+                        'observed_boot_id': initial['observed_boot_id'],
+                        'recovery_sha256': profile['target_sha256'],
+                        'kernel_gnu_build_id': ADAPTER.RUNNING_KERNEL_BUILD_ID,
+                        'audio_module_gnu_build_ids': _expected_profile_modules(profile_name),
+                        'stability_seconds': round(observed_seconds, 3),
+                        'sample_offsets_seconds': list(STABILITY_SAMPLE_OFFSETS_SECONDS),
+                        'sample_count': len(stable_receipts),
+                        'startup_readiness_polls': startup_readiness_poll_count,
+                        'startup_uptime_probes': startup_probe_count,
+                        'read_only_reconnect_attempts': reconnect_count,
+                        'remote_query_attempts': attempt_count,
+                        'samples': stable_receipts,
+                        'audio_hardware_acceptance': False,
+                        'bootability_claim': False,
+                        'full_boot_log_coverage_claimed': False,
+                    }
+                    SHARED.persist_receipt(paths['result'], receipt,
+                                           directory_fd=directory_fd)
+                    if operation is not None:
+                        operation.complete(paths['result'], outcome='success',
+                                           cleanup_confirmed=True)
+                    return receipt
+                except Exception as error:
+                    if isinstance(error, ReadOnlyTransportGap):
+                        active_category = 'transport_gap'
+                    elif isinstance(error, TimeoutError):
+                        active_category = 'timeout'
+                    elif isinstance(error, TerminalObservationError):
+                        active_category = error.category
+                    failure = {
+                        'schema': 's22-audio-coherent-stability-failure/v1',
+                        'profile': profile_name,
+                        'trial_identity': profile['trial_identity'],
+                        'status': 'UNKNOWN',
+                        'outcome': 'UNKNOWN',
+                        'failure_category': active_category,
+                        'retry_allowed': False,
+                        'sample_receipts': saved_samples,
+                        'read_only_reconnect_attempts': reconnect_count,
+                        'remote_query_attempts': attempt_count,
+                        'elapsed_seconds': round(max(0.0, clock() - operation_started), 3),
+                        'error_type': type(error).__name__,
+                    }
+                    SHARED.persist_receipt(paths['failure'], failure,
+                                           directory_fd=directory_fd)
+                    raise
+        except Exception as error:
+            if not Path(paths['failure']).exists():
+                failure = {
+                    'schema': 's22-audio-coherent-stability-failure/v1',
+                    'profile': profile_name,
+                    'trial_identity': profile['trial_identity'],
+                    'status': 'UNKNOWN',
+                    'outcome': 'UNKNOWN',
+                    'failure_category': (error.category if isinstance(
+                        error, TerminalObservationError) else active_category),
+                    'retry_allowed': False,
+                    'sample_receipts': saved_samples,
+                    'read_only_reconnect_attempts': reconnect_count,
+                    'remote_query_attempts': attempt_count,
+                    'elapsed_seconds': round(max(0.0, clock() - operation_started), 3),
+                    'error_type': type(error).__name__,
+                }
+                try:
+                    SHARED.persist_receipt(paths['failure'], failure,
+                                           directory_fd=directory_fd)
+                except Exception:
+                    pass
+            raise
+    finally:
+        os.close(directory_fd)
+
+
 def build_plan(profile_name: str, *, artifact_root: Path = ARTIFACT_ROOT) -> dict:
     plan = ADAPTER.build_plan(profile_name, artifact_root=artifact_root)
     plan.update({
@@ -568,6 +1265,9 @@ def build_plan(profile_name: str, *, artifact_root: Path = ARTIFACT_ROOT) -> dic
         'execution_authorized_trial_allowlist': [],
         'reboot_marker_created': False,
         'reboot_performed': False,
+        'stability_observation_execution': False,
+        'stability_observation_total_deadline_seconds': STABILITY_TOTAL_DEADLINE_SECONDS,
+        'stability_observation_sample_offsets_seconds': list(STABILITY_SAMPLE_OFFSETS_SECONDS),
         'audio_hardware_acceptance': False,
     })
     return plan
@@ -578,12 +1278,15 @@ def main(argv: list[str] | None = None) -> int:
     choice = parser.add_mutually_exclusive_group()
     choice.add_argument('--request-reboot', action='store_true')
     choice.add_argument('--observe-once', action='store_true')
+    choice.add_argument('--observe-stability', action='store_true')
     parser.add_argument('--profile', required=True, choices=tuple(PROFILE.PROFILES))
     parser.add_argument('--execute', action='store_true',
                         help='request operation intent; this is not owner authorization')
     parser.add_argument('--trial-identity')
     args = parser.parse_args(argv)
-    operation = 'reboot' if args.request_reboot else 'observe' if args.observe_once else None
+    operation = ('reboot' if args.request_reboot else
+                 'observe' if args.observe_once else
+                 'stability' if args.observe_stability else None)
     if operation is None:
         if args.execute or args.trial_identity is not None:
             parser.error('execution arguments require --request-reboot or --observe-once')
@@ -595,8 +1298,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.trial_identity != PROFILE.TRIAL_IDENTITY:
         parser.error('operation trial identity does not match the reserved audio profile')
     ADAPTER.require_execution_authorized(args.trial_identity)
-    result = (request_recovery_once(args.profile) if operation == 'reboot'
-              else observe_reboot_once(args.profile))
+    if operation == 'reboot':
+        result = request_recovery_once(args.profile)
+    elif operation == 'observe':
+        result = observe_reboot_once(args.profile)
+    else:
+        result = observe_stability(args.profile)
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
