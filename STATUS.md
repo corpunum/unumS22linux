@@ -19,10 +19,11 @@ DSP images) plus the stock HAL mixer defaults generated from the vendor
 **Physical buttons: volume keys accepted by the owner's physical test; Power reworked.** `s22-buttons`
 autostarts and logs every Power/Volume press to `/srv/s22/buttons/events.jsonl`.
 Volume keys step the speaker volume and announce the level. Holding Volume Up
-runs the `assistant` hook (agent push-to-talk). A short Power press now runs `s22-display toggle` (black compositing, backlight
-0, touch disabled), because DPMS off left a stale, corrupted panel frame. This
-was verified with an injected press, a framebuffer capture and backlight
-sysfs; the owner still needs to re-test the physical Power key.
+runs the `assistant` hook (agent push-to-talk). A short Power press runs `s22-display toggle`. Off is DPMS off: the kernel
+log shows panel sleep-in and the panel regulators switched off; touch is
+disabled while off. On is followed by two forced full repaints. Hyprland now
+uses synchronous llvmpipe (`LP_NUM_THREADS=0`) because half-drawn frames
+reached the command-mode panel. The owner's physical re-test of Power is pending.
 
 **Microphone and earpiece (later the same day):** `s22-rec SECONDS OUT.wav`
 records the main mic. The loudspeaker and earpiece are verified end to end:
