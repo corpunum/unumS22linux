@@ -31,8 +31,19 @@ the phone's own mic recording of `s22-say` output, transcribed with
 whisper.cpp, gives the spoken sentence back word for word (the earpiece run
 had one misheard word).
 
+**Modem: AP-side init complete, identity/SIM/signal readable (no SIM inserted).**
+The CP was looping on PHONE_START because cpif only sends INIT_END once
+`umts_ipc0` and `umts_rfs0` are both open. The new `s22-modem` (a minimal
+Samsung SIPC client) opens them and queries the CP. Device results: modem SW
+`S901BXXSIFYI3`, a Luhn-valid IMEI (masked in the evidence), SIM
+`CARD_NOT_PRESENT`, and LTE limited service (`reg_status denied`, RSRP −95 dBm,
+SNR 30 dB). The CP stayed ONLINE with no crash. Bring-up is manual
+(`s22-modem-up`, no boot hook). CP→AP RFS file writes are logged but not
+served. Data, voice and SMS need a SIM, and calls/SMS need the owner's go-ahead.
+[Evidence](evidence/modem-20261006/README.md).
+
 Still open: the firmware-graph DMAs (RDMA2/3, most WDMAs) do not advance, so
-only the hardware-direct RDMA6/9 playback and WDMA4 capture work. SIM/modem, Bluetooth, cameras, NPU and GPU are unchanged
+only the hardware-direct RDMA6/9 playback and WDMA4 capture work. Bluetooth, cameras, NPU and GPU are unchanged
 from the checkpoints below. A runtime rebind of `0.abox-tplg` panics the
 kernel (recovered automatically); do not repeat it. RECOVERY image unchanged
 (`b1041271…`); no partition writes.
