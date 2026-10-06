@@ -22,6 +22,12 @@ Volume keys step the speaker volume and announce the level. Holding Volume Up
 runs the `assistant` hook (agent push-to-talk). Power keeps Hyprland's display
 toggle. It has been verified only with an injected event so far.
 
+**Microphone and earpiece (later the same day):** `s22-rec SECONDS OUT.wav`
+records the main mic. The loudspeaker and earpiece are verified end to end:
+the phone's own mic recording of `s22-say` output, transcribed with
+whisper.cpp, gives the spoken sentence back word for word (the earpiece run
+had one misheard word).
+
 Still open: the firmware-graph DMAs (RDMA2/3, most WDMAs) do not advance, so
 only the hardware-direct RDMA6/9 playback and WDMA4 capture work. The mic
 capture channel layout needs fixing before voice input or calls. Earpiece

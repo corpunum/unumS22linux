@@ -7,7 +7,7 @@
 # /opt/s22-audio/mixer are generated from the stock vendor mixer_paths.xml by
 # tools/hardware/audio/gen-mixer-batches.py: defaults are applied once per
 # boot (as the Android HAL does), then the chosen route, then defaults again
-# to close the route.  Needs sectiongraph_tplg.bin + amp firmware staged by
+# to close the route (only that route's controls: <route>.reset).  Needs sectiongraph_tplg.bin + amp firmware staged by
 # start-persistent-desktop (stage_optional_audio_firmware / fallback answer).
 #
 #   s22-say [--out speaker|earpiece|bottom|top] [--amp N] [--diag DIR] TEXT...
@@ -16,7 +16,7 @@ set -u
 CHROOT=/mnt/omarchy-trial
 OPT=/opt/s22-audio
 MIX=$CHROOT$OPT/mixer
-PCM=${S22_SAY_PCM:-6}     # RDMA6: hardware SPUS path (RDMA2/3 need the firmware graph tick, not working yet)
+PCM=6                      # RDMA6: hardware SPUS path (RDMA2/3 need the firmware graph tick, not working yet)
 OUT=speaker
 AMP=60                     # espeak-ng amplitude (0-200, default 100)
 DIAG=
@@ -62,7 +62,7 @@ if [ -z "$WAV" ]; then
   CLEANWAV=1
 fi
 
-trap 'batch defaults; [ -n "${CLEANWAV:-}" ] && rm -f "$CHROOT$WAV"' EXIT
+trap 'batch "$ROUTE.reset"; [ -n "${CLEANWAV:-}" ] && rm -f "$CHROOT$WAV"' EXIT
 trap 'exit 130' INT TERM
 batch "$ROUTE" || exit 1
 
@@ -74,8 +74,10 @@ if [ -n "$DIAG" ]; then
   dmesg > "$DIAG/dmesg-before.txt" 2>&1
 fi
 
+# s22spk (alsa-s22.conf) = plug -> hw:0,6 at 48 kHz stereo; RDMA6's own ASRC
+# garbles 22.05 kHz mono (espeak's native format).
 play() { timeout 60 chroot "$CHROOT" /usr/bin/env LD_LIBRARY_PATH=$OPT/usr/lib \
-  $OPT/usr/bin/aplay -q -D "plughw:0,$PCM" "$@"; }
+  ALSA_CONFIG_PATH=$OPT/mixer/alsa-s22.conf $OPT/usr/bin/aplay -q -D s22spk "$@"; }
 # ABOX powers Calliope down ~0.5 s after the last close; a short silent
 # stream first makes sure the firmware is up before the real trigger.
 play -t raw -f S16_LE -r 48000 -c 2 -s 4800 /dev/zero >/dev/null 2>&1
