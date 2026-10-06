@@ -52,6 +52,12 @@ with a passive LE scan and an inquiry. The chip is then powered off with
 Wi-Fi unaffected. Pairing and a persistent controller come next.
 [Evidence](evidence/bt-scan-20261006/README.md).
 
+**Camera: the rear sensor streams (83 frames over CSI), no image yet.**
+The kernel's Pablo sensor self-test powered the GN3, streamed 2040x1532@30
+and powered it down cleanly. The TrustZone dependency only affects the ISP
+library path. Capturing a frame needs a V4L2 client, which is not done yet.
+[Evidence](evidence/camera-20261006/README.md).
+
 **Modem: AP-side init complete, identity/SIM/signal readable (no SIM inserted).**
 The CP was looping on PHONE_START because cpif only sends INIT_END once
 `umts_ipc0` and `umts_rfs0` are both open. The new `s22-modem` (a minimal
@@ -64,7 +70,7 @@ served. Data, voice and SMS need a SIM, and calls/SMS need the owner's go-ahead.
 [Evidence](evidence/modem-20261006/README.md).
 
 Still open: the firmware-graph DMAs (RDMA2/3, most WDMAs) do not advance, so
-only the hardware-direct RDMA6/9 playback and WDMA4 capture work. Cameras, NPU and GPU are unchanged
+only the hardware-direct RDMA6/9 playback and WDMA4 capture work. NPU and GPU are unchanged
 from the checkpoints below. A runtime rebind of `0.abox-tplg` panics the
 kernel (recovered automatically); do not repeat it. RECOVERY image unchanged
 (`b1041271…`); no partition writes.
