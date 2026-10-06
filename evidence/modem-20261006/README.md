@@ -35,3 +35,21 @@ See the lead report. It sets session-only ownership (`/dev/umts_*`
 → group 1001 0640, read-only; cbd log dir → 1001) and relaunches cbd once.
 Rollback: `pkill -f vendor/bin/cbd`, or `s22-reboot recovery` (it restores
 the device-node modes).
+
+## Second command (ownership fix + cbd): no crash; it never ran
+- There was **no reboot or panic.** The current boot started at 19:24:17 UTC
+  with my own `s22-reboot recovery` (deploying c72b3d6). That is the
+  "uptime 10 min at 19:34". The saved last_kmsg of the previous boot ends with
+  `s22-restart2 … sec_reboot (0, recovery)` (my deliberate reboot), with no
+  panic and no cbd lines.
+- In the current boot, `cbd.out` was written 266 s after boot (19:28); that is the
+  first run. After the second command, `/dev/umts_*`, `/dev/sda17`,
+  `/sys/power/wake_lock` and `/srv/s22/android-rt` all still have their old
+  ownership. The second command died at its first step: `pkill -f
+  vendor/bin/cbd` matches the remote `sh -c` command line that contains the same
+  string, so it killed its own shell. That explains why there was no output at all.
+  (I made the same mistake earlier with `s22-buttons`.)
+- Load ~14 is the steady state seen since day 1: D-state kernel threads
+  (`tz_worker_threa` ×8, `tz_iwsock`, `ufs_perf`, …); CPU is 98% idle. It is not
+  a runaway and not the close_range bug.
+- Health: Hyprland, model, s22-buttons, sound card, display on, and wlan0 up.
