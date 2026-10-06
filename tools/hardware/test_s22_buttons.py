@@ -50,9 +50,12 @@ class ButtonTests(unittest.TestCase):
         self.assertEqual(self.b.actions[-1], (str(h),))
         self.assertEqual(self.b.level, 7)
 
-    def test_power_without_hook_only_logs(self):
-        self.b.handle(116, 1, now=0.0); self.b.handle(116, 0, now=0.1)
-        self.assertEqual(self.b.actions, [])
+    def test_power_short_toggles_display_long_does_not(self):
+        with mock.patch.object(MOD.os.path, 'exists', return_value=True):
+            self.b.handle(116, 1, now=0.0); self.b.handle(116, 0, now=0.1)
+            self.assertEqual(self.b.actions, [(MOD.DISPLAY, 'toggle')])
+            self.b.handle(116, 1, now=1.0); self.b.handle(116, 0, now=3.0)
+            self.assertEqual(len(self.b.actions), 1)
         self.assertEqual(self.events()[-1]['key'], 'power')
 
     def test_unknown_codes_and_repeats_ignored(self):

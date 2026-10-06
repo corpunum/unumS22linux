@@ -74,3 +74,30 @@ need a reboot, using the boot-time firmware staging above.
     10× lower than the loudspeaker, as expected for the earpiece.
 - Closing a route now resets only that route's controls
   (`<route>.reset.amixer`), so playback and recording can run concurrently.
+
+## Owner button test and Power fix (same day)
+- Owner pressed the physical keys: `events.jsonl` logs Volume Up (short presses and a 2508 ms hold),
+  Volume Down (219 ms), and four Power presses. The owner confirmed that
+  volume stepping, the spoken level and the hold → assistant prompt all work. **Volume keys are accepted.**
+- **Power defect:** Hyprland's DPMS off detaches the CRTC (atomic state:
+  crtc enable=0, connector crtc=null). On this stack, though, no panel or DSIM
+  activity follows (no sleep-in in dmesg or the panel cmd_log), and the
+  backlight stays at 128. The command-mode OLED therefore keeps scanning a
+  stale, half-updated frame from its own RAM — this is the corrupted half-black
+  screen the owner reported.
+- **Fix:** `s22-display on|off|toggle` keeps scanout running and composites
+  pure black via a Hyprland `screen_shader` (OLED black = pixels off). It also
+  sets the backlight to 0 and disables the `sec_touchscreen-2` touch device.
+  `s22-buttons` maps a short Power press to `s22-display toggle`. The Hyprland
+  `XF86PowerOff` DPMS bind is removed from the config, with a backup kept in
+  `/srv/s22/lead-20261006/`.
+- **Verified** with an injected Power press, both before and after a reboot:
+  - Press 1: framebuffer capture is all black (max 0), backlight 0 (actual 2).
+  - Press 2: normal frame (mean 84), backlight back to 128 (actual 205).
+  - After the reboot the daemon and firmware staging autostarted, and
+    `s22-say` was transcribed correctly by whisper.
+  - The owner still needs to re-test the physical key.
+- **Note:** Arch Python that spawns subprocesses (e.g. ctypes `find_library`)
+  must run under `/usr/local/libexec/s22-close-range-compat`. Otherwise the
+  known kernel `close_range` bug leaves unkillable spinning tasks; two
+  appeared here and were cleared by the reboot.

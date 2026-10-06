@@ -16,11 +16,13 @@ DSP images) plus the stock HAL mixer defaults generated from the vendor
 `mixer_paths.xml`. See
 [the evidence](evidence/audio-buttons-20261006/README.md).
 
-**Physical buttons: daemon installed, owner test pending.** `s22-buttons`
+**Physical buttons: volume keys accepted by the owner's physical test; Power reworked.** `s22-buttons`
 autostarts and logs every Power/Volume press to `/srv/s22/buttons/events.jsonl`.
 Volume keys step the speaker volume and announce the level. Holding Volume Up
-runs the `assistant` hook (agent push-to-talk). Power keeps Hyprland's display
-toggle. It has been verified only with an injected event so far.
+runs the `assistant` hook (agent push-to-talk). A short Power press now runs `s22-display toggle` (black compositing, backlight
+0, touch disabled), because DPMS off left a stale, corrupted panel frame. This
+was verified with an injected press, a framebuffer capture and backlight
+sysfs; the owner still needs to re-test the physical Power key.
 
 **Microphone and earpiece (later the same day):** `s22-rec SECONDS OUT.wav`
 records the main mic. The loudspeaker and earpiece are verified end to end:
