@@ -36,3 +36,18 @@ A persistent controller (`bluetoothd`, pairing, audio) needs the bridge to run
 without the hard-coded 20 s limit (`s22_bridge_run(fd, 20000, …)`, max 60 s).
 That is a probe rebuild using the private patch/NVM headers on the rig, plus a
 supervised long-running mode.
+
+## Persistent controller (same night)
+- New `tools/hardware/bt/bt-qca6490-hci-hold.c` does the same power/patch/NVM/3M/
+  runtime-reset sequence by including the reviewed sources, which are left
+  unchanged and still hash-pinned. Its own copy of the bridge loop runs until
+  SIGINT/SIGTERM instead of 20 s. It is a static aarch64 build with the private
+  headers. The binary is only on the phone (`/srv/s22/bt-hold/`, 0700) and is not committed.
+- `s22-bt up|down|status` (manual, no boot hook, pinned X2/SCHED_FIFO like the scan).
+- Device: hci0 was up after 4 s and **stayed registered for more than 70 s**. Two scans 40 s
+  apart each found 6 LE + 2 BR/EDR devices. `s22-bt down` gave `bridge_result=0
+  commands=141 events=311 queued=0`, `pty_cleanup_ioctl_result=0`, `baud_probe_result=0`;
+  hci0 was gone, the chip was off and Wi-Fi was still up.
+- `s22-bt-scan.py` now only runs HCIDEVDOWN if it brought the controller up itself.
+- No pairing (that needs the owner). BlueZ (`bluetoothd`) is not installed in the
+  chroot yet. It is needed for pairing and audio later.

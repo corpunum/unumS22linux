@@ -78,8 +78,10 @@ def main():
         time.sleep(0.2)
     out["hci0_after_s"] = round(time.time() - t0, 1)
     ctl = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_RAW, socket.BTPROTO_HCI)
+    brought_up = False
     try:
         fcntl.ioctl(ctl, HCIDEVUP, 0)
+        brought_up = True
         out["steps"].append("HCIDEVUP ok")
     except OSError as e:
         out["steps"].append(f"HCIDEVUP errno {e.errno}")  # 114 EALREADY = already up
@@ -193,11 +195,12 @@ def main():
         out["br_count"] = sum(1 for k in devices if k[0] == "br")
     finally:
         s.close()
-        try:
-            fcntl.ioctl(ctl, HCIDEVDOWN, 0)
-            out["steps"].append("HCIDEVDOWN ok")
-        except OSError as e:
-            out["steps"].append(f"HCIDEVDOWN errno {e.errno}")
+        if brought_up:  # leave the controller as we found it
+            try:
+                fcntl.ioctl(ctl, HCIDEVDOWN, 0)
+                out["steps"].append("HCIDEVDOWN ok")
+            except OSError as e:
+                out["steps"].append(f"HCIDEVDOWN errno {e.errno}")
         ctl.close()
     print(json.dumps(out, indent=1))
     return 0
