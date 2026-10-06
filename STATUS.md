@@ -65,8 +65,9 @@ Samsung SIPC client) opens them and queries the CP. Device results: modem SW
 `S901BXXSIFYI3`, a Luhn-valid IMEI (masked in the evidence), SIM
 `CARD_NOT_PRESENT`, and LTE limited service (`reg_status denied`, RSRP −95 dBm,
 SNR 30 dB). The CP stayed ONLINE with no crash. Bring-up is manual
-(`s22-modem-up`, no boot hook). CP→AP RFS file writes are logged but not
-served. Data, voice and SMS need a SIM, and calls/SMS need the owner's go-ahead.
+(`s22-modem-up`, no boot hook). `s22-modem --serve-rfs` now answers the CP's
+NV writes into the private EFS copy only, updating its md5. The real EFS is
+never touched. Data, voice and SMS need a SIM, and calls/SMS need the owner's go-ahead.
 [Evidence](evidence/modem-20261006/README.md).
 
 Still open: the firmware-graph DMAs (RDMA2/3, most WDMAs) do not advance, so

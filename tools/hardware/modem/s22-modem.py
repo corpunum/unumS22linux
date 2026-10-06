@@ -13,6 +13,7 @@ state-changing request it can send is IPC_PWR_PHONE_STATE, and only with
 same as a phone with no SIM. It does not register or transmit.
 """
 import argparse
+import hashlib
 import json
 import os
 import select
@@ -113,6 +114,48 @@ def summarize(replies, show_imei=False):
     return out
 
 
+# RFS (umts_rfs0): libsamsung-ipc framing  u32 length(incl. 6-byte header) | u8 cmd | u8 id
+RFS_NV_READ, RFS_NV_WRITE = 0x01, 0x02
+# Only the PRIVATE EFS copy used by the chroot'd cbd. The real EFS partition is never opened.
+PRIVATE_EFS = "/srv/s22/android-rt/efs"
+NV_SIZE = 1 << 20
+NV_SECRET = b"Samsung_Android_RIL"   # nv_data.bin.md5 = md5(nv_data + secret), verified on the copy
+
+
+class NvStore:
+    def __init__(self, root=PRIVATE_EFS):
+        real = os.path.realpath(root)
+        if not real.startswith("/srv/s22/android-rt/"):
+            raise SystemExit(f"refusing NV store outside the private copy: {real}")
+        self.path = os.path.join(real, "nv_data.bin")
+        self.md5 = self.path + ".md5"
+        if os.path.getsize(self.path) != NV_SIZE:
+            raise SystemExit("unexpected nv_data.bin size")
+
+    def read(self, off, n):
+        with open(self.path, "rb") as f:
+            f.seek(off)
+            return f.read(n)
+
+    def write(self, off, data):
+        with open(self.path, "r+b") as f:
+            f.seek(off)
+            old = f.read(len(data))
+            f.seek(off)
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+            f.seek(0)
+            digest = hashlib.md5(f.read() + NV_SECRET).hexdigest()
+        tmp = self.md5 + ".tmp"
+        with open(tmp, "w") as f:
+            f.write(digest)
+        os.chown(tmp, 1001, 1001)
+        os.chmod(tmp, 0o700)
+        os.replace(tmp, self.md5)
+        return sum(1 for a, b in zip(old, data) if a != b), digest
+
+
 class Modem:
     def __init__(self, log):
         self.ipc = os.open("/dev/umts_ipc0", os.O_RDWR | os.O_NONBLOCK)
@@ -120,6 +163,8 @@ class Modem:
         self.mseq = 0
         self.log = log
         self.replies = []
+        self.rfs_buf = b""
+        self.nv = None
 
     def emit(self, rec):
         rec["t"] = round(time.time(), 3)
@@ -187,8 +232,47 @@ class Modem:
             off += length
 
     def on_rfs(self, buf):
-        # RFS requests are logged only. We do not serve files to the CP.
-        self.emit({"dir": "rfs-rx", "len": len(buf), "hex": buf[:96].hex()})
+        self.rfs_buf += buf
+        while len(self.rfs_buf) >= 6:
+            total, cmd, rid = struct.unpack_from("<IBB", self.rfs_buf)
+            if total < 6 or total > NV_SIZE + 64:
+                self.emit({"dir": "rfs-rx", "bad_header": self.rfs_buf[:16].hex()})
+                self.rfs_buf = b""
+                return
+            if len(self.rfs_buf) < total:
+                return
+            frame, self.rfs_buf = self.rfs_buf[:total], self.rfs_buf[total:]
+            self.handle_rfs(cmd, rid, frame[6:])
+
+    def rfs_reply(self, cmd, rid, payload):
+        frame = struct.pack("<IBB", 6 + len(payload), cmd, rid) + payload
+        os.write(self.rfs, frame)
+
+    def handle_rfs(self, cmd, rid, body):
+        rec = {"dir": "rfs", "cmd": cmd, "id": rid, "len": len(body)}
+        if self.nv is None:
+            rec["served"] = False
+            self.emit(rec)
+            return
+        if cmd in (RFS_NV_READ, RFS_NV_WRITE) and len(body) >= 8:
+            off, n = struct.unpack_from("<II", body)
+            rec.update(offset=off, length=n)
+            ok = off + n <= NV_SIZE
+            if cmd == RFS_NV_READ:
+                data = self.nv.read(off, n) if ok else b""
+                self.rfs_reply(cmd, rid, struct.pack("<BII", 1 if ok else 0, off, len(data)) + data)
+                rec.update(op="nv_read", confirm=ok)
+            else:
+                data = body[8:8 + n]
+                ok = ok and len(data) == n
+                if ok:
+                    changed, digest = self.nv.write(off, data)
+                    rec.update(changed_bytes=changed, md5=digest[:8] + "…")
+                self.rfs_reply(cmd, rid, struct.pack("<BII", 1 if ok else 0, off, n))
+                rec.update(op="nv_write", confirm=ok)
+        else:
+            rec.update(op="unknown", head=body[:32].hex())
+        self.emit(rec)
 
 
 def main():
@@ -196,6 +280,8 @@ def main():
     ap.add_argument("--listen", type=float, default=8.0, help="seconds to listen before queries")
     ap.add_argument("--after", type=float, default=6.0, help="seconds to listen after queries")
     ap.add_argument("--no-query", action="store_true")
+    ap.add_argument("--serve-rfs", action="store_true",
+                    help="answer CP NV read/write requests from the PRIVATE EFS copy")
     ap.add_argument("--radio", choices=sorted(PHONE_STATE), help="send PWR_PHONE_STATE")
     ap.add_argument("--show-imei", action="store_true", help="do not mask the IMEI")
     ap.add_argument("--log", default="/srv/s22/state/modem/ipc.jsonl")
@@ -203,6 +289,8 @@ def main():
     os.makedirs(os.path.dirname(a.log), exist_ok=True)
     with open(a.log, "a") as log:
         m = Modem(log)
+        if a.serve_rfs:
+            m.nv = NvStore()
         m.emit({"event": "opened", "devices": ["umts_ipc0", "umts_rfs0"]})
         m.pump(a.listen)
         if a.radio:
