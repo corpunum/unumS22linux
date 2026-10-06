@@ -1,6 +1,6 @@
 #!/bin/sh
 # Install the on-device neural TTS used by s22-say into the Arch chroot.
-# Runs on the phone as root (needs internet). ~350 MB under /opt/s22-tts.
+# Runs on the phone as root (needs internet). ~390 MB under /opt/s22-tts.
 set -eu
 D=/mnt/omarchy-trial/opt/s22-tts
 B=https://github.com/k2-fsa/sherpa-onnx/releases/download

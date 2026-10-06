@@ -3,7 +3,7 @@
 All synthesis runs on the phone's CPU. It uses sherpa-onnx v1.13.8
 (official static aarch64 build, glibc, so it runs inside the Arch chroot)
 pinned to the A710/X2 cores (`taskset -c 4-7`, 4 threads). The models are in
-`/opt/s22-tts` (~330 MB), installed with `tools/hardware/tts/install-s22-tts.sh`.
+`/opt/s22-tts` (~390 MB), installed with `tools/hardware/tts/install-s22-tts.sh`.
 
 | Engine (model) | Size | RTF on S22 | whisper base.en of the raw WAV |
 |---|---|---|---|
