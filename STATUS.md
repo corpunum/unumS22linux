@@ -29,9 +29,7 @@ whisper.cpp, gives the spoken sentence back word for word (the earpiece run
 had one misheard word).
 
 Still open: the firmware-graph DMAs (RDMA2/3, most WDMAs) do not advance, so
-only the hardware-direct RDMA6/9 playback and WDMA4 capture work. The mic
-capture channel layout needs fixing before voice input or calls. Earpiece
-route is untested. SIM/modem, Bluetooth, cameras, NPU and GPU are unchanged
+only the hardware-direct RDMA6/9 playback and WDMA4 capture work. SIM/modem, Bluetooth, cameras, NPU and GPU are unchanged
 from the checkpoints below. A runtime rebind of `0.abox-tplg` panics the
 kernel (recovered automatically); do not repeat it. RECOVERY image unchanged
 (`b1041271…`); no partition writes.
