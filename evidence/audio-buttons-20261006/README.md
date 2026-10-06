@@ -128,3 +128,15 @@ need a reboot, using the boot-time firmware staging above.
 - **Verified after a reboot** with an injected Power press: Hyprland's environment
   has `LP_NUM_THREADS=0`, and the full panel off and on sequences appear in the
   kernel log. **The physical result needs the owner's photo.**
+
+## Owner video of the pre-c72b3d6 Power behaviour (18 s, 1 frame/s reviewed)
+- In the black-shader + backlight-0 state, the panel showed a **dim**
+  partial image: the keyboard and content were still visible, and there were
+  frames where the black only partly replaced the desktop. This confirms that
+  backlight 0 is not dark and that black frames reached the panel incomplete.
+- After toggling on, several frames show the desktop on top and stale black
+  in the bottom ~45%, with an irregular blocky edge. This matches llvmpipe tiles
+  delivered before rasterization finished. The panel became correct only after
+  later redraws, which is consistent with the partial-frame diagnosis.
+- c72b3d6 (DPMS panel power-off, `LP_NUM_THREADS=0`, forced repaints) addresses
+  both effects. **The owner's physical re-test is parked until they are back.**
