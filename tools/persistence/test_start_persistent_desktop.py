@@ -189,6 +189,14 @@ class SupervisorUnitTests(unittest.TestCase):
             self.assertEqual((req / 'mfc!mfc_fw_flash.bin/loading').read_text(), '')
             self.assertEqual((req / 'unknown.bin/loading').read_text(), '')
 
+    def test_llvmpipe_threads_default_and_override(self):
+        with tempfile.TemporaryDirectory() as td:
+            f = Path(td) / 'threads'
+            self.assertEqual(MOD.llvmpipe_threads(f), '0')
+            f.write_text('4\n'); self.assertEqual(MOD.llvmpipe_threads(f), '4')
+            f.write_text('lots'); self.assertEqual(MOD.llvmpipe_threads(f), '0')
+            f.write_text('99'); self.assertEqual(MOD.llvmpipe_threads(f), '0')
+
     def test_preflight_rejects_wrong_uuid_before_mount(self):
         mount = Path(tempfile.mkdtemp())
         with mock.patch.object(MOD, "MOUNT", mount), \

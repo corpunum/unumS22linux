@@ -101,3 +101,30 @@ need a reboot, using the boot-time firmware staging above.
   must run under `/usr/local/libexec/s22-close-range-compat`. Otherwise the
   known kernel `close_range` bug leaves unkillable spinning tasks; two
   appeared here and were cleared by the reboot.
+
+## Power key, second iteration (owner photo showed it still buggy)
+- Owner photo: the panel stayed lit and dim, the top showed the desktop, and the
+  bottom about 45% was stale black with a blocky stair-step edge. The DRM
+  framebuffer capture was clean at the same time, so **captures do not prove what
+  the panel shows**.
+- An earlier analysis of mine was wrong. I diffed kernel logs with
+  `tail -n +$(dmesg|wc -l)`, but the ring buffer is always full, so the diff
+  dropped every line. With timestamp filtering, **DPMS off does run the real panel path**:
+  - off: `decon_disable` → `panel_sleep_in` → `panel_power_off`, with the
+    `fixed_regulator0`, `vdd_ldo12` and `vdd_ldo20s` regulators disabled;
+  - on: `decon_enable` → `panel_power_on` → `panel_sleep_out` → display on.
+- **Backlight 0 is not dark** on this OLED: the brightness table maps 0 to the
+  minimum level (actual 2), which is the dim screen the owner saw.
+- **Likely root cause of the stale region:** Hyprland renders with llvmpipe
+  worker threads, so `glFlush` returns before rasterization finishes. The
+  command-mode panel (hardware TE trigger) then receives a half-drawn
+  buffer, and on a static screen no later frame fixes it. The stair edge
+  matches llvmpipe tile order.
+- **Fix:**
+  - `start-persistent-desktop` starts Hyprland with `LP_NUM_THREADS=0`
+    (synchronous rasterization; the `/etc/s22-llvmpipe-threads` file overrides it).
+  - `s22-display` uses DPMS off/on and disables touch while off.
+  - After every on, `s22-display` forces two full repaints.
+- **Verified after a reboot** with an injected Power press: Hyprland's environment
+  has `LP_NUM_THREADS=0`, and the full panel off and on sequences appear in the
+  kernel log. **The physical result needs the owner's photo.**

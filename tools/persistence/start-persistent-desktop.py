@@ -502,6 +502,24 @@ def start_model(log: Path, retries: int = 3, profile: str | None = None) -> subp
     raise Failure("model server did not become healthy after bounded retries")
 
 
+LLVMPIPE_THREADS = Path('/etc/s22-llvmpipe-threads')
+
+
+def llvmpipe_threads(path: Path = LLVMPIPE_THREADS) -> str:
+    """llvmpipe rasterizer threads for Hyprland (default 0 = synchronous).
+
+    With worker threads, glFlush returns before rasterization finishes and the
+    software-rendered buffer reaches the command-mode panel half drawn (owner
+    photo 2026-10-06: stale bottom with an llvmpipe-tile stair edge).  Zero
+    threads rasterize inside the flush, so the committed frame is complete.
+    """
+    try:
+        value = path.read_text().strip()
+    except OSError:
+        return '0'
+    return value if value.isdigit() and int(value) <= 8 else '0'
+
+
 def start_desktop(log: Path) -> tuple[subprocess.Popen[str], subprocess.Popen[str]]:
     # Marker is installed only after physical-panel confirmation. An explicit
     # environment value overrides it, so '=0' retains a no-preload rescue path.
@@ -537,6 +555,7 @@ def start_desktop(log: Path) -> tuple[subprocess.Popen[str], subprocess.Popen[st
            "GALLIUM_DRIVER": "llvmpipe", "HYPRLAND_NO_CRASHREPORTER": "1"}
     if stride_trial:
         env.update({'LD_PRELOAD': stride_library, 'S22_LINEAR_STRIDE': '1'})
+    env['LP_NUM_THREADS'] = llvmpipe_threads()
     try:
         with log.open("ab", buffering=0) as out:
             desktop = subprocess.Popen(chroot_cmd(env, "/usr/bin/dbus-run-session", "--",
