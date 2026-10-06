@@ -53,3 +53,14 @@ the device-node modes).
   (`tz_worker_threa` ×8, `tz_iwsock`, `ufs_perf`, …); CPU is 98% idle. It is not
   a runaway and not the close_range bug.
 - Health: Hyprland, model, s22-buttons, sound card, display on, and wlan0 up.
+
+## Third attempt: radio partition EACCES; NV validation explained
+- With the ownership fix, the wake lock works and `umts_boot0` opens. The next
+  failure is `std_boot_parse_toc_img: BIN(/dev/block/by-name/radio) open fail
+  (Permission denied)`. `/dev/sda17` is `root:1001 0440/0640`, but cbd runs as
+  uid 1001 **with gid 0** (setuid only, no setgid/setgroups), so the group bit
+  does not apply. Fix: `chown 1001 /dev/sda17; chmod 0400`, read-only.
+- `NV validation TIMEOUT` is **not fatal**. The disassembly at 0xee48–0xef1c
+  polls `property_get("vendor.cbd.rfs_check_done")` for "1" (normally set by
+  the Samsung RIL's RFS service) 50 × 100 ms, then logs TIMEOUT and carries on
+  with boot. With no Android property service, it always times out after 5 s.
