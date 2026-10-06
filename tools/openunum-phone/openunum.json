@@ -1,0 +1,25 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 18880
+  },
+  "model": {
+    "provider": "llama-cpp-local",
+    "model": "llama-cpp-local/openai/qwen3.8-flash-next-uncensored-lean",
+    "llamaCppLocalBaseUrl": "http://100.76.5.104:8080",
+    "maxOutputTokens": 4096,
+    "providerModels": {
+      "llama-cpp-local": "llama-cpp-local/openai/qwen3.8-flash-next-uncensored-lean"
+    }
+  },
+  "runtime": {
+    "autoHealEnabled": false,
+    "mediaSwap": {
+      "enabled": false
+    },
+    "autonomyMasterAutoStart": false
+  },
+  "browser": {
+    "enabled": false
+  }
+}

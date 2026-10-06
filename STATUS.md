@@ -37,6 +37,13 @@ available and espeak-ng as the fallback. Verified acoustically: the phone's
 mic recording of its own speaker was transcribed by whisper word for word.
 [Evidence](evidence/tts-20261006/README.md).
 
+**OpenUnum on the phone, using the rig's Halogen over Tailscale.** The
+server and WebUI run in the Arch chroot (127.0.0.1:18880, `s22-openunum
+start`). The model is the rig's Halogen at 100.76.5.104:8080, and speech
+stays local. Device-verified agent turn: the rig model ran shell tools on the
+phone, then `s22-say` spoke "CPU architecture is aarch64 and the modem state
+is ONLINE." [Evidence](evidence/openunum-phone-20261006/README.md).
+
 **Modem: AP-side init complete, identity/SIM/signal readable (no SIM inserted).**
 The CP was looping on PHONE_START because cpif only sends INIT_END once
 `umts_ipc0` and `umts_rfs0` are both open. The new `s22-modem` (a minimal
