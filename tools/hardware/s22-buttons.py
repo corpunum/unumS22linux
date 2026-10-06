@@ -8,7 +8,7 @@ to EVENTS as JSON lines and, on release:
   volume up / down (short)   speaker volume step (amp digital gain) + spoken level
   volume up (hold >= 1 s)    hook "assistant"  (push-to-talk for an agent)
   volume down (hold >= 1 s)  hook "voldown-long"
-  power (short)              hook "power" only (display toggle stays in Hyprland)
+  power (short)              hook "power", else s22-display toggle (black + backlight 0)
 
 A hook is an executable HOOKS/<name>; it gets S22_BUTTON / S22_HELD_MS in its
 environment and runs detached.  Without a hook the defaults above apply.
@@ -33,6 +33,7 @@ BASE = Path('/srv/s22/buttons')
 CHROOT = '/mnt/omarchy-trial'
 OPT = '/opt/s22-audio'
 SAY = '/srv/s22/hardware/bin/s22-say'
+DISPLAY = '/srv/s22/hardware/bin/s22-display'
 LONG_MS = 1000
 LEVELS = 10            # level 10 = 0 dB amp gain, 4 dB per step, 0 = mute
 
@@ -113,7 +114,10 @@ class Buttons:
         long = held >= LONG_MS
         self.log(key=key, action='release', held_ms=held)
         if key == 'power':
-            self.hook('power-long' if long else 'power', key, held)
+            if long:
+                self.hook('power-long', key, held)
+            elif not self.hook('power', key, held) and os.path.exists(DISPLAY):
+                self.spawn([DISPLAY, 'toggle'])
         elif key == 'volup':
             if long:
                 if not self.hook('assistant', key, held) and os.path.exists(SAY):
