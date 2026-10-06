@@ -1,10 +1,43 @@
 # S22 native Linux status
 
+Updated 2026-10-06 by the Claude lead session (directly on the device).
+The 2026-10-02 task board and earlier checkpoints below are historical.
+
+## Current checkpoint — 2026-10-06
+
+**Speaker audio and text-to-speech work on the device.** The new
+`s22-say "text"` (espeak-ng → ALSA RDMA6 → stock `media-speaker` route →
+CS35L41 amps with the speaker-protection DSP running) speaks through the
+loudspeakers. Device evidence: the amps' protection telemetry recorded
+speaker excursion and coil temperature, and an on-device mic loopback picked
+up a test tone and the spoken phrase. The fixes were boot-time staging of the
+missing stock audio firmware (ABOX `sectiongraph_tplg.bin`, amp and haptic
+DSP images) plus the stock HAL mixer defaults generated from the vendor
+`mixer_paths.xml`. See
+[the evidence](evidence/audio-buttons-20261006/README.md).
+
+**Physical buttons: daemon installed, owner test pending.** `s22-buttons`
+autostarts and logs every Power/Volume press to `/srv/s22/buttons/events.jsonl`.
+Volume keys step the speaker volume and announce the level. Holding Volume Up
+runs the `assistant` hook (agent push-to-talk). Power keeps Hyprland's display
+toggle. It has been verified only with an injected event so far.
+
+Still open: the firmware-graph DMAs (RDMA2/3, most WDMAs) do not advance, so
+only the hardware-direct RDMA6/9 playback and WDMA4 capture work. The mic
+capture channel layout needs fixing before voice input or calls. Earpiece
+route is untested. SIM/modem, Bluetooth, cameras, NPU and GPU are unchanged
+from the checkpoints below. A runtime rebind of `0.abox-tplg` panics the
+kernel (recovered automatically); do not repeat it. RECOVERY image unchanged
+(`b1041271…`); no partition writes.
+
+
+## Historical checkpoint header — 2026-09-27
+
 Updated 2026-09-27 from coordinator hardware trials and independent host review.
 The current work is tracked in [the September 27 task board](docs/S22_LUNA_TASK_BOARD_2026-09-27.md).
 Earlier checkpoints below are historical.
 
-## Current checkpoint — 2026-09-27
+## Historical checkpoint — 2026-09-27
 
 The same HCI-only RECOVERY kernel remains running; no new flash, reboot or raw
 HCI socket-test repetition occurred. The new plain-H4 helper fixed the observed

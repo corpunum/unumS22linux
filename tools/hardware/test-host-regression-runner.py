@@ -86,6 +86,8 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test-tz-progress-evidence.py",
     "tools/pi-web/test_pi_readiness.py",
     "tools/pi-web/test_agent_web.py",
+    "tools/hardware/test_s22_buttons.py",
+    "tools/persistence/test_start_persistent_desktop.py",
 )
 
 

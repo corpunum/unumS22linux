@@ -99,6 +99,8 @@ REVIEWED_HOST_TEST_PATHS = (
     "tools/hardware/test-tz-progress-evidence.py",
     "tools/pi-web/test_pi_readiness.py",
     "tools/pi-web/test_agent_web.py",
+    "tools/hardware/test_s22_buttons.py",
+    "tools/persistence/test_start_persistent_desktop.py",
 )
 
 HOST_TESTS = (
@@ -180,6 +182,8 @@ HOST_TESTS = (
         optimization_safe=False,
         normal_only_reason="the launcher deliberately refuses Python optimization",
     ),
+    HostTest("tools/hardware/test_s22_buttons.py"),
+    HostTest("tools/persistence/test_start_persistent_desktop.py"),
 )
 
 
@@ -193,7 +197,8 @@ def _resolve_test_paths(root: Path, tests: Sequence[HostTest]) -> tuple[Path, ..
         if (relative.is_absolute() or ".." in relative.parts or
                 test.path in seen or not (
                     test.path.startswith("tools/hardware/") or
-                    test.path.startswith("tools/pi-web/")
+                    test.path.startswith("tools/pi-web/") or
+                    test.path.startswith("tools/persistence/")
                 ) or
                 not test.optimization_safe and not test.normal_only_reason):
             raise ValueError(f"invalid or duplicate allowlist entry: {test.path}")
