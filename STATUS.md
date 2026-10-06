@@ -44,6 +44,14 @@ stays local. Device-verified agent turn: the rig model ran shell tools on the
 phone, then `s22-say` spoke "CPU architecture is aarch64 and the modem state
 is ONLINE." [Evidence](evidence/openunum-phone-20261006/README.md).
 
+**Bluetooth discovery works (bounded).** The running kernel has the raw-HCI
+socket fix (build b2dda820). `s22-bt-scan` brings up the QCA6490 for the
+bridge's 20 s window (pinned to the X2 core, which fixed a timing-sensitive
+baud switch), confirms BT 5.3, Qualcomm, and finds 6 LE + 2 classic devices
+with a passive LE scan and an inquiry. The chip is then powered off with
+Wi-Fi unaffected. Pairing and a persistent controller come next.
+[Evidence](evidence/bt-scan-20261006/README.md).
+
 **Modem: AP-side init complete, identity/SIM/signal readable (no SIM inserted).**
 The CP was looping on PHONE_START because cpif only sends INIT_END once
 `umts_ipc0` and `umts_rfs0` are both open. The new `s22-modem` (a minimal
@@ -56,7 +64,7 @@ served. Data, voice and SMS need a SIM, and calls/SMS need the owner's go-ahead.
 [Evidence](evidence/modem-20261006/README.md).
 
 Still open: the firmware-graph DMAs (RDMA2/3, most WDMAs) do not advance, so
-only the hardware-direct RDMA6/9 playback and WDMA4 capture work. Bluetooth, cameras, NPU and GPU are unchanged
+only the hardware-direct RDMA6/9 playback and WDMA4 capture work. Cameras, NPU and GPU are unchanged
 from the checkpoints below. A runtime rebind of `0.abox-tplg` panics the
 kernel (recovered automatically); do not repeat it. RECOVERY image unchanged
 (`b1041271…`); no partition writes.
