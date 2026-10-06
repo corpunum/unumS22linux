@@ -54,3 +54,23 @@ Unbinding/rebinding `0.abox-tplg` at runtime to reload the topology
 on freed topology data. The phone rebooted itself into the same RECOVERY with
 desktop, Wi-Fi and Tailscale healthy. Do not repeat this. Topology changes
 need a reboot, using the boot-time firmware staging above.
+
+## Follow-up (same day): microphone, transcription-verified speech, earpiece
+- **Mic capture layout.** UAIF6 → NSRC4 → WDMA4 (pcm 16) delivers **4 × 16-bit
+  slots**; the main mic is slot 0. With 2-channel capture the hardware still
+  wrote four slots, which explains the 2× time and frequency distortion seen
+  earlier. `s22-rec SECONDS OUT.wav` records 4 slots and writes mono 48 kHz
+  from slot 0. Check: a 1 kHz tone recorded with its peak at 1001 Hz.
+- **Speech garbling root cause.** RDMA6 accepts 22.05 kHz mono (espeak's
+  native format), but its ASRC distorts it. `alsa-s22.conf` defines
+  `s22spk`, which converts to 48 kHz stereo in software before `hw:0,6`.
+- **End-to-end check with whisper.cpp base.en** on the rig, transcribing the
+  phone's own mic recording of the phone's speaker:
+  - `s22-say "Testing the microphone. One, two, three."` → "Testing the microphone. 1, 2, 3."
+  - `s22-say "Hello Antonis. The microphone and the speaker both work now."` →
+    "Hello Antonis, the microphone and the speaker both work now."
+  - `s22-say --out earpiece "This is the earpiece speaking. Can you hear me?"`
+    → "This is the dear beast speaking. Can you hear me?" Mic level is about
+    10× lower than the loudspeaker, as expected for the earpiece.
+- Closing a route now resets only that route's controls
+  (`<route>.reset.amixer`), so playback and recording can run concurrently.
