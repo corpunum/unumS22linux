@@ -64,3 +64,35 @@ the device-node modes).
   polls `property_get("vendor.cbd.rfs_check_done")` for "1" (normally set by
   the Samsung RIL's RFS service) 50 × 100 ms, then logs TIMEOUT and carries on
   with boot. With no Android property service, it always times out after 5 s.
+
+## AP-side init done: IMEI, no-SIM status and signal over SIPC (same day, later)
+- Root cause of the endless `PHONE_START`: cpif `rild_ready()` (link_device.c)
+  sends `CMD_INIT_END` only once **both `umts_ipc0` (FMT) and `umts_rfs0` (RFS)
+  are open**. Nothing had opened them.
+- New `tools/hardware/modem/s22-modem.py` (installed as `s22-modem`) opens
+  both and speaks Samsung SIPC FMT frames (`u16 len | mseq | aseq | group |
+  index | type | data`). The kernel adds/strips the SIPC5 link header. INIT_END
+  was sent at the next PHONE_START. The CP then sent `PWR_PHONE_PWR_UP`,
+  `AST_POWERON`, SIM/NET notifications and started streaming 2040-byte RFS
+  frames (a ~141 KB CP→AP file write; logged, **not served**; the real EFS is
+  untouched).
+- Device-verified replies (GET only; no call/SMS/attach request sent):
+  - `MISC_ME_VERSION`: modem SW `S901BXXSIFYI3`, HW `REV0.7`, model `SM-S901BZKDEUX`.
+  - `MISC_ME_SN`: IMEI `35033005*****13` (15 digits, Luhn-valid; SVN 29).
+  - `SEC_SIM_STATUS`: `0x80 CARD_NOT_PRESENT` (correct; no SIM).
+  - `NET_REGIST` (JSON payload in this firmware): `act lte, reg_status denied,
+    tac 3062, pci 334`. That is limited service without a SIM. The CP powers up
+    in normal (RF on) mode by itself.
+  - `DISP_RSSI_INFO` notification: LTE RSRP −95 dBm, RSRQ −7 dB, RSSNR 30.0 dB.
+    A `GET` returns `{"rssi_level": 66–68}`.
+- After the sessions closed, `modem_state` stayed `ONLINE`. There was no CP
+  crash and cbd kept running. The kernel no longer logs PHONE_START.
+- Many newer messages carry JSON (`{"signal":6,"status":0}`, `scell_status`, …).
+  The tool decodes those.
+- `tools/hardware/modem/s22-modem-up.sh` (`s22-modem-up [up|stop|status]`) is
+  the manual, on-demand bring-up: session-only node ownership, then the cbd
+  chroot launch. It adds no boot hook. The `up` path has not yet been re-run
+  after a reboot.
+- Open: RFS service (CP NV writes go unanswered; a private-copy RFS server is
+  the next step), rmnet data (needs SIM + PDP), voice/SMS (owner must name
+  numbers first).
