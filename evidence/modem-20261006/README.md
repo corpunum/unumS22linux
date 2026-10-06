@@ -96,3 +96,25 @@ the device-node modes).
 - Open: RFS service (CP NV writes go unanswered; a private-copy RFS server is
   the next step), rmnet data (needs SIM + PDP), voice/SMS (owner must name
   numbers first).
+
+## RFS NV service into the PRIVATE EFS copy (2026-10-06/07, lead)
+- The unanswered CP→AP frames are libsamsung-ipc RFS `NV_WRITE_ITEM` (cmd 2):
+  `u32 len | cmd | id | u32 offset | u32 length | data`. The CP writes its NV image
+  (141 590 bytes at offset 0) after INIT_END. The kernel delivers it in 2040-byte
+  chunks, which are reassembled by total length.
+- `s22-modem --serve-rfs` answers NV read/write. The only file it ever touches
+  is `/srv/s22/android-rt/efs/nv_data.bin` (the private copy). The store
+  refuses any path outside `/srv/s22/android-rt/`, and the real EFS partition
+  is never opened. After each write it rewrites `nv_data.bin.md5` =
+  md5(nv_data + "Samsung_Android_RIL"). This scheme was first checked against
+  the copy's existing md5, which matched. Each request is bounds-checked
+  against 1 MiB.
+- Backup taken first: `/srv/s22/state/modem/efs-private-backup-<ts>/`.
+- Device run: the first open after cbd was running sent no write. After a manual
+  `s22-modem-up stop` + `up` (this also tested the bring-up script; ONLINE
+  immediately), the CP sent one NV write. It was served with confirm=1; 2 bytes
+  differed from the copy, and the md5 was updated. The CP stayed ONLINE with no
+  crash, and the queries afterwards still worked (signal then: RSRP −119 dBm,
+  SNR 21 dB, a different cell).
+- Host tests: `tools/hardware/test_s22_modem.py` (fragmented write + md5,
+  read, out-of-range refusal, real-EFS path refusal, IMEI masking). Added to the CI allowlist.
