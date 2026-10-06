@@ -31,6 +31,12 @@ the phone's own mic recording of `s22-say` output, transcribed with
 whisper.cpp, gives the spoken sentence back word for word (the earpiece run
 had one misheard word).
 
+**Neural on-device TTS.** `s22-say` now defaults to Supertonic (int8,
+sherpa-onnx, CPU, real-time factor 0.16), with Kitten, Piper and Kokoro
+available and espeak-ng as the fallback. Verified acoustically: the phone's
+mic recording of its own speaker was transcribed by whisper word for word.
+[Evidence](evidence/tts-20261006/README.md).
+
 **Modem: AP-side init complete, identity/SIM/signal readable (no SIM inserted).**
 The CP was looping on PHONE_START because cpif only sends INIT_END once
 `umts_ipc0` and `umts_rfs0` are both open. The new `s22-modem` (a minimal

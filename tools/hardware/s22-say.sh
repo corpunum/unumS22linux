@@ -10,7 +10,14 @@
 # to close the route (only that route's controls: <route>.reset).  Needs sectiongraph_tplg.bin + amp firmware staged by
 # start-persistent-desktop (stage_optional_audio_firmware / fallback answer).
 #
-#   s22-say [--out speaker|earpiece|bottom|top] [--amp N] [--diag DIR] TEXT...
+# Neural TTS (default): sherpa-onnx (static aarch64 build) with on-device
+# models under /opt/s22-tts in the chroot, CPU only, pinned to the big cores.
+# Engines: supertonic (default; int8, RTF ~0.16), kitten (nano int8, ~0.29),
+# piper (lessac-medium, ~0.26), kokoro (int8 v0.19, ~1.2, best prosody,
+# slower than real time), espeak (formant). If the neural engine fails, it
+# falls back to espeak-ng. S22_TTS_ENGINE sets the default.
+#
+#   s22-say [--out speaker|earpiece|bottom|top] [--engine E] [--sid N] [--amp N] [--diag DIR] TEXT...
 #   s22-say [--out ...] --wav /path/inside/chroot.wav
 set -u
 CHROOT=/mnt/omarchy-trial
@@ -21,12 +28,16 @@ OUT=speaker
 AMP=60                     # espeak-ng amplitude (0-200, default 100)
 DIAG=
 WAV=
+ENGINE=${S22_TTS_ENGINE:-supertonic}
+SID=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --out) OUT=$2; shift 2;;
     --amp) AMP=$2; shift 2;;
     --diag) DIAG=$2; shift 2;;
     --wav) WAV=$2; shift 2;;
+    --engine) ENGINE=$2; shift 2;;
+    --sid) SID=$2; shift 2;;
     --) shift; break;;
     *) break;;
   esac
@@ -50,6 +61,33 @@ for n in /sys/class/sound/*; do
   IFS=: read ma mi < "$n/dev"; mknod -m 660 "$d" c "$ma" "$mi" && chgrp audio "$d"
 done
 
+TTS=/opt/s22-tts
+neural_tts() {  # $1 = wav path inside the chroot, $2 = text
+  M=$TTS
+  case "$ENGINE" in
+    supertonic) S=$M/sherpa-onnx-supertonic-tts-int8-2026-03-06
+      set -- "$1" "$2" --supertonic-duration-predictor=$S/duration_predictor.int8.onnx \
+        --supertonic-text-encoder=$S/text_encoder.int8.onnx \
+        --supertonic-vector-estimator=$S/vector_estimator.int8.onnx \
+        --supertonic-vocoder=$S/vocoder.int8.onnx --supertonic-tts-json=$S/tts.json \
+        --supertonic-unicode-indexer=$S/unicode_indexer.bin --supertonic-voice-style=$S/voice.bin;;
+    kitten) S=$M/kitten-nano-en-v0_8-int8
+      set -- "$1" "$2" --kitten-model=$S/model.int8.onnx --kitten-voices=$S/voices.bin \
+        --kitten-tokens=$S/tokens.txt --kitten-data-dir=$S/espeak-ng-data;;
+    piper) S=$M/vits-piper-en_US-lessac-medium
+      set -- "$1" "$2" --vits-model=$S/en_US-lessac-medium.onnx --vits-tokens=$S/tokens.txt \
+        --vits-data-dir=$S/espeak-ng-data;;
+    kokoro) S=$M/kokoro-int8-en-v0_19
+      set -- "$1" "$2" --kokoro-model=$S/model.int8.onnx --kokoro-voices=$S/voices.bin \
+        --kokoro-tokens=$S/tokens.txt --kokoro-data-dir=$S/espeak-ng-data;;
+    *) return 1;;
+  esac
+  out=$1 text=$2; shift 2
+  timeout 120 chroot "$CHROOT" taskset -c 4-7 $TTS/bin/sherpa-onnx-offline-tts \
+    --num-threads=4 --sid="$SID" "$@" --output-filename="$out" "$text" >/dev/null 2>&1 &&
+    [ -s "$CHROOT$out" ]
+}
+
 exec 9>/run/s22-say.lock
 flock 9
 if [ ! -e /run/s22-audio-defaults ]; then
@@ -58,7 +96,10 @@ fi
 
 if [ -z "$WAV" ]; then
   WAV=/tmp/s22-say-$$.wav
-  run $OPT/usr/bin/espeak-ng -a "$AMP" -s 150 -w "$WAV" "$TEXT" || exit 1
+  if ! neural_tts "$WAV" "$TEXT"; then
+    [ "$ENGINE" = espeak ] || echo "s22-say: $ENGINE failed, falling back to espeak-ng" >&2
+    run $OPT/usr/bin/espeak-ng -a "$AMP" -s 150 -w "$WAV" "$TEXT" || exit 1
+  fi
   CLEANWAV=1
 fi
 
