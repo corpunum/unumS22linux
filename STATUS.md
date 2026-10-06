@@ -49,7 +49,8 @@ socket fix (build b2dda820). `s22-bt-scan` brings up the QCA6490 for the
 bridge's 20 s window (pinned to the X2 core, which fixed a timing-sensitive
 baud switch), confirms BT 5.3, Qualcomm, and finds 6 LE + 2 classic devices
 with a passive LE scan and an inquiry. The chip is then powered off with
-Wi-Fi unaffected. Pairing and a persistent controller come next.
+Wi-Fi unaffected. `s22-bt up/down` now keeps hci0 up until stopped (verified
+for more than 70 s with two scans, clean power-off). Pairing needs the owner.
 [Evidence](evidence/bt-scan-20261006/README.md).
 
 **Camera: the rear sensor streams (83 frames over CSI), no image yet.**
