@@ -59,12 +59,12 @@ and powered it down cleanly. The TrustZone dependency only affects the ISP
 library path. Capturing a frame needs a V4L2 client, which is not done yet.
 [Evidence](evidence/camera-20261006/README.md).
 
-**NPU: owner-approved attempt stopped at step 2 (module swap).** The stock
-`npu` module's remove leaves its fixed IOMMU mapping at 0x31000000 in place, so
-the patched module's probe fails with EADDRINUSE. BOOTUP was not reached. The
-NPU is unusable until the next reboot; no panic. A runtime swap is not viable.
-The patched module would have to load at boot instead.
-[Evidence](evidence/npu-20261007/README.md).
+**NPU works: a stock vendor model runs on the NPU through ENN.** After one recovery
+reboot, BOOTUP on the stock module succeeded (firmware verified by S2MPU). A stock
+object-detection `.nnc` then ran 3000 times at 3.1 ms mean, with deterministic outputs.
+NPU devfreq rose to 1066 MHz and `/dev/vertex10` was in use. A runtime module swap is
+not viable (the stock remove leaks an IOMMU mapping). TTS on the NPU needs Samsung's
+proprietary `.nnc` compiler. [Evidence](evidence/npu-20261007/README.md).
 
 **Modem: AP-side init complete, identity/SIM/signal readable (no SIM inserted).**
 The CP was looping on PHONE_START because cpif only sends INIT_END once
