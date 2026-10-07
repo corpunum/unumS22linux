@@ -29,7 +29,7 @@ AMP=60                     # espeak-ng amplitude (0-200, default 100)
 DIAG=
 WAV=
 ENGINE=${S22_TTS_ENGINE:-supertonic}
-SID=0
+SID=${S22_TTS_SID:-0}       # supertonic sid 0-4 = female styles (0 = F1, owner's choice: female), 5-9 = male
 while [ $# -gt 0 ]; do
   case "$1" in
     --out) OUT=$2; shift 2;;

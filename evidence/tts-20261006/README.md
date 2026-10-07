@@ -39,3 +39,13 @@ restored level 3.
 
 ## NPU
 Not attempted yet. NPU runtime is still unproven; see the NPU section of STATUS.md.
+
+## Female default voice (owner decision 2026-10-07: "pick a female one")
+Supertonic's `voice.bin` holds 10 styles. A median-F0 estimate of the same
+sentence gives sid 0–4 = 190/280/190/189/159 Hz (female styles F1–F5) and
+sid 5–9 = 120/97/98/127/118 Hz (male). whisper transcribed sid 0, 2 and 3 exactly.
+`s22-say` now defaults explicitly to **sid 0 (F1, female)**, overridable with
+`S22_TTS_SID` / `--sid`. The rig sample is `~/s22-tts-samples/default-female.wav`.
+Acoustic check (phone mic recording its own speaker, amp temporarily raised to level 8
+and then restored to 3): whisper → "Hello Antonis, this is my new default voice,
+speaking from the phone."

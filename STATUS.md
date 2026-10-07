@@ -31,7 +31,7 @@ the phone's own mic recording of `s22-say` output, transcribed with
 whisper.cpp, gives the spoken sentence back word for word (the earpiece run
 had one misheard word).
 
-**Neural on-device TTS.** `s22-say` now defaults to Supertonic (int8,
+**Neural on-device TTS.** `s22-say` now defaults to Supertonic with a female voice (int8,
 sherpa-onnx, CPU, real-time factor 0.16), with Kitten, Piper and Kokoro
 available and espeak-ng as the fallback. Verified acoustically: the phone's
 mic recording of its own speaker was transcribed by whisper word for word.
