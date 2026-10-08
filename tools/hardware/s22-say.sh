@@ -19,6 +19,11 @@
 #
 #   s22-say [--out speaker|earpiece|bottom|top] [--engine E] [--sid N] [--amp N] [--diag DIR] TEXT...
 #   s22-say [--out ...] --wav /path/inside/chroot.wav
+#
+# Render only (silent verification): with S22_SAY_OUT=/host/path.wav in the
+# environment the speech is synthesized (or the --wav input copied) to that
+# file and NOTHING is played: no mixer batch, no route, no amp access, no
+# aplay. The phone stays exactly as muted as it was.
 set -u
 CHROOT=/mnt/omarchy-trial
 OPT=/opt/s22-audio
@@ -53,14 +58,6 @@ esac
 run() { chroot "$CHROOT" /usr/bin/env LD_LIBRARY_PATH=$OPT/usr/lib ESPEAK_DATA_PATH=$OPT/usr/share "$@"; }
 batch() { run $OPT/usr/bin/amixer -c0 -q -s < "$MIX/$1.amixer"; }
 
-[ -e /sys/class/sound/card0 ] || { echo "no sound card" >&2; exit 1; }
-mkdir -p "$CHROOT/dev/snd"
-for n in /sys/class/sound/*; do
-  [ -f "$n/dev" ] || continue
-  d="$CHROOT/dev/snd/${n##*/}"; [ -e "$d" ] && continue
-  IFS=: read ma mi < "$n/dev"; mknod -m 660 "$d" c "$ma" "$mi" && chgrp audio "$d"
-done
-
 TTS=/opt/s22-tts
 neural_tts() {  # $1 = wav path inside the chroot, $2 = text
   M=$TTS
@@ -87,6 +84,27 @@ neural_tts() {  # $1 = wav path inside the chroot, $2 = text
     --num-threads=4 --sid="$SID" "$@" --output-filename="$out" "$text" >/dev/null 2>&1 &&
     [ -s "$CHROOT$out" ]
 }
+
+if [ -n "${S22_SAY_OUT:-}" ]; then   # render only: never touches the sound card
+  if [ -n "$WAV" ]; then
+    cp "$CHROOT$WAV" "$S22_SAY_OUT.tmp" && mv "$S22_SAY_OUT.tmp" "$S22_SAY_OUT"; exit $?
+  fi
+  R=/tmp/s22-say-render-$$.wav
+  if ! neural_tts "$R" "$TEXT"; then
+    [ "$ENGINE" = espeak ] || echo "s22-say: $ENGINE failed, falling back to espeak-ng" >&2
+    run $OPT/usr/bin/espeak-ng -a "$AMP" -s 150 -w "$R" "$TEXT" || { rm -f "$CHROOT$R"; exit 1; }
+  fi
+  cp "$CHROOT$R" "$S22_SAY_OUT.tmp" && mv "$S22_SAY_OUT.tmp" "$S22_SAY_OUT"; rc=$?
+  rm -f "$CHROOT$R"; exit $rc
+fi
+
+[ -e /sys/class/sound/card0 ] || { echo "no sound card" >&2; exit 1; }
+mkdir -p "$CHROOT/dev/snd"
+for n in /sys/class/sound/*; do
+  [ -f "$n/dev" ] || continue
+  d="$CHROOT/dev/snd/${n##*/}"; [ -e "$d" ] && continue
+  IFS=: read ma mi < "$n/dev"; mknod -m 660 "$d" c "$ma" "$mi" && chgrp audio "$d"
+done
 
 exec 9>/run/s22-say.lock
 flock 9
