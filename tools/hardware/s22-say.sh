@@ -14,7 +14,9 @@
 # models under /opt/s22-tts in the chroot, CPU only, pinned to the big cores.
 # Engines: supertonic (default; int8, RTF ~0.16), kitten (nano int8, ~0.29),
 # piper (lessac-medium, ~0.26), kokoro (int8 v0.19, ~1.2, best prosody,
-# slower than real time), espeak (formant). If the neural engine fails, it
+# slower than real time), paradee (Paradee-8M int8, Kokoro af_heart distill,
+# own runner under /opt/s22-tts/paradee, see tools/hardware/tts/paradee/),
+# espeak (formant). If the neural engine fails, it
 # falls back to espeak-ng. S22_TTS_ENGINE sets the default.
 #
 #   s22-say [--out speaker|earpiece|bottom|top] [--engine E] [--sid N] [--amp N] [--diag DIR] TEXT...
@@ -77,6 +79,14 @@ neural_tts() {  # $1 = wav path inside the chroot, $2 = text
     kokoro) S=$M/kokoro-int8-en-v0_19
       set -- "$1" "$2" --kokoro-model=$S/model.int8.onnx --kokoro-voices=$S/voices.bin \
         --kokoro-tokens=$S/tokens.txt --kokoro-data-dir=$S/espeak-ng-data;;
+    paradee)  # Paradee-8M (Kokoro af_heart distill), own runner, not sherpa-onnx
+      S=$M/paradee; P=$S/paradee_int8.ort
+      [ -f "$CHROOT$P" ] || P=$S/paradee_int8.onnx
+      timeout 120 chroot "$CHROOT" /usr/bin/env LD_LIBRARY_PATH=$OPT/usr/lib taskset -c 4-7 \
+        $S/bin/paradee-tts --num-threads=4 --model=$P --espeak-lib=$OPT/usr/lib/libespeak-ng.so.1 \
+        --espeak-data=$OPT/usr/share --output-filename="$1" "$2" >/dev/null 2>&1 &&
+        [ -s "$CHROOT$1" ]
+      return;;
     *) return 1;;
   esac
   out=$1 text=$2; shift 2
