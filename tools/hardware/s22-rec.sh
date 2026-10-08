@@ -30,7 +30,10 @@ exec 8>/run/s22-rec.lock; flock 8
 if [ ! -e /run/s22-audio-defaults ]; then
   run $OPT/usr/bin/amixer -c0 -q -s < "$MIX/defaults.amixer" && touch /run/s22-audio-defaults
 fi
-TMP=/tmp/s22-rec-$$.raw
+# S22_REC_RAW=/path (inside the chroot) names the raw capture file, so a
+# caller can read the 4-slot S16_LE stream live while it is recorded
+# (s22-converse runs its voice-activity detection on it).
+TMP=${S22_REC_RAW:-/tmp/s22-rec-$$.raw}
 cleanup() {
   run $OPT/usr/bin/amixer -c0 -q -s < "$MIX/media-mic.reset.amixer"
   amx cset 'name=ABOX NSRC4' RESERVED; amx cset 'name=ABOX WDMA4 Channel' 2
