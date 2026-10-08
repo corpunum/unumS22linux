@@ -18,7 +18,8 @@ The 2026-10-02 task board and earlier checkpoints below are historical.
 - **Voice:** `s22-sip` (stdlib SIP/RTP) carries agent voice calls with all audio in software
   (rig↔phone verified with whisper). `s22-converse` gives hands-free turns (verified silently).
   Paradee TTS is installed (RTF ≈0.07); supertonic stays the default.
-- **Camera:** a raw V4L2 client exists (video101 + video210). Its device trial is gated on review.
+- **Camera:** the raw V4L2 client (video101 + video210, independently reviewed) DMA'd frames with no fault, but the
+  frames are black (black pedestal only). Next: rear camera facing light, then exposure via sensor-peri.
 [Evidence](evidence/lead2-20261008/README.md).
 
 ## Push-to-talk voice assistant — 2026-10-08
