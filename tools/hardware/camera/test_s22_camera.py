@@ -470,6 +470,16 @@ class FakeCaptureTest(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertFalse([c for c in fake.calls if c[0] == "open"])
 
+    def test_kernel_bug_vc0_name_only_on_video210(self):
+        bug = cam.VC0_NAME_KERNEL_BUG + "\n"
+        fake = FakeSys(names={"/sys/class/video4linux/video210/name": bug})
+        rc, res, _, _ = self._capture(fake)
+        self.assertEqual(rc, 0, res)
+        fake = FakeSys(names={"/sys/class/video4linux/video214/name": bug})
+        rc, res, _, _ = self._capture(fake, "--vc0", "/dev/video214")
+        self.assertEqual(rc, 1)
+        self.assertFalse([c for c in fake.calls if c[0] == "open"])
+
     def test_refuses_active_selftest(self):
         fake = FakeSys(names={cam.SELFTEST_PARAM: "act 1 position 0\n"})
         rc, res, _, _ = self._capture(fake)
