@@ -1,0 +1,51 @@
+{
+  "started_at": "2026-10-08T19:59:38.654899+00:00",
+  "variant": "llama-vulkan",
+  "name": "t2b-q2b-server-8090-nocache-20261008",
+  "command": [
+    "/system/bin/llama-server",
+    "-m",
+    "/models/Qwen3.5-2B-Q4_0.gguf",
+    "-ngl",
+    "99",
+    "-t",
+    "4",
+    "-c",
+    "4096",
+    "-np",
+    "1",
+    "-fa",
+    "on",
+    "--cache-ram",
+    "0",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "8090",
+    "--no-webui"
+  ],
+  "read_only_views": [],
+  "returncode": 0,
+  "before": {
+    "boot_id": "25d961f5-3261-477c-84a2-af9f281ff705",
+    "pid1": "native-guardian",
+    "temperature": 40.9,
+    "profile": "qwen4b",
+    "model": "ok"
+  },
+  "after": {
+    "boot_id": "25d961f5-3261-477c-84a2-af9f281ff705",
+    "pid1": "native-guardian",
+    "temperature": 30.5,
+    "profile": "qwen4b",
+    "model": "ok"
+  },
+  "elapsed_seconds": 1903.582,
+  "deadline_seconds": 1900,
+  "bridge": "v4",
+  "same_boot": true,
+  "kernel_capture_exit": 0,
+  "gpu_messages": [],
+  "helper_sha256": "c4b7a67800d038f2e439ad0b07e19bfde867b390a8b219d78826a991ff82d9e3",
+  "note": "Isolated diagnostic. Numerical compute and no faults required for GPU acceptance."
+}
