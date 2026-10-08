@@ -1,0 +1,28 @@
+{
+  "name": "s22-phone",
+  "version": "0.1.0",
+  "type": "tool",
+  "entrypoint": "index.mjs",
+  "description": "Samsung S22 native-Linux phone: SMS and call tools over the s22-phoned daemon, plus a bridge that turns incoming SMS and calls into agent turns.",
+  "capabilities": ["sms_send", "sms_inbox", "call_dial", "call_answer", "call_hangup", "call_dtmf", "phone_status", "phone_event_bridge"],
+  "dependencies": [],
+  "config": {
+    "daemon_url": "http://127.0.0.1:8095",
+    "request_timeout_ms": 15000,
+    "bridge_enabled": true,
+    "owner_numbers": [],
+    "session_id": "phone:inbox",
+    "untrusted_session_id": "phone:untrusted",
+    "openunum_url": "",
+    "chat_user_id": "",
+    "chat_timeout_ms": 60000,
+    "poll_timeout_s": 25,
+    "backoff_initial_ms": 1000,
+    "backoff_max_ms": 60000,
+    "bridge_start_delay_ms": 3000,
+    "replay_backlog_on_first_run": false,
+    "answer_unknown_calls": false,
+    "max_sms_chars": 1000,
+    "data_dir": ""
+  }
+}
