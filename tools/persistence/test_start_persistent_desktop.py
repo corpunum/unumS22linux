@@ -42,6 +42,32 @@ class SupervisorUnitTests(unittest.TestCase):
                 MOD.optional_agent_web('--start')
                 command.assert_not_called()
 
+    def test_openunum_autostart_is_opt_in(self):
+        with tempfile.TemporaryDirectory() as td, \
+             mock.patch.object(MOD, 'OPENUNUM_AUTOSTART', Path(td) / 'autostart'), \
+             mock.patch.object(MOD.subprocess, 'Popen') as popen:
+            self.assertIsNone(MOD.start_optional_openunum())
+            popen.assert_not_called()
+
+    def test_openunum_autostart_detached_and_checks_ownership(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td); marker = root / 'autostart'; marker.write_text('')
+            control = root / 's22-openunum'; control.write_text('#!/bin/sh\n'); control.chmod(0o755)
+            with mock.patch.object(MOD, 'OPENUNUM_AUTOSTART', marker), \
+                 mock.patch.object(MOD, 'OPENUNUM_CONTROL', control), \
+                 mock.patch.object(MOD.subprocess, 'Popen') as popen:
+                if os.getuid() == 0:
+                    self.assertIs(MOD.start_optional_openunum(), popen.return_value)
+                    self.assertEqual(popen.call_args.args[0], ['/bin/sh', str(control), 'start'])
+                    self.assertTrue(popen.call_args.kwargs['start_new_session'])
+                else:   # not root-owned: refused, and the refusal is non-fatal
+                    self.assertIsNone(MOD.start_optional_openunum())
+                    popen.assert_not_called()
+                control.chmod(0o777)
+                popen.reset_mock()
+                self.assertIsNone(MOD.start_optional_openunum())
+                popen.assert_not_called()
+
     def test_wifi_disabled_by_default_and_explicit_marker(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
