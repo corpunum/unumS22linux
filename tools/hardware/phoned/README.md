@@ -60,21 +60,33 @@ All state lives in `/srv/s22/state/phoned/` (mode 0700):
 
 ## SIM day (first run with a SIM)
 
-1. Insert the SIM and run `s22-modem-up`. Then run
-   `s22-phoned serve --port 8095`. Do not start `s22-modem` alongside it.
-2. Run `s22-phoned status`. Expect the sim to be `READY`, or `LOCK_SC(PIN)`. For the PIN, either
-   `POST /sim/pin` once, or write `sim-pin` (0600) **before** starting the daemon.
-3. Read `ipc.jsonl` and check these raw frames against the layouts below. These are the first
+Since 2026-10-08 the phone runs `modem` (cbd) and `phoned` as `s22-keepalive` services
+(`/srv/s22/state/keepalive/config.json`), so nothing needs starting by hand. Keep the phone muted.
+
+1. Insert the SIM (no hot-plug assumed): stop the CP so keepalive re-boots it with the card present:
+   `s22-modem-up stop`, wait until keepalive has restarted cbd (`s22-modem-up status` shows ONLINE),
+   then stop phoned too (kill its `s22-phoned serve` pid) so keepalive restarts it with fresh IPC nodes.
+   Check `curl 127.0.0.1:8095/status`.
+2. Expect `sim` = `READY` or `LOCK_SC(PIN)`. For the PIN, either `POST /sim/pin` ONCE, or write
+   `/srv/s22/state/phoned/sim-pin` (0600) and restart phoned. Never retry a failed PIN automatically.
+3. Registration: `registration.reg_status` should become `home`/`roaming`. If it stays `not_reg`/`denied`,
+   add `--radio-normal` to phoned's argv via `service_defs.phoned` in the keepalive config (sends
+   PWR_PHONE_STATE normal once) and restart phoned.
+4. Read `ipc.jsonl` and check these raw frames against the layouts below. These are the first
    things to verify, because IPC 4.1 may differ:
    SEC_SIM_STATUS, NET_REGIST/NET_CURRENT_PLMN (JSON?), SMS_DEVICE_READY,
    SMS_SVC_CENTER_ADDR, and then the SMS_SEND_MSG response.
    Use `s22-phoned send-test-frame-decode <hex>` to decode a frame.
-4. Allow the owner's own number only: `echo +30... > allowlist`, then `touch tx_enabled`.
-   Send one short SMS to it. Confirm the `sms_sent` event, then `sms_delivered` (SRR is always set).
-5. Ask the owner to send an SMS to the phone. Check the inbox and confirm that the CP does not
-   redeliver it, which shows the DELIVER_REPORT ack worked.
-6. Calls: dial the owner and test answer, hangup and DTMF. Audio routing (SND) is out of scope.
-7. Afterwards, `rm tx_enabled`.
+5. Owner's number (only after the owner gives it):
+   `echo +30... > /srv/s22/state/phoned/allowlist`, then `touch /srv/s22/state/phoned/tx_enabled`.
+   Also set it in the OpenUnum plugin: `/mnt/omarchy-trial/root/.openunum/plugins.json` →
+   `{"s22-phone": {"owner_numbers": ["+30..."]}}`, then restart OpenUnum (`s22-openunum stop`; keepalive restarts it).
+6. Send one short SMS to the owner (`POST /sms/send` or ask the agent). Confirm `sms_sent`, then `sms_delivered`.
+7. Ask the owner to text the phone. Check the inbox, the bridge turn in session `phone:inbox`, and that the CP
+   does not redeliver it (DELIVER_REPORT ack works).
+8. Calls: dial the owner; test answer, hangup and DTMF, and an incoming call from the owner.
+   Call audio (ABOX firmware-graph DMAs) is out of scope; voice conversations use `s22-sip` meanwhile.
+9. Afterwards keep `tx_enabled` only if the owner wants the agent able to text/call the allowlist.
 
 Tests: `python3 -I -B tools/hardware/phoned/test_s22_phoned.py`. They use synthetic frames
 and simulate mode only, with no /dev access.
