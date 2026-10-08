@@ -147,6 +147,10 @@ LEADER_NODE = "/dev/video101"
 VC0_NODE = "/dev/video210"
 LEADER_NAME = "exynos-is-ss0"
 VC0_NAME = "exynos-is-ss0vc0"
+# This kernel's IS_VIDEO_SSXVC0_NAME(id) stringifies the parameter name ("ss"#id"vc0"),
+# so every sensor's VC0 node is called this. It is accepted only on /dev/video210,
+# whose number (IS_VIDEO_SS0VC0_NUM + 0*4, is-video-sensor-subdev.c:61-62) is SS0 VC0.
+VC0_NAME_KERNEL_BUG = "exynos-is-ssdevice_idvc0"
 SELFTEST_PARAM = "/sys/module/fimc_is/parameters/test_sensor_run"
 MCU_FW_NAME = "is_mcu_fw.bin"
 # Only where the kernel's firmware loader looks (firmware_loader/main.c): it never
@@ -411,7 +415,8 @@ def prechecks(sysif, args) -> dict:
     if not args.skip_node_check:
         for node, expected in ((args.leader, LEADER_NAME), (args.vc0, VC0_NAME)):
             name = node_name(sysif, node)
-            if name != expected:
+            if name != expected and not (expected == VC0_NAME and name == VC0_NAME_KERNEL_BUG
+                                         and os.path.basename(node) == "video210"):
                 raise CameraError(f"{node} sysfs name is {name!r}, expected {expected!r}; "
                                   "refusing (use --skip-node-check only after review)")
     if selftest_active(sysif):
