@@ -444,6 +444,211 @@ done:
     return rc;
 }
 
+/* --caps: capability inventory only.  Creates an instance (apiVersion 1.1)
+ * and queries physical-device properties; never creates a VkDevice, never
+ * allocates memory and never submits GPU work. */
+static int has_ext(const VkExtensionProperties *e, uint32_t n, const char *name)
+{
+    for (uint32_t i = 0; i < n; ++i)
+        if (strcmp(e[i].extensionName, name) == 0)
+            return 1;
+    return 0;
+}
+
+static void caps_formats(PFN_vkGetPhysicalDeviceFormatProperties2 fp2,
+                         PFN_vkGetPhysicalDeviceImageFormatProperties2 ifp2,
+                         VkPhysicalDevice pd, VkFormat format, const char *label, int drm_mod)
+{
+    VkDrmFormatModifierPropertiesEXT mods[64];
+    VkDrmFormatModifierPropertiesListEXT list;
+    VkFormatProperties2 props;
+    memset(&list, 0, sizeof(list));
+    memset(&props, 0, sizeof(props));
+    list.sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT;
+    props.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
+    if (drm_mod) {
+        props.pNext = &list;
+        fp2(pd, format, &props);
+        if (list.drmFormatModifierCount > 64)
+            list.drmFormatModifierCount = 64;
+        list.pDrmFormatModifierProperties = mods;
+    }
+    fp2(pd, format, &props);
+    printf("CAPS_FORMAT format=%s linear=0x%x optimal=0x%x buffer=0x%x modifiers=%u\n", label,
+           props.formatProperties.linearTilingFeatures, props.formatProperties.optimalTilingFeatures,
+           props.formatProperties.bufferFeatures, drm_mod ? list.drmFormatModifierCount : 0);
+    for (uint32_t i = 0; drm_mod && i < list.drmFormatModifierCount; ++i)
+        printf("CAPS_MODIFIER format=%s modifier=0x%016llx planes=%u features=0x%x\n", label,
+               (unsigned long long)mods[i].drmFormatModifier, mods[i].drmFormatModifierPlaneCount,
+               mods[i].drmFormatModifierTilingFeatures);
+    if (ifp2 != NULL) {
+        /* LINEAR 1080x2340 image exportable/importable as dma_buf? */
+        VkPhysicalDeviceExternalImageFormatInfo ext_info;
+        VkPhysicalDeviceImageDrmFormatModifierInfoEXT mod_info;
+        VkPhysicalDeviceImageFormatInfo2 info;
+        VkExternalImageFormatProperties ext_props;
+        VkImageFormatProperties2 out;
+        VkResult r;
+        memset(&ext_info, 0, sizeof(ext_info));
+        memset(&mod_info, 0, sizeof(mod_info));
+        memset(&info, 0, sizeof(info));
+        memset(&ext_props, 0, sizeof(ext_props));
+        memset(&out, 0, sizeof(out));
+        ext_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO;
+        ext_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+        mod_info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT;
+        mod_info.drmFormatModifier = 0; /* DRM_FORMAT_MOD_LINEAR */
+        mod_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2;
+        info.pNext = &ext_info;
+        info.format = format;
+        info.type = VK_IMAGE_TYPE_2D;
+        info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        if (drm_mod) {
+            ext_info.pNext = &mod_info;
+            info.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+        } else {
+            info.tiling = VK_IMAGE_TILING_LINEAR;
+        }
+        ext_props.sType = VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES;
+        out.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2;
+        out.pNext = &ext_props;
+        r = ifp2(pd, &info, &out);
+        printf("CAPS_DMABUF_IMAGE format=%s tiling=%s result=%d max=%ux%u features=0x%x export=0x%x compatible=0x%x\n",
+               label, drm_mod ? "drm-linear" : "linear", (int)r,
+               out.imageFormatProperties.maxExtent.width, out.imageFormatProperties.maxExtent.height,
+               ext_props.externalMemoryProperties.externalMemoryFeatures,
+               ext_props.externalMemoryProperties.exportFromImportedHandleTypes,
+               ext_props.externalMemoryProperties.compatibleHandleTypes);
+    }
+}
+
+static int caps_mode(const char *path)
+{
+    void *handle = NULL;
+    hwvulkan_module_t *module = (hwvulkan_module_t *)load_hmi(path, &handle);
+    hwvulkan_device_t *device = NULL;
+    VkInstance instance = VK_NULL_HANDLE;
+    PFN_vkDestroyInstance destroy = NULL;
+    VkPhysicalDevice pd[8];
+    uint32_t count = 8;
+    int rc = 1;
+
+    if (module == NULL || validate_module(module) != 0 || open_device(module, &device) != 0)
+        goto done;
+    {
+        VkApplicationInfo app;
+        VkInstanceCreateInfo info;
+        PFN_vkGetInstanceProcAddr gip = device->GetInstanceProcAddr;
+        PFN_vkEnumerateInstanceVersion eiv =
+            (PFN_vkEnumerateInstanceVersion)gip(VK_NULL_HANDLE, "vkEnumerateInstanceVersion");
+        uint32_t iver = VK_API_VERSION_1_0;
+        uint32_t n = 0;
+        VkExtensionProperties *iext = NULL;
+        if (eiv != NULL)
+            eiv(&iver);
+        printf("CAPS_INSTANCE_VERSION %u.%u.%u\n", VK_VERSION_MAJOR(iver), VK_VERSION_MINOR(iver),
+               VK_VERSION_PATCH(iver));
+        if (device->EnumerateInstanceExtensionProperties(NULL, &n, NULL) == VK_SUCCESS && n > 0 &&
+            (iext = (VkExtensionProperties *)calloc(n, sizeof(*iext))) != NULL &&
+            device->EnumerateInstanceExtensionProperties(NULL, &n, iext) == VK_SUCCESS)
+            for (uint32_t i = 0; i < n; ++i)
+                printf("CAPS_INSTANCE_EXT %s %u\n", iext[i].extensionName, iext[i].specVersion);
+        free(iext);
+        memset(&app, 0, sizeof(app));
+        app.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+        app.pApplicationName = "s22-vulkan-hal-caps";
+        app.apiVersion = VK_API_VERSION_1_1;
+        memset(&info, 0, sizeof(info));
+        info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+        info.pApplicationInfo = &app;
+        stage("HAL CreateInstance(1.1)");
+        if (vk_check("HMI.CreateInstance", device->CreateInstance(&info, NULL, &instance)) != 0)
+            goto done;
+        destroy = (PFN_vkDestroyInstance)gip(instance, "vkDestroyInstance");
+        PFN_vkEnumeratePhysicalDevices epd =
+            (PFN_vkEnumeratePhysicalDevices)gip(instance, "vkEnumeratePhysicalDevices");
+        PFN_vkEnumerateDeviceExtensionProperties edep =
+            (PFN_vkEnumerateDeviceExtensionProperties)gip(instance, "vkEnumerateDeviceExtensionProperties");
+        PFN_vkGetPhysicalDeviceProperties2 gpp2 =
+            (PFN_vkGetPhysicalDeviceProperties2)gip(instance, "vkGetPhysicalDeviceProperties2");
+        PFN_vkGetPhysicalDeviceMemoryProperties gmp =
+            (PFN_vkGetPhysicalDeviceMemoryProperties)gip(instance, "vkGetPhysicalDeviceMemoryProperties");
+        PFN_vkGetPhysicalDeviceFormatProperties2 fp2 =
+            (PFN_vkGetPhysicalDeviceFormatProperties2)gip(instance, "vkGetPhysicalDeviceFormatProperties2");
+        PFN_vkGetPhysicalDeviceImageFormatProperties2 ifp2 =
+            (PFN_vkGetPhysicalDeviceImageFormatProperties2)gip(instance, "vkGetPhysicalDeviceImageFormatProperties2");
+        if (destroy == NULL || epd == NULL || edep == NULL || gpp2 == NULL || gmp == NULL || fp2 == NULL) {
+            fprintf(stderr, "VK_EXPORT_MISSING caps\n");
+            goto done;
+        }
+        if (vk_check("vkEnumeratePhysicalDevices", epd(instance, &count, pd)) != 0 && count == 0)
+            goto done;
+        for (uint32_t d = 0; d < count; ++d) {
+            uint32_t en = 0;
+            VkExtensionProperties *ext = NULL;
+            VkPhysicalDeviceDriverProperties drv;
+            VkPhysicalDeviceDrmPropertiesEXT drm;
+            VkPhysicalDeviceProperties2 p2;
+            VkPhysicalDeviceMemoryProperties mem;
+            int has_drm, has_mod;
+            edep(pd[d], NULL, &en, NULL);
+            ext = (VkExtensionProperties *)calloc(en ? en : 1, sizeof(*ext));
+            if (ext == NULL)
+                goto done;
+            edep(pd[d], NULL, &en, ext);
+            has_drm = has_ext(ext, en, VK_EXT_PHYSICAL_DEVICE_DRM_EXTENSION_NAME);
+            has_mod = has_ext(ext, en, VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
+            memset(&drv, 0, sizeof(drv));
+            memset(&drm, 0, sizeof(drm));
+            memset(&p2, 0, sizeof(p2));
+            drv.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
+            drm.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT;
+            p2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+            if (has_ext(ext, en, VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME))
+                p2.pNext = &drv;
+            if (has_drm) {
+                drm.pNext = p2.pNext;
+                p2.pNext = &drm;
+            }
+            gpp2(pd[d], &p2);
+            printf("CAPS_DEVICE index=%u name=%s type=%u api=%u.%u.%u driver=%u vendor=0x%x device=0x%x extensions=%u\n",
+                   d, p2.properties.deviceName, p2.properties.deviceType,
+                   VK_VERSION_MAJOR(p2.properties.apiVersion), VK_VERSION_MINOR(p2.properties.apiVersion),
+                   VK_VERSION_PATCH(p2.properties.apiVersion), p2.properties.driverVersion,
+                   p2.properties.vendorID, p2.properties.deviceID, en);
+            if (p2.pNext != NULL && drv.driverID != 0)
+                printf("CAPS_DRIVER id=%d name=%s info=%s\n", (int)drv.driverID, drv.driverName, drv.driverInfo);
+            if (has_drm)
+                printf("CAPS_DRM primary=%d %lld:%lld render=%d %lld:%lld\n",
+                       drm.hasPrimary, (long long)drm.primaryMajor, (long long)drm.primaryMinor,
+                       drm.hasRender, (long long)drm.renderMajor, (long long)drm.renderMinor);
+            for (uint32_t i = 0; i < en; ++i)
+                printf("CAPS_DEVICE_EXT %s %u\n", ext[i].extensionName, ext[i].specVersion);
+            gmp(pd[d], &mem);
+            for (uint32_t i = 0; i < mem.memoryHeapCount; ++i)
+                printf("CAPS_HEAP index=%u size_mib=%llu flags=0x%x\n", i,
+                       (unsigned long long)(mem.memoryHeaps[i].size >> 20), mem.memoryHeaps[i].flags);
+            for (uint32_t i = 0; i < mem.memoryTypeCount; ++i)
+                printf("CAPS_MEMTYPE index=%u heap=%u flags=0x%x\n", i, mem.memoryTypes[i].heapIndex,
+                       mem.memoryTypes[i].propertyFlags);
+            caps_formats(fp2, ifp2, pd[d], VK_FORMAT_B8G8R8A8_UNORM, "B8G8R8A8_UNORM", has_mod);
+            caps_formats(fp2, ifp2, pd[d], VK_FORMAT_R8G8B8A8_UNORM, "R8G8B8A8_UNORM", has_mod);
+            free(ext);
+        }
+    }
+    printf("CAPS PASS devices=%u no_device_created=1 no_submission=1\n", count);
+    fflush(stdout);
+    rc = 0;
+done:
+    if (instance != VK_NULL_HANDLE && destroy != NULL)
+        destroy(instance, NULL);
+    close_device(device);
+    if (handle != NULL)
+        dlclose(handle);
+    return rc;
+}
+
 static int read_shader(const char *path, uint32_t **code_out, size_t *size_out)
 {
     FILE *file = fopen(path, "rb");
@@ -808,7 +1013,7 @@ done:
 
 static void usage(const char *name)
 {
-    fprintf(stderr, "usage: %s --load-only|--enumerate|--compute256 [--library PATH] [--shader PATH]\n", name);
+    fprintf(stderr, "usage: %s --load-only|--enumerate|--caps|--compute256 [--library PATH] [--shader PATH]\n", name);
 }
 
 int main(int argc, char **argv)
@@ -818,7 +1023,7 @@ int main(int argc, char **argv)
     const char *shader = "tools/gpu-compute-probe/compute.spv";
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--load-only") == 0 || strcmp(argv[i], "--enumerate") == 0 ||
-            strcmp(argv[i], "--compute256") == 0) {
+            strcmp(argv[i], "--compute256") == 0 || strcmp(argv[i], "--caps") == 0) {
             if (mode != NULL) { usage(argv[0]); return 2; }
             mode = argv[i];
         } else if (strcmp(argv[i], "--library") == 0 && i + 1 < argc) {
@@ -854,5 +1059,7 @@ int main(int argc, char **argv)
     }
     if (strcmp(mode, "--enumerate") == 0)
         return enumerate_mode(library);
+    if (strcmp(mode, "--caps") == 0)
+        return caps_mode(library);
     return compute_mode(library, shader);
 }

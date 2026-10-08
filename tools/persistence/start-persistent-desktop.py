@@ -750,6 +750,34 @@ def start_optional_openunum() -> subprocess.Popen | None:
         return None
 
 
+KEEPALIVE_ENABLED = MOUNT / 'state/keepalive/enabled'
+KEEPALIVE_DAEMON = MOUNT / 'hardware/bin/s22-keepalive'
+
+
+def start_optional_keepalive() -> subprocess.Popen | None:
+    """Service keepalive: restarts OpenUnum/unumsearch, keeps volume 0 (opt-in marker).
+
+    Detached and single-instance (flock), so a desktop restart does not
+    duplicate it.
+    """
+    if not KEEPALIVE_ENABLED.is_file():
+        return None
+    try:
+        st = KEEPALIVE_DAEMON.stat()
+        if KEEPALIVE_DAEMON.is_symlink() or st.st_uid != 0 or st.st_mode & 0o022:
+            raise Failure('keepalive ownership changed')
+        log = open(KEEPALIVE_ENABLED.parent / 'daemon.log', 'ab')
+        proc = subprocess.Popen(['/usr/bin/python3', str(KEEPALIVE_DAEMON)],
+                                stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                                start_new_session=True)
+        log.close()
+        say(f'optional keepalive started pid={proc.pid}')
+        return proc
+    except Exception as error:
+        say(f'optional keepalive unavailable: {type(error).__name__}')
+        return None
+
+
 def optional_agent_web(action: str) -> None:
     """The web terminal is optional; Tailscale/rescue remain independent."""
     base = MOUNT / 'agent-web'
@@ -897,6 +925,7 @@ def main() -> int:
                 optional_agent_web('--start')
                 buttons = start_optional_buttons()
                 start_optional_openunum()
+                start_optional_keepalive()
                 wifi_startup = start_optional_wifi()
                 model_restarts = 0
                 while desktop.poll() is None:
