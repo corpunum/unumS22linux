@@ -149,8 +149,16 @@ LEADER_NAME = "exynos-is-ss0"
 VC0_NAME = "exynos-is-ss0vc0"
 SELFTEST_PARAM = "/sys/module/fimc_is/parameters/test_sensor_run"
 MCU_FW_NAME = "is_mcu_fw.bin"
-MCU_FW_DIRS = ("/system/vendor/firmware", "/vendor/firmware", "/lib/firmware/updates",
-               "/lib/firmware")
+# Only where the kernel's firmware loader looks (firmware_loader/main.c): it never
+# searches /vendor/firmware on this kernel.
+MCU_FW_DIRS = ("/system/vendor/firmware", "/lib/firmware/updates", "/lib/firmware")
+# Review 2026-10-08: one SysMMU fault on the camera block panics the kernel, and
+# the CSIS DMA has no visible vertical clamp, so every VC0 image buffer gets
+# guard pages (vb2 accepts a larger plane; the whole dma-buf is mapped).
+VC0_GUARD_BYTES = 1 << 20
+# Until a capture has been proven once, only the geometry the 2026-10-06
+# self-test used is allowed (DMA geometry comes from the DT mode anyway).
+LOCKED_GEOMETRY = (2040, 1532, 30)
 DMA_HEAP = "/dev/dma_heap/system"
 GN3_BAYER = "GBRG"
 
@@ -512,7 +520,7 @@ class Session:
         for _ in range(self.n_leader):
             self.lbufs.append((DmaBuf(self.sys, limg), DmaBuf(self.sys, SIZE_OF_META_PLANE)))
         for _ in range(self.n_vc):
-            self.vbufs.append((DmaBuf(self.sys, page_round(self.image_len)),
+            self.vbufs.append((DmaBuf(self.sys, page_round(self.image_len) + VC0_GUARD_BYTES),
                                DmaBuf(self.sys, SIZE_OF_META_PLANE)))
         for i in range(self.n_vc):
             self._queue_vc(i)
@@ -526,8 +534,12 @@ class Session:
                     "STREAMON leader")
         self.state["leader_streamon"] = True
         self.state["front_start"] = True   # set before the call: stop is harmless if it failed
-        self._ioctl(self.lfd, VIDIOC_S_CTRL, make_control(
-            CID_IS_S_STREAM, 1 | (1 << SENSOR_NOBLOCK_SHIFT)), "S_CTRL IS_S_STREAM on")
+        # BLOCKING start (noblock=0): is_sensor_instanton runs inside the ioctl.
+        # A non-blocking start races teardown (front_stop returns early while
+        # the instant work later arms CSI DMA into freed buffers -> SysMMU
+        # fault -> panic). Review 2026-10-08.
+        self._ioctl(self.lfd, VIDIOC_S_CTRL, make_control(CID_IS_S_STREAM, 1),
+                    "S_CTRL IS_S_STREAM on (blocking)")
 
     def frames(self, timeout_first: float, timeout_next: float, deadline: float):
         """Yield (raw_bytes, info) for each VC0 frame; requeues buffers."""
@@ -634,6 +646,8 @@ class _Alarm:
 
 def run_stream(sysif, args, consume, alarm=True) -> dict:
     """Common capture/record driver; `consume(raw, info) -> bool` (True = done)."""
+    if isinstance(sysif, RealSys) and (args.width, args.height, args.fps) != LOCKED_GEOMETRY:
+        raise CameraError("geometry locked to %dx%d@%d until a capture is proven" % LOCKED_GEOMETRY)
     info = prechecks(sysif, args)
     pixfmt = PIX_SBGGR16 if args.pixfmt == "sbggr16" else PIX_SBGGR10P
     session = Session(sysif, args.width, args.height, args.fps, pixfmt,
