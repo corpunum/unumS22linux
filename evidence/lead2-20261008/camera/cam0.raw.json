@@ -1,0 +1,11 @@
+{
+ "bayer": "GBRG",
+ "height": 1532,
+ "mode": "2040x1532@30",
+ "pixfmt": "BYR2",
+ "sensor": "S5KGN3",
+ "sequence": 0,
+ "stride": 4096,
+ "timestamp": 0.0,
+ "width": 2040
+}
