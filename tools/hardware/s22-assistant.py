@@ -262,7 +262,10 @@ class Assistant:
 
     def healthy(self) -> bool:
         try:
-            self._http('GET', '/api/health', timeout=4)
+            # liveness, not the deep /api/health: deep checks run every diagnostic
+            # and exceed a few seconds right after boot or under load, which made
+            # the assistant think OpenUnum was down (2026-10-08).
+            self._http('GET', '/health', timeout=10)
             return True
         except (OSError, ValueError, urllib.error.URLError):
             return False
