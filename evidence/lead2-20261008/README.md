@@ -56,3 +56,14 @@ load 0.67–0.74 s, first audio 0.105 s, RTF 0.061–0.083. whisper.cpp on the r
 ## Raw files
 `gpu/` receipts + stdout per trial, `device/device-logs.jsonl` (phoned status, assistant/converse/voip turns,
 keepalive events).
+
+## Camera (independent review GO-WITH-CHANGES applied; client sha256 3f1375f6…)
+- Kernel names every sensor's VC0 node `exynos-is-ssdevice_idvc0` (`"ss"#id"vc0"` stringification bug); the client
+  accepts that name only on `/dev/video210` (= `IS_VIDEO_SS0VC0_NUM + 0*4`).
+- Trial 1 (default exposure) and trial 2 (`--exposure-us 20000 --iso 400`), both `--allow-fw-stall` (no `is_mcu_fw.bin`,
+  ~60 s firmware fallback): `ok: true`, 5/7 frames DMA'd by CSIS VC0 into dma-heap buffers (raw 6,275,072 B,
+  stride 4096), clean teardown, no SysMMU fault/oops, same boot.
+- **Image is black:** all raw values 62–66 (= 10-bit black pedestal 64, so real sensor output, not untouched
+  memory). Either the rear lens was covered or exposure control does not reach the sensor in the stand-alone
+  VISION path (no ISP/DDK AE). Next: owner places the phone rear-camera-up in light, one more capture; if still
+  black, drive exposure through the CIS sensor-peri controls instead of `shot.ctl`.
