@@ -24,7 +24,7 @@ T=${1:?usage: install-paradee.sh BUNDLE.tar.gz | --rollback}
 if [ -f "$T.sha256" ]; then (cd "$(dirname "$T")" && sha256sum -c "$(basename "$T").sha256"); fi
 rm -rf "$D/paradee.new"; mkdir -p "$D/paradee.new"
 tar xzf "$T" -C "$D/paradee.new" --strip-components=1
-(cd "$D/paradee.new" && sha256sum -c --quiet SHA256SUMS)
+(cd "$D/paradee.new" && sha256sum -c SHA256SUMS >/dev/null)
 chown -R root:root "$D/paradee.new"
 rm -rf "$D/paradee.prev"
 [ -d "$D/paradee" ] && mv "$D/paradee" "$D/paradee.prev"
