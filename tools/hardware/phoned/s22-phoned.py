@@ -679,7 +679,7 @@ def load_s22_modem():
     """Import tools/hardware/modem/s22-modem.py (or the installed s22-modem) for the RFS server."""
     here = Path(__file__).resolve().parent
     cands = [os.environ.get("S22_MODEM_PY"), here.parent / "modem" / "s22-modem.py",
-             here / "s22-modem.py", shutil.which("s22-modem")]
+             here / "s22-modem.py", here / "s22-modem", shutil.which("s22-modem")]
     for c in cands:
         if c and Path(c).is_file():
             loader = importlib.machinery.SourceFileLoader("s22_modem", str(c))

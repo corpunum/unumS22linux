@@ -184,6 +184,19 @@ class ServiceTableTest(unittest.TestCase):
             svc = mod.Generic('t', {'argv': ['/bin/true'], 'log': f'{d}/t.log'})
             self.assertTrue(svc.start()[0])           # no probe: started is enough
 
+    def test_file_health_probe_for_modem_state(self):
+        with tempfile.TemporaryDirectory() as d:
+            state = Path(d) / 'modem_state'
+            svc = mod.Generic('m', {'argv': ['x'], 'health': {'file': str(state), 'equals': 'ONLINE'}})
+            self.assertFalse(svc.healthy())                 # missing file
+            state.write_text('INIT\n')
+            self.assertFalse(svc.healthy())
+            state.write_text('ONLINE\n')
+            self.assertTrue(svc.healthy())
+        modem = mod.SERVICE_DEFS['modem']
+        self.assertEqual(modem['health']['equals'], 'ONLINE')
+        self.assertEqual(modem['needle'], 'vendor/bin/cbd')
+
     def test_per_service_unhealthy_window(self):
         with tempfile.TemporaryDirectory() as d:
             slow = mod.Generic('llama', {'argv': ['x'], 'unhealthy_s': 600})
