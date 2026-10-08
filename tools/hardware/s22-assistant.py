@@ -144,10 +144,16 @@ _MD = [
 ]
 
 
+_FRAMEWORK_NOTE = re.compile(r'^(verification (warning|note)|evidence (warning|note))\s*:', re.I)
+
+
 def clean_for_speech(text: str) -> str:
     for rx, sub in _MD:
         text = rx.sub(sub, text)
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    # OpenUnum appends framework notes (e.g. "Verification warning: ...") for
+    # the chat UI; they are not part of the answer and must not be spoken.
+    lines = [l.strip() for l in text.splitlines()
+             if l.strip() and not _FRAMEWORK_NOTE.match(l.strip())]
     out = ''
     for l in lines:                      # join lines; keep sentence breaks
         if out and not out.endswith(('.', '!', '?', ':', ';', ',')):
