@@ -3,6 +3,24 @@
 Updated 2026-10-06 by the Claude lead session (directly on the device).
 The 2026-10-02 task board and earlier checkpoints below are historical.
 
+## Resident agent, phone stack, GPU fallback — 2026-10-08 (lead2)
+
+- **GPU:** the resident 2B runs on the Xclipse 920 (vendor Vulkan, isolated Bionic root) as
+  `llama-server` on 127.0.0.1:8090 next to the CPU 4B on :8089. It decodes 1.1–1.25x faster than the
+  CPU at depth 4096, with byte-identical greedy text and a clean 32-min soak. It is OpenUnum's
+  offline fallback; Luna stays the default, and keepalive pins it back after any fallback switch.
+- **Always-on:** `s22-keepalive` supervises openunum, unumsearch, modem (cbd), s22-phoned and llama-8090,
+  keeps the amp at 0 and pins the model. Config-drift root cause: OpenUnum saves its in-memory config
+  after every turn, and provider-timeout recovery switches to the fallback.
+- **Phone:** `s22-phoned` (SIPC 4.1 SMS/call/SIM daemon) runs against the real CP: SIM absent, LTE
+  denied. Outbound is off until `tx_enabled` + allowlist. The OpenUnum `s22-phone` plugin's tools and
+  incoming bridge work through Luna. SIM-day plan: `tools/hardware/phoned/README.md`.
+- **Voice:** `s22-sip` (stdlib SIP/RTP) carries agent voice calls with all audio in software
+  (rig↔phone verified with whisper). `s22-converse` gives hands-free turns (verified silently).
+  Paradee TTS is installed (RTF ≈0.07); supertonic stays the default.
+- **Camera:** a raw V4L2 client exists (video101 + video210). Its device trial is gated on review.
+[Evidence](evidence/lead2-20261008/README.md).
+
 ## Push-to-talk voice assistant — 2026-10-08
 
 **Hold Volume Up, speak after the beep, release: the phone answers aloud.**

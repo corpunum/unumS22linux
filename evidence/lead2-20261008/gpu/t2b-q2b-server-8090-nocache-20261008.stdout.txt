@@ -1,0 +1,1 @@
+ISOLATED uid=1000 caps=0 NoNewPrivs=1

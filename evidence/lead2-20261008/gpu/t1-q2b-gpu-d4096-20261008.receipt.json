@@ -1,0 +1,50 @@
+{
+  "started_at": "2026-10-08T19:44:49.770422+00:00",
+  "variant": "llama-vulkan",
+  "name": "t1-q2b-gpu-d4096-20261008",
+  "command": [
+    "/system/bin/llama-bench",
+    "-m",
+    "/models/Qwen3.5-2B-Q4_0.gguf",
+    "-d",
+    "4096",
+    "-p",
+    "128",
+    "-n",
+    "64",
+    "-fa",
+    "1",
+    "-r",
+    "2",
+    "-ngl",
+    "99",
+    "-t",
+    "4",
+    "-o",
+    "json"
+  ],
+  "read_only_views": [],
+  "returncode": 0,
+  "before": {
+    "boot_id": "25d961f5-3261-477c-84a2-af9f281ff705",
+    "pid1": "native-guardian",
+    "temperature": 35.1,
+    "profile": "qwen4b",
+    "model": "ok"
+  },
+  "after": {
+    "boot_id": "25d961f5-3261-477c-84a2-af9f281ff705",
+    "pid1": "native-guardian",
+    "temperature": 37.2,
+    "profile": "qwen4b",
+    "model": "ok"
+  },
+  "elapsed_seconds": 87.599,
+  "deadline_seconds": 600,
+  "bridge": "v4",
+  "same_boot": true,
+  "kernel_capture_exit": 0,
+  "gpu_messages": [],
+  "helper_sha256": "c4b7a67800d038f2e439ad0b07e19bfde867b390a8b219d78826a991ff82d9e3",
+  "note": "Isolated diagnostic. Numerical compute and no faults required for GPU acceptance."
+}
