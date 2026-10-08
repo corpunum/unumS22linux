@@ -722,6 +722,34 @@ def start_optional_buttons() -> subprocess.Popen | None:
         return None
 
 
+OPENUNUM_AUTOSTART = MOUNT / 'state/openunum/autostart'
+OPENUNUM_CONTROL = MOUNT / 'hardware/bin/s22-openunum'
+
+
+def start_optional_openunum() -> subprocess.Popen | None:
+    """OpenUnum server for the push-to-talk assistant (opt-in marker).
+
+    s22-openunum start is idempotent and detaches the server, so it outlives
+    a desktop restart; the voice assistant also starts it on demand.
+    """
+    if not OPENUNUM_AUTOSTART.is_file():
+        return None
+    try:
+        st = OPENUNUM_CONTROL.stat()
+        if OPENUNUM_CONTROL.is_symlink() or st.st_uid != 0 or st.st_mode & 0o022:
+            raise Failure('openunum control script ownership changed')
+        log = open(OPENUNUM_AUTOSTART.parent / 'autostart.log', 'ab')
+        proc = subprocess.Popen(['/bin/sh', str(OPENUNUM_CONTROL), 'start'],
+                                stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                                start_new_session=True)
+        log.close()
+        say(f'optional OpenUnum start pid={proc.pid}')
+        return proc
+    except Exception as error:
+        say(f'optional OpenUnum unavailable: {type(error).__name__}')
+        return None
+
+
 def optional_agent_web(action: str) -> None:
     """The web terminal is optional; Tailscale/rescue remain independent."""
     base = MOUNT / 'agent-web'
@@ -868,6 +896,7 @@ def main() -> int:
                 late_audio_done = audio_control is not None
                 optional_agent_web('--start')
                 buttons = start_optional_buttons()
+                start_optional_openunum()
                 wifi_startup = start_optional_wifi()
                 model_restarts = 0
                 while desktop.poll() is None:

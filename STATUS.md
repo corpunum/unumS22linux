@@ -3,6 +3,17 @@
 Updated 2026-10-06 by the Claude lead session (directly on the device).
 The 2026-10-02 task board and earlier checkpoints below are historical.
 
+## Push-to-talk voice assistant — 2026-10-08
+
+**Hold Volume Up, speak after the beep, release: the phone answers aloud.**
+Speech recognition runs on the phone (sherpa-onnx Parakeet 110M int8, about
+1 s per utterance on the big cores). The phone's own OpenUnum answers in a
+`voice` session, and `s22-say` speaks the reply. Verified on the device
+through the real hook with mic loopback (transcripts exact). OpenUnum is now
+started at boot (opt-in marker), and the hook also starts it on demand. The
+owner's physical press test is pending.
+[Evidence](evidence/push-to-talk-20261008/README.md).
+
 ## Current checkpoint — 2026-10-06
 
 **Speaker audio and text-to-speech work on the device.** The new

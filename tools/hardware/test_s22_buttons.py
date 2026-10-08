@@ -50,6 +50,63 @@ class ButtonTests(unittest.TestCase):
         self.assertEqual(self.b.actions[-1], (str(h),))
         self.assertEqual(self.b.level, 7)
 
+    def _hook(self):
+        hooks = self.base / 'hooks'; hooks.mkdir(exist_ok=True)
+        h = hooks / 'assistant'; h.write_text('#!/bin/sh\n'); h.chmod(0o755)
+        return h
+
+    def test_hold_mode_starts_hook_at_threshold_and_signals_release(self):
+        h = self._hook(); (self.base / 'ptt-hold').write_text('')
+        (self.base / 'ptt-release').write_text('stale')
+        self.b.handle(115, 1, now=0.0)
+        self.b.tick(now=0.5)
+        self.assertEqual(self.b.actions, [])
+        self.b.tick(now=1.0)
+        self.assertEqual(self.b.actions, [(str(h),)])
+        self.assertFalse((self.base / 'ptt-release').exists())
+        self.b.tick(now=1.5)                      # only once per press
+        self.assertEqual(len(self.b.actions), 1)
+        self.b.handle(115, 0, now=3.25)
+        self.assertEqual(len(self.b.actions), 1)  # release starts nothing else
+        rel = json.loads((self.base / 'ptt-release').read_text())
+        self.assertEqual(rel['held_ms'], 3250)
+        self.assertEqual(self.b.level, 7)
+        self.assertEqual([e['action'] for e in self.events()], ['press', 'ptt-start', 'release'])
+        # the next long press starts a fresh hold session
+        self.b.handle(115, 1, now=10.0); self.b.tick(now=11.1)
+        self.assertEqual(len(self.b.actions), 2)
+
+    def test_hold_mode_env(self):
+        self._hook(); (self.base / 'ptt-hold').write_text('')
+        with mock.patch.object(MOD.subprocess, 'Popen') as popen:
+            self.b.dry_run = False
+            self.b.handle(115, 1, now=0.0); self.b.tick(now=1.2)
+        env = popen.call_args.kwargs['env']
+        self.assertEqual(env['S22_PTT'], 'hold')
+        self.assertEqual(env['S22_PTT_STOP'], str(self.base / 'ptt-release'))
+        self.assertEqual(env['S22_HELD_MS'], '1200')
+
+    def test_hold_mode_off_without_flag_keeps_release_hook(self):
+        h = self._hook()
+        self.b.handle(115, 1, now=0.0); self.b.tick(now=2.0)
+        self.assertEqual(self.b.actions, [])
+        self.b.handle(115, 0, now=2.0)
+        self.assertEqual(self.b.actions, [(str(h),)])
+        self.assertFalse((self.base / 'ptt-release').exists())
+
+    def test_hold_flag_without_hook_falls_back(self):
+        (self.base / 'ptt-hold').write_text('')
+        with mock.patch.object(MOD.os.path, 'exists', return_value=True):
+            self.b.handle(115, 1, now=0.0); self.b.tick(now=2.0)
+            self.assertEqual(self.b.actions, [])
+            self.b.handle(115, 0, now=2.0)
+        self.assertEqual(self.b.actions, [(MOD.SAY, 'assistant hook not configured')])
+
+    def test_tick_ignores_other_keys(self):
+        self._hook(); (self.base / 'ptt-hold').write_text('')
+        self.b.handle(114, 1, now=0.0); self.b.handle(116, 1, now=0.0); self.b.tick(now=5.0)
+        self.assertEqual(self.b.actions, [])
+
     def test_power_short_toggles_display_long_does_not(self):
         with mock.patch.object(MOD.os.path, 'exists', return_value=True):
             self.b.handle(116, 1, now=0.0); self.b.handle(116, 0, now=0.1)

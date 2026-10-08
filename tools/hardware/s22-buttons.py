@@ -12,6 +12,12 @@ to EVENTS as JSON lines and, on release:
 
 A hook is an executable HOOKS/<name>; it gets S22_BUTTON / S22_HELD_MS in its
 environment and runs detached.  Without a hook the defaults above apply.
+
+Press-and-hold mode (opt-in: the file BASE/ptt-hold exists and the hook
+"assistant" is executable): the hook starts as soon as volume up has been
+held for LONG_MS, with S22_PTT=hold and S22_PTT_STOP=<file>.  On release the
+daemon writes the release time and the held time into that file, so the hook
+can record exactly while the key is held.  The release then does nothing else.
 """
 from __future__ import annotations
 
@@ -68,6 +74,40 @@ class Buttons:
         except (OSError, ValueError):
             self.level = 7
         self.actions: list[tuple] = []
+        self.ptt_started = False    # hold-mode hook already started for this press
+
+    @property
+    def ptt_stop(self) -> Path:
+        return self.base / 'ptt-release'
+
+    def hold_mode(self) -> bool:
+        hook = self.base / 'hooks' / 'assistant'
+        return ((self.base / 'ptt-hold').is_file() and hook.is_file()
+                and os.access(hook, os.X_OK))
+
+    def tick(self, now: float | None = None) -> None:
+        """Start the hold-mode hook once volume up has been held long enough."""
+        start = self.down.get('volup')
+        if start is None or self.ptt_started:
+            return
+        now = time.monotonic() if now is None else now
+        held = int((now - start) * 1000)
+        if held < LONG_MS or not self.hold_mode():
+            return
+        self.ptt_started = True
+        try:
+            self.ptt_stop.unlink()
+        except FileNotFoundError:
+            pass
+        self.log(key='volup', action='ptt-start', held_ms=held)
+        self.spawn([str(self.base / 'hooks' / 'assistant')],
+                   {'S22_BUTTON': 'volup', 'S22_HELD_MS': str(held),
+                    'S22_PTT': 'hold', 'S22_PTT_STOP': str(self.ptt_stop)})
+
+    def ptt_release(self, held: int) -> None:
+        tmp = self.ptt_stop.with_suffix('.tmp')
+        tmp.write_text(json.dumps({'t': time.time(), 'held_ms': held}) + '\n')
+        tmp.replace(self.ptt_stop)
 
     def log(self, **rec) -> None:
         rec['t'] = round(time.time(), 3)
@@ -107,6 +147,8 @@ class Buttons:
         now = time.monotonic() if now is None else now
         if value == 1:
             self.down[key] = now
+            if key == 'volup':
+                self.ptt_started = False
             self.log(key=key, action='press')
             return
         start = self.down.pop(key, None)
@@ -119,7 +161,10 @@ class Buttons:
             elif not self.hook('power', key, held) and os.path.exists(DISPLAY):
                 self.spawn([DISPLAY, 'toggle'])
         elif key == 'volup':
-            if long:
+            if self.ptt_started:
+                self.ptt_started = False
+                self.ptt_release(held)
+            elif long:
                 if not self.hook('assistant', key, held) and os.path.exists(SAY):
                     self.spawn([SAY, 'assistant hook not configured'])
             elif not self.hook('volup', key, held):
@@ -143,7 +188,8 @@ def main() -> int:
     b.set_volume(b.level, speak=False)
     fds = [os.open(n, os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC) for n in nodes]
     while True:
-        ready, _, _ = select.select(fds, [], [], 60)
+        # Poll faster while volume up is down so hold mode starts on time.
+        ready, _, _ = select.select(fds, [], [], 0.05 if 'volup' in b.down else 60)
         for fd in ready:
             while True:
                 try:
@@ -156,6 +202,7 @@ def main() -> int:
                     _, _, typ, code, value = EVENT.unpack_from(data, off)
                     if typ == EV_KEY:
                         b.handle(code, value)
+        b.tick()
         # reap finished action processes
         try:
             while os.waitpid(-1, os.WNOHANG)[0]:

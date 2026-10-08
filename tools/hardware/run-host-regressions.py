@@ -100,6 +100,7 @@ REVIEWED_HOST_TEST_PATHS = (
     "tools/pi-web/test_pi_readiness.py",
     "tools/pi-web/test_agent_web.py",
     "tools/hardware/test_s22_buttons.py",
+    "tools/hardware/test_s22_assistant.py",
     "tools/hardware/test_s22_modem.py",
     "tools/persistence/test_start_persistent_desktop.py",
 )
@@ -184,6 +185,7 @@ HOST_TESTS = (
         normal_only_reason="the launcher deliberately refuses Python optimization",
     ),
     HostTest("tools/hardware/test_s22_buttons.py"),
+    HostTest("tools/hardware/test_s22_assistant.py"),
     HostTest("tools/hardware/test_s22_modem.py"),
     HostTest("tools/persistence/test_start_persistent_desktop.py"),
 )
