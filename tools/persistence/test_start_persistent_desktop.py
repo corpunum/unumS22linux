@@ -68,6 +68,28 @@ class SupervisorUnitTests(unittest.TestCase):
                 self.assertIsNone(MOD.start_optional_openunum())
                 popen.assert_not_called()
 
+    def test_keepalive_is_opt_in_and_checks_ownership(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td); marker = root / 'enabled'
+            daemon = root / 's22-keepalive'; daemon.write_text('#!/usr/bin/python3\n'); daemon.chmod(0o755)
+            with mock.patch.object(MOD, 'KEEPALIVE_ENABLED', marker), \
+                 mock.patch.object(MOD, 'KEEPALIVE_DAEMON', daemon), \
+                 mock.patch.object(MOD.subprocess, 'Popen') as popen:
+                self.assertIsNone(MOD.start_optional_keepalive())
+                popen.assert_not_called()
+                marker.write_text('')
+                if os.getuid() == 0:
+                    self.assertIs(MOD.start_optional_keepalive(), popen.return_value)
+                    self.assertEqual(popen.call_args.args[0], ['/usr/bin/python3', str(daemon)])
+                    self.assertTrue(popen.call_args.kwargs['start_new_session'])
+                else:
+                    self.assertIsNone(MOD.start_optional_keepalive())
+                    popen.assert_not_called()
+                daemon.chmod(0o777)
+                popen.reset_mock()
+                self.assertIsNone(MOD.start_optional_keepalive())
+                popen.assert_not_called()
+
     def test_wifi_disabled_by_default_and_explicit_marker(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
