@@ -4,12 +4,20 @@
     "port": 18880
   },
   "model": {
-    "provider": "llama-cpp-local",
-    "model": "llama-cpp-local/openai/qwen3.8-flash-next-uncensored-lean",
+    "provider": "openai",
+    "model": "openai/gpt-6-luna",
     "llamaCppLocalBaseUrl": "http://100.76.5.104:8080",
     "maxOutputTokens": 4096,
     "providerModels": {
+      "openai": "openai/gpt-6-luna",
       "llama-cpp-local": "llama-cpp-local/openai/qwen3.8-flash-next-uncensored-lean"
+    },
+    "routing": {
+      "fallbackEnabled": false,
+      "disabledProviders": [
+        "ollama-local"
+      ],
+      "cloudEnabled": true
     }
   },
   "runtime": {
