@@ -3,6 +3,7 @@
 
 Run: python3 -I -B tools/hardware/camera/test_s22_camera.py
 """
+import types
 import ctypes
 import importlib.util
 import io
@@ -247,7 +248,7 @@ class FakeSys:
         }
         if names:
             self.sysfs.update(names)
-        self.files = {"/vendor/firmware/is_mcu_fw.bin"} if fw else set()
+        self.files = {"/system/vendor/firmware/is_mcu_fw.bin"} if fw else set()
         self.frame, self.stride = bayer_frame(self.W, self.H, (536, 236, 86))
         self.seq = 0
 
@@ -325,6 +326,8 @@ class FakeSys:
                     raise OSError(22, "output bytesused")
             elif planes[0][1] < self.stride * self.H:
                 raise OSError(22, "image plane too small")
+            else:
+                self.__dict__.setdefault("vc_plane_lengths", []).append(planes[0][1])
             self.queued[role].append((info["index"], img_fd))
         elif name == "VIDIOC_STREAMON":
             if role == "vc" and (not self.s_input or self.stream["leader"]):
@@ -336,6 +339,7 @@ class FakeSys:
         elif name == "VIDIOC_S_CTRL":
             cid, value = struct.unpack("<Ii", buf)
             if cid == cam.CID_IS_S_STREAM:
+                self.__dict__.setdefault("s_stream_values", []).append(value)
                 self.stream["front"] = bool(value & 0xF)
         elif name == "VIDIOC_DQBUF":
             if not self.queued[role]:
@@ -411,6 +415,20 @@ class FakeCaptureTest(unittest.TestCase):
         # VC0 is closed before the leader
         closes = [c[1] for c in fake.calls if c[0] == "close" and c[1] != "dmabuf"]
         self.assertEqual(closes, ["/dev/video210", "/dev/video101"])
+
+    def test_review_safety_changes(self):
+        """2026-10-08 review: blocking stream start, VC0 guard pages, real-device geometry lock."""
+        fake = FakeSys()
+        rc, res, out, raw = self._capture(fake, "--skip", "1")
+        self.assertEqual(rc, 0, res)
+        self.assertEqual(fake.s_stream_values[0], 1)          # on, noblock bit clear
+        self.assertNotIn(1 | (1 << cam.SENSOR_NOBLOCK_SHIFT), fake.s_stream_values)
+        self.assertTrue(all(n >= fake.stride * fake.H + cam.VC0_GUARD_BYTES
+                            for n in fake.vc_plane_lengths), fake.vc_plane_lengths)
+        self.assertNotIn("/vendor/firmware", cam.MCU_FW_DIRS)
+        args = types.SimpleNamespace(width=1920, height=1080, fps=30)
+        with self.assertRaises(cam.CameraError):
+            cam.run_stream(cam.RealSys.__new__(cam.RealSys), args, lambda r, i: True, alarm=False)
 
     def test_timeout_still_rolls_back(self):
         fake = FakeSys(deliver=False)

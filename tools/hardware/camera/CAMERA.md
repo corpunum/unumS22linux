@@ -98,6 +98,15 @@ Record a short sequence (frames are developed after the stream stops):
 inside the Arch chroot, but only when the output directory is under
 `/mnt/omarchy-trial`.
 
+## Independent review (2026-10-08): GO-WITH-CHANGES, applied
+
+- Blocking stream start (`IS_S_STREAM` = 1, noblock 0). The non-blocking start raced teardown: CSI DMA
+  could arm into freed buffers, and a SysMMU fault on the camera block panics the kernel.
+- VC0 buffers carry 1 MiB of guard pages, because no vertical clamp on the CSIS DMA is visible.
+- On real hardware the geometry is locked to 2040x1532 at 30 fps until a capture is proven.
+- `/vendor/firmware` was dropped from the firmware search: the kernel never looks there.
+- Struct offsets were cross-checked against DWARF from `fimc-is.ko`, and all match.
+
 ## Risks and rollback
 
 - **First real DMA write by CSIS VC0 into memory.** The buffer is sized from
