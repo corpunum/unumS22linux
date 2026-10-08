@@ -179,7 +179,8 @@ class Generic(Service):
 
     argv     command started detached (own session), output appended to log
     needle   substring of its `ps` line (default: the argv joined)
-    health   {"http": URL} (any HTTP answer < 500) or {"tcp": [host, port]}
+    health   {"http": URL} (any HTTP answer < 500), {"tcp": [host, port]} or
+             {"file": path, "equals": text} (file content, stripped)
     requires path that must exist for the service to be managed at all
     nice, start_wait_s (default 10), unhealthy_s (overrides the global one)
     """
@@ -202,6 +203,12 @@ class Generic(Service):
         if 'tcp' in h:
             host, port = h['tcp']
             return tcp_ok(host, int(port))
+        if 'file' in h:                   # e.g. cpif modem_state == ONLINE
+            try:
+                value = Path(h['file']).read_text().strip()
+            except OSError:
+                return False
+            return value == str(h.get('equals', value))
         return True                       # no probe: running is enough
 
     def start(self) -> tuple[bool, str]:
@@ -233,6 +240,14 @@ SERVICE_DEFS = {
         'health': {'tcp': ['127.0.0.1', 7781]},
         'log': '/srv/s22/unumsearch/serve.log',
         'nice': 15,
+    },
+    'modem': {                            # cbd boots the CP; s22-modem-up exits once ONLINE
+        'argv': ['/srv/s22/hardware/bin/s22-modem-up', 'up'],
+        'needle': 'vendor/bin/cbd',
+        'health': {'file': '/sys/devices/platform/cpif/modem_state', 'equals': 'ONLINE'},
+        'requires': '/srv/s22/hardware/bin/s22-modem-up',
+        'log': '/srv/s22/state/modem/keepalive-up.log',
+        'start_wait_s': 75,
     },
     'phoned': {
         'argv': ['/srv/s22/hardware/bin/s22-phoned', 'serve'],
