@@ -178,6 +178,33 @@ GN3_DUMP_REGS = (   # (address, bytes, name) - sensor_gn3 log table subset, page
     (0x0702, 2, "fll_shifter"), (0x0704, 2, "cit_shifter"), (0x0900, 2, "binning"),
     (0x0B30, 2, "fast_change_idx"), (0x0E00, 1, "aeb"), (0x19C2, 2, "retention_crc_ok"),
 )
+# Review v3: page-0x4000 CCI registers (< 0x6000) that the driver's own setfiles
+# write, with the value written (sensor_gn3_setfile_A_19p2_Global, then
+# sensor_gn3_setfile_A_2040x1532_30fps), plus SMIA id registers. Read-only echo
+# check: a mismatch is a hint (firmware may legitimately rewrite some), not an error.
+GN3_SETFILE_ECHO = (
+    (0x0006, 1, None), (0x0008, 2, None),          # pixel order, data pedestal (SMIA)
+    (0x011C, 2, 0x0101), (0x0136, 2, 0x1300), (0x013E, 2, 0x00C8), (0x0228, 2, 0x0100),
+    (0x0260, 2, 0x0001), (0x0262, 2, 0x0200), (0x0264, 2, 0x0203), (0x0266, 2, 0x0300),
+    (0x0304, 2, 0x0002), (0x0306, 2, 0x00C8), (0x030E, 2, 0x0003), (0x0310, 2, 0x00CA),
+    (0x0312, 2, 0x0000), (0x031A, 2, 0x0003), (0x031C, 2, 0x0031), (0x031E, 2, 0x0001),
+    (0x0400, 2, 0x1010), (0x0408, 2, 0x0100), (0x040A, 2, 0x0100), (0x040C, 2, 0x0000),
+    (0x0724, 2, 0x0000), (0x0A52, 2, 0x0001), (0x0B04, 2, 0x0001), (0x0B32, 2, 0x0000),
+    (0x0BC2, 2, 0x0000), (0x0BC4, 2, 0x0000), (0x0BC6, 2, 0x0000), (0x0BE2, 2, 0x0000),
+    (0x0BE4, 2, 0x0001), (0x0FE0, 2, 0x0000),
+    (0x0118, 2, 0x0000), (0x020C, 2, 0x0000), (0x021E, 2, 0x0000), (0x0270, 2, 0x2B2B),
+    (0x0272, 2, 0x2B10), (0x0350, 2, 0x0000), (0x0352, 2, 0x000A), (0x0380, 2, 0x0002),
+    (0x0382, 2, 0x0006), (0x0384, 2, 0x0002), (0x0386, 2, 0x0006), (0x0720, 2, 0x0001),
+    (0x0722, 2, 0x0000), (0x0728, 2, 0x03F8), (0x072A, 2, 0x017E), (0x0B02, 2, 0x0103),
+    (0x0B08, 2, 0x0001),
+)
+# Review v3: camera rails from the GN3 power table (all S2MPB02 regulators,
+# DT s2mpb02_pmic@59). Their sysfs state/microvolts are read from the PMIC
+# (s2m_is_enabled_regmap / get_voltage_sel read the chip, no cache).
+CAMERA_RAILS = ("VDDA_2.2V_CAM", "VDDD_0.92V_CAM", "VDDPHY_0.92V_CAM", "VDDIO_1.8V_CAM",
+                "VDDIO_1.8V_SUB", "S2MPB02_BUCK2", "S2MPB02_BB", "VDDAF_3.2V_CAM",
+                "VDDAF_2.8V_SUB", "VDDD_1.8V_OIS", "VDDD_3.2V_OIS", "VDDOIS_2.8V_SUB")
+REGULATOR_CLASS = "/sys/class/regulator"
 EXT_CTRL_FMT = "<IIIq"                      # struct v4l2_ext_control (packed), 20 bytes
 EXT_CTRLS_FMT = "<IIIiI4xQ"                 # which,count,error_idx,request_fd,rsvd,controls
 SENSOR_SCENARIO_VISION = 1
@@ -410,6 +437,12 @@ class RealSys:
     def exists(self, path: str) -> bool:
         return os.path.exists(path)
 
+    def listdir(self, path: str) -> list:
+        try:
+            return sorted(os.listdir(path))
+        except OSError:
+            return []
+
     def i2c_open(self, bus: int) -> int:
         return os.open(f"/dev/i2c-{int(bus)}", os.O_RDWR | os.O_CLOEXEC)
 
@@ -550,6 +583,8 @@ def gn3_i2c_bus_ok(sysif, bus: int) -> bool:
 def prechecks(sysif, args) -> dict:
     info = {}
     bus = getattr(args, "cis_i2c_bus", None)
+    if getattr(args, "cis_i2c_extended", False) and bus is None:
+        raise CameraError("--cis-i2c-extended needs --cis-i2c-bus")
     if bus is not None and not gn3_i2c_bus_ok(sysif, bus):
         raise CameraError(f"i2c bus {bus}: /sys/bus/i2c/devices/{bus}-0010 is not "
                           f"{GN3_COMPATIBLE.decode()}; refusing the register dump")
@@ -581,7 +616,7 @@ class Session:
     def __init__(self, sysif, width=2040, height=1532, fps=30, pixfmt=PIX_SBGGR16,
                  leader_bufs=2, vc_bufs=3, leader=LEADER_NODE, vc0=VC0_NODE,
                  exposure_us=0, iso=0, position=0, log=None, cis_exposure_us=0, cis_again=0.0,
-                 cis_dump=False, cis_i2c_bus=None):
+                 cis_dump=False, cis_i2c_bus=None, cis_i2c_extended=False, rails=False):
         self.sys = sysif
         self.width, self.height, self.fps, self.pixfmt = width, height, fps, pixfmt
         self.n_leader, self.n_vc = leader_bufs, vc_bufs
@@ -603,7 +638,30 @@ class Session:
         self.cis = ({"requested": summary, "applied": False, "error": None,
                      "readback_again_permille": None} if self.cis_controls else None)
         self.cis_dump_enabled, self.cis_i2c_bus = cis_dump, cis_i2c_bus
-        self.dump = {} if (cis_dump or cis_i2c_bus is not None) else None
+        self.cis_i2c_extended, self.rails_enabled = cis_i2c_extended, rails
+        self.dump = {} if (cis_dump or cis_i2c_bus is not None or rails) else None
+
+    def rails_snapshot(self, tag: str):
+        """Read-only sysfs snapshot of the camera regulators (never raises)."""
+        if not self.rails_enabled or self.dump is None:
+            return
+        out = {}
+        try:
+            for entry in self.sys.listdir(REGULATOR_CLASS):
+                base = f"{REGULATOR_CLASS}/{entry}"
+                name = (self.sys.read_text(base + "/name") or "").strip()
+                if name not in CAMERA_RAILS:
+                    continue
+                out[name] = {k: (self.sys.read_text(f"{base}/{k}") or "").strip() or None
+                             for k in ("state", "microvolts", "num_users")}
+                out[name]["node"] = entry
+            for name in CAMERA_RAILS:
+                out.setdefault(name, "not found")
+        except DeadlineExceeded:
+            raise
+        except Exception as exc:   # sysfs oddities must never fail a capture
+            out["error"] = repr(exc)
+        self.dump.setdefault(tag, {})["rails"] = out
 
     # -- helpers
     def _ioctl(self, fd, req, buf, what):
@@ -648,6 +706,7 @@ class Session:
     # -- setup / teardown
     def start(self):
         out_t, cap_t = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE
+        self.rails_snapshot("before_open")
         self.steps.append(f"open {self.leader_path}")
         self.lfd = self.sys.open(self.leader_path)
         self._ioctl(self.lfd, VIDIOC_S_INPUT, bytearray(struct.pack("<I", s_input_value(
@@ -716,6 +775,7 @@ class Session:
                     ctl_out[name] = f"error: {exc}"
         if self.cis_i2c_bus is not None:
             snap["i2c"] = self._i2c_dump()
+        self.rails_snapshot(tag)
 
     def _i2c_dump(self) -> dict:
         out = {}
@@ -737,6 +797,21 @@ class Session:
                     out["error"] = (f"revision {value:#06x} != {GN3_REV:#06x}: page is not "
                                     "0x4000 or wrong device; dump stopped")
                     break
+            if self.cis_i2c_extended and "error" not in out:
+                echo, mismatch = {}, []
+                for reg, length, expected in GN3_SETFILE_ECHO:
+                    self.steps.append(f"I2C read {reg:#06x}")
+                    try:
+                        raw = self.sys.i2c_read(fd, GN3_I2C_ADDR, reg, length)
+                    except OSError as exc:
+                        out["error"] = f"read {reg:#06x}: {exc.strerror}; echo stopped"
+                        break
+                    value = int.from_bytes(raw, "big")
+                    echo[f"{reg:#06x}"] = f"{value:#0{2 + 2 * length}x}"
+                    if expected is not None and value != expected:
+                        mismatch.append(f"{reg:#06x}: {value:#06x} (setfile {expected:#06x})")
+                out["setfile_echo"] = echo
+                out["setfile_mismatch"] = mismatch
         finally:
             try:
                 self.sys.close(fd)
@@ -865,6 +940,10 @@ class Session:
             for dbuf in pair:
                 step("release dmabuf", dbuf.release)
         self.vbufs, self.lbufs = [], []
+        try:
+            self.rails_snapshot("after_close")
+        except BaseException as exc:
+            self.teardown_errors.append(f"rails after_close: {exc!r}")
 
 
 class _Alarm:
@@ -909,6 +988,7 @@ def run_stream(sysif, args, consume, alarm=True, report=None) -> dict:
                       exposure_us=args.exposure_us, iso=args.iso,
                       cis_exposure_us=args.cis_exposure_us, cis_again=args.cis_again,
                       cis_dump=args.cis_dump, cis_i2c_bus=args.cis_i2c_bus,
+                      cis_i2c_extended=args.cis_i2c_extended, rails=args.rails,
                       log=(lambda m: print("# " + m, file=sys.stderr)) if args.verbose else None)
     started = time.monotonic()
     deadline = started + args.deadline
@@ -1405,6 +1485,12 @@ def _add_stream_args(p):
     p.add_argument("--cis-i2c-bus", type=int, default=None, metavar="N",
                    help="read-only GN3 register dump via /dev/i2c-N (i2c-dev must already "
                         "be loaded; N-0010 must be the GN3 in sysfs)")
+    p.add_argument("--cis-i2c-extended", action="store_true",
+                   help="with --cis-i2c-bus: also read back the page-0x4000 registers the "
+                        "driver's setfiles write and report mismatches (read-only)")
+    p.add_argument("--rails", action="store_true",
+                   help="read-only sysfs snapshot of the GN3 S2MPB02 rails (state, microvolts, "
+                        "num_users) before open, after start, before stop and after close")
     p.add_argument("--allow-fw-stall", action="store_true",
                    help="run even if is_mcu_fw.bin is not staged (~60 s stall)")
     p.add_argument("--skip-node-check", action="store_true")

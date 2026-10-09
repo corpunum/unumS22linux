@@ -163,6 +163,22 @@ after the last kept frame (`before_stop`), and record it in `result["dump"]`:
   - The client refuses to run unless `/sys/bus/i2c/devices/N-0010/of_node/compatible` is `samsung,exynos-is-cis-gn3`.
   - It does not load `i2c-dev` itself. Loading that module is a separate step.
 
+## Analog-rail and setfile-echo probes (review v3, 2026-10-09)
+
+The v2 dump showed that the sensor's digital side matches the driver's configuration on every
+register read: it is streaming, the frame counter advances, CIT 0x0830, gains 0x80/0x100,
+timing, window, RAW10, binning, and the test pattern off. Yet the pixels contribute nothing.
+Two more opt-in, read-only probes:
+
+- `--rails` reads `/sys/class/regulator/*/{name,state,microvolts,num_users}` for the GN3
+  power-table rails: S2MPB02 BUCK1/2, BB and LDO1/6/7/10/11/13/14, including VDDA_2.2V_CAM =
+  LDO14. It snapshots before open, after start, before stop and after close. The S2MPB02
+  driver reads `state` and `microvolts` from the PMIC itself and does not cache them.
+- `--cis-i2c-extended`, used together with `--cis-i2c-bus N`, reads back the 47 page-0x4000
+  registers below 0x6000 that the driver's Global and mode-18 setfiles write, plus SMIA 0x0006
+  (pixel order) and 0x0008 (data pedestal). It lists every mismatch. A mismatch is a hint
+  only, because the firmware may rewrite some of these registers.
+
 ## Risks and rollback
 
 - **First real DMA write by CSIS VC0 into memory.** The buffer is sized from
