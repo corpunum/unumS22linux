@@ -1,0 +1,6 @@
+pid=1651 cpu%=97.0 rssKB=251484 /usr/bin/Hyprland --i-am-really-stupid --config /root/hyprla
+pid=1721 cpu%=0.0 rssKB=20000 squeekboard 
+pid=2122 cpu%=1.1 rssKB=83020 quickshell -n -p /opt/s22-ui/shell 
+pid=27523 cpu%=0.0 rssKB=15224 /usr/bin/python3 /srv/s22/hardware/bin/s22-touchd 
+pid=27527 cpu%=0.0 rssKB=56280 quickshell -n -p /opt/s22-touch/shell.qml 
+cpu  4355862 11 914049 29407927 27056 122814 39829 0 0 0
