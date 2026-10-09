@@ -179,6 +179,19 @@ Two more opt-in, read-only probes:
   (pixel order) and 0x0008 (data pedestal). It lists every mismatch. A mismatch is a hint
   only, because the firmware may rewrite some of these registers.
 
+## Front camera preset (review v5, 2026-10-09)
+
+`--sensor front` selects the IMX374. Its DT node is `is_sensor_imx374@10`: `position = 1`, which is
+SP_FRONT, and module `id = 1`, which maps to `core->sensor[1]`. That gives:
+- leader `/dev/video102` (`exynos-is-ss1`; S_INPUT vindex 2, so S_INPUT = `0x04010201`);
+- VC0 `/dev/video214` (shot `capture[0].vid` 114). Its sysfs name is the kernel-bug name, which
+  the client accepts only on video214 for this preset.
+
+The geometry is locked to DT mode9, which is setfile 8: 1824x1368@30 RAW10, stride 3648, CFA
+GRBG. Sensor-write and raw-I2C flags are refused with `--sensor front`; they were reviewed for
+the GN3 only. `--sensor rear` is the default and sends the same ioctls with the same bytes as
+before.
+
 ## Risks and rollback
 
 - **First real DMA write by CSIS VC0 into memory.** The buffer is sized from

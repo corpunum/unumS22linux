@@ -338,7 +338,7 @@ class FakeSys:
         return self.next_fd
 
     def _role(self, fd):
-        return "leader" if self.fds.get(fd, "").endswith("video101") else "vc"
+        return "leader" if self.fds.get(fd, "").endswith(("video101", "video102")) else "vc"
 
     def open(self, path):
         fd = self._new_fd()
@@ -415,7 +415,8 @@ class FakeSys:
         if (name, role) in self.fail:
             raise OSError(self.fail[(name, role)], os.strerror(self.fail[(name, role)]))
         if name == "VIDIOC_S_INPUT":
-            if struct.unpack("<I", buf)[0] != 0x04000101:
+            self.s_input_value = struct.unpack("<I", buf)[0]
+            if self.s_input_value not in (0x04000101, 0x04010201):
                 raise OSError(22, "bad input")
             self.s_input = True
         elif name == "VIDIOC_S_FMT":
@@ -430,6 +431,9 @@ class FakeSys:
             img_fd, meta_fd = planes[0][2], planes[1][2]
             if role == "leader":
                 meta = self.bufs[meta_fd]
+                self.__dict__.setdefault("shot_vids", []).append(struct.unpack_from(
+                    "<II", meta, cam.OFF_NODE_GROUP)[0:1] + struct.unpack_from(
+                    "<I", meta, cam.OFF_NODE_GROUP + cam.NODE_SIZE))
                 if struct.unpack_from("<I", meta, cam.OFF_SHOT_MAGIC)[0] != cam.SHOT_MAGIC_NUMBER:
                     raise OSError(22, "Shot magic number error")
                 if planes[0][0] != planes[0][1]:
@@ -970,6 +974,82 @@ class Test0BE4(CaptureHelpers):
                      (0x10, 0x6000, 0x0001)):
             with self.assertRaises(ValueError):
                 real.i2c_write_0be4(-1, *args)
+
+
+class SensorPresetTest(CaptureHelpers):
+    """Review v5 2026-10-09: --sensor rear (default, unchanged) / front (IMX374, ss1)."""
+
+    FRONT_NAMES = {"/sys/class/video4linux/video102/name": "exynos-is-ss1\n",
+                   "/sys/class/video4linux/video214/name": cam.VC0_NAME_KERNEL_BUG + "\n"}
+
+    def test_rear_defaults_unchanged(self):
+        args = cam.build_parser().parse_args(["capture", "--out", "x"])
+        preset = cam.apply_sensor_preset(args)
+        self.assertEqual((args.width, args.height, args.fps, args.bayer, args.leader, args.vc0),
+                         (2040, 1532, 30, "GBRG", "/dev/video101", "/dev/video210"))
+        self.assertEqual((preset["position"], preset["device"]), (0, 0))
+        self.assertEqual(cam.LOCKED_GEOMETRY, cam.SENSOR_PRESETS["rear"]["geometry"])
+        self.assertEqual(cam.build_shot(2040, 1532, cam.PIX_SBGGR16),
+                         cam.build_shot(2040, 1532, cam.PIX_SBGGR16, device=0))
+        fake = FakeSys()
+        rc, res, _, raw = self._capture(fake)
+        self.assertEqual(rc, 0, res)
+        self.assertEqual(fake.s_input_value, 0x04000101)
+        self.assertEqual(set(fake.shot_vids), {(1, 110)})
+        self.assertEqual([c[1] for c in fake.calls if c[0] == "open"],
+                         ["/dev/video101", "/dev/video210"])
+        self.assertEqual(json.loads(Path(raw + ".json").read_text())["sensor"], "S5KGN3")
+
+    def test_front_uses_ss1_nodes_and_ids(self):
+        fake = FakeSys(names=self.FRONT_NAMES)
+        rc, res, _, raw = self._capture(fake, "--sensor", "front")
+        self.assertEqual(rc, 0, res)
+        self.assertEqual(fake.s_input_value, 0x04010201)    # VISION, position 1, vindex 2, leader
+        self.assertEqual(set(fake.shot_vids), {(2, 114)})
+        self.assertEqual([c[1] for c in fake.calls if c[0] == "open"],
+                         ["/dev/video102", "/dev/video214"])
+        self.assertEqual((res["leader"], res["node"]), ("/dev/video102", "/dev/video214"))
+        side = json.loads(Path(raw + ".json").read_text())
+        self.assertEqual((side["sensor"], side["bayer"]), ("IMX374", "GRBG"))
+        self._assert_rolled_back(fake)
+
+    def test_front_name_checks(self):
+        # the kernel-bug VC0 name is accepted only on the preset's own VC0 node
+        fake = FakeSys(names={**self.FRONT_NAMES,
+                              "/sys/class/video4linux/video210/name": cam.VC0_NAME_KERNEL_BUG})
+        rc, res, _, _ = self._capture(fake, "--sensor", "front", "--vc0", "/dev/video210")
+        self.assertEqual(rc, 1)
+        self.assertFalse([c for c in fake.calls if c[0] == "open"])
+        # rear leader name on the front preset is refused
+        fake = FakeSys(names={"/sys/class/video4linux/video214/name": cam.VC0_NAME_KERNEL_BUG})
+        rc, res, _, _ = self._capture(fake, "--sensor", "front", "--leader", "/dev/video101")
+        self.assertEqual(rc, 1)
+        self.assertIn("exynos-is-ss1", res["error"])
+
+    def test_front_refuses_rear_only_sensor_flags(self):
+        for extra in (("--cis-exposure-us", "1000"), ("--cis-again", "2"),
+                      ("--cis-i2c-bus", "3"), ("--cis-i2c-bus", "3", "--cis-test-0be4",
+                                               "--allow-sensor-write")):
+            fake = FakeSys(names=self.FRONT_NAMES)
+            rc, res, _, _ = self._capture(fake, "--sensor", "front", *extra)
+            self.assertEqual(rc, 1)
+            self.assertIn("rear GN3 only", res["error"])
+            self.assertFalse([c for c in fake.calls if c[0] in ("open", "i2c_open")])
+        fake = FakeSys(names=self.FRONT_NAMES)       # read-only G_CTRL dump stays allowed
+        rc, res, _, _ = self._capture(fake, "--sensor", "front", "--cis-dump")
+        self.assertEqual(rc, 0, res)
+
+    def test_front_geometry_lock(self):
+        for sensor, geo, ok in (("front", (1824, 1368, 30), True), ("front", (2040, 1532, 30), False),
+                                ("rear", (1824, 1368, 30), False)):
+            args = types.SimpleNamespace(sensor=sensor, width=geo[0], height=geo[1], fps=geo[2])
+            try:
+                cam.run_stream(cam.RealSys.__new__(cam.RealSys), args, lambda r, i: True, alarm=False)
+            except cam.CameraError as exc:
+                self.assertEqual("geometry locked" in str(exc), not ok, (sensor, geo, exc))
+            except AttributeError:
+                self.assertTrue(ok)      # passed the lock, failed later on the missing args
+        self.assertEqual(cam.vc0_stride(1824, cam.PIX_SBGGR16), 3648)
 
 
 class ListTest(unittest.TestCase):

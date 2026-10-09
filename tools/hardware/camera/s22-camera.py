@@ -252,6 +252,39 @@ VC0_GUARD_BYTES = 1 << 20
 # Until a capture has been proven once, only the geometry the 2026-10-06
 # self-test used is allowed (DMA geometry comes from the DT mode anyway).
 LOCKED_GEOMETRY = (2040, 1532, 30)
+# Review v5 (2026-10-09): sensor presets. "rear" reproduces every previous
+# default byte for byte. "front" = IMX374 (DT is_sensor_imx374@10: position 1
+# = SP_FRONT, module id 1 -> core->sensor[1]), so leader /dev/video102
+# ("exynos-is-ss1", IS_VIDEO_SS0_NUM + 1) and VC0 /dev/video214
+# (IS_VIDEO_SS0VC0_NUM + 1*4). Geometry = DT mode9 -> setfile 8
+# 1824x1368@30 RAW10 (sensor_imx374_setfile_A_19p2_1824x1368_30fps), normal
+# (non-special) mode; IMX374 bayer_order OTF_INPUT_ORDER_BAYER_GR_BG.
+SENSOR_PRESETS = {
+    "rear": {"position": 0, "device": 0, "geometry": (2040, 1532, 30), "bayer": "GBRG",
+             "sensor": "S5KGN3"},
+    "front": {"position": 1, "device": 1, "geometry": (1824, 1368, 30), "bayer": "GRBG",
+              "sensor": "IMX374"},
+}
+
+
+def leader_node(device: int) -> str:
+    return f"/dev/video{VIDEO_NODE_BASE + IS_VIDEO_SS0_NUM + device}"
+
+
+def vc0_node(device: int) -> str:
+    return f"/dev/video{VIDEO_NODE_BASE + IS_VIDEO_SS0VC0_NUM + 4 * device}"
+
+
+def apply_sensor_preset(args) -> dict:
+    """Fill unset stream args from --sensor (default rear). Explicit values win."""
+    preset = SENSOR_PRESETS[getattr(args, "sensor", None) or "rear"]
+    w, h, fps = preset["geometry"]
+    for key, value in (("width", w), ("height", h), ("fps", fps), ("bayer", preset["bayer"]),
+                       ("leader", leader_node(preset["device"])),
+                       ("vc0", vc0_node(preset["device"]))):
+        if getattr(args, key, None) is None:
+            setattr(args, key, value)
+    return preset
 DMA_HEAP = "/dev/dma_heap/system"
 GN3_BAYER = "GBRG"
 
@@ -363,14 +396,14 @@ def sensor_size_value(width: int, height: int) -> int:
 
 
 def build_shot(width: int, height: int, cap_pixfmt: int, exposure_us: int = 0,
-               iso: int = 0, fps: int = 30) -> bytearray:
+               iso: int = 0, fps: int = 30, device: int = 0) -> bytearray:
     """camera2_shot_ext for the sensor-group leader meta plane."""
     meta = bytearray(SIZE_OF_META_PLANE)
     struct.pack_into("<I", meta, OFF_SHOT_MAGIC, SHOT_MAGIC_NUMBER)
     leader = OFF_NODE_GROUP
-    struct.pack_into("<II", meta, leader + NODE_VID, IS_VIDEO_SS0_NUM, 0)  # request 0
+    struct.pack_into("<II", meta, leader + NODE_VID, IS_VIDEO_SS0_NUM + device, 0)  # request 0
     cap = OFF_NODE_GROUP + NODE_SIZE  # capture[0]
-    struct.pack_into("<II", meta, cap + NODE_VID, IS_VIDEO_SS0VC0_NUM, 1)
+    struct.pack_into("<II", meta, cap + NODE_VID, IS_VIDEO_SS0VC0_NUM + 4 * device, 1)
     struct.pack_into("<4I", meta, cap + NODE_INPUT_CROP, 0, 0, width, height)
     struct.pack_into("<4I", meta, cap + NODE_OUTPUT_CROP, 0, 0, width, height)
     struct.pack_into("<I", meta, cap + NODE_PIXELFORMAT, cap_pixfmt)
@@ -596,6 +629,14 @@ def gn3_i2c_bus_ok(sysif, bus: int) -> bool:
 
 def prechecks(sysif, args) -> dict:
     info = {}
+    if (getattr(args, "sensor", None) or "rear") != "rear":
+        reviewed_rear_only = [flag for flag, attr in (
+            ("--cis-exposure-us", "cis_exposure_us"), ("--cis-again", "cis_again"),
+            ("--cis-i2c-bus", "cis_i2c_bus"), ("--cis-i2c-extended", "cis_i2c_extended"),
+            ("--cis-test-0be4", "cis_test_0be4")) if getattr(args, attr, None)]
+        if reviewed_rear_only:
+            raise CameraError(f"{', '.join(reviewed_rear_only)} reviewed for the rear GN3 only; "
+                              "not allowed with --sensor " + args.sensor)
     bus = getattr(args, "cis_i2c_bus", None)
     if getattr(args, "cis_test_0be4", False) and not (bus is not None and
                                                       getattr(args, "allow_sensor_write", False)):
@@ -606,10 +647,12 @@ def prechecks(sysif, args) -> dict:
         raise CameraError(f"i2c bus {bus}: /sys/bus/i2c/devices/{bus}-0010 is not "
                           f"{GN3_COMPATIBLE.decode()}; refusing the register dump")
     if not args.skip_node_check:
-        for node, expected in ((args.leader, LEADER_NAME), (args.vc0, VC0_NAME)):
+        device = SENSOR_PRESETS[getattr(args, "sensor", None) or "rear"]["device"]
+        leader_name, vc0_name = f"exynos-is-ss{device}", f"exynos-is-ss{device}vc0"
+        for node, expected in ((args.leader, leader_name), (args.vc0, vc0_name)):
             name = node_name(sysif, node)
-            if name != expected and not (expected == VC0_NAME and name == VC0_NAME_KERNEL_BUG
-                                         and os.path.basename(node) == "video210"):
+            if name != expected and not (expected == vc0_name and name == VC0_NAME_KERNEL_BUG
+                                         and node == vc0_node(device)):
                 raise CameraError(f"{node} sysfs name is {name!r}, expected {expected!r}; "
                                   "refusing (use --skip-node-check only after review)")
     if selftest_active(sysif):
@@ -633,6 +676,7 @@ class Session:
     def __init__(self, sysif, width=2040, height=1532, fps=30, pixfmt=PIX_SBGGR16,
                  leader_bufs=2, vc_bufs=3, leader=LEADER_NODE, vc0=VC0_NODE,
                  exposure_us=0, iso=0, position=0, log=None, cis_exposure_us=0, cis_again=0.0,
+                 device=0,
                  cis_dump=False, cis_i2c_bus=None, cis_i2c_extended=False, rails=False,
                  cis_test_0be4=False):
         self.sys = sysif
@@ -640,6 +684,7 @@ class Session:
         self.n_leader, self.n_vc = leader_bufs, vc_bufs
         self.leader_path, self.vc_path = leader, vc0
         self.exposure_us, self.iso, self.position = exposure_us, iso, position
+        self.device = device
         self.stride = vc0_stride(width, pixfmt)
         self.image_len = self.stride * height
         self.log = log or (lambda msg: None)
@@ -713,7 +758,7 @@ class Session:
     def _queue_leader(self, index):
         img, meta = self.lbufs[index]
         meta.write(build_shot(self.width, self.height, self.pixfmt, self.exposure_us,
-                              self.iso, self.fps))
+                              self.iso, self.fps, self.device))
         self._qbuf(self.lfd, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, self.lplanes, index, img, meta,
                    True, f"QBUF leader[{index}]")
 
@@ -729,7 +774,8 @@ class Session:
         self.steps.append(f"open {self.leader_path}")
         self.lfd = self.sys.open(self.leader_path)
         self._ioctl(self.lfd, VIDIOC_S_INPUT, bytearray(struct.pack("<I", s_input_value(
-            SENSOR_SCENARIO_VISION, self.position, IS_VIDEO_SS0_NUM, 1))), "S_INPUT leader")
+            SENSOR_SCENARIO_VISION, self.position, IS_VIDEO_SS0_NUM + self.device, 1))),
+            "S_INPUT leader")
         self._ioctl(self.lfd, VIDIOC_S_PARM, make_streamparm_capture(self.fps), "S_PARM leader")
         self._ioctl(self.lfd, VIDIOC_S_CTRL,
                     make_control(CID_IS_S_SENSOR_SIZE, sensor_size_value(self.width, self.height)),
@@ -1034,12 +1080,15 @@ def run_stream(sysif, args, consume, alarm=True, report=None) -> dict:
 
     `report` (the caller's result dict) also receives "cis" when the run
     raises, so a failed run still shows whether exposure/gain were written."""
-    if isinstance(sysif, RealSys) and (args.width, args.height, args.fps) != LOCKED_GEOMETRY:
-        raise CameraError("geometry locked to %dx%d@%d until a capture is proven" % LOCKED_GEOMETRY)
+    preset = apply_sensor_preset(args)
+    if isinstance(sysif, RealSys) and (args.width, args.height, args.fps) != preset["geometry"]:
+        raise CameraError("geometry locked to %dx%d@%d for this sensor until a capture is proven"
+                          % preset["geometry"])
     info = prechecks(sysif, args)
     pixfmt = PIX_SBGGR16 if args.pixfmt == "sbggr16" else PIX_SBGGR10P
     session = Session(sysif, args.width, args.height, args.fps, pixfmt,
                       vc_bufs=args.buffers, leader=args.leader, vc0=args.vc0,
+                      position=preset["position"], device=preset["device"],
                       exposure_us=args.exposure_us, iso=args.iso,
                       cis_exposure_us=args.cis_exposure_us, cis_again=args.cis_again,
                       cis_dump=args.cis_dump, cis_i2c_bus=args.cis_i2c_bus,
@@ -1381,6 +1430,7 @@ def _develop_args(args):
 
 def cmd_capture(args, sysif=None, alarm=True) -> int:
     sysif = sysif or RealSys()
+    preset = apply_sensor_preset(args)
     t0 = time.monotonic()
     holder = {"seen": 0, "raw": None, "frame": None}
 
@@ -1403,7 +1453,8 @@ def cmd_capture(args, sysif=None, alarm=True) -> int:
         fmt = args.pixfmt
         meta = {"width": args.width, "height": args.height, "stride": stream["stride"],
                 "pixfmt": stream["pixfmt"], "bayer": args.bayer, "sequence": holder["frame"]["sequence"],
-                "timestamp": holder["frame"]["timestamp"], "sensor": "S5KGN3", "mode": "2040x1532@30"}
+                "timestamp": holder["frame"]["timestamp"], "sensor": preset["sensor"],
+                "mode": "%dx%d@%d" % (args.width, args.height, args.fps)}
         if args.raw:
             write_raw(args.raw, holder["raw"], meta)
             result["raw"] = args.raw
@@ -1422,6 +1473,7 @@ def cmd_capture(args, sysif=None, alarm=True) -> int:
 
 def cmd_record(args, sysif=None, alarm=True) -> int:
     sysif = sysif or RealSys()
+    preset = apply_sensor_preset(args)
     os.makedirs(args.out, exist_ok=True)
     t0 = time.monotonic()
     state = {"start": None, "last": None, "kept": 0, "seen": 0}
@@ -1518,13 +1570,16 @@ def cmd_develop(args) -> int:
 
 
 def _add_stream_args(p):
-    p.add_argument("--width", type=int, default=2040)
-    p.add_argument("--height", type=int, default=1532)
-    p.add_argument("--fps", type=int, default=30)
+    p.add_argument("--sensor", choices=sorted(SENSOR_PRESETS), default="rear",
+                   help="rear = S5KGN3 ss0 (video101/video210, default); front = IMX374 ss1 "
+                        "(video102/video214, 1824x1368@30)")
+    p.add_argument("--width", type=int, default=None, help="default from --sensor")
+    p.add_argument("--height", type=int, default=None)
+    p.add_argument("--fps", type=int, default=None)
     p.add_argument("--pixfmt", choices=("sbggr16", "raw10p"), default="sbggr16")
     p.add_argument("--buffers", type=int, default=3, help="VC0 dma-buf count")
-    p.add_argument("--leader", default=LEADER_NODE)
-    p.add_argument("--vc0", default=VC0_NODE)
+    p.add_argument("--leader", default=None, help="default from --sensor")
+    p.add_argument("--vc0", default=None, help="default from --sensor")
     p.add_argument("--timeout", type=float, default=5.0, help="per-frame select timeout (s)")
     p.add_argument("--first-timeout", type=float, default=20.0)
     p.add_argument("--deadline", type=float, default=120.0, help="hard total deadline (s)")
@@ -1560,11 +1615,12 @@ def _add_stream_args(p):
                    help="run even if is_mcu_fw.bin is not staged (~60 s stall)")
     p.add_argument("--skip-node-check", action="store_true")
     p.add_argument("-v", "--verbose", action="store_true", help="log each ioctl to stderr")
-    _add_develop_args(p)
+    _add_develop_args(p, bayer_default=None)
 
 
-def _add_develop_args(p):
-    p.add_argument("--bayer", default=GN3_BAYER, help="CFA order (GN3: GBRG)")
+def _add_develop_args(p, bayer_default=GN3_BAYER):
+    p.add_argument("--bayer", default=bayer_default,
+                   help="CFA order (GN3: GBRG, IMX374: GRBG; streams default from --sensor)")
     p.add_argument("--scale", type=int, default=4, help="even downscale factor (2,4,8)")
     p.add_argument("--black", type=float, default=64.0, help="black level in 10-bit units")
     p.add_argument("--wb", choices=("grayworld", "none"), default="grayworld")
