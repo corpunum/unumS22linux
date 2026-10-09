@@ -48,6 +48,9 @@ MODEL_PROFILE_SELECTOR = Path('/etc/s22-model-profile')
 QWEN2B_PROFILE = 'qwen2b'
 QWEN4B_PROFILE = 'qwen4b'
 QWEN4B_ALIAS = 's22-qwen4b'
+# 'none': no CPU model server on :8089 at all (the resident model is the :8090 GPU server
+# that s22-keepalive supervises). Selected with /etc/s22-model-profile = none.
+NONE_PROFILE = 'none'
 QWEN2B_MODEL_ID = '/mnt/model-bench/models/Qwen3.5-2B-Q4_0.gguf'
 QWEN4B_MODEL_ID = '/mnt/model-bench/models/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf'
 QWEN4B_SHA256 = '79e28ecacf84e75b6056cf4059636d435aa9eb67795780f7b7dbc7d32a962741'
@@ -136,10 +139,14 @@ def selected_model_profile(selector: Path = MODEL_PROFILE_SELECTOR) -> str:
         return QWEN2B_PROFILE
     if value in (QWEN4B_PROFILE, QWEN4B_ALIAS):
         return QWEN4B_PROFILE
-    raise Failure(f"unsupported model profile {value!r}; expected qwen2b or qwen4b")
+    if value == NONE_PROFILE:
+        return NONE_PROFILE
+    raise Failure(f"unsupported model profile {value!r}; expected qwen2b, qwen4b or none")
 
 
-def model_id(profile: str) -> str:
+def model_id(profile: str) -> str | None:
+    if profile == NONE_PROFILE:
+        return None
     if profile == QWEN2B_PROFILE:
         return QWEN2B_MODEL_ID
     if profile == QWEN4B_PROFILE:
@@ -472,8 +479,11 @@ def model_command(profile: str) -> list[str]:
     return command
 
 
-def start_model(log: Path, retries: int = 3, profile: str | None = None) -> subprocess.Popen[str]:
+def start_model(log: Path, retries: int = 3, profile: str | None = None) -> subprocess.Popen[str] | None:
     profile = selected_model_profile() if profile is None else profile
+    if profile == NONE_PROFILE:
+        say("model profile 'none': no CPU model server on :8089")
+        return None
     cmd = chroot_cmd(
         {"HOME": "/root", "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
         *model_command(profile))
@@ -914,9 +924,9 @@ def main() -> int:
                 else:
                     raise Failure('terminal, keyboard or Omarchy shell did not start')
                 runtime = {"uuid": UUID, "device": DEVICE,
-                    "arch": str(ARCH), "model": str(MODEL), "model_port": 8089,
+                    "arch": str(ARCH), "model": str(MODEL), "model_port": 8089 if model else None,
                     "model_profile": profile, "model_id": model_id(profile),
-                    "desktop_pid": desktop.pid, "model_pid": model.pid,
+                    "desktop_pid": desktop.pid, "model_pid": model.pid if model else None,
                     "supervisor_pid": os.getpid(), "started_at": int(time.time())}
                 RUNTIME_READY.write_text(json.dumps(runtime, sort_keys=True) + "\n")
                 say("persistent desktop and model ready")
@@ -953,7 +963,7 @@ def main() -> int:
                     if wifi_startup is not None and wifi_startup.poll() is not None:
                         say(f'optional Wi-Fi startup exited status={wifi_startup.returncode}; no retry')
                         wifi_startup = None
-                    if model.poll() is not None:
+                    if model is not None and model.poll() is not None:
                         if model_restarts >= 2:
                             raise Failure("model server exceeded bounded runtime restarts")
                         model_restarts += 1
