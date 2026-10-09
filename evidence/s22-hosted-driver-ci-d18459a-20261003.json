@@ -1,0 +1,30 @@
+{
+  "schema": "s22-hosted-driver-ci/v1",
+  "repository": "corpunum/unumS22linux",
+  "branch": "s22/luna-driver-completion-20260923",
+  "tested_head": "d18459a5591ec64322263fa1cd56aa36d164d153",
+  "run_id": 37081635954,
+  "url": "https://github.com/corpunum/unumS22linux/actions/runs/37081635954",
+  "status": "completed",
+  "conclusion": "success",
+  "job_started_at_utc": "2026-10-03T00:20:20Z",
+  "job_completed_at_utc": "2026-10-03T00:22:38Z",
+  "fixed_runner_policy_tests_passed": 7,
+  "normal_scripts_passed": 60,
+  "optimized_scripts_passed": 57,
+  "runner_failures": 0,
+  "private_complete_hosted_log_sha256": "8878f2082b5d0b20b7bc6dac0145bd806c8d2957126ce400de4e137f34f58808",
+  "private_log_contents_published": false,
+  "fixture_specific_skips_remain_explicit_in_original_log": true,
+  "failed_local_public_source_runs_relabelled": false,
+  "phone_access": false,
+  "partition_writes": 0,
+  "reboots": 0,
+  "hardware_acceptance": false,
+  "limits": [
+    "This exact HEAD includes the reviewed NPU13 interface patch and its focused suite, not a native NPU13 module build.",
+    "Optional private artifact and unavailable-tool fixtures remain explicitly skipped; script passes are not universal fixture coverage.",
+    "The later camera clock revision and audio profile review are not part of this tested HEAD.",
+    "Hosted tests do not establish module loading, powered liveness, independent rescue or physical acceptance."
+  ]
+}

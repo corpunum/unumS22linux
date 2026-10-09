@@ -1,0 +1,38 @@
+{
+  "schema": "s22-preserved-camera-payload-host-abi/v1",
+  "scope": "Existing host artifact inspection only; no running-loader or hardware acceptance",
+  "host_image": {
+    "artifact": "builds/camera-module-recovery-20260927/recovery.img",
+    "bytes": 100663296,
+    "sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+    "independently_readable_on_host": true
+  },
+  "parser_sha256": "715383e85d4c5b426f8b6fa43961da2481b57a8fc52dcd54c335faf68d5c4155",
+  "symbol_map": {
+    "source": "Completed native-eight host build",
+    "sha256": "15fc69e815cb4da6cb3372f4b5141005ab2e770b0414b67f230f1b185bf03df7"
+  },
+  "ramdisk": {
+    "module_count": 324,
+    "inventory_sha256": "36133a389fd0f570bb711fa8d756febb07be8a59c05c626fa6d678c131bd426e",
+    "import_records": 16547,
+    "remaining_vermagic_flags_compatible": true,
+    "version_sections_present": true,
+    "module_layout_records_present_and_matching": true,
+    "missing_symbols": 0,
+    "crc_mismatches": 0,
+    "unknown_or_ambiguous_crcs": 0,
+    "host_model_compatible": true
+  },
+  "private_inspection_receipt_sha256": "b82474e6cae2af592c47b7da5333107561aa8f3dd55a954fdb37299c8aae43a9",
+  "external_wlan_rechecked_by_this_operation": false,
+  "prior_external_wlan_receipt": "evidence/s22-native-eight-preserved-payload-abi-20261002.json",
+  "loaded_325_module_source_membership_verified": false,
+  "current_RECOVERY_partition_rehashed": false,
+  "kernel_loader_executed": false,
+  "candidate_audio_group_validated_by_this_operation": false,
+  "phone_access": false,
+  "independent_hardware_rescue": "unproven",
+  "consumed_device_authorizations_reused": false,
+  "hardware_acceptance": false
+}

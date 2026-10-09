@@ -1,0 +1,219 @@
+{
+  "schema": "s22-audio-coherent-recovery-profile-independent-review/v1",
+  "review_date": "2026-10-03",
+  "verdict": {
+    "status": "BLOCKED_NARROW_RECEIPT_JSON_TYPE_CONFUSION",
+    "scope": "Receipt validation is not strict about JSON boolean versus integer types; profile planning and artifact validation remain host-only.",
+    "strict_receipt_validation": false,
+    "profile_cli_executes_transport": false,
+    "deployment_authority": false,
+    "independent_hardware_rescue_demonstrated": false,
+    "other_blockers_demonstrated": false
+  },
+  "selection": {
+    "model": "gpt-6-luna",
+    "reasoning": "max",
+    "basis": "Explicit parent assignment; configuration evidence, not backend attestation."
+  },
+  "review_source": {
+    "worktree": "/home/corpunum/s22-workers/audio-profile-independent-review-20261003",
+    "branch": "codex/s22-audio-profile-independent-review-20261003",
+    "review_source_commit": "830a7bb2c379ce77bb9d8eb15d4c354febe93d36",
+    "review_base_commit": "d18459a5591ec64322263fa1cd56aa36d164d153",
+    "frozen_author_commit": "bddb66ac717b3668898eb78c825d02aadbba254b",
+    "frozen_author_parent": "7765ce59ea96aaa04958811c8eabbd229e1a6921",
+    "four_author_files_identical_to_frozen_commit": true,
+    "clean_before_review_files": true,
+    "source_modified": false
+  },
+  "frozen_source_hashes": {
+    "tools/hardware/audio-coherent-recovery-profile.py": "40526594559cc839d7d3b5371c4dff3480d6a5c69394476eedd8047abbe5f0cc",
+    "tools/hardware/test-audio-coherent-recovery-profile.py": "c13b8269d5bb9f4dea7f0862f76203f9a7a8d99aeb79fb1e4f54ab02c60d32d3",
+    "tools/hardware/deploy-audio-recovery.py": "d0c54cc306e3a8a80cb79d79958fceedf6bb5945dabc7606e02b12d27dc00fd3",
+    "tools/hardware/test-recovery-deployment-hardening.py": "10efaccce960c9fb7a0bc774715b56e16b00debeaf65cdd8ce8c6a59501fb424"
+  },
+  "artifact_identity": {
+    "read_only_local_validation": true,
+    "candidate_image": {
+      "path": "builds/audio-coherent-recovery-stripped-host-20261003/recovery.img",
+      "bytes": 100663296,
+      "sha256": "6b788b23f54b9b8e84212187544064949b72af20c167cbb02392cbe53ee5a6ab"
+    },
+    "candidate_manifest": {
+      "path": "builds/audio-coherent-recovery-stripped-host-20261003/manifest.json",
+      "bytes": 26524,
+      "sha256": "f78bbaddf94ef6d1ae37b059b7455b24a15cbb7c2fab1ec9bbc4e1df5fd1edf8",
+      "schema": "s22-audio-coherent-recovery-package/v1",
+      "phone_access": false,
+      "deployed": false,
+      "host_only": true,
+      "module_loaded": false,
+      "boot_authorized": false,
+      "avb_algorithm": "NONE"
+    },
+    "camera_baseline": {
+      "path": "builds/camera-module-recovery-20260927/recovery.img",
+      "bytes": 100663296,
+      "sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f"
+    },
+    "lineage_reference_sha256": "b5bf01c4a47091eb95078fc69b133b44c2b453b31c23433594c5b605e3747b55",
+    "static_inventory": {
+      "ramdisk_modules": 324,
+      "ramdisk_imports": 16569,
+      "selected_external_wlan_imports": 495,
+      "module_loader_or_runtime_membership_proven": false
+    }
+  },
+  "profiles": {
+    "audio-forward": {
+      "before_sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+      "target_sha256": "6b788b23f54b9b8e84212187544064949b72af20c167cbb02392cbe53ee5a6ab",
+      "staging_directory": "/srv/s22/audio-coherent-forward-20261003",
+      "rollback_filename": "camera-baseline-rollback.img",
+      "actual_artifact_validation": "passed"
+    },
+    "audio-reverse": {
+      "before_sha256": "6b788b23f54b9b8e84212187544064949b72af20c167cbb02392cbe53ee5a6ab",
+      "target_sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+      "staging_directory": "/srv/s22/audio-coherent-reverse-20261003",
+      "rollback_filename": "audio-candidate-rollback.img",
+      "actual_artifact_validation": "passed"
+    }
+  },
+  "build_id_comparison": {
+    "kernel": {
+      "base_kernel_build_id_reference": "b2dda820b18d410d9bf12f1bd2584567d545991d",
+      "standalone_candidate_kernel_build_id_field_present": false,
+      "base_payload_sha256": "7738564db77e4a6183ffaa875fc12f8168a58e8135a3bdc86e27b127b47fc05c",
+      "candidate_unchanged_payload_sha256": "7738564db77e4a6183ffaa875fc12f8168a58e8135a3bdc86e27b127b47fc05c",
+      "actual_unpacked_base_and_candidate_kernel_payloads_identical": true,
+      "actual_payload_sha256_verified": true
+    },
+    "audio_modules": [
+      {
+        "path": "lib/modules/snd-soc-samsung-abox.ko",
+        "base_build_id_sha1_from_manifest": "34a5354a75980688ee7dbeb6a848e04a7d54558f",
+        "candidate_build_id_sha1": "26347c3373e155fa6badf7883ff162f1d9f6723f",
+        "candidate_readelf_matches_manifest": true
+      },
+      {
+        "path": "lib/modules/rainbow_prince.ko",
+        "base_build_id_sha1_from_manifest": "510b984887b640ad4ad3c1e9a556ef16c30b38c9",
+        "candidate_build_id_sha1": "8a7227b58cb7f4faf73ea92974781d34870bbfac",
+        "candidate_readelf_matches_manifest": true
+      },
+      {
+        "path": "lib/modules/exynos-usb-audio-offloading.ko",
+        "base_build_id_sha1_from_manifest": "4f35c50b0eca0d22b2060f7b8d84f03359feacd1",
+        "candidate_build_id_sha1": "8c9b0d4787ea32eae7de0086a4d662b0f351675d",
+        "candidate_readelf_matches_manifest": true
+      }
+    ]
+  },
+  "source_review": {
+    "profile_constant_and_direction_lines": "tools/hardware/audio-coherent-recovery-profile.py:21-59",
+    "pinned_helper_import_lines": "tools/hardware/audio-coherent-recovery-profile.py:81-101",
+    "bounded_nofollow_input_lines": "tools/hardware/audio-coherent-recovery-profile.py:104-138",
+    "manifest_integrity_and_scalar_gate_lines": "tools/hardware/audio-coherent-recovery-profile.py:161-222",
+    "actual_artifact_validation_lines": "tools/hardware/audio-coherent-recovery-profile.py:225-253",
+    "receipt_wrapper_lines": "tools/hardware/audio-coherent-recovery-profile.py:266-305",
+    "host_plan_flags_lines": "tools/hardware/audio-coherent-recovery-profile.py:317-346",
+    "nonexecuting_cli_lines": "tools/hardware/audio-coherent-recovery-profile.py:349-365",
+    "receipt_type_comparison_lines": "tools/hardware/deploy-audio-recovery.py:722-737",
+    "rendered_stage_fakefs_test_lines": "tools/hardware/test-audio-coherent-recovery-profile.py:340-393",
+    "transport_negative_mock_and_cli_rejections": "tools/hardware/test-audio-coherent-recovery-profile.py:245-272"
+  },
+  "receipt_type_blocker": {
+    "profile_file": "tools/hardware/audio-coherent-recovery-profile.py",
+    "profile_lines": "282-294",
+    "shared_helper_file": "tools/hardware/deploy-audio-recovery.py",
+    "shared_helper_lines": "722-737",
+    "cause": "Expected false values are checked by equality; Python int 0 equals bool False.",
+    "reproductions": [
+      {
+        "mode": "stage",
+        "field": "partition_written",
+        "json_value": 0,
+        "runtime_type": "int",
+        "expected_json_type": "boolean",
+        "result": "accepted_as_valid"
+      },
+      {
+        "mode": "flash",
+        "field": "reboot_performed",
+        "json_value": 0,
+        "runtime_type": "int",
+        "expected_json_type": "boolean",
+        "result": "accepted_as_valid"
+      }
+    ],
+    "reproducer_executed": true,
+    "source_changed": false,
+    "scope_effect": "Receipt classification is not strict; no transport, write, reboot, or authority path is introduced."
+  },
+  "negative_controls": {
+    "partial_stage_receipt_rejected": true,
+    "unknown_extra_outcome_rejected": true,
+    "unknown_mode_rejected": true,
+    "stale_trial_identity_rejected": true,
+    "wrong_profile_rejected": true,
+    "wrong_readback_hash_rejected": true,
+    "mutated_boot_authorized_true_manifest_rejected_at_scalar_gate": true,
+    "mutation_method": "Synthetic temporary manifest content; expected digest adjusted only in-memory to reach boot_authorized check; original artifact and source unchanged."
+  },
+  "test_matrix": {
+    "python_version": "3.12.3",
+    "portable_private_root_unset": {
+      "fixture_skip_message": "private 100663296-byte package inputs are not part of portable CI",
+      "normal": {"sys_flags_optimize": 0, "passed": 12, "skipped": 1, "failed": 0},
+      "python3_O": {"sys_flags_optimize": 1, "passed": 12, "skipped": 1, "failed": 0},
+      "pythonoptimize_1": {"sys_flags_optimize": 1, "passed": 12, "skipped": 1, "failed": 0}
+    },
+    "optional_private_artifact_root_configured": {
+      "root": "/home/corpunum/s22-linux",
+      "normal": {"passed": 13, "skipped": 0, "failed": 0},
+      "directions_validated": ["audio-forward", "audio-reverse"],
+      "read_only": true
+    },
+    "rendered_stage_fakefs": {
+      "both_directions": true,
+      "actual_shared_rendered_stage_body": true,
+      "modeled_partition_write_bytes": 0,
+      "flash_body_executed": false,
+      "transport_called": false
+    },
+    "strict_json_bool_int_regression_covered_by_suite": false
+  },
+  "prior_artifact_review_context": {
+    "historical_artifact_review_commit": "7fedb5ba249d2685ce4595c1c8132c7267bfea17",
+    "historical_verdict": "PASS_LIMITED",
+    "historical_review_private_capture_gap": true,
+    "root_reconciliation_commit": "61bf29031ff9d4200fbed0292f663bf23719ed52",
+    "root_reconciliation_historical_gap_preserved": true,
+    "reconciled_launch_id": "201c9d90-71a0-48a9-a8d5-46edea60004f",
+    "reconciled_exit_code": 0,
+    "reconciled_duration_seconds": 13.281,
+    "reconciled_stdout_bytes": 22166,
+    "reconciled_stderr_bytes": 0,
+    "reconciled_image_sha256": "6b788b23f54b9b8e84212187544064949b72af20c167cbb02392cbe53ee5a6ab",
+    "reconciled_manifest_sha256": "f78bbaddf94ef6d1ae37b059b7455b24a15cbb7c2fab1ec9bbc4e1df5fd1edf8",
+    "interpretation": "Separate coordinator-side host capture reconciliation; it does not retroactively close the original independent review gap or establish device acceptance."
+  },
+  "safety_and_acceptance": {
+    "phone_or_device_access": false,
+    "ssh_or_adb": false,
+    "build_or_repack": false,
+    "stage_or_flash_performed": false,
+    "partition_written": false,
+    "reboot_performed": false,
+    "operation_marker_created": false,
+    "deployment_authorized": false,
+    "independent_hardware_rescue_demonstrated": false,
+    "bootability_or_samsung_authentication": false,
+    "module_load_or_audio_hardware_acceptance": false
+  },
+  "owned_outputs": [
+    "docs/reviews/AUDIO_COHERENT_RECOVERY_PROFILE_REVIEW_2026-10-03.md",
+    "evidence/s22-audio-coherent-recovery-profile-review-20261003.json"
+  ]
+}

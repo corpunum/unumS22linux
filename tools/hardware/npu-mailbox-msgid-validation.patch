@@ -1,0 +1,95 @@
+diff --git a/drivers/vision/npu/core/npu-util-msgidgen.c b/drivers/vision/npu/core/npu-util-msgidgen.c
+--- a/drivers/vision/npu/core/npu-util-msgidgen.c
++++ b/drivers/vision/npu/core/npu-util-msgidgen.c
+@@ -102,12 +102,15 @@
+-static inline void __validate_handle_msgid(struct msgid_pool *handle, const int msg_id)
++static inline int __validate_handle_msgid(struct msgid_pool *handle, const int msg_id)
+ {
+-	BUG_ON(!handle);
+-	BUG_ON(handle->magic != MSGID_POOL_MAGIC);
+-
+-	BUG_ON(msg_id < 0);
+-	if (msg_id >= NPU_MAX_MSG_ID_CNT) {
+-		npu_warn("msg_id(0x%08x) >= NPU_MAX_MSG_ID_CNT(0x%08x)\n", msg_id, NPU_MAX_MSG_ID_CNT);
+-		fw_will_note(FW_LOGSIZE);
+-		BUG_ON(1);
+-	}
++	BUG_ON(!handle);
++	BUG_ON(handle->magic != MSGID_POOL_MAGIC);
++
++	if (msg_id < 0 || msg_id >= NPU_MAX_MSG_ID_CNT) {
++		npu_warn("invalid msg_id(%d), valid range is [0, %d)\n",
++			msg_id, NPU_MAX_MSG_ID_CNT);
++		if (msg_id >= NPU_MAX_MSG_ID_CNT)
++			fw_will_note(FW_LOGSIZE);
++		return 0;
++	}
++
++	return 1;
+ }
+@@ -116,6 +119,7 @@
+ void msgid_claim(struct msgid_pool *handle, const int msg_id)
+ {
+-	__validate_handle_msgid(handle, msg_id);
++	if (!__validate_handle_msgid(handle, msg_id))
++		return;
+-	npu_dbg("claim(%d)\n", msg_id);
++	npu_dbg("claim(%d)\n", msg_id);
+-	__msgid_claim(handle, msg_id);
++	__msgid_claim(handle, msg_id);
+ }
+@@ -124,17 +128,19 @@
+ void *msgid_claim_get_ref(struct msgid_pool *handle, const int msg_id, const int expected_type)
+ {
+-	void *ref;
+-	__validate_handle_msgid(handle, msg_id);
+-	npu_dbg("claim_ref(%d)\n", msg_id);
+-
+-	if (expected_type != handle->pool[msg_id].pt_type) {
+-		npu_err("expected_type error(%d != %d)\n", expected_type, handle->pool[msg_id].pt_type);
+-		WARN_ON(expected_type != handle->pool[msg_id].pt_type);
+-	}
+-
+-	ref = handle->pool[msg_id].ref;
+-	if (__msgid_claim(handle, msg_id)) {
+-		return NULL;
+-	}
+-	return ref;
++	void *ref;
++	if (!__validate_handle_msgid(handle, msg_id))
++		return NULL;
++	npu_dbg("claim_ref(%d)\n", msg_id);
++
++	if (expected_type != handle->pool[msg_id].pt_type) {
++		npu_err("expected_type error(%d != %d)\n", expected_type, handle->pool[msg_id].pt_type);
++		WARN_ON(expected_type != handle->pool[msg_id].pt_type);
++		return NULL;
++	}
++
++	ref = handle->pool[msg_id].ref;
++	if (__msgid_claim(handle, msg_id)) {
++		return NULL;
++	}
++	return ref;
+ }
+@@ -142,11 +148,12 @@
+ int msgid_get_pt_type(struct msgid_pool *handle, const int msg_id)
+ {
+-	BUG_ON(!handle);
+-	__validate_handle_msgid(handle, msg_id);
+-
+-	if (!atomic_read(&handle->pool[msg_id].occupied)) {
+-		npu_warn("request pt_type for unoccupied msg_id(%d)\n", msg_id);
+-		return -1;
+-	}
+-	return handle->pool[msg_id].pt_type;
++	BUG_ON(!handle);
++	if (!__validate_handle_msgid(handle, msg_id))
++		return -1;
++
++	if (!atomic_read(&handle->pool[msg_id].occupied)) {
++		npu_warn("request pt_type for unoccupied msg_id(%d)\n", msg_id);
++		return -1;
++	}
++	return handle->pool[msg_id].pt_type;
+ }

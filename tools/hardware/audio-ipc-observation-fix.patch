@@ -1,0 +1,276 @@
+diff --git a/include/trace/events/samsung_abox.h b/include/trace/events/samsung_abox.h
+new file mode 100644
+index 0000000..1123e30
+--- /dev/null
++++ b/include/trace/events/samsung_abox.h
+@@ -0,0 +1,108 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++#undef TRACE_SYSTEM
++#define TRACE_SYSTEM samsung_abox
++
++#if !defined(_TRACE_SAMSUNG_ABOX_H) || defined(TRACE_HEADER_MULTI_READ)
++#define _TRACE_SAMSUNG_ABOX_H
++
++#include <linux/tracepoint.h>
++
++/*
++ * These events contain only routing/result metadata. In particular, they do
++ * not copy or print ABOX messages, DMA pointers, firmware data, or device
++ * pointers. The generated tracepoints are disabled until explicitly enabled.
++ */
++TRACE_EVENT(abox_pcm_trigger_queue,
++	TP_PROTO(u64 sequence, u64 mono_ns, int ipc_id, int channel,
++		int msg_type, int result, int attempt, bool atomic, bool sync),
++
++	TP_ARGS(sequence, mono_ns, ipc_id, channel, msg_type, result, attempt,
++		atomic, sync),
++
++	TP_STRUCT__entry(
++		__field(u64, sequence)
++		__field(u64, mono_ns)
++		__field(int, ipc_id)
++		__field(int, channel)
++		__field(int, msg_type)
++		__field(int, result)
++		__field(int, attempt)
++		__field(bool, atomic)
++		__field(bool, sync)
++	),
++
++	TP_fast_assign(
++		__entry->sequence = sequence;
++		__entry->mono_ns = mono_ns;
++		__entry->ipc_id = ipc_id;
++		__entry->channel = channel;
++		__entry->msg_type = msg_type;
++		__entry->result = result;
++		__entry->attempt = attempt;
++		__entry->atomic = atomic;
++		__entry->sync = sync;
++	),
++
++	TP_printk("seq=%llu mono_ns=%llu ipc_id=%d channel=%d msg_type=%d result=%d attempt=%d atomic=%d sync=%d",
++		(unsigned long long)__entry->sequence,
++		(unsigned long long)__entry->mono_ns, __entry->ipc_id,
++		__entry->channel, __entry->msg_type, __entry->result,
++		__entry->attempt, __entry->atomic, __entry->sync)
++);
++
++TRACE_EVENT(abox_pcm_trigger_send,
++	TP_PROTO(u64 sequence, u64 mono_ns, int ipc_id, int channel,
++		int msg_type, int result),
++
++	TP_ARGS(sequence, mono_ns, ipc_id, channel, msg_type, result),
++
++	TP_STRUCT__entry(
++		__field(u64, sequence)
++		__field(u64, mono_ns)
++		__field(int, ipc_id)
++		__field(int, channel)
++		__field(int, msg_type)
++		__field(int, result)
++	),
++
++	TP_fast_assign(
++		__entry->sequence = sequence;
++		__entry->mono_ns = mono_ns;
++		__entry->ipc_id = ipc_id;
++		__entry->channel = channel;
++		__entry->msg_type = msg_type;
++		__entry->result = result;
++	),
++
++	TP_printk("seq=%llu mono_ns=%llu ipc_id=%d channel=%d msg_type=%d result=%d",
++		(unsigned long long)__entry->sequence,
++		(unsigned long long)__entry->mono_ns, __entry->ipc_id,
++		__entry->channel, __entry->msg_type, __entry->result)
++);
++
++TRACE_EVENT(abox_rdma_pointer_handler,
++	TP_PROTO(u64 mono_ns, int channel, int msg_type),
++
++	TP_ARGS(mono_ns, channel, msg_type),
++
++	TP_STRUCT__entry(
++		__field(u64, mono_ns)
++		__field(int, channel)
++		__field(int, msg_type)
++	),
++
++	TP_fast_assign(
++		__entry->mono_ns = mono_ns;
++		__entry->channel = channel;
++		__entry->msg_type = msg_type;
++	),
++
++	TP_printk("mono_ns=%llu channel=%d msg_type=%d",
++		(unsigned long long)__entry->mono_ns, __entry->channel,
++		__entry->msg_type)
++);
++
++#endif /* _TRACE_SAMSUNG_ABOX_H */
++
++/* This part must be outside protection */
++#include <trace/define_trace.h>
+diff --git a/sound/soc/samsung/abox/abox.c b/sound/soc/samsung/abox/abox.c
+index 70bf48d..29fd585 100755
+--- a/sound/soc/samsung/abox/abox.c
++++ b/sound/soc/samsung/abox/abox.c
+@@ -9,7 +9,9 @@
+  * published by the Free Software Foundation.
+  */
+ 
++#include <linux/atomic.h>
+ #include <linux/clk.h>
++#include <linux/ktime.h>
+ #include <linux/io.h>
+ #include <linux/module.h>
+ #include <linux/of.h>
+@@ -61,6 +63,9 @@
+ #include "abox_vss.h"
+ #include "abox.h"
+ 
++#define CREATE_TRACE_POINTS
++#include <trace/events/samsung_abox.h>
++
+ #if IS_ENABLED(CONFIG_SND_SOC_SAMSUNG_AUDIO)
+ #include <sound/samsung/sec_audio_sysfs.h>
+ #endif
+@@ -75,6 +80,7 @@
+ #define BOOT_DONE_TIMEOUT_MS		(10000)
+ #define DRAM_TIMEOUT_NS			(10000000)
+ #define IPC_RETRY			(10)
++static atomic64_t abox_pcm_trigger_trace_seq = ATOMIC64_INIT(0);
+ 
+ /* For only external static functions */
+ static struct abox_data *p_abox_data;
+@@ -544,7 +550,8 @@ static bool __abox_ipc_queue_full(struct abox_data *data)
+ }
+ 
+ static int abox_ipc_queue_put(struct abox_data *data, struct device *dev,
+-		int hw_irq, const ABOX_IPC_MSG *msg, size_t size)
++		int hw_irq, const ABOX_IPC_MSG *msg, size_t size,
++		u64 trace_seq)
+ {
+ 	spinlock_t *lock = &data->ipc_queue_lock;
+ 	size_t length = ARRAY_SIZE(data->ipc_queue);
+@@ -562,6 +569,8 @@ static int abox_ipc_queue_put(struct abox_data *data, struct device *dev,
+ 		ipc->hw_irq = hw_irq;
+ 		ipc->put_time = sched_clock();
+ 		ipc->get_time = 0;
++		if (trace_seq || ipc->trace_seq)
++			ipc->trace_seq = trace_seq;
+ 		memcpy(&ipc->msg, msg, size);
+ 		ipc->size = size;
+ 		data->ipc_queue_end = (data->ipc_queue_end + 1) % length;
+@@ -628,9 +637,18 @@ static bool abox_can_calliope_ipc(struct device *dev,
+ }
+ 
+ static int __abox_process_ipc(struct device *dev, struct abox_data *data,
+-		int hw_irq, const ABOX_IPC_MSG *msg, size_t size)
++		int hw_irq, const ABOX_IPC_MSG *msg, size_t size, u64 trace_seq)
+ {
+-	return abox_ipc_send(dev, msg, size, NULL, 0);
++	int ret = abox_ipc_send(dev, msg, size, NULL, 0);
++
++	if (trace_seq && msg->ipcid == IPC_PCMPLAYBACK &&
++			msg->msg.pcmtask.msgtype == PCM_PLTDAI_TRIGGER &&
++			trace_abox_pcm_trigger_send_enabled())
++		trace_abox_pcm_trigger_send(trace_seq, ktime_get_ns(),
++				msg->ipcid, msg->msg.pcmtask.channel_id,
++				msg->msg.pcmtask.msgtype, ret);
++
++	return ret;
+ }
+ 
+ static void abox_process_ipc(struct work_struct *work)
+@@ -652,7 +670,8 @@ static void abox_process_ipc(struct work_struct *work)
+ 			const ABOX_IPC_MSG *msg = &ipc.msg;
+ 			size_t size = ipc.size;
+ 
+-			ret = __abox_process_ipc(dev, data, hw_irq, msg, size);
++			ret = __abox_process_ipc(dev, data, hw_irq, msg, size,
++					ipc.trace_seq);
+ 			if (ret < 0)
+ 				abox_failsafe_report(dev, true);
+ 		}
+@@ -668,12 +687,25 @@ static int abox_schedule_ipc(struct device *dev, struct abox_data *data,
+ {
+ 	int retry = 0;
+ 	int ret;
++	u64 trace_seq = 0;
+ 
+ 	abox_dbg(dev, "%s(%d, %zu, %d, %d)\n", __func__, hw_irq,
+ 			size, atomic, sync);
+ 
++	if ((trace_abox_pcm_trigger_queue_enabled() ||
++			trace_abox_pcm_trigger_send_enabled()) &&
++			msg->ipcid == IPC_PCMPLAYBACK &&
++			msg->msg.pcmtask.msgtype == PCM_PLTDAI_TRIGGER)
++		trace_seq = atomic64_inc_return(&abox_pcm_trigger_trace_seq);
++
+ 	do {
+-		ret = abox_ipc_queue_put(data, dev, hw_irq, msg, size);
++		ret = abox_ipc_queue_put(data, dev, hw_irq, msg, size,
++				trace_seq);
++		if (trace_seq && trace_abox_pcm_trigger_queue_enabled())
++			trace_abox_pcm_trigger_queue(trace_seq, ktime_get_ns(),
++					msg->ipcid, msg->msg.pcmtask.channel_id,
++					msg->msg.pcmtask.msgtype, ret, retry,
++					atomic, sync);
+ 		queue_work(data->ipc_workqueue, &data->ipc_work);
+ 		if (!atomic && sync)
+ 			flush_work(&data->ipc_work);
+@@ -707,7 +738,7 @@ int abox_request_ipc(struct device *dev,
+ 	int ret;
+ 
+ 	if (atomic && sync) {
+-		ret = __abox_process_ipc(dev, data, hw_irq, msg, size);
++		ret = __abox_process_ipc(dev, data, hw_irq, msg, size, 0);
+ 	} else {
+ 		ret = abox_schedule_ipc(dev, data, hw_irq, msg, size,
+ 				!!atomic, !!sync);
+diff --git a/sound/soc/samsung/abox/abox.h b/sound/soc/samsung/abox/abox.h
+index 2ed6fcf..c448089 100755
+--- a/sound/soc/samsung/abox/abox.h
++++ b/sound/soc/samsung/abox/abox.h
+@@ -372,6 +372,8 @@ struct abox_ipc {
+ 	int hw_irq;
+ 	unsigned long long put_time;
+ 	unsigned long long get_time;
++	/* Local trace correlation only; never copied into the IPC message. */
++	u64 trace_seq;
+ 	size_t size;
+ 	ABOX_IPC_MSG msg;
+ };
+diff --git a/sound/soc/samsung/abox/abox_rdma.c b/sound/soc/samsung/abox/abox_rdma.c
+index ba5871c..37179c3 100755
+--- a/sound/soc/samsung/abox/abox_rdma.c
++++ b/sound/soc/samsung/abox/abox_rdma.c
+@@ -22,6 +22,7 @@
+ #include <linux/iommu.h>
+ #include <linux/delay.h>
+ #include <linux/memblock.h>
++#include <linux/ktime.h>
+ #include <linux/sched/clock.h>
+ #include <sound/hwdep.h>
+ #include <linux/miscdevice.h>
+@@ -41,6 +42,7 @@
+ #include "abox.h"
+ #include "abox_dma.h"
+ #include "abox_memlog.h"
++#include <trace/events/samsung_abox.h>
+ 
+ #define COMPR_USE_COPY
+ #define COMPR_USE_FIXED_MEMORY
+@@ -1350,6 +1352,10 @@ static irqreturn_t abox_rdma_ipc_handler(int ipc, void *dev_id,
+ 			break;
+ 		}
+ 
++		if (trace_abox_rdma_pointer_handler_enabled())
++			trace_abox_rdma_pointer_handler(ktime_get_ns(), id,
++					pcmtask_msg->msgtype);
++
+ 		data->pointer = pcmtask_msg->param.pointer;
+ 		snd_pcm_period_elapsed(data->substream);
+ 		break;

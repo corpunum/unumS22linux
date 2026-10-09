@@ -1,0 +1,266 @@
+diff --git a/drivers/vision/npu/core/interface/hardware/npu-interface.c b/drivers/vision/npu/core/interface/hardware/npu-interface.c
+--- a/drivers/vision/npu/core/interface/hardware/npu-interface.c
++++ b/drivers/vision/npu/core/interface/hardware/npu-interface.c
+@@ -20,6 +20,8 @@
+ #include <linux/workqueue.h>
+ #include <linux/spinlock.h>
+ #include <linux/mutex.h>
++#include <linux/refcount.h>
++#include <linux/wait.h>
+ #include "npu-interface.h"
+ #include "npu-util-llq.h"
+ #include "npu-vertex.h"
+@@ -33,6 +35,66 @@
+ #define LINE_TO_SGMT(sgmt_len, ptr)	((ptr) & ((sgmt_len) - 1))
+ static struct workqueue_struct *wq;
+ static struct work_struct work_report;
++
++/* The report owner pin is initialized once and is never reset by probe. */
++static DEFINE_SPINLOCK(report_owner_lock);
++static DECLARE_WAIT_QUEUE_HEAD(report_owner_wait);
++/* One reference is held by publication; readers take and drop extra refs. */
++static refcount_t report_owner_refs = REFCOUNT_INIT(0);
++static volatile struct mailbox_hdr *report_owner;
++
++static volatile struct mailbox_hdr *npu_report_owner_get(void)
++{
++	unsigned long flags;
++	volatile struct mailbox_hdr *owner;
++	spin_lock_irqsave(&report_owner_lock, flags);
++	owner = report_owner;
++	if (owner && !refcount_inc_not_zero(&report_owner_refs))
++		owner = NULL;
++	spin_unlock_irqrestore(&report_owner_lock, flags);
++	return owner;
++}
++
++static void npu_report_owner_put(void)
++{
++	if (refcount_dec_and_test(&report_owner_refs))
++		wake_up_all(&report_owner_wait);
++}
++
++static int npu_report_owner_publish(volatile struct mailbox_hdr *owner)
++{
++	unsigned long flags;
++	int ret = 0;
++	if (!owner)
++		return -EINVAL;
++	spin_lock_irqsave(&report_owner_lock, flags);
++	if (report_owner || refcount_read(&report_owner_refs))
++		ret = -EBUSY;
++	else {
++		refcount_set(&report_owner_refs, 1);
++		report_owner = owner;
++	}
++	spin_unlock_irqrestore(&report_owner_lock, flags);
++	return ret;
++}
++
++/* Detach first; wait without holding the spinlock so pinned readers can exit. */
++static volatile struct mailbox_hdr *npu_report_owner_detach(void)
++{
++	unsigned long flags;
++	volatile struct mailbox_hdr *owner;
++	bool wake_readers = false;
++	spin_lock_irqsave(&report_owner_lock, flags);
++	owner = report_owner;
++	report_owner = NULL;
++	if (owner)
++		wake_readers = refcount_dec_and_test(&report_owner_refs);
++	spin_unlock_irqrestore(&report_owner_lock, flags);
++	if (wake_readers)
++		wake_up_all(&report_owner_wait);
++	wait_event(report_owner_wait, !refcount_read(&report_owner_refs));
++	return owner;
++}
+ static DEFINE_SPINLOCK(report_wq_lock);
+ static DEFINE_MUTEX(report_wq_lifecycle_lock);
+ static int report_irq_count;
+@@ -411,16 +468,18 @@
+ 	char *base;
+ 
+ 	volatile struct mailbox_ctrl *ctrl;
+-
+-	if (interface.mbox_hdr == NULL)
++	volatile struct mailbox_hdr *mbox_hdr;
++
++	mbox_hdr = npu_report_owner_get();
++	if (!mbox_hdr)
+ 		return;
+ 	mutex_lock(&interface.lock);
+ 
+-	ctrl = &(interface.mbox_hdr->f2hctrl[MAILBOX_F2HCTRL_REPORT]);
++	ctrl = &(mbox_hdr->f2hctrl[MAILBOX_F2HCTRL_REPORT]);
+ 	wptr = ctrl->wptr;
+ 	rptr = ctrl->rptr;
+ 	sgmt_len = ctrl->sgmt_len;
+-	base = NPU_MAILBOX_GET_CTRL(NPU_MBOX_BASE((void *)interface.mbox_hdr), ctrl->sgmt_ofs);
++	base = NPU_MAILBOX_GET_CTRL(NPU_MBOX_BASE((void *)mbox_hdr), ctrl->sgmt_ofs);
+ 
+ 	if (wptr < rptr) { //When wptr circled a time,
+ 		while (rptr != 0) {
+@@ -451,6 +510,7 @@
+ 		buf[0] = '\0';
+ 	}
+ 	mutex_unlock(&interface.lock);
++	npu_report_owner_put();
+ }
+ 
+ void dbg_print_ncp_header(struct ncp_header *nhdr)
+@@ -626,6 +686,11 @@
+ 	npu_report_workqueue_destroy(old_wq);
+ 	npu_report_workqueue_install(report_wq);
+ 	report_wq = NULL;
++	ret = npu_report_owner_publish(interface.mbox_hdr);
++	if (ret) {
++		/* A busy owner may still pin this storage; fail closed. */
++		goto err_probe_irq;
++	}
+ 	report_irq_count = requested_irqs;
+ 	report_affinity_count = affinity_irqs;
+ 	report_interface_open = true;
+@@ -657,6 +722,7 @@
+ 	int i, wptr, rptr;
+ 	struct device *dev;
+ 	struct workqueue_struct *report_wq;
++	volatile struct mailbox_hdr *report_mbox;
+ 
+ 	if (!system) {
+ 		npu_err("fail in %s\n", __func__);
+@@ -665,9 +731,6 @@
+ 
+ 	dev = &system->pdev->dev;
+ 	mutex_lock(&report_wq_lifecycle_lock);
+-	if (report_interface_open && likely(interface.mbox_hdr))
+-		mailbox_deinit(interface.mbox_hdr, system);
+-
+ 	if (report_interface_open)
+ 		npu_report_queue_work();
+ 	report_wq = npu_report_workqueue_detach();
+@@ -689,6 +752,11 @@
+ 		npu_report_workqueue_destroy(report_wq);
+ 	}
+ 
++	/* The queue is drained before detach; direct readers are drained here. */
++	report_mbox = npu_report_owner_detach();
++	if (report_interface_open && likely(report_mbox))
++		mailbox_deinit(report_mbox, system);
++
+ 	interface.addr = NULL;
+ 	interface.mbox_hdr = NULL;
+ 	report_interface_open = false;
+@@ -1176,10 +1244,12 @@
+ 	int ret = TRUE;
+ 	char *base;
+ 	u32 nSize, wptr, rptr, sgmt_len;
+-	u32 *buf, *strOut;
++	u32 *buf = NULL, *strOut = NULL;
++	volatile struct mailbox_hdr *mbox_hdr;
+ 	volatile struct mailbox_ctrl *ctrl;
+ 
+-	if (interface.mbox_hdr == NULL)
++	mbox_hdr = npu_report_owner_get();
++	if (!mbox_hdr)
+ 		return -1;
+ 
+ 	strOut = kzalloc(LENGTHOFEVIDENCE, GFP_ATOMIC);
+@@ -1200,36 +1270,36 @@
+ 
+ 	switch (nCtrl) {
+ 	case ECTRL_LOW:
+-		ctrl = &(interface.mbox_hdr->h2fctrl[MAILBOX_H2FCTRL_LPRIORITY]);
++		ctrl = &(mbox_hdr->h2fctrl[MAILBOX_H2FCTRL_LPRIORITY]);
+ 		npu_dump("[V] H2F_MBOX[LOW] - rptr/wptr : %d/%d\n", ctrl->rptr, ctrl->wptr);
+-		mbx_ipc_print(NPU_MBOX_BASE((void *)interface.mbox_hdr), ctrl, NPU_LOG_ERR);
++		mbx_ipc_print(NPU_MBOX_BASE((void *)mbox_hdr), ctrl, NPU_LOG_ERR);
+ 		break;
+ #if (CONFIG_NPU_MAILBOX_VERSION >= 8)
+ 	case ECTRL_MEDIUM:
+-		ctrl = &(interface.mbox_hdr->h2fctrl[MAILBOX_H2FCTRL_MPRIORITY]);
++		ctrl = &(mbox_hdr->h2fctrl[MAILBOX_H2FCTRL_MPRIORITY]);
+ 		npu_dump("[V] H2F_MBOX[MEDIUM] - rptr/wptr : %d/%d\n", ctrl->rptr, ctrl->wptr);
+-		mbx_ipc_print(NPU_MBOX_BASE((void *)interface.mbox_hdr), ctrl, NPU_LOG_ERR);
++		mbx_ipc_print(NPU_MBOX_BASE((void *)mbox_hdr), ctrl, NPU_LOG_ERR);
+ 		break;
+ #endif
+ 	case ECTRL_HIGH:
+-		ctrl = &(interface.mbox_hdr->h2fctrl[MAILBOX_H2FCTRL_HPRIORITY]);
++		ctrl = &(mbox_hdr->h2fctrl[MAILBOX_H2FCTRL_HPRIORITY]);
+ 		npu_dump("[V] H2F_MBOX[HIGH] - rptr/wptr : %d/%d\n", ctrl->rptr, ctrl->wptr);
+-		mbx_ipc_print(NPU_MBOX_BASE((void *)interface.mbox_hdr), ctrl, NPU_LOG_ERR);
++		mbx_ipc_print(NPU_MBOX_BASE((void *)mbox_hdr), ctrl, NPU_LOG_ERR);
+ 		break;
+ 	case ECTRL_ACK:
+-		ctrl = &(interface.mbox_hdr->f2hctrl[MAILBOX_F2HCTRL_RESPONSE]);
++		ctrl = &(mbox_hdr->f2hctrl[MAILBOX_F2HCTRL_RESPONSE]);
+ 		npu_dump("[V] F2H_MBOX[RESPONSE] - rptr/wptr : %d/%d\n", ctrl->rptr, ctrl->wptr);
+-		mbx_ipc_print(NPU_MBOX_BASE((void *)interface.mbox_hdr), ctrl, NPU_LOG_ERR);
++		mbx_ipc_print(NPU_MBOX_BASE((void *)mbox_hdr), ctrl, NPU_LOG_ERR);
+ 		break;
+ #if (CONFIG_NPU_MAILBOX_VERSION >= 8)
+ 	case ECTRL_NACK:
+-		ctrl = &(interface.mbox_hdr->f2hctrl[MAILBOX_F2HCTRL_NRESPONSE]);
++		ctrl = &(mbox_hdr->f2hctrl[MAILBOX_F2HCTRL_NRESPONSE]);
+ 		npu_dump("[V] F2H_MBOX[NRESPONSE] - rptr/wptr : %d/%d\n", ctrl->rptr, ctrl->wptr);
+-		mbx_ipc_print(NPU_MBOX_BASE((void *)interface.mbox_hdr), ctrl, NPU_LOG_ERR);
++		mbx_ipc_print(NPU_MBOX_BASE((void *)mbox_hdr), ctrl, NPU_LOG_ERR);
+ 		break;
+ #endif
+ 	case ECTRL_REPORT:
+-		ctrl = &(interface.mbox_hdr->f2hctrl[MAILBOX_F2HCTRL_REPORT]);
++		ctrl = &(mbox_hdr->f2hctrl[MAILBOX_F2HCTRL_REPORT]);
+ 		npu_dump("[V] F2H_MBOX[REPORT] - rptr/wptr : %d/%d\n", ctrl->rptr, ctrl->wptr);
+ 		break;
+ 	default:
+@@ -1238,7 +1308,7 @@
+ 
+ 	wptr = ctrl->wptr;
+ 	sgmt_len = ctrl->sgmt_len;
+-	base = NPU_MAILBOX_GET_CTRL(NPU_MBOX_BASE((void *)interface.mbox_hdr), ctrl->sgmt_ofs);
++	base = NPU_MAILBOX_GET_CTRL(NPU_MBOX_BASE((void *)mbox_hdr), ctrl->sgmt_ofs);
+ 
+ 	pos = 0;
+ 	if (wptr < LENGTHOFEVIDENCE) {
+@@ -1263,6 +1333,7 @@
+ 	if (strOut)
+ 		kfree(strOut);
+ err_exit:
++	npu_report_owner_put();
+ 	return ret;
+ }
+ 
+@@ -1273,16 +1344,18 @@
+ 	u32 wptr, rptr, sgmt_len;
+ 	char buf[BUFSIZE - 1] = "\0";
+ 	volatile struct mailbox_ctrl *ctrl;
+-
+-	if (interface.mbox_hdr == NULL)
++	volatile struct mailbox_hdr *mbox_hdr;
++
++	mbox_hdr = npu_report_owner_get();
++	if (!mbox_hdr)
+ 		return;
+ 	mutex_lock(&interface.lock);
+ 
+-	ctrl = &(interface.mbox_hdr->f2hctrl[MAILBOX_F2HCTRL_REPORT]);
++	ctrl = &(mbox_hdr->f2hctrl[MAILBOX_F2HCTRL_REPORT]);
+ 	wptr = ctrl->wptr;
+ 	rptr = ctrl->rptr;
+ 	sgmt_len = ctrl->sgmt_len;
+-	base = NPU_MAILBOX_GET_CTRL(NPU_MBOX_BASE((void *)interface.mbox_hdr), ctrl->sgmt_ofs);
++	base = NPU_MAILBOX_GET_CTRL(NPU_MBOX_BASE((void *)mbox_hdr), ctrl->sgmt_ofs);
+ 
+ 	if (wptr < rptr) { //When wptr circled a time,
+ 		while (rptr != 0) {
+@@ -1313,8 +1386,9 @@
+ 		npu_fw_report_store(buf, nSize);
+ 		buf[0] = '\0';
+ 	}
+-	interface.mbox_hdr->f2hctrl[MAILBOX_F2HCTRL_REPORT].rptr = wptr;
++	mbox_hdr->f2hctrl[MAILBOX_F2HCTRL_REPORT].rptr = wptr;
+ 	mutex_unlock(&interface.lock);
++	npu_report_owner_put();
+ }
+ 
+ static void __rprt_manager(struct work_struct *w)

@@ -1,0 +1,193 @@
+{
+  "schema": "s22-audio-deadline-completion-host/v1",
+  "evidence_date": "2026-10-03",
+  "disposition": "HOST_CORRECTION_COMPLETE_INDEPENDENT_REVIEW_PENDING",
+  "scope": "Host-only finalization deadline correction for the bounded audio stability observer.",
+  "worktree": {
+    "path": "/home/corpunum/s22-workers/audio-observer-deadline-20261003",
+    "branch": "codex/s22-audio-deadline-20261003",
+    "base_commit": "0fd23611d80263b731e4fb322538aa581f8b5a1c",
+    "owned_paths": [
+      "tools/hardware/audio-coherent-recovery-reboot-once.py",
+      "tools/hardware/test-audio-coherent-trial-adapter.py",
+      "docs/research/AUDIO_COHERENT_TRIAL_ADAPTER_2026-10-03.md",
+      "evidence/s22-audio-deadline-completion-host-20261003.json"
+    ]
+  },
+  "frozen_history": {
+    "independent_blocked_review_commit": "11c14a50eb9cb47b79ee124a0cea15b84e7f438f",
+    "independent_blocked_review_sha256": "ad4a4d4342f8b26aa2c1f0225ba101b393c8fff409ed28db8472948979155094",
+    "independent_blocked_review_evidence_sha256": "cc27d42aabe17a34ff43dd4a8da4cdef14c1617d30da97c16af28c49aad0df84",
+    "frozen_pre_deadline_fix_observer_commit": "ea39e48cb344865fb37ed98a040a0d0ee09dc466",
+    "frozen_pre_deadline_fix_observer_sha256": "eee1e2a467bf1df57325966b6573e1a8dc5dd031d71ef0e8088bd23272f349ea",
+    "frozen_pre_deadline_fix_tests_sha256": "8cbfab6fcee0da24b93ed0d75af5b66b7cc09b32c21a24f1997af15607eccca4",
+    "prior_remote_freshness_note_sha256": "319aeeade6e1ea2d1ac446e9e0bf5251bfb47a90d718b2e7e6c16d9a68ea1632",
+    "prior_remote_freshness_receipt_sha256": "8b19ce08be9369b74934ab487789b8cfae3b1eea4d7e31e5cb9259546a3af919",
+    "original_blocked_review_sha256": "1c606da8cce90d98e7b1c3fd017a24e328a02ce2e53f69243e71699c9ca8027b",
+    "original_author_receipt_sha256": "5c8d6827ee83b8ca2724770becae1e81aa5b70021d99088662c66b8845e20247",
+    "prior_reviews_and_receipts_modified": false
+  },
+  "pre_correction_counterexample": {
+    "actual_frozen_observer_executed": true,
+    "observer_sha256": "eee1e2a467bf1df57325966b6573e1a8dc5dd031d71ef0e8088bd23272f349ea",
+    "fixture": "Temporary synthetic filesystem, fake transport, and fake monotonic clock; no device contact.",
+    "method": "Advance the fake clock to 601 seconds only after real final-result persistence returns; remote observation samples and queries have completed.",
+    "clock_at_observer_return_seconds": 601,
+    "returned_status": "bounded-stability-observed",
+    "result_receipt_exists": true,
+    "global_marker_status": "complete",
+    "global_marker_outcome": "success",
+    "global_marker_receipt_path_matches": true,
+    "global_marker_receipt_sha256_matches": true,
+    "cli_zero_exit_would_be_returned": true,
+    "same_trial_replay_refused": true,
+    "separate_stability_result_consumer_found": false,
+    "blocked_finding": "The frozen observer could publish a matching result and complete marker after the 600-second deadline."
+  },
+  "correction_contract": {
+    "persisted_result_status": "provisional-bounded-stability-observed",
+    "receipt_alone_is_acceptance": false,
+    "required_binding": "A timely successful return requires the same active locked operation, exact marker identity, complete/success status, exact persisted receipt path and SHA-256, and a final in-deadline monotonic check.",
+    "late_final_receipt_persist": "Check the deadline after persistence returns; do not complete the still-pending marker; preserve the provisional result and fail UNKNOWN.",
+    "late_marker_completion": "Revalidate the active operation and exact marker while its lock is held; demote only that completion to UNKNOWN and nest its original completion fields plus the provisional result path/hash.",
+    "wrong_marker_identity": "Refuse without updating the marker whose identity is not proven.",
+    "unknown_reboot_request": "No stability guard is acquired; any read-only result remains provisional and the CLI returns nonzero.",
+    "retry_policy": "Consumed result/marker stays preserved and blocking; no remote query, reboot, or marker replay is attempted.",
+    "failure_demotion_behavior": "A transient first UNKNOWN-update failure is retried; unresolved write/readback failures raise and never return acceptance."
+  },
+  "actual_observer_controls": {
+    "transport_filesystem_and_clock": "Temporary host fixture with a fake transport and monotonic clock; no phone or device interaction.",
+    "forward_success": {
+      "returned_finalization_accepted": true,
+      "persisted_result_status": "provisional-bounded-stability-observed",
+      "returned_status": "bounded-stability-observed",
+      "host_sample_offsets_seconds": [0.0, 90.0, 195.0],
+      "remote_sample_uptimes_seconds": [180.1, 270.09999999999997, 375.09999999999997],
+      "host_interval_seconds": [null, 90.0, 105.0],
+      "remote_interval_seconds": [null, 89.99999999999997, 105.0],
+      "host_and_remote_stability_seconds": 195.0,
+      "complete_marker_receipt_path_and_sha256_match": true
+    },
+    "reverse_success": {
+      "returned_finalization_accepted": true,
+      "host_sample_offsets_seconds": [0.0, 90.0, 195.0],
+      "remote_sample_uptimes_seconds": [180.1, 270.09999999999997, 375.09999999999997],
+      "host_and_remote_stability_seconds": 195.0,
+      "reverse_postboot_module_roles_verified": true
+    },
+    "late_result_persistence": {
+      "fake_clock_seconds": 601,
+      "observer_returned_success": false,
+      "result_status": "provisional-bounded-stability-observed",
+      "failure_status": "UNKNOWN",
+      "failure_category": "timeout",
+      "guard_marker_status": "unknown",
+      "guard_complete_called": false,
+      "same_trial_retry_contacted_transport": false
+    },
+    "late_guard_completion": {
+      "fake_clock_seconds": 601,
+      "observer_returned_success": false,
+      "failure_status": "UNKNOWN",
+      "guard_marker_status": "unknown",
+      "original_complete_marker_nested": true,
+      "provisional_receipt_path_and_sha256_nested": true,
+      "transient_first_demotion_update_failure_recovered": true,
+      "same_trial_retry_contacted_transport": false
+    },
+    "wrong_marker_refusal": {
+      "observer_returned_success": false,
+      "failure_category": "ambiguous_marker",
+      "wrong_marker_updated": false,
+      "complete_called": false,
+      "same_trial_retry_contacted_transport": false
+    },
+    "late_failure_receipt_persistence": {
+      "fake_clock_seconds": 601,
+      "result_receipt_created": false,
+      "failure_category": "serious_fault",
+      "guard_marker_status": "unknown",
+      "observer_returned_success": false
+    },
+    "unknown_reboot_candidate": {
+      "persisted_result_status": "provisional-bounded-stability-observed",
+      "finalization_accepted": false,
+      "reboot_marker_bytes_unchanged": true,
+      "cli_exit_code": 2,
+      "reboot_or_retry_attempted": false
+    }
+  },
+  "unchanged_limits_and_identity": {
+    "total_observation_deadline_seconds": 600,
+    "conservative_remote_query_wait_upper_bound_seconds": 520,
+    "prior_independent_worst_case_fake_clock_seconds": 515,
+    "startup_query_cap_seconds": 3,
+    "readiness_query_cap_seconds": 15,
+    "identity_query_cap_seconds": 30,
+    "maximum_read_only_reconnects": 1,
+    "candidate_image_sha256": "6b788b23f54b9b8e84212187544064949b72af20c167cbb02392cbe53ee5a6ab",
+    "baseline_image_sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+    "candidate_manifest_sha256": "f78bbaddf94ef6d1ae37b059b7455b24a15cbb7c2fab1ec9bbc4e1df5fd1edf8",
+    "unchanged_kernel_gnu_build_id": "b2dda820b18d410d9bf12f1bd2584567d545991d",
+    "exact_three_audio_module_ids_per_profile_maintained": true,
+    "full_image_identity_and_readback_gates_maintained": true,
+    "readiness_power_log_and_boot_id_gates_maintained": true,
+    "current_deployment_authorized": false,
+    "execution_allowlist": [],
+    "audio_hardware_acceptance": false,
+    "bootability_claim": false
+  },
+  "source_hashes": {
+    "tools/hardware/audio-coherent-recovery-reboot-once.py": "68827be195abf9afbe176b6af7261f9153cc4c435d539d98f1706c2af5f34dce",
+    "tools/hardware/test-audio-coherent-trial-adapter.py": "436ef4f97c3ac9b934b7b2ec379d266c89cfef27a41222cc563b1c74325a8cb5",
+    "docs/research/AUDIO_COHERENT_TRIAL_ADAPTER_2026-10-03.md": "95753e371454de67716358f5754491c06bd3611b22082fe5308563779dc804d7"
+  },
+  "host_test_matrix": [
+    {
+      "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=0 python3 -B tools/hardware/test-audio-coherent-trial-adapter.py -q",
+      "result": "PASS",
+      "passed": 42,
+      "failed": 0,
+      "sys_flags_optimize": 0
+    },
+    {
+      "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=1 python3 -O -B tools/hardware/test-audio-coherent-trial-adapter.py -q",
+      "result": "PASS",
+      "passed": 42,
+      "failed": 0,
+      "sys_flags_optimize": 1
+    },
+    {
+      "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=1 PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-audio-coherent-trial-adapter.py -q",
+      "result": "PASS",
+      "passed": 42,
+      "failed": 0,
+      "sys_flags_optimize": 1
+    }
+  ],
+  "plan_checks": {
+    "audio_forward_default_plan_exit": 0,
+    "audio_reverse_default_plan_exit": 0,
+    "both_authorized_false": true,
+    "both_allowlists_empty": true,
+    "both_stability_execution_false": true,
+    "diff_check": "PASS",
+    "in_memory_source_compile": "PASS"
+  },
+  "safety_and_limits": {
+    "phone_or_device_contact": false,
+    "ssh": false,
+    "adb": false,
+    "usb": false,
+    "partition_write": false,
+    "reboot_performed": false,
+    "service_restart_or_inference": false,
+    "heavy_build_or_package_operation": false,
+    "prior_evidence_modified": false,
+    "host_tests_are_hardware_acceptance": false,
+    "local_durability_or_lock_io_is_hard_wallclock_bounded": false,
+    "blocked_local_io_can_be_interrupted": false,
+    "late_returning_io_is_checked_and_success_refused": true,
+    "independent_review": "Pending on the frozen correction source and tests."
+  }
+}

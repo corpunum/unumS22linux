@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "verdict": "PASS_LIMITED",
+  "scope": "independent host-only review of camera shutdown/reboot/queued-worker clock-ownership quarantine",
+  "review": {
+    "worktree": "codex/s22-camera-shutdown-review-20261003",
+    "reviewed_candidate_commit": "d06bb09bcb69fd1418863ae000181afa66fa1938",
+    "reviewed_candidate_tree": "389793e3c1d393cd053dafd151528dda5f47a50e"
+  },
+  "candidate": {
+    "patch_sha256": "7808ac0cabc806270a0d07aa2bb974bfd0fc924d3fef33035ba50bf494e768bd",
+    "harness_sha256": "000e62c7091673a6b1260358ce6641aac763a830827175417647b2a392573619",
+    "test_runner_sha256": "f8fb0f52263631415e5a1ea616bb45316dcf5494159f999062e2a2b4c8508fc3"
+  },
+  "pinned_source": {
+    "commit": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+    "tree": "5c46cbe12dadbcdb64eec4344c9e8ff0f8a75dee",
+    "read_only_clean": true,
+    "derived_optional": {
+      "commit": "3fca50941422439b2019db2e4a3dc1016b2138a1",
+      "tree": "5aad5cf1dbaa0f430377737141f0547e971b0a2d"
+    },
+    "six_sensor_configuration_checked": true,
+    "reboot_notifier_enabled_and_registered": true
+  },
+  "source_findings": {
+    "cleanup_unknown_preflight": "core-wide scan precedes front-stop; when any UNKNOWN is observed, sets reboot=true on probed sensors under each mutex_reboot and returns without front-stop",
+    "registered_reboot_callback": "calls guarded is_cleanup; notifier configuration and registration were verified in pinned source; global reboot is not vetoed",
+    "platform_shutdown": "after cleanup, rescans UNKNOWN and returns before sensor-thread deinit and CIS work cancellation",
+    "queued_instant_worker": "under current mutex_reboot, scans current and peer UNKNOWN state before reboot branch CSI stream-off and sensor start; exits with -EUCLEAN through no-start path when unknown is observed",
+    "mixed_unknown_healthy_peers": "core-wide policy retains the healthy peer as well as the unknown owner",
+    "repeat_and_clean_paths": "repeated quarantine calls and ordinary clean-state worker/cleanup/shutdown paths covered in extracted C fixture"
+  },
+  "python_test_matrix": [
+    {"mode": "normal", "command": "CAMERA_EXPECT_PYTHONOPTIMIZE=0 python3 -I -B tools/hardware/test-camera-sensor-clock-unwind.py", "isolated": 1, "no_site": 0, "optimize": 0, "tests": 9, "failures": 0, "skips": 0},
+    {"mode": "-O", "command": "CAMERA_EXPECT_PYTHONOPTIMIZE=1 python3 -O -I -B tools/hardware/test-camera-sensor-clock-unwind.py", "isolated": 1, "no_site": 0, "optimize": 1, "tests": 9, "failures": 0, "skips": 0},
+    {"mode": "PYTHONOPTIMIZE=1", "command": "CAMERA_EXPECT_PYTHONOPTIMIZE=1 PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-camera-sensor-clock-unwind.py", "isolated": 0, "no_site": 0, "optimize": 1, "tests": 9, "failures": 0, "skips": 0}
+  ],
+  "extracted_c": {
+    "compiler": "GCC 13.3.0",
+    "baseline_and_patched": true,
+    "optimization_flags": ["-O0", "-O2"],
+    "baseline_cleanup_reboot_shutdown_worker_escape_reproduced": true,
+    "patched_unknown_plus_healthy_peer_retained": true,
+    "patched_worker_avoids_csi_stop_and_start_when_unknown_observed": true,
+    "repeated_and_clean_paths": "passed"
+  },
+  "public_source_route": {
+    "command": "CAMERA_CLOCK_FORCE_PUBLIC=1 CAMERA_CLOCK_DERIVED_ROOT=/tmp/camera-clock-derived-absent-review-20261003 CAMERA_EXPECT_PYTHONOPTIMIZE=0 python3 -B tools/hardware/test-camera-sensor-clock-unwind.py",
+    "python_flags": {"isolated": 0, "no_site": 0, "optimize": 0},
+    "tests": 9,
+    "failures": 0,
+    "skips": 1,
+    "skip": "optional private derived-tree apply check; derived-root verified absent before invocation",
+    "applicable_public_tests_passed": 8
+  },
+  "wrong_fixture_control": {
+    "command": "CAMERA_CLOCK_SOURCE_TREE=/home/corpunum/s22-workers/camera-kernel-build-20260927 CAMERA_EXPECT_PYTHONOPTIMIZE=0 python3 -B tools/hardware/test-camera-sensor-clock-unwind.py",
+    "expected": "reject supplied source tree because it is not the pinned original tree",
+    "observed_exit_code": 5,
+    "tests_run": 0,
+    "observed_identity": "3fca50941422439b2019db2e4a3dc1016b2138a1/5aad5cf1dbaa0f430377737141f0547e971b0a2d",
+    "required_identity": "4e5c5ad7d950e4de0688b5663965f2075654b2ad/5c46cbe12dadbcdb64eec4344c9e8ff0f8a75dee",
+    "result": "rejected during test setup before source-dependent tests"
+  },
+  "limits": [
+    "UNKNOWN state writers are not synchronized with the new core scans; concurrent runtime-PM transitions can race cleanup/worker preflight.",
+    "The worker guard does not drain work already past the guard; platform shutdown cannot undo teardown begun before a racing UNKNOWN transition.",
+    "Mutexes, callbacks, work cancellation, and sensor start/stop in extracted C are shims; no real kernel scheduling or concurrency proof.",
+    "No proof of DMA stop, physical clock state, parent/external teardown, or global reboot/power-removal behavior.",
+    "Earlier per-caller clock-vote retry-ownership review remains blocked and is not cleared by this scoped shutdown review.",
+    "No kernel build, device or phone access, firmware, module load, camera streaming, reboot, or deployment."
+  ],
+  "reconciliation_addendum": {
+    "date": "2026-10-03",
+    "prior_independent_review_commit": "3d24675",
+    "prior_review_file": "docs/reviews/CAMERA_CLOCK_OWNERSHIP_REVISION_REVIEW_2026-10-03.md",
+    "finding": "F1 verified the modeled sequential shared-vote retry fix in revision 296441ec81caf3e2ed8f4d2a2764c3e9efee8056; the earlier retry defect report is historical, not an active modeled blocker.",
+    "revision_296_patch_sha256": "0d206b54b6d65d5e530d15cf2c2e21f9632defff154f459107645b3079abe8ba",
+    "current_candidate_patch_sha256": "7808ac0cabc806270a0d07aa2bb974bfd0fc924d3fef33035ba50bf494e768bd",
+    "source_delta_review": "Current patch adds the queued-worker and core cleanup/shutdown guards; earlier clock callback and ordinary caller quarantine hunks are unchanged.",
+    "new_sequential_retry_defect_found": false,
+    "tests_repeated_for_addendum": false,
+    "supersedes_prior_statements": [
+      "Opening verdict sentence that called the earlier ICLK retry-ownership blocker open.",
+      "limits entry asserting the earlier sequential retry-ownership blocker remains unresolved."
+    ],
+    "still_unproven": [
+      "Clock provider and physical gate behavior.",
+      "Concurrency and asynchronous work quiescence.",
+      "DMA safety and external teardown behavior.",
+      "Device or camera acceptance."
+    ]
+  }
+}

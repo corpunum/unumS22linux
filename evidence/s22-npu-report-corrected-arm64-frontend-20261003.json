@@ -1,0 +1,62 @@
+{
+  "schema": "s22-npu-report-corrected-arm64-frontend-host/v1",
+  "executor": "coordinator; separate from author and independent reviewer",
+  "source_commit": "e9c3016233a72ceccb13e537f0b7ef72426582b9",
+  "config_sha256": "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16",
+  "compiler": "Clang 18 configured ARM64 frontend",
+  "compiler_sha256": "8ef402d453d1ba4902e4ee0f0f847f6cfa01400c95aa43c24e97818b9c0e3f45",
+  "mode": "existing saved build command, output/dependency flags removed, -fsyntax-only added",
+  "retained_flags": [
+    "aarch64 target",
+    "-O2",
+    "-Werror",
+    "-fsanitize=kcfi",
+    "-fsanitize=shadow-call-stack"
+  ],
+  "patches": {
+    "npu-interface-open-unwind.patch": "95e63b45d60e0a2611c1f2dcab4428e5658a03ff9954b8197d175ac6fec139cb",
+    "npu-report-close-lifetime.patch": "9bf6eef33be3b8f2c49744e362dada21613a0969576ef78a725d356cdebb0060"
+  },
+  "application": "ordinary git apply --check and --whitespace=error-all on temporary copies only",
+  "composed_interface_sha256": "3e1c9198f8317beb05f0e978f08c270fbc6e25cb73224784ccd92e959a0c4ef7",
+  "jobs": [
+    {
+      "role": "unchanged-baseline",
+      "relative_source": "drivers/vision/npu/core/interface/hardware/npu-interface.c",
+      "source_sha256": "c2deaa0abd990184b64373bb13983f048b925e0f5f421f6623de7de85f667108",
+      "saved_command_sha256": "9db9ea9b9f79641c2ac38a8b00a564063988611acf2976ae336abad08eaf4f5f",
+      "returncode": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    {
+      "role": "report-owner-candidate",
+      "relative_source": "drivers/vision/npu/core/interface/hardware/npu-interface.c",
+      "source_sha256": "3e1c9198f8317beb05f0e978f08c270fbc6e25cb73224784ccd92e959a0c4ef7",
+      "saved_command_sha256": "9db9ea9b9f79641c2ac38a8b00a564063988611acf2976ae336abad08eaf4f5f",
+      "returncode": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    }
+  ],
+  "private_complete_result_sha256": "90b4052b2e884511004e02f506ffe17535d92e524ded82b7a858ecced5a59bfa",
+  "source_config_saved_commands_unchanged": true,
+  "module_or_Image_built": false,
+  "link_modpost_or_symbol_CRC_verification": false,
+  "phone_operations": 0,
+  "hardware_acceptance": false,
+  "NPU_BOOTUP_authorized": false,
+  "limits": [
+    "Frontend evidence only",
+    "No Linux refcount or waitqueue runtime execution",
+    "No NPU firmware, DMA, TrustZone or provider operation",
+    "No installation or new deployment authority"
+  ],
+  "historical_revision": {
+    "patch_sha256": "47647d18bb869af639f11a6d9b00b578db10a01a2bcb2c7b7cdd95805b9aa2c3",
+    "frontend_pass_preserved": true,
+    "semantically_blocked": true,
+    "defect": "refcount_dec at sole publication reference warns and saturates in pinned kernel; close wait cannot complete"
+  },
+  "correction": "publication reference uses refcount_dec_and_test; independent runtime/kernel liveness acceptance is not inferred"
+}

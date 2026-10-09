@@ -1,0 +1,7 @@
+ISOLATED uid=1000 caps=0 NoNewPrivs=1
+<think>
+Thinking Process:
+1.  **Analyze the Request:**
+    *   Topic: Why the sky is blue.
+    *   Constraint: Explain in exactly two sentences.
+2.  **Identify the

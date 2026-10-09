@@ -1,0 +1,25 @@
+{
+  "schema": "s22-hosted-driver-ci/v1",
+  "repository": "corpunum/unumS22linux",
+  "branch": "s22/luna-driver-completion-20260923",
+  "tested_commit": "61bf29031ff9d4200fbed0292f663bf23719ed52",
+  "run_id": 37083080925,
+  "run_url": "https://github.com/corpunum/unumS22linux/actions/runs/37083080925",
+  "conclusion": "success",
+  "job_started_utc": "2026-10-03T00:41:04Z",
+  "job_completed_utc": "2026-10-03T00:43:24Z",
+  "normal_script_invocations_passed": 60,
+  "optimized_script_invocations_passed": 57,
+  "runner_failures": 0,
+  "runner_policy_cases": 7,
+  "complete_private_log_sha256": "67750fb1a772601f1fc41c70ad8807d34c78e2b3f61513feb732d5e008760785",
+  "limitations": [
+    "Host-only source and fake-operation tests are not device acceptance.",
+    "Private artifact fixtures and unavailable verified AVB-tool fixtures retain their explicit skips.",
+    "Three assert-only standalone scripts are intentionally normal-only.",
+    "This run predates the new audio profile CI registration and does not prove the later 119-invocation matrix."
+  ],
+  "phone_access_or_mutations": false,
+  "hardware_acceptance": false,
+  "master_changed": false
+}

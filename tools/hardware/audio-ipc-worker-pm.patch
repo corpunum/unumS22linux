@@ -1,0 +1,15 @@
+diff --git a/sound/soc/samsung/abox/abox.c b/sound/soc/samsung/abox/abox.c
+--- a/sound/soc/samsung/abox/abox.c
++++ b/sound/soc/samsung/abox/abox.c
+@@ -663,3 +663,10 @@ static void abox_process_ipc(struct work_struct *work)
+-	pm_runtime_get_sync(dev);
++	ret = pm_runtime_get_sync(dev);
++	if (ret < 0) {
++		dev_err_ratelimited(dev,
++				"%s: IPC runtime resume failed: %d\n",
++				__func__, ret);
++		pm_runtime_put_noidle(dev);
++		return;
++	}
+ 
+ 	if (abox_can_calliope_ipc(dev, data)) {

@@ -1,0 +1,212 @@
+{
+  "schema": "s22-bt-native-transport-candidate/v1",
+  "receipt_created_at_utc": "2026-10-02T19:57:19Z",
+  "status": "host_candidate_built_not_staged_or_authorized",
+  "source_commit": "79c539ea55a1663e946ed881606232519873fd93",
+  "source_inputs": [
+    {
+      "path": "tools/hardware/bt-qca6490-hci-bridge-probe.c",
+      "sha256": "3324cba16c421254c6e0f64d1f26b422e72ba31189a25d8372957248672410b3"
+    },
+    {
+      "path": "tools/hardware/bt-h4-ibs-bridge.c",
+      "sha256": "32bfebfc96864b6f5150195518fc7da996f62b7b21311d79c9bfea2725f9b1a1"
+    },
+    {
+      "path": "tools/hardware/bt-qca6490-runtime-reset.c",
+      "sha256": "337fb3b576a6dccce0a520daf9628a02a9842c5ffa97f16c1f2230351b516b5b"
+    },
+    {
+      "path": "tools/hardware/bt-qca6490-nvm-capture.c",
+      "sha256": "16e4759f22a5932d29a892e3f32f4339d0ab53807aa9f6f314b3e59afdbe8202"
+    },
+    {
+      "path": "tools/hardware/bt-qca6490-patch-capture.c",
+      "sha256": "ac24c9334a4371ecf3ba6c47d80499ec40da5081b8f70a311389c931c99e4bc1"
+    },
+    {
+      "path": "tools/hardware/bt-qca6490-baud-probe.c",
+      "sha256": "655a097731f50417c8012a7ebd0ce1ad9da5a76d6180c38d05f5b3d4f6af843b"
+    },
+    {
+      "path": "tools/hardware/bt-qca6490-patch-version-probe.c",
+      "sha256": "a32ed1bddc52000a7d36ceee032d55c45a978788868f47c3f0aa3a23ca305984"
+    },
+    {
+      "path": "tools/hardware/bt-version-transport-probe.c",
+      "sha256": "b3a9a346facc24845655fa63c020687efc30ffd44c2a0a9ae7bf8ed149ec58a9"
+    }
+  ],
+  "private_inputs": [
+    {
+      "id": "qca_patch_profile",
+      "sha256": "de1ef56689bbc1f0da3dabe41786561d6949f1c3fb8d5f4deb02f3b9c99e5824"
+    },
+    {
+      "id": "runtime_nvm_profile",
+      "sha256": "989eddb0975569255ae9096255b083dac5a6447137b3adfefa1b54b88416b215"
+    }
+  ],
+  "compiler": {
+    "id": "aarch64-linux-gnu-gcc-13",
+    "sha256": "cd90adc7801f4595267f61a5d25bd3a0c6beb2f9f1f107ab919a97a12972dc9a",
+    "version": "aarch64-linux-gnu-gcc-13 (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "target": "aarch64-linux-gnu",
+    "sysroot": "/",
+    "components": [
+      {
+        "id": "cc1",
+        "sha256": "a7f69616cf8ddbf5c52a5b61bc4c11f504ed9421e282e9083f0a7a22a3268dad"
+      },
+      {
+        "id": "collect2",
+        "sha256": "9cf2eeb7b62183cd18107e7e2645dea6d3545e803a386569f24e98265ba1d79c"
+      },
+      {
+        "id": "aarch64-linux-gnu-as",
+        "sha256": "a315904827ba6f80ad0b58ac3a4672f56a76e639cec2d6833f80b475a28445a3"
+      },
+      {
+        "id": "aarch64-linux-gnu-ld.bfd",
+        "sha256": "7c903ac277dd1f5c4397277db865f12d8239fe45782f71afbeb3d42180a4b1ae"
+      }
+    ],
+    "static_runtime_inputs": [
+      {
+        "id": "crt1.o",
+        "sha256": "332a510b4afece51376517d3c9b3d5a210e27c38a73cf946bf0daac3dfc4e724"
+      },
+      {
+        "id": "crti.o",
+        "sha256": "93bb05d2d87f3464fd89a70d26d8ed29f0797e4b97a60786a2724a7e3ffbeba5"
+      },
+      {
+        "id": "crtn.o",
+        "sha256": "1c741c1f9499461b6f1e531e21fc5f86a216cc5d0c49d18bdcf97d7d922342d5"
+      },
+      {
+        "id": "crtbeginT.o",
+        "sha256": "772152265b97c58d4d0df6ec4ecbf27265b1ec62bfdcb6edcef7400854cc9927"
+      },
+      {
+        "id": "crtend.o",
+        "sha256": "3da9c42040eca63e3432014ee4b0a98a24ea1f7c4a33e1b40c2b02cc7a15c208"
+      },
+      {
+        "id": "libc.a",
+        "sha256": "84d7ae225e8eafaee13344c74ff19bc42189f68a6c704a979ccb0924902fc996"
+      },
+      {
+        "id": "libgcc.a",
+        "sha256": "4bc354241987926aa0489ba1d925e8b10356556323307944f08209f370a28ad6"
+      },
+      {
+        "id": "libgcc_eh.a",
+        "sha256": "ba85797b21e8eb241afccce977b0b2ca607a9764e3ae15bb966415824a8ee8a4"
+      }
+    ]
+  },
+  "build": {
+    "output_id": "bt-native-transport-candidate-20261002",
+    "artifact_name": "bt-qca6490-hci-bridge-probe-native-20261002",
+    "argv_template": [
+      "aarch64-linux-gnu-gcc-13",
+      "-static",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-O2",
+      "-I",
+      "<private-include-root-id>",
+      "-MD",
+      "-MF",
+      "<private-output>/candidate-dependencies.d",
+      "-Wl,-Map,<private-output>/candidate-link.map",
+      "tools/hardware/bt-qca6490-hci-bridge-probe.c",
+      "-o",
+      "<private-output>/bt-qca6490-hci-bridge-probe-native-20261002"
+    ],
+    "compiler_exit_code": 0,
+    "elapsed_seconds": 1.033,
+    "artifact": {
+      "sha256": "74b39343eaa0cd4e7176fb0fef0d6a30ee3e6abcea8954f68331381e719d8c61",
+      "gnu_build_id": "c5c9be207d9a957fc52734f056c510218ac01be5",
+      "size_bytes": 1042008,
+      "elf_class": 64,
+      "endianness": "little",
+      "machine": "AArch64",
+      "type": "ET_EXEC",
+      "static": true,
+      "owner_only_mode": "0700",
+      "independent_readelf_no_interpreter_or_dynamic_segment": true
+    },
+    "candidate_executed": false,
+    "device_or_deployment_action": false
+  },
+  "dependency_proof": {
+    "prebuild_and_postbuild_content_manifest_match": true,
+    "dependency_count": 208,
+    "dependency_bytes": 1835278,
+    "public_source_count": 8,
+    "private_header_count": 2,
+    "system_header_count": 198,
+    "content_manifest_id": "dependency-content-manifest.json",
+    "content_manifest_owner_only": true,
+    "content_manifest_sha256": "25dfe4c980f6bfe85bf25dee9a542c2ce88c19f3355cbac440180b7ea2ae9a95",
+    "compiler_depfile_sha256": "8c139471cf0ee9ea6d0c44e895dbe3b5588b2465603a63931abbac29639eb80a",
+    "link_map_sha256": "4fb01d83d0d092b9eeb4b376f11a5f016c1e018a2d088869d7a4ec926e34f41e",
+    "build_log_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "linked_runtime_count": 8,
+    "dependency_path_policy": "public source paths; private IDs; system path SHA-256 labels; no absolute paths in published receipt",
+    "scope_limit": "captured compiler include dependency and selected static-link inputs, not a general hermetic build claim"
+  },
+  "builder_provenance": {
+    "builder_sha256_measured_after_build": "7d17e06534356bfbd60c12f29a70bbfd859a8305db9231838122dcaf6c1ff9cf",
+    "test_sha256_measured_after_build": "e312290aceebd44da20c8030ca3e05f0a3b897c97f02c9cd5c82509bc22a9a42",
+    "contemporaneous_executed_builder_hash_captured": false,
+    "limitation": "builder file was not fingerprinted in the invocation receipt; post-build hash is an identity clue, not independent proof of exact executed bytes"
+  },
+  "tests": {
+    "portable_tests": 10,
+    "optional_local_fixture_tests": 3,
+    "local_fixture_tests_passed": 3,
+    "runs": [
+      {
+        "mode": "normal",
+        "effective_python_optimize": 0,
+        "passed": 13,
+        "failed": 0
+      },
+      {
+        "mode": "-O",
+        "effective_python_optimize": 1,
+        "passed": 13,
+        "failed": 0
+      },
+      {
+        "mode": "PYTHONOPTIMIZE=1 without -I",
+        "effective_python_optimize": 1,
+        "passed": 13,
+        "failed": 0
+      }
+    ]
+  },
+  "legacy_trial": {
+    "runner_sha256": "26bbe8bdb5ff687de29d5ce67f17d58cfa460a48fe9fc5be9043dccd54cf9253",
+    "bridge_source_pin_sha256": "476f148246dfac8330f7ade2790627b64a38ee7b1cb4f713934b6d438864a7a4",
+    "artifact_sha256": "f4ba76613e1339314898ebbf067338d846ed9ee231907a44306b82f54f2f1684",
+    "artifact_build_id": "a5be9451d95335ae2a5d292d721a766208f55a87",
+    "trial_identity": "bt-hci-plain-h4-20260927",
+    "attempts_preserved": 1,
+    "receipt_sha256": "eb8f1963049cb4cdbca7236169bbdc91f2c929227ea995bdbb310972399518dc",
+    "runner_or_trial_modified": false
+  },
+  "acceptance": {
+    "candidate_execution": false,
+    "phone_or_controller_access": false,
+    "staging_or_upload": false,
+    "powered_test": false,
+    "deployment_authorized": false
+  }
+}
