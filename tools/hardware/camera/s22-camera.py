@@ -25,6 +25,12 @@ RISK / SAFETY NOTES (read before running on the phone)
   finally block, each step independent. A SIGALRM hard deadline backs this up.
 * Kernel BUG() trap avoided: node_group.capture[0].buf.length stays 0 so
   _is_queue_subbuf_prepare() never maps user plane pointers.
+* --cis-exposure-us / --cis-again (opt-in, off by default) write GN3 CIS
+  registers 0x0202/0x0704 (integration) and 0x0204/0x020E (gains) over I2C:
+  ONE VIDIOC_S_EXT_CTRLS on the leader, only after the blocking IS_S_STREAM
+  on and an IS_G_STREAM == 1 check, values clamped here and again in the CIS
+  driver. On any failure the client sends nothing more (no retry). The older
+  --exposure-us/--iso only fill shot.ctl, which nothing reads without the DDK.
 
 PIPELINE (derived from kernel source, fimc_is GNU id 59e54c03; see CAMERA.md)
 -----------------------------------------------------------------------------
@@ -50,6 +56,7 @@ import ctypes
 import errno
 import fcntl
 import json
+import math
 import mmap
 import os
 import select
@@ -83,7 +90,7 @@ SIZEOF = {
     "v4l2_capability": 104, "v4l2_fmtdesc": 64, "v4l2_format": 208,
     "v4l2_requestbuffers": 20, "v4l2_buffer": 88, "v4l2_plane": 64,
     "v4l2_control": 8, "v4l2_streamparm": 204, "dma_heap_allocation_data": 24,
-    "dma_buf_sync": 8,
+    "dma_buf_sync": 8, "v4l2_ext_control": 20, "v4l2_ext_controls": 32,
 }
 VIDIOC_QUERYCAP = _ioc(_IOC_READ, "V", 0, 104)
 VIDIOC_ENUM_FMT = _iowr("V", 2, 64)
@@ -97,6 +104,8 @@ VIDIOC_STREAMON = _ioc(_IOC_WRITE, "V", 18, 4)
 VIDIOC_STREAMOFF = _ioc(_IOC_WRITE, "V", 19, 4)
 VIDIOC_S_PARM = _iowr("V", 22, 204)
 VIDIOC_S_CTRL = _iowr("V", 28, 8)
+VIDIOC_G_CTRL = _iowr("V", 27, 8)
+VIDIOC_S_EXT_CTRLS = _iowr("V", 72, 32)   # struct v4l2_ext_controls: 32 bytes (DWARF)
 VIDIOC_S_INPUT = _iowr("V", 39, 4)
 DMA_HEAP_IOCTL_ALLOC = _iowr("H", 0, 24)
 DMA_BUF_IOCTL_SYNC = _ioc(_IOC_WRITE, "b", 0, 8)
@@ -124,6 +133,86 @@ PIX_SBGGR10P = fourcc("pBAA")
 CID_IS_S_STREAM = 10096654
 CID_IS_S_SENSOR_SIZE = 10096709
 CID_SENSOR_SET_EXTENDED_MODE = 10104853
+CID_IS_G_STREAM = 10096655                  # V4L2_CID_FIMC_IS_BASE + 15
+IS_ENABLE_STREAM = 1
+# Sensor (CIS) controls, V4L2_CID_SENSOR_BASE = V4L2_CTRL_CLASS_CAMERA | 0x3000
+# (include/videodev2_exynos_camera.h). SET_EXTENDED_MODE above is base + 21.
+V4L2_CTRL_CLASS_CAMERA = 0x009A0000
+CID_SENSOR_BASE = V4L2_CTRL_CLASS_CAMERA | 0x3000
+CID_SENSOR_SET_AE_TARGET = CID_SENSOR_BASE + 1        # exposure, microseconds
+CID_SENSOR_SET_ANALOG_GAIN = CID_SENSOR_BASE + 18     # permille (1000 = 1x)
+CID_SENSOR_SET_DIGITAL_GAIN = CID_SENSOR_BASE + 19    # permille
+CID_SENSOR_GET_ANALOG_GAIN = CID_SENSOR_BASE + 108    # reads GN3 reg 0x0204 back
+# Manual CIS exposure without the DDK (exposure review 2026-10-09, see CAMERA.md).
+# Only VIDIOC_S_EXT_CTRLS on the leader reaches sensor_module_s_ctrl():
+# VIDIOC_S_CTRL with AE_TARGET/SHUTTER/GAIN is caught by is_ssx_video_s_ctrl()
+# and ends in CALL_MOPS on module->ops == NULL, a silent no-op. The values are
+# applied once, after the blocking IS_S_STREAM on, and clamped here first.
+CIS_EXPOSURE_US_RANGE = (100, 30000)        # 30 fps frame is 33.3 ms; u16 CIT stays safe
+CIS_AGAIN_PERMILLE_RANGE = (1000, 16000)    # GN3 mode 18 allows 64x; first runs stay <=16x
+CIS_DGAIN_UNITY = 1000
+CID_IS_G_DTPSTATUS = 10096697              # V4L2_CID_FIMC_IS_BASE + 57 (state bits, no I2C)
+CID_IS_G_MIPI_ERR = 10096702               # V4L2_CID_FIMC_IS_BASE + 62 (csi->error_id_last, no I2C)
+CID_SENSOR_GET_DIGITAL_GAIN = CID_SENSOR_BASE + 109   # reads GN3 reg 0x020E
+# Read-only GN3 register dump through i2c-dev (review v2 2026-10-09). Every
+# access is ONE I2C_RDWR of [write 2-byte register address, read n bytes]
+# to 7-bit address 0x10 - the same framing as is_sensor_read16(). No register
+# is ever written. All addresses are page-0x4000 CCI registers below 0x6000
+# (0x6000+ are page/indirect-access controls and are never touched). The page
+# is checked first: 0x0002 must read the GN3 revision 0xC000 seen at open.
+I2C_RDWR = 0x0707
+I2C_M_RD = 0x0001
+GN3_I2C_ADDR = 0x10
+GN3_COMPATIBLE = b"samsung,exynos-is-cis-gn3"
+GN3_REV_REG, GN3_REV = 0x0002, 0xC000
+GN3_DUMP_REGS = (   # (address, bytes, name) - sensor_gn3 log table subset, page 0x4000
+    (0x0000, 2, "model_id"), (0x0002, 2, "revision"), (0x0005, 1, "frame_count"),
+    (0x0100, 2, "mode_select|orientation"), (0x010E, 2, "retention_crc_en"),
+    (0x0112, 2, "csi_data_format"), (0x0202, 2, "coarse_integration"),
+    (0x0204, 2, "analog_gain"), (0x020E, 2, "digital_gain"),
+    (0x0340, 2, "frame_length_lines"), (0x0342, 2, "line_length_pck"),
+    (0x0344, 2, "x_addr_start"), (0x0346, 2, "y_addr_start"),
+    (0x0348, 2, "x_addr_end"), (0x034A, 2, "y_addr_end"),
+    (0x034C, 2, "x_output_size"), (0x034E, 2, "y_output_size"),
+    (0x0600, 2, "test_pattern_mode"), (0x0620, 2, "test_pattern_0620"),
+    (0x0702, 2, "fll_shifter"), (0x0704, 2, "cit_shifter"), (0x0900, 2, "binning"),
+    (0x0B30, 2, "fast_change_idx"), (0x0E00, 1, "aeb"), (0x19C2, 2, "retention_crc_ok"),
+)
+# Review v3: page-0x4000 CCI registers (< 0x6000) that the driver's own setfiles
+# write, with the value written (sensor_gn3_setfile_A_19p2_Global, then
+# sensor_gn3_setfile_A_2040x1532_30fps), plus SMIA id registers. Read-only echo
+# check: a mismatch is a hint (firmware may legitimately rewrite some), not an error.
+GN3_SETFILE_ECHO = (
+    (0x0006, 1, None), (0x0008, 2, None),          # pixel order, data pedestal (SMIA)
+    (0x011C, 2, 0x0101), (0x0136, 2, 0x1300), (0x013E, 2, 0x00C8), (0x0228, 2, 0x0100),
+    (0x0260, 2, 0x0001), (0x0262, 2, 0x0200), (0x0264, 2, 0x0203), (0x0266, 2, 0x0300),
+    (0x0304, 2, 0x0002), (0x0306, 2, 0x00C8), (0x030E, 2, 0x0003), (0x0310, 2, 0x00CA),
+    (0x0312, 2, 0x0000), (0x031A, 2, 0x0003), (0x031C, 2, 0x0031), (0x031E, 2, 0x0001),
+    (0x0400, 2, 0x1010), (0x0408, 2, 0x0100), (0x040A, 2, 0x0100), (0x040C, 2, 0x0000),
+    (0x0724, 2, 0x0000), (0x0A52, 2, 0x0001), (0x0B04, 2, 0x0001), (0x0B32, 2, 0x0000),
+    (0x0BC2, 2, 0x0000), (0x0BC4, 2, 0x0000), (0x0BC6, 2, 0x0000), (0x0BE2, 2, 0x0000),
+    (0x0BE4, 2, 0x0001), (0x0FE0, 2, 0x0000),
+    (0x0118, 2, 0x0000), (0x020C, 2, 0x0000), (0x021E, 2, 0x0000), (0x0270, 2, 0x2B2B),
+    (0x0272, 2, 0x2B10), (0x0350, 2, 0x0000), (0x0352, 2, 0x000A), (0x0380, 2, 0x0002),
+    (0x0382, 2, 0x0006), (0x0384, 2, 0x0002), (0x0386, 2, 0x0006), (0x0720, 2, 0x0001),
+    (0x0722, 2, 0x0000), (0x0728, 2, 0x03F8), (0x072A, 2, 0x017E), (0x0B02, 2, 0x0103),
+    (0x0B08, 2, 0x0001),
+)
+# Review v3: camera rails from the GN3 power table (all S2MPB02 regulators,
+# DT s2mpb02_pmic@59). Their sysfs state/microvolts are read from the PMIC
+# (s2m_is_enabled_regmap / get_voltage_sel read the chip, no cache).
+CAMERA_RAILS = ("VDDA_2.2V_CAM", "VDDD_0.92V_CAM", "VDDPHY_0.92V_CAM", "VDDIO_1.8V_CAM",
+                "VDDIO_1.8V_SUB", "S2MPB02_BUCK2", "S2MPB02_BB", "VDDAF_3.2V_CAM",
+                "VDDAF_2.8V_SUB", "VDDD_1.8V_OIS", "VDDD_3.2V_OIS", "VDDOIS_2.8V_SUB")
+REGULATOR_CLASS = "/sys/class/regulator"
+# Review v4: the ONE sensor register write this client may ever do through
+# i2c-dev. Every GN3 retention fast-change table (INDEX0..8) and the Global
+# setfile set CCI 0x0BE4 = 0x0001; the mode-18 setfile does not, and the
+# streaming sensor reads 0x0000. Hard-coded: no CLI address/value. Off unless
+# both --cis-test-0be4 and --allow-sensor-write are given.
+GN3_0BE4_REG, GN3_0BE4_VALUE = 0x0BE4, 0x0001
+EXT_CTRL_FMT = "<IIIq"                      # struct v4l2_ext_control (packed), 20 bytes
+EXT_CTRLS_FMT = "<IIIiI4xQ"                 # which,count,error_idx,request_fd,rsvd,controls
 SENSOR_SCENARIO_VISION = 1
 SENSOR_NOBLOCK_SHIFT = 28
 
@@ -163,6 +252,39 @@ VC0_GUARD_BYTES = 1 << 20
 # Until a capture has been proven once, only the geometry the 2026-10-06
 # self-test used is allowed (DMA geometry comes from the DT mode anyway).
 LOCKED_GEOMETRY = (2040, 1532, 30)
+# Review v5 (2026-10-09): sensor presets. "rear" reproduces every previous
+# default byte for byte. "front" = IMX374 (DT is_sensor_imx374@10: position 1
+# = SP_FRONT, module id 1 -> core->sensor[1]), so leader /dev/video102
+# ("exynos-is-ss1", IS_VIDEO_SS0_NUM + 1) and VC0 /dev/video214
+# (IS_VIDEO_SS0VC0_NUM + 1*4). Geometry = DT mode9 -> setfile 8
+# 1824x1368@30 RAW10 (sensor_imx374_setfile_A_19p2_1824x1368_30fps), normal
+# (non-special) mode; IMX374 bayer_order OTF_INPUT_ORDER_BAYER_GR_BG.
+SENSOR_PRESETS = {
+    "rear": {"position": 0, "device": 0, "geometry": (2040, 1532, 30), "bayer": "GBRG",
+             "sensor": "S5KGN3"},
+    "front": {"position": 1, "device": 1, "geometry": (1824, 1368, 30), "bayer": "GRBG",
+              "sensor": "IMX374"},
+}
+
+
+def leader_node(device: int) -> str:
+    return f"/dev/video{VIDEO_NODE_BASE + IS_VIDEO_SS0_NUM + device}"
+
+
+def vc0_node(device: int) -> str:
+    return f"/dev/video{VIDEO_NODE_BASE + IS_VIDEO_SS0VC0_NUM + 4 * device}"
+
+
+def apply_sensor_preset(args) -> dict:
+    """Fill unset stream args from --sensor (default rear). Explicit values win."""
+    preset = SENSOR_PRESETS[getattr(args, "sensor", None) or "rear"]
+    w, h, fps = preset["geometry"]
+    for key, value in (("width", w), ("height", h), ("fps", fps), ("bayer", preset["bayer"]),
+                       ("leader", leader_node(preset["device"])),
+                       ("vc0", vc0_node(preset["device"]))):
+        if getattr(args, key, None) is None:
+            setattr(args, key, value)
+    return preset
 DMA_HEAP = "/dev/dma_heap/system"
 GN3_BAYER = "GBRG"
 
@@ -216,6 +338,39 @@ def make_control(cid: int, value: int) -> bytearray:
     return bytearray(struct.pack("<Ii", cid, value))
 
 
+def _clamp(value: int, lo: int, hi: int) -> int:
+    return max(lo, min(hi, value))
+
+
+def cis_exposure_plan(exposure_us: int = 0, again: float = 0.0) -> tuple[list, dict]:
+    """(controls, summary) for one S_EXT_CTRLS on the leader; ([], {}) = leave the sensor alone.
+
+    exposure_us -> V4L2_CID_SENSOR_SET_AE_TARGET -> GN3 coarse integration (0x0202).
+    again (x, e.g. 4.0) -> V4L2_CID_SENSOR_SET_ANALOG_GAIN -> GN3 0x0204.
+
+    sensor_module_s_ctrl() skips the analog write and FALLS THROUGH to the
+    digital gain when the value equals the cached cis_data->analog_gain[1]. With
+    CONFIG_CAMERA_VENDER_MCD that cache survives close/open while the sensor
+    register does not. So the gain goes out as (g-1, g, dgain=1x): the second
+    write always differs from the cache, and a fall-through on the first is
+    undone by the explicit unity digital gain.
+    """
+    controls, summary = [], {}
+    if exposure_us and exposure_us > 0:
+        exp = _clamp(int(exposure_us), *CIS_EXPOSURE_US_RANGE)
+        controls.append((CID_SENSOR_SET_AE_TARGET, exp))
+        summary["exposure_us"] = exp
+        summary["exposure_clamped"] = exp != int(exposure_us)
+    if again and math.isfinite(again) and again > 0:
+        want = int(round(min(float(again), 1000.0) * 1000))
+        gain = _clamp(want, *CIS_AGAIN_PERMILLE_RANGE)
+        controls += [(CID_SENSOR_SET_ANALOG_GAIN, gain - 1), (CID_SENSOR_SET_ANALOG_GAIN, gain),
+                     (CID_SENSOR_SET_DIGITAL_GAIN, CIS_DGAIN_UNITY)]
+        summary["again_permille"] = gain
+        summary["again_clamped"] = gain != want
+    return controls, summary
+
+
 def make_buffer(index: int, buf_type: int, planes_addr: int, num_planes: int,
                 memory: int = V4L2_MEMORY_DMABUF) -> bytearray:
     return bytearray(struct.pack(BUFFER_FMT, index, buf_type, 0, 0, 0, 0, 0, b"\0" * 16,
@@ -241,14 +396,14 @@ def sensor_size_value(width: int, height: int) -> int:
 
 
 def build_shot(width: int, height: int, cap_pixfmt: int, exposure_us: int = 0,
-               iso: int = 0, fps: int = 30) -> bytearray:
+               iso: int = 0, fps: int = 30, device: int = 0) -> bytearray:
     """camera2_shot_ext for the sensor-group leader meta plane."""
     meta = bytearray(SIZE_OF_META_PLANE)
     struct.pack_into("<I", meta, OFF_SHOT_MAGIC, SHOT_MAGIC_NUMBER)
     leader = OFF_NODE_GROUP
-    struct.pack_into("<II", meta, leader + NODE_VID, IS_VIDEO_SS0_NUM, 0)  # request 0
+    struct.pack_into("<II", meta, leader + NODE_VID, IS_VIDEO_SS0_NUM + device, 0)  # request 0
     cap = OFF_NODE_GROUP + NODE_SIZE  # capture[0]
-    struct.pack_into("<II", meta, cap + NODE_VID, IS_VIDEO_SS0VC0_NUM, 1)
+    struct.pack_into("<II", meta, cap + NODE_VID, IS_VIDEO_SS0VC0_NUM + 4 * device, 1)
     struct.pack_into("<4I", meta, cap + NODE_INPUT_CROP, 0, 0, width, height)
     struct.pack_into("<4I", meta, cap + NODE_OUTPUT_CROP, 0, 0, width, height)
     struct.pack_into("<I", meta, cap + NODE_PIXELFORMAT, cap_pixfmt)
@@ -321,6 +476,44 @@ class RealSys:
     def exists(self, path: str) -> bool:
         return os.path.exists(path)
 
+    def listdir(self, path: str) -> list:
+        try:
+            return sorted(os.listdir(path))
+        except OSError:
+            return []
+
+    def i2c_open(self, bus: int) -> int:
+        return os.open(f"/dev/i2c-{int(bus)}", os.O_RDWR | os.O_CLOEXEC)
+
+    def i2c_write_0be4(self, fd: int, addr: int, reg: int, value: int) -> None:
+        """The single allowed write: [W 0x0B 0xE4 0x00 0x01] to 0x10. Anything else refuses."""
+        if (addr, reg, value) != (GN3_I2C_ADDR, GN3_0BE4_REG, GN3_0BE4_VALUE):
+            raise ValueError("only GN3 0x0BE4 <- 0x0001 is allowed")
+        wbuf = (ctypes.c_uint8 * 4)(reg >> 8, reg & 0xFF, value >> 8, value & 0xFF)
+        msgs = (I2cMsg * 1)(I2cMsg(addr, 0, 4, ctypes.addressof(wbuf)))
+        fcntl.ioctl(fd, I2C_RDWR, bytes(I2cRdwr(ctypes.addressof(msgs), 1)))
+
+    def i2c_read(self, fd: int, addr: int, reg: int, length: int) -> bytes:
+        """One I2C_RDWR: [W reg_hi reg_lo][Sr R length]. Never a data write."""
+        if not (0 <= reg < 0x6000 and length in (1, 2)):
+            raise ValueError("register outside the read-only allowlist")
+        wbuf = (ctypes.c_uint8 * 2)(reg >> 8, reg & 0xFF)
+        rbuf = (ctypes.c_uint8 * length)()
+        msgs = (I2cMsg * 2)(I2cMsg(addr, 0, 2, ctypes.addressof(wbuf)),
+                            I2cMsg(addr, I2C_M_RD, length, ctypes.addressof(rbuf)))
+        rdwr = I2cRdwr(ctypes.addressof(msgs), 2)
+        fcntl.ioctl(fd, I2C_RDWR, bytes(rdwr))
+        return bytes(rbuf)
+
+
+class I2cMsg(ctypes.Structure):          # struct i2c_msg, 16 bytes on arm64
+    _fields_ = [("addr", ctypes.c_uint16), ("flags", ctypes.c_uint16),
+                ("len", ctypes.c_uint16), ("buf", ctypes.c_void_p)]
+
+
+class I2cRdwr(ctypes.Structure):         # struct i2c_rdwr_ioctl_data, 16 bytes
+    _fields_ = [("msgs", ctypes.c_void_p), ("nmsgs", ctypes.c_uint32)]
+
 
 class CameraError(Exception):
     pass
@@ -380,6 +573,24 @@ class PlaneArray:
         return struct.unpack_from(PLANE_FMT, self.mem, idx * 64)
 
 
+class ExtControls:
+    """struct v4l2_ext_controls + a stable-address v4l2_ext_control[n] (value controls only)."""
+
+    def __init__(self, controls, which: int = V4L2_CTRL_CLASS_CAMERA):
+        if not controls:
+            raise ValueError("no controls")
+        self.mem = ctypes.create_string_buffer(SIZEOF["v4l2_ext_control"] * len(controls))
+        for i, (cid, value) in enumerate(controls):
+            struct.pack_into(EXT_CTRL_FMT, self.mem, i * SIZEOF["v4l2_ext_control"],
+                             cid, 0, 0, int(value))
+        self.buf = bytearray(struct.pack(EXT_CTRLS_FMT, which, len(controls), 0, 0, 0,
+                                         ctypes.addressof(self.mem)))
+
+    @property
+    def error_idx(self) -> int:
+        return struct.unpack_from("<I", self.buf, 8)[0]
+
+
 # --------------------------------------------------------------------------
 # Prechecks
 # --------------------------------------------------------------------------
@@ -410,13 +621,38 @@ def selftest_active(sysif) -> bool:
     return False
 
 
+def gn3_i2c_bus_ok(sysif, bus: int) -> bool:
+    """/dev/i2c-BUS is only used when sysfs says the GN3 CIS client sits at BUS-0010."""
+    text = sysif.read_text(f"/sys/bus/i2c/devices/{int(bus)}-{GN3_I2C_ADDR:04x}/of_node/compatible")
+    return text is not None and GN3_COMPATIBLE.decode() in text.replace("\0", "\n").split("\n")
+
+
 def prechecks(sysif, args) -> dict:
     info = {}
+    if (getattr(args, "sensor", None) or "rear") != "rear":
+        reviewed_rear_only = [flag for flag, attr in (
+            ("--cis-exposure-us", "cis_exposure_us"), ("--cis-again", "cis_again"),
+            ("--cis-i2c-bus", "cis_i2c_bus"), ("--cis-i2c-extended", "cis_i2c_extended"),
+            ("--cis-test-0be4", "cis_test_0be4")) if getattr(args, attr, None)]
+        if reviewed_rear_only:
+            raise CameraError(f"{', '.join(reviewed_rear_only)} reviewed for the rear GN3 only; "
+                              "not allowed with --sensor " + args.sensor)
+    bus = getattr(args, "cis_i2c_bus", None)
+    if getattr(args, "cis_test_0be4", False) and not (bus is not None and
+                                                      getattr(args, "allow_sensor_write", False)):
+        raise CameraError("--cis-test-0be4 needs --cis-i2c-bus and --allow-sensor-write")
+    if getattr(args, "cis_i2c_extended", False) and bus is None:
+        raise CameraError("--cis-i2c-extended needs --cis-i2c-bus")
+    if bus is not None and not gn3_i2c_bus_ok(sysif, bus):
+        raise CameraError(f"i2c bus {bus}: /sys/bus/i2c/devices/{bus}-0010 is not "
+                          f"{GN3_COMPATIBLE.decode()}; refusing the register dump")
     if not args.skip_node_check:
-        for node, expected in ((args.leader, LEADER_NAME), (args.vc0, VC0_NAME)):
+        device = SENSOR_PRESETS[getattr(args, "sensor", None) or "rear"]["device"]
+        leader_name, vc0_name = f"exynos-is-ss{device}", f"exynos-is-ss{device}vc0"
+        for node, expected in ((args.leader, leader_name), (args.vc0, vc0_name)):
             name = node_name(sysif, node)
-            if name != expected and not (expected == VC0_NAME and name == VC0_NAME_KERNEL_BUG
-                                         and os.path.basename(node) == "video210"):
+            if name != expected and not (expected == vc0_name and name == VC0_NAME_KERNEL_BUG
+                                         and node == vc0_node(device)):
                 raise CameraError(f"{node} sysfs name is {name!r}, expected {expected!r}; "
                                   "refusing (use --skip-node-check only after review)")
     if selftest_active(sysif):
@@ -439,12 +675,16 @@ class Session:
 
     def __init__(self, sysif, width=2040, height=1532, fps=30, pixfmt=PIX_SBGGR16,
                  leader_bufs=2, vc_bufs=3, leader=LEADER_NODE, vc0=VC0_NODE,
-                 exposure_us=0, iso=0, position=0, log=None):
+                 exposure_us=0, iso=0, position=0, log=None, cis_exposure_us=0, cis_again=0.0,
+                 device=0,
+                 cis_dump=False, cis_i2c_bus=None, cis_i2c_extended=False, rails=False,
+                 cis_test_0be4=False):
         self.sys = sysif
         self.width, self.height, self.fps, self.pixfmt = width, height, fps, pixfmt
         self.n_leader, self.n_vc = leader_bufs, vc_bufs
         self.leader_path, self.vc_path = leader, vc0
         self.exposure_us, self.iso, self.position = exposure_us, iso, position
+        self.device = device
         self.stride = vc0_stride(width, pixfmt)
         self.image_len = self.stride * height
         self.log = log or (lambda msg: None)
@@ -457,6 +697,35 @@ class Session:
                       "leader_streamon": False, "front_start": False}
         self.teardown_errors: list[str] = []
         self.steps: list[str] = []
+        self.cis_controls, summary = cis_exposure_plan(cis_exposure_us, cis_again)
+        self.cis = ({"requested": summary, "applied": False, "error": None,
+                     "readback_again_permille": None} if self.cis_controls else None)
+        self.cis_dump_enabled, self.cis_i2c_bus = cis_dump, cis_i2c_bus
+        self.cis_i2c_extended, self.rails_enabled = cis_i2c_extended, rails
+        self.test_0be4 = {"done": False} if (cis_test_0be4 and cis_i2c_bus is not None) else None
+        self.dump = {} if (cis_dump or cis_i2c_bus is not None or rails) else None
+
+    def rails_snapshot(self, tag: str):
+        """Read-only sysfs snapshot of the camera regulators (never raises)."""
+        if not self.rails_enabled or self.dump is None:
+            return
+        out = {}
+        try:
+            for entry in self.sys.listdir(REGULATOR_CLASS):
+                base = f"{REGULATOR_CLASS}/{entry}"
+                name = (self.sys.read_text(base + "/name") or "").strip()
+                if name not in CAMERA_RAILS:
+                    continue
+                out[name] = {k: (self.sys.read_text(f"{base}/{k}") or "").strip() or None
+                             for k in ("state", "microvolts", "num_users")}
+                out[name]["node"] = entry
+            for name in CAMERA_RAILS:
+                out.setdefault(name, "not found")
+        except DeadlineExceeded:
+            raise
+        except Exception as exc:   # sysfs oddities must never fail a capture
+            out["error"] = repr(exc)
+        self.dump.setdefault(tag, {})["rails"] = out
 
     # -- helpers
     def _ioctl(self, fd, req, buf, what):
@@ -489,7 +758,7 @@ class Session:
     def _queue_leader(self, index):
         img, meta = self.lbufs[index]
         meta.write(build_shot(self.width, self.height, self.pixfmt, self.exposure_us,
-                              self.iso, self.fps))
+                              self.iso, self.fps, self.device))
         self._qbuf(self.lfd, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, self.lplanes, index, img, meta,
                    True, f"QBUF leader[{index}]")
 
@@ -501,10 +770,12 @@ class Session:
     # -- setup / teardown
     def start(self):
         out_t, cap_t = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE
+        self.rails_snapshot("before_open")
         self.steps.append(f"open {self.leader_path}")
         self.lfd = self.sys.open(self.leader_path)
         self._ioctl(self.lfd, VIDIOC_S_INPUT, bytearray(struct.pack("<I", s_input_value(
-            SENSOR_SCENARIO_VISION, self.position, IS_VIDEO_SS0_NUM, 1))), "S_INPUT leader")
+            SENSOR_SCENARIO_VISION, self.position, IS_VIDEO_SS0_NUM + self.device, 1))),
+            "S_INPUT leader")
         self._ioctl(self.lfd, VIDIOC_S_PARM, make_streamparm_capture(self.fps), "S_PARM leader")
         self._ioctl(self.lfd, VIDIOC_S_CTRL,
                     make_control(CID_IS_S_SENSOR_SIZE, sensor_size_value(self.width, self.height)),
@@ -545,6 +816,157 @@ class Session:
         # fault -> panic). Review 2026-10-08.
         self._ioctl(self.lfd, VIDIOC_S_CTRL, make_control(CID_IS_S_STREAM, 1),
                     "S_CTRL IS_S_STREAM on (blocking)")
+        self._apply_cis()
+        self.dump_state("after_start")
+        self._test_0be4()
+
+    def _test_0be4(self):
+        """Review v4: re-assert GN3 0x0BE4 = 0x0001 once, mid-stream. Never raises
+        for I2C errors; skips unless the page check passes and 0x0BE4 reads 0x0000."""
+        rec = self.test_0be4
+        if rec is None or not self.state["front_start"]:
+            return
+        try:
+            fd = self.sys.i2c_open(self.cis_i2c_bus)
+        except OSError as exc:
+            rec["error"] = f"open: {exc.strerror}; no write"
+            return
+        try:
+            rev = int.from_bytes(self.sys.i2c_read(fd, GN3_I2C_ADDR, GN3_REV_REG, 2), "big")
+            if rev != GN3_REV:
+                rec["error"] = f"revision {rev:#06x}: page check failed; no write"
+                return
+            before = int.from_bytes(self.sys.i2c_read(fd, GN3_I2C_ADDR, GN3_0BE4_REG, 2), "big")
+            rec["before"] = f"{before:#06x}"
+            if before != 0x0000:
+                rec["error"] = "0x0BE4 is not 0x0000; no write"
+                return
+            self.steps.append("I2C WRITE 0x0be4=0x0001")
+            self.log("I2C WRITE 0x0be4=0x0001")
+            self.sys.i2c_write_0be4(fd, GN3_I2C_ADDR, GN3_0BE4_REG, GN3_0BE4_VALUE)
+            rec["done"] = True
+            rec["after"] = "0x%04x" % int.from_bytes(
+                self.sys.i2c_read(fd, GN3_I2C_ADDR, GN3_0BE4_REG, 2), "big")
+        except OSError as exc:
+            rec["error"] = f"i2c: {exc.strerror}"
+        finally:
+            try:
+                self.sys.close(fd)
+            except OSError:
+                pass
+
+    def dump_state(self, tag: str):
+        """Read-only snapshot. Never raises for an ioctl/I2C error; never writes."""
+        if self.dump is None or self.lfd is None or not self.state["front_start"]:
+            return
+        snap = self.dump.setdefault(tag, {})
+        if self.cis_dump_enabled:
+            ctl_out = snap.setdefault("controls", {})
+            for cid, name in ((CID_IS_G_STREAM, "is_g_stream"), (CID_IS_G_DTPSTATUS, "dtp_status"),
+                              (CID_IS_G_MIPI_ERR, "csis_error_id"),
+                              (CID_SENSOR_GET_ANALOG_GAIN, "again_permille"),
+                              (CID_SENSOR_GET_DIGITAL_GAIN, "dgain_permille")):
+                ctl = make_control(cid, 0)
+                try:
+                    self._ioctl(self.lfd, VIDIOC_G_CTRL, ctl, f"G_CTRL {name}")
+                    ctl_out[name] = struct.unpack("<Ii", ctl)[1]
+                except DeadlineExceeded:
+                    raise
+                except CameraError as exc:
+                    ctl_out[name] = f"error: {exc}"
+        if self.cis_i2c_bus is not None:
+            snap["i2c"] = self._i2c_dump()
+        self.rails_snapshot(tag)
+
+    def _i2c_dump(self) -> dict:
+        out = {}
+        try:
+            fd = self.sys.i2c_open(self.cis_i2c_bus)
+        except OSError as exc:
+            return {"error": f"open /dev/i2c-{self.cis_i2c_bus}: {exc.strerror}"}
+        try:
+            for reg, length, name in GN3_DUMP_REGS:
+                self.steps.append(f"I2C read {reg:#06x}")
+                try:
+                    raw = self.sys.i2c_read(fd, GN3_I2C_ADDR, reg, length)
+                except OSError as exc:
+                    out["error"] = f"read {reg:#06x}: {exc.strerror}; dump stopped"
+                    break
+                value = int.from_bytes(raw, "big")
+                out[f"{reg:#06x} {name}"] = f"{value:#0{2 + 2 * length}x}"
+                if reg == GN3_REV_REG and value != GN3_REV:
+                    out["error"] = (f"revision {value:#06x} != {GN3_REV:#06x}: page is not "
+                                    "0x4000 or wrong device; dump stopped")
+                    break
+            if self.cis_i2c_extended and "error" not in out:
+                echo, mismatch = {}, []
+                for reg, length, expected in GN3_SETFILE_ECHO:
+                    self.steps.append(f"I2C read {reg:#06x}")
+                    try:
+                        raw = self.sys.i2c_read(fd, GN3_I2C_ADDR, reg, length)
+                    except OSError as exc:
+                        out["error"] = f"read {reg:#06x}: {exc.strerror}; echo stopped"
+                        break
+                    value = int.from_bytes(raw, "big")
+                    echo[f"{reg:#06x}"] = f"{value:#0{2 + 2 * length}x}"
+                    if expected is not None and value != expected:
+                        mismatch.append(f"{reg:#06x}: {value:#06x} (setfile {expected:#06x})")
+                out["setfile_echo"] = echo
+                out["setfile_mismatch"] = mismatch
+        finally:
+            try:
+                self.sys.close(fd)
+            except OSError:
+                pass
+        return out
+
+    def _apply_cis(self):
+        """Write exposure/gain to the GN3 once, only while the sensor streams.
+
+        Never raises for an ioctl failure. If the gate or the call fails,
+        nothing more is sent: no retry and no second attempt, and the capture
+        goes on. The hard deadline (DeadlineExceeded) still propagates to the
+        teardown.
+        """
+        if not self.cis_controls:
+            return
+        rec = self.cis
+        try:
+            ctl = make_control(CID_IS_G_STREAM, 0)
+            self._ioctl(self.lfd, VIDIOC_G_CTRL, ctl, "G_CTRL IS_G_STREAM")
+            value = struct.unpack("<Ii", ctl)[1]
+            if value != IS_ENABLE_STREAM:
+                rec["error"] = f"sensor not streaming (IS_G_STREAM={value}); no change"
+                return
+            ext = ExtControls(self.cis_controls)
+            try:
+                self._ioctl(self.lfd, VIDIOC_S_EXT_CTRLS, ext.buf,
+                            "S_EXT_CTRLS cis " + " ".join(f"{c:#x}={v}" for c, v in
+                                                          self.cis_controls))
+            except CameraError as exc:
+                if isinstance(exc, DeadlineExceeded):
+                    raise
+                # The driver stops at the first failing control and leaves
+                # error_idx == count, so earlier controls in the list may have
+                # been written. Nothing is retried; the capture goes on.
+                rec["error"] = (f"{exc}; not retried, sensor keeps its defaults or a "
+                                "partial write (error_idx is not set by this driver)")
+                return
+            rec["applied"] = True
+        except DeadlineExceeded:
+            raise
+        except CameraError as exc:
+            rec["error"] = f"{exc}; no change"
+            return
+        if "again_permille" in rec["requested"]:
+            try:   # best effort: one I2C read of 0x0204
+                ctl = make_control(CID_SENSOR_GET_ANALOG_GAIN, 0)
+                self._ioctl(self.lfd, VIDIOC_G_CTRL, ctl, "G_CTRL GET_ANALOG_GAIN")
+                rec["readback_again_permille"] = struct.unpack("<Ii", ctl)[1]
+            except DeadlineExceeded:
+                raise
+            except CameraError as exc:
+                rec["readback_error"] = str(exc)
 
     def frames(self, timeout_first: float, timeout_next: float, deadline: float):
         """Yield (raw_bytes, info) for each VC0 frame; requeues buffers."""
@@ -619,6 +1041,10 @@ class Session:
             for dbuf in pair:
                 step("release dmabuf", dbuf.release)
         self.vbufs, self.lbufs = [], []
+        try:
+            self.rails_snapshot("after_close")
+        except BaseException as exc:
+            self.teardown_errors.append(f"rails after_close: {exc!r}")
 
 
 class _Alarm:
@@ -649,15 +1075,25 @@ class _Alarm:
         return False
 
 
-def run_stream(sysif, args, consume, alarm=True) -> dict:
-    """Common capture/record driver; `consume(raw, info) -> bool` (True = done)."""
-    if isinstance(sysif, RealSys) and (args.width, args.height, args.fps) != LOCKED_GEOMETRY:
-        raise CameraError("geometry locked to %dx%d@%d until a capture is proven" % LOCKED_GEOMETRY)
+def run_stream(sysif, args, consume, alarm=True, report=None) -> dict:
+    """Common capture/record driver; `consume(raw, info) -> bool` (True = done).
+
+    `report` (the caller's result dict) also receives "cis" when the run
+    raises, so a failed run still shows whether exposure/gain were written."""
+    preset = apply_sensor_preset(args)
+    if isinstance(sysif, RealSys) and (args.width, args.height, args.fps) != preset["geometry"]:
+        raise CameraError("geometry locked to %dx%d@%d for this sensor until a capture is proven"
+                          % preset["geometry"])
     info = prechecks(sysif, args)
     pixfmt = PIX_SBGGR16 if args.pixfmt == "sbggr16" else PIX_SBGGR10P
     session = Session(sysif, args.width, args.height, args.fps, pixfmt,
                       vc_bufs=args.buffers, leader=args.leader, vc0=args.vc0,
+                      position=preset["position"], device=preset["device"],
                       exposure_us=args.exposure_us, iso=args.iso,
+                      cis_exposure_us=args.cis_exposure_us, cis_again=args.cis_again,
+                      cis_dump=args.cis_dump, cis_i2c_bus=args.cis_i2c_bus,
+                      cis_i2c_extended=args.cis_i2c_extended, rails=args.rails,
+                      cis_test_0be4=args.cis_test_0be4,
                       log=(lambda m: print("# " + m, file=sys.stderr)) if args.verbose else None)
     started = time.monotonic()
     deadline = started + args.deadline
@@ -673,10 +1109,23 @@ def run_stream(sysif, args, consume, alarm=True) -> dict:
                     result["errors"] += 1
                     continue
                 if consume(raw, frame):
+                    session.dump_state("before_stop")
                     break
         finally:
             backstop.rearm(30)   # teardown gets its own bounded window
             session.stop()
+            if session.cis is not None:
+                result["cis"] = session.cis
+                if report is not None:
+                    report["cis"] = session.cis
+            if session.test_0be4 is not None:
+                result["test_0be4"] = session.test_0be4
+                if report is not None:
+                    report["test_0be4"] = session.test_0be4
+            if session.dump is not None:
+                result["dump"] = session.dump
+                if report is not None:
+                    report["dump"] = session.dump
     result["ms"] = int((time.monotonic() - started) * 1000)
     result["teardown_errors"] = session.teardown_errors
     return result
@@ -981,6 +1430,7 @@ def _develop_args(args):
 
 def cmd_capture(args, sysif=None, alarm=True) -> int:
     sysif = sysif or RealSys()
+    preset = apply_sensor_preset(args)
     t0 = time.monotonic()
     holder = {"seen": 0, "raw": None, "frame": None}
 
@@ -996,14 +1446,15 @@ def cmd_capture(args, sysif=None, alarm=True) -> int:
     result = {"ok": False, "path": args.out, "node": args.vc0, "leader": args.leader,
               "width": None, "height": None, "format": None}
     try:
-        stream = run_stream(sysif, args, consume, alarm=alarm)
+        stream = run_stream(sysif, args, consume, alarm=alarm, report=result)
         result.update(stream)
         if holder["raw"] is None:
             raise CameraError("no frame captured")
         fmt = args.pixfmt
         meta = {"width": args.width, "height": args.height, "stride": stream["stride"],
                 "pixfmt": stream["pixfmt"], "bayer": args.bayer, "sequence": holder["frame"]["sequence"],
-                "timestamp": holder["frame"]["timestamp"], "sensor": "S5KGN3", "mode": "2040x1532@30"}
+                "timestamp": holder["frame"]["timestamp"], "sensor": preset["sensor"],
+                "mode": "%dx%d@%d" % (args.width, args.height, args.fps)}
         if args.raw:
             write_raw(args.raw, holder["raw"], meta)
             result["raw"] = args.raw
@@ -1022,6 +1473,7 @@ def cmd_capture(args, sysif=None, alarm=True) -> int:
 
 def cmd_record(args, sysif=None, alarm=True) -> int:
     sysif = sysif or RealSys()
+    preset = apply_sensor_preset(args)
     os.makedirs(args.out, exist_ok=True)
     t0 = time.monotonic()
     state = {"start": None, "last": None, "kept": 0, "seen": 0}
@@ -1043,7 +1495,7 @@ def cmd_record(args, sysif=None, alarm=True) -> int:
 
     args.deadline = max(args.deadline, args.seconds + args.first_timeout + 30)
     try:
-        stream = run_stream(sysif, args, consume, alarm=alarm)
+        stream = run_stream(sysif, args, consume, alarm=alarm, report=result)
         result.update(stream)
         meta = {"width": args.width, "height": args.height, "stride": stream["stride"],
                 "pixfmt": stream["pixfmt"], "bayer": args.bayer, "frames": state["kept"]}
@@ -1118,27 +1570,57 @@ def cmd_develop(args) -> int:
 
 
 def _add_stream_args(p):
-    p.add_argument("--width", type=int, default=2040)
-    p.add_argument("--height", type=int, default=1532)
-    p.add_argument("--fps", type=int, default=30)
+    p.add_argument("--sensor", choices=sorted(SENSOR_PRESETS), default="rear",
+                   help="rear = S5KGN3 ss0 (video101/video210, default); front = IMX374 ss1 "
+                        "(video102/video214, 1824x1368@30)")
+    p.add_argument("--width", type=int, default=None, help="default from --sensor")
+    p.add_argument("--height", type=int, default=None)
+    p.add_argument("--fps", type=int, default=None)
     p.add_argument("--pixfmt", choices=("sbggr16", "raw10p"), default="sbggr16")
     p.add_argument("--buffers", type=int, default=3, help="VC0 dma-buf count")
-    p.add_argument("--leader", default=LEADER_NODE)
-    p.add_argument("--vc0", default=VC0_NODE)
+    p.add_argument("--leader", default=None, help="default from --sensor")
+    p.add_argument("--vc0", default=None, help="default from --sensor")
     p.add_argument("--timeout", type=float, default=5.0, help="per-frame select timeout (s)")
     p.add_argument("--first-timeout", type=float, default=20.0)
     p.add_argument("--deadline", type=float, default=120.0, help="hard total deadline (s)")
-    p.add_argument("--exposure-us", type=int, default=0, help="manual exposure (0 = sensor default)")
-    p.add_argument("--iso", type=int, default=0, help="manual sensitivity (0 = default)")
+    p.add_argument("--exposure-us", type=int, default=0,
+                   help="shot.ctl exposure; IGNORED without the DDK (use --cis-exposure-us)")
+    p.add_argument("--iso", type=int, default=0,
+                   help="shot.ctl sensitivity; IGNORED without the DDK (use --cis-again)")
+    p.add_argument("--cis-exposure-us", type=int, default=0,
+                   help="GN3 integration time in us, written once after stream-on "
+                        "(clamped %d..%d; 0 = leave sensor default)" % CIS_EXPOSURE_US_RANGE)
+    p.add_argument("--cis-again", type=float, default=0.0,
+                   help="GN3 analog gain multiplier, written once after stream-on "
+                        "(clamped %g..%g; 0 = leave default)" % tuple(
+                            v / 1000 for v in CIS_AGAIN_PERMILLE_RANGE))
+    p.add_argument("--cis-dump", action="store_true",
+                   help="read-only: G_CTRL stream/DTP/CSIS-error/gain readbacks after "
+                        "stream-on and before stop")
+    p.add_argument("--cis-i2c-bus", type=int, default=None, metavar="N",
+                   help="read-only GN3 register dump via /dev/i2c-N (i2c-dev must already "
+                        "be loaded; N-0010 must be the GN3 in sysfs)")
+    p.add_argument("--cis-i2c-extended", action="store_true",
+                   help="with --cis-i2c-bus: also read back the page-0x4000 registers the "
+                        "driver's setfiles write and report mismatches (read-only)")
+    p.add_argument("--rails", action="store_true",
+                   help="read-only sysfs snapshot of the GN3 S2MPB02 rails (state, microvolts, "
+                        "num_users) before open, after start, before stop and after close")
+    p.add_argument("--cis-test-0be4", action="store_true",
+                   help="REVIEW v4, WRITES THE SENSOR: once, mid-stream, set GN3 0x0BE4=0x0001 "
+                        "(needs --cis-i2c-bus and --allow-sensor-write)")
+    p.add_argument("--allow-sensor-write", action="store_true",
+                   help="explicit consent for --cis-test-0be4 (CSIS overflow would panic)")
     p.add_argument("--allow-fw-stall", action="store_true",
                    help="run even if is_mcu_fw.bin is not staged (~60 s stall)")
     p.add_argument("--skip-node-check", action="store_true")
     p.add_argument("-v", "--verbose", action="store_true", help="log each ioctl to stderr")
-    _add_develop_args(p)
+    _add_develop_args(p, bayer_default=None)
 
 
-def _add_develop_args(p):
-    p.add_argument("--bayer", default=GN3_BAYER, help="CFA order (GN3: GBRG)")
+def _add_develop_args(p, bayer_default=GN3_BAYER):
+    p.add_argument("--bayer", default=bayer_default,
+                   help="CFA order (GN3: GBRG, IMX374: GRBG; streams default from --sensor)")
     p.add_argument("--scale", type=int, default=4, help="even downscale factor (2,4,8)")
     p.add_argument("--black", type=float, default=64.0, help="black level in 10-bit units")
     p.add_argument("--wb", choices=("grayworld", "none"), default="grayworld")
