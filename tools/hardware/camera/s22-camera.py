@@ -151,6 +151,33 @@ CID_SENSOR_GET_ANALOG_GAIN = CID_SENSOR_BASE + 108    # reads GN3 reg 0x0204 bac
 CIS_EXPOSURE_US_RANGE = (100, 30000)        # 30 fps frame is 33.3 ms; u16 CIT stays safe
 CIS_AGAIN_PERMILLE_RANGE = (1000, 16000)    # GN3 mode 18 allows 64x; first runs stay <=16x
 CIS_DGAIN_UNITY = 1000
+CID_IS_G_DTPSTATUS = 10096697              # V4L2_CID_FIMC_IS_BASE + 57 (state bits, no I2C)
+CID_IS_G_MIPI_ERR = 10096702               # V4L2_CID_FIMC_IS_BASE + 62 (csi->error_id_last, no I2C)
+CID_SENSOR_GET_DIGITAL_GAIN = CID_SENSOR_BASE + 109   # reads GN3 reg 0x020E
+# Read-only GN3 register dump through i2c-dev (review v2 2026-10-09). Every
+# access is ONE I2C_RDWR of [write 2-byte register address, read n bytes]
+# to 7-bit address 0x10 - the same framing as is_sensor_read16(). No register
+# is ever written. All addresses are page-0x4000 CCI registers below 0x6000
+# (0x6000+ are page/indirect-access controls and are never touched). The page
+# is checked first: 0x0002 must read the GN3 revision 0xC000 seen at open.
+I2C_RDWR = 0x0707
+I2C_M_RD = 0x0001
+GN3_I2C_ADDR = 0x10
+GN3_COMPATIBLE = b"samsung,exynos-is-cis-gn3"
+GN3_REV_REG, GN3_REV = 0x0002, 0xC000
+GN3_DUMP_REGS = (   # (address, bytes, name) - sensor_gn3 log table subset, page 0x4000
+    (0x0000, 2, "model_id"), (0x0002, 2, "revision"), (0x0005, 1, "frame_count"),
+    (0x0100, 2, "mode_select|orientation"), (0x010E, 2, "retention_crc_en"),
+    (0x0112, 2, "csi_data_format"), (0x0202, 2, "coarse_integration"),
+    (0x0204, 2, "analog_gain"), (0x020E, 2, "digital_gain"),
+    (0x0340, 2, "frame_length_lines"), (0x0342, 2, "line_length_pck"),
+    (0x0344, 2, "x_addr_start"), (0x0346, 2, "y_addr_start"),
+    (0x0348, 2, "x_addr_end"), (0x034A, 2, "y_addr_end"),
+    (0x034C, 2, "x_output_size"), (0x034E, 2, "y_output_size"),
+    (0x0600, 2, "test_pattern_mode"), (0x0620, 2, "test_pattern_0620"),
+    (0x0702, 2, "fll_shifter"), (0x0704, 2, "cit_shifter"), (0x0900, 2, "binning"),
+    (0x0B30, 2, "fast_change_idx"), (0x0E00, 1, "aeb"), (0x19C2, 2, "retention_crc_ok"),
+)
 EXT_CTRL_FMT = "<IIIq"                      # struct v4l2_ext_control (packed), 20 bytes
 EXT_CTRLS_FMT = "<IIIiI4xQ"                 # which,count,error_idx,request_fd,rsvd,controls
 SENSOR_SCENARIO_VISION = 1
@@ -383,6 +410,30 @@ class RealSys:
     def exists(self, path: str) -> bool:
         return os.path.exists(path)
 
+    def i2c_open(self, bus: int) -> int:
+        return os.open(f"/dev/i2c-{int(bus)}", os.O_RDWR | os.O_CLOEXEC)
+
+    def i2c_read(self, fd: int, addr: int, reg: int, length: int) -> bytes:
+        """One I2C_RDWR: [W reg_hi reg_lo][Sr R length]. Never a data write."""
+        if not (0 <= reg < 0x6000 and length in (1, 2)):
+            raise ValueError("register outside the read-only allowlist")
+        wbuf = (ctypes.c_uint8 * 2)(reg >> 8, reg & 0xFF)
+        rbuf = (ctypes.c_uint8 * length)()
+        msgs = (I2cMsg * 2)(I2cMsg(addr, 0, 2, ctypes.addressof(wbuf)),
+                            I2cMsg(addr, I2C_M_RD, length, ctypes.addressof(rbuf)))
+        rdwr = I2cRdwr(ctypes.addressof(msgs), 2)
+        fcntl.ioctl(fd, I2C_RDWR, bytes(rdwr))
+        return bytes(rbuf)
+
+
+class I2cMsg(ctypes.Structure):          # struct i2c_msg, 16 bytes on arm64
+    _fields_ = [("addr", ctypes.c_uint16), ("flags", ctypes.c_uint16),
+                ("len", ctypes.c_uint16), ("buf", ctypes.c_void_p)]
+
+
+class I2cRdwr(ctypes.Structure):         # struct i2c_rdwr_ioctl_data, 16 bytes
+    _fields_ = [("msgs", ctypes.c_void_p), ("nmsgs", ctypes.c_uint32)]
+
 
 class CameraError(Exception):
     pass
@@ -490,8 +541,18 @@ def selftest_active(sysif) -> bool:
     return False
 
 
+def gn3_i2c_bus_ok(sysif, bus: int) -> bool:
+    """/dev/i2c-BUS is only used when sysfs says the GN3 CIS client sits at BUS-0010."""
+    text = sysif.read_text(f"/sys/bus/i2c/devices/{int(bus)}-{GN3_I2C_ADDR:04x}/of_node/compatible")
+    return text is not None and GN3_COMPATIBLE.decode() in text.replace("\0", "\n").split("\n")
+
+
 def prechecks(sysif, args) -> dict:
     info = {}
+    bus = getattr(args, "cis_i2c_bus", None)
+    if bus is not None and not gn3_i2c_bus_ok(sysif, bus):
+        raise CameraError(f"i2c bus {bus}: /sys/bus/i2c/devices/{bus}-0010 is not "
+                          f"{GN3_COMPATIBLE.decode()}; refusing the register dump")
     if not args.skip_node_check:
         for node, expected in ((args.leader, LEADER_NAME), (args.vc0, VC0_NAME)):
             name = node_name(sysif, node)
@@ -519,7 +580,8 @@ class Session:
 
     def __init__(self, sysif, width=2040, height=1532, fps=30, pixfmt=PIX_SBGGR16,
                  leader_bufs=2, vc_bufs=3, leader=LEADER_NODE, vc0=VC0_NODE,
-                 exposure_us=0, iso=0, position=0, log=None, cis_exposure_us=0, cis_again=0.0):
+                 exposure_us=0, iso=0, position=0, log=None, cis_exposure_us=0, cis_again=0.0,
+                 cis_dump=False, cis_i2c_bus=None):
         self.sys = sysif
         self.width, self.height, self.fps, self.pixfmt = width, height, fps, pixfmt
         self.n_leader, self.n_vc = leader_bufs, vc_bufs
@@ -540,6 +602,8 @@ class Session:
         self.cis_controls, summary = cis_exposure_plan(cis_exposure_us, cis_again)
         self.cis = ({"requested": summary, "applied": False, "error": None,
                      "readback_again_permille": None} if self.cis_controls else None)
+        self.cis_dump_enabled, self.cis_i2c_bus = cis_dump, cis_i2c_bus
+        self.dump = {} if (cis_dump or cis_i2c_bus is not None) else None
 
     # -- helpers
     def _ioctl(self, fd, req, buf, what):
@@ -629,6 +693,56 @@ class Session:
         self._ioctl(self.lfd, VIDIOC_S_CTRL, make_control(CID_IS_S_STREAM, 1),
                     "S_CTRL IS_S_STREAM on (blocking)")
         self._apply_cis()
+        self.dump_state("after_start")
+
+    def dump_state(self, tag: str):
+        """Read-only snapshot. Never raises for an ioctl/I2C error; never writes."""
+        if self.dump is None or self.lfd is None or not self.state["front_start"]:
+            return
+        snap = self.dump.setdefault(tag, {})
+        if self.cis_dump_enabled:
+            ctl_out = snap.setdefault("controls", {})
+            for cid, name in ((CID_IS_G_STREAM, "is_g_stream"), (CID_IS_G_DTPSTATUS, "dtp_status"),
+                              (CID_IS_G_MIPI_ERR, "csis_error_id"),
+                              (CID_SENSOR_GET_ANALOG_GAIN, "again_permille"),
+                              (CID_SENSOR_GET_DIGITAL_GAIN, "dgain_permille")):
+                ctl = make_control(cid, 0)
+                try:
+                    self._ioctl(self.lfd, VIDIOC_G_CTRL, ctl, f"G_CTRL {name}")
+                    ctl_out[name] = struct.unpack("<Ii", ctl)[1]
+                except DeadlineExceeded:
+                    raise
+                except CameraError as exc:
+                    ctl_out[name] = f"error: {exc}"
+        if self.cis_i2c_bus is not None:
+            snap["i2c"] = self._i2c_dump()
+
+    def _i2c_dump(self) -> dict:
+        out = {}
+        try:
+            fd = self.sys.i2c_open(self.cis_i2c_bus)
+        except OSError as exc:
+            return {"error": f"open /dev/i2c-{self.cis_i2c_bus}: {exc.strerror}"}
+        try:
+            for reg, length, name in GN3_DUMP_REGS:
+                self.steps.append(f"I2C read {reg:#06x}")
+                try:
+                    raw = self.sys.i2c_read(fd, GN3_I2C_ADDR, reg, length)
+                except OSError as exc:
+                    out["error"] = f"read {reg:#06x}: {exc.strerror}; dump stopped"
+                    break
+                value = int.from_bytes(raw, "big")
+                out[f"{reg:#06x} {name}"] = f"{value:#0{2 + 2 * length}x}"
+                if reg == GN3_REV_REG and value != GN3_REV:
+                    out["error"] = (f"revision {value:#06x} != {GN3_REV:#06x}: page is not "
+                                    "0x4000 or wrong device; dump stopped")
+                    break
+        finally:
+            try:
+                self.sys.close(fd)
+            except OSError:
+                pass
+        return out
 
     def _apply_cis(self):
         """Write exposure/gain to the GN3 once, only while the sensor streams.
@@ -794,6 +908,7 @@ def run_stream(sysif, args, consume, alarm=True, report=None) -> dict:
                       vc_bufs=args.buffers, leader=args.leader, vc0=args.vc0,
                       exposure_us=args.exposure_us, iso=args.iso,
                       cis_exposure_us=args.cis_exposure_us, cis_again=args.cis_again,
+                      cis_dump=args.cis_dump, cis_i2c_bus=args.cis_i2c_bus,
                       log=(lambda m: print("# " + m, file=sys.stderr)) if args.verbose else None)
     started = time.monotonic()
     deadline = started + args.deadline
@@ -809,6 +924,7 @@ def run_stream(sysif, args, consume, alarm=True, report=None) -> dict:
                     result["errors"] += 1
                     continue
                 if consume(raw, frame):
+                    session.dump_state("before_stop")
                     break
         finally:
             backstop.rearm(30)   # teardown gets its own bounded window
@@ -817,6 +933,10 @@ def run_stream(sysif, args, consume, alarm=True, report=None) -> dict:
                 result["cis"] = session.cis
                 if report is not None:
                     report["cis"] = session.cis
+            if session.dump is not None:
+                result["dump"] = session.dump
+                if report is not None:
+                    report["dump"] = session.dump
     result["ms"] = int((time.monotonic() - started) * 1000)
     result["teardown_errors"] = session.teardown_errors
     return result
@@ -1279,6 +1399,12 @@ def _add_stream_args(p):
                    help="GN3 analog gain multiplier, written once after stream-on "
                         "(clamped %g..%g; 0 = leave default)" % tuple(
                             v / 1000 for v in CIS_AGAIN_PERMILLE_RANGE))
+    p.add_argument("--cis-dump", action="store_true",
+                   help="read-only: G_CTRL stream/DTP/CSIS-error/gain readbacks after "
+                        "stream-on and before stop")
+    p.add_argument("--cis-i2c-bus", type=int, default=None, metavar="N",
+                   help="read-only GN3 register dump via /dev/i2c-N (i2c-dev must already "
+                        "be loaded; N-0010 must be the GN3 in sysfs)")
     p.add_argument("--allow-fw-stall", action="store_true",
                    help="run even if is_mcu_fw.bin is not staged (~60 s stall)")
     p.add_argument("--skip-node-check", action="store_true")
