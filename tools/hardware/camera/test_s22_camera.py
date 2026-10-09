@@ -379,6 +379,11 @@ class FakeSys:
         self.fds[fd] = f"/dev/i2c-{bus}"
         return fd
 
+    def i2c_write_0be4(self, fd, addr, reg, value):
+        assert (addr, reg, value) == (0x10, 0x0BE4, 0x0001), (addr, reg, value)
+        self.i2c_writes = getattr(self, "i2c_writes", []) + [(reg, value, self.stream["front"])]
+        self.i2c_regs[reg] = value
+
     def i2c_read(self, fd, addr, reg, length):
         assert addr == 0x10 and 0 <= reg < 0x6000 and length in (1, 2), (addr, reg, length)
         self.i2c_reads.append((reg, length, self.stream["front"]))
@@ -911,6 +916,60 @@ class RailsAndEchoTest(CaptureHelpers):
             self.assertTrue(0 <= reg < 0x6000 and length in (1, 2), hex(reg))
         regs = [r for r, _, _ in cam.GN3_SETFILE_ECHO]
         self.assertEqual(len(regs), len(set(regs)))
+
+
+class Test0BE4(CaptureHelpers):
+    """Review v4 2026-10-09: the single gated sensor write."""
+
+    COMPAT = CisDumpTest.COMPAT
+    FLAGS = ("--cis-i2c-bus", "7", "--cis-test-0be4", "--allow-sensor-write")
+
+    def test_writes_once_mid_stream_and_reads_back(self):
+        fake = FakeSys(names=self.COMPAT)
+        rc, res, _, _ = self._capture(fake, *self.FLAGS)
+        self.assertEqual(rc, 0, res)
+        self.assertEqual(fake.i2c_writes, [(0x0BE4, 0x0001, True)])
+        self.assertEqual(res["test_0be4"], {"done": True, "before": "0x0000", "after": "0x0001"})
+        order = [c[0] for c in fake.calls]
+        self.assertLess(max(i for i, c in enumerate(fake.calls) if c[0] == "VIDIOC_S_CTRL"
+                            and i < order.index("VIDIOC_DQBUF")), order.index("VIDIOC_DQBUF"))
+        self._assert_rolled_back(fake)
+
+    def test_needs_bus_and_consent(self):
+        for extra in (("--cis-test-0be4",), ("--cis-test-0be4", "--allow-sensor-write"),
+                      ("--cis-test-0be4", "--cis-i2c-bus", "7")):
+            fake = FakeSys(names=self.COMPAT)
+            rc, res, _, _ = self._capture(fake, *extra)
+            self.assertEqual(rc, 1)
+            self.assertIn("--allow-sensor-write", res["error"])
+            self.assertFalse([c for c in fake.calls if c[0] in ("open", "i2c_open")])
+
+    def test_no_write_when_page_check_fails_or_already_set(self):
+        fake = FakeSys(names=self.COMPAT)
+        fake.i2c_regs[0x0002] = 0xA000
+        rc, res, _, _ = self._capture(fake, *self.FLAGS)
+        self.assertEqual(rc, 0, res)
+        self.assertFalse(getattr(fake, "i2c_writes", []))
+        self.assertIn("page check", res["test_0be4"]["error"])
+        fake = FakeSys(names=self.COMPAT)
+        fake.i2c_regs[0x0BE4] = 0x0001
+        rc, res, _, _ = self._capture(fake, *self.FLAGS)
+        self.assertFalse(getattr(fake, "i2c_writes", []))
+        self.assertIn("not 0x0000", res["test_0be4"]["error"])
+
+    def test_no_write_when_start_fails(self):
+        fake = FakeSys(names=self.COMPAT, fail={("VIDIOC_STREAMON", "leader"): 22})
+        rc, res, _, _ = self._capture(fake, *self.FLAGS)
+        self.assertEqual(rc, 1)
+        self.assertFalse(getattr(fake, "i2c_writes", []))
+        self._assert_rolled_back(fake)
+
+    def test_realsys_write_guard(self):
+        real = cam.RealSys()
+        for args in ((0x10, 0x0BE4, 0x0003), (0x10, 0x0BE6, 0x0001), (0x11, 0x0BE4, 0x0001),
+                     (0x10, 0x6000, 0x0001)):
+            with self.assertRaises(ValueError):
+                real.i2c_write_0be4(-1, *args)
 
 
 class ListTest(unittest.TestCase):
