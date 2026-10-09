@@ -104,11 +104,14 @@ REVIEWED_HOST_TEST_PATHS = (
     "tools/hardware/test_s22_modem.py",
     "tools/hardware/test_s22_keepalive.py",
     "tools/persistence/test_start_persistent_desktop.py",
+    "tools/persistence/test_model_profile.py",
     "tools/hardware/phoned/test_s22_phoned.py",
     "tools/hardware/voip/test_s22_sip.py",
     "tools/hardware/test_s22_converse.py",
     "tools/openunum-phone/test_check_model_pin.py",
     "tools/openunum-phone/test_phone_plugin.py",
+    "tools/openunum-phone/test_ui_plugin.py",
+    "tools/touchui/test_s22_touchd.py",
     "tools/hardware/camera/test_s22_camera.py",
 )
 
@@ -196,11 +199,14 @@ HOST_TESTS = (
     HostTest("tools/hardware/test_s22_modem.py"),
     HostTest("tools/hardware/test_s22_keepalive.py"),
     HostTest("tools/persistence/test_start_persistent_desktop.py"),
+    HostTest("tools/persistence/test_model_profile.py"),
     HostTest("tools/hardware/phoned/test_s22_phoned.py"),
     HostTest("tools/hardware/voip/test_s22_sip.py"),
     HostTest("tools/hardware/test_s22_converse.py"),
     HostTest("tools/openunum-phone/test_check_model_pin.py"),
     HostTest("tools/openunum-phone/test_phone_plugin.py"),
+    HostTest("tools/openunum-phone/test_ui_plugin.py"),
+    HostTest("tools/touchui/test_s22_touchd.py"),
     HostTest("tools/hardware/camera/test_s22_camera.py"),
 )
 
@@ -217,7 +223,8 @@ def _resolve_test_paths(root: Path, tests: Sequence[HostTest]) -> tuple[Path, ..
                     test.path.startswith("tools/hardware/") or
                     test.path.startswith("tools/pi-web/") or
                     test.path.startswith("tools/persistence/") or
-                    test.path.startswith("tools/openunum-phone/")
+                    test.path.startswith("tools/openunum-phone/") or
+                    test.path.startswith("tools/touchui/")
                 ) or
                 not test.optimization_safe and not test.normal_only_reason):
             raise ValueError(f"invalid or duplicate allowlist entry: {test.path}")
