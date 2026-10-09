@@ -1,0 +1,12 @@
+diff --git a/drivers/vision/npu/core/npu-if-protodrv-mbox2.c b/drivers/vision/npu/core/npu-if-protodrv-mbox2.c
+--- a/drivers/vision/npu/core/npu-if-protodrv-mbox2.c
++++ b/drivers/vision/npu/core/npu-if-protodrv-mbox2.c
+@@ -112,5 +112,8 @@ int npu_nw_mbox_ops_put(struct msgid_pool *pool, struct proto_req_nw *src)
+ 		ret = protodrv_mbox.npu_if_protodrv_mbox_ops->nw_post_request(msgid, &src->nw);
+ 	else {
+ 		npu_warn("not defined: nw_post_request()\n");
++#ifdef CONFIG_NPU_USE_BOOT_IOCTL
++		msgid_claim(pool, msgid);
++#endif
+ 		return 0;
+ 	}

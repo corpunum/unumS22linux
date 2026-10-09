@@ -1,0 +1,172 @@
+diff --git a/drivers/soc/samsung/imgloader.c b/drivers/soc/samsung/imgloader.c
+--- a/drivers/soc/samsung/imgloader.c
++++ b/drivers/soc/samsung/imgloader.c
+@@ -262,15 +262,16 @@
+- * imgloader_shutdown() - Shutdown a peripheral
++ * imgloader_shutdown_status() - Shutdown a peripheral and return status
+  * @desc: descriptor from imgloader_desc_init()
+  *
+- * Once the FW permission is released successfully,
+- * the FW cannot have the access permission again
+- * even if desc->ops->shutdown() and imgloader_notify()
+- * fail. Each driver must call imgloader_boot() to run
+- * FW again.
++ * Returns 0 on success or a negative errno when a provider step fails.
++ * A failure can be reported after FW permission was released irreversibly.
++ * Once released, the FW cannot have the access permission again, even if
++ * desc->ops->shutdown() or imgloader_notify() fails. Each driver must call
++ * imgloader_boot() to run FW again.
+  */
+-void imgloader_shutdown(struct imgloader_desc *desc)
++int imgloader_shutdown_status(struct imgloader_desc *desc)
+ {
+ 	int ret;
++	int status = 0;
+ 
+ 	if (desc->s2mpu_support) {
+ 		ret = imgloader_release_fw_permission(desc);
+@@ -278,7 +280,7 @@ int imgloader_shutdown_status(struct imgloader_desc *desc)
+ 			imgloader_err(desc,
+ 				"Failed to release fw permission (rc:%d)\n",
+ 				ret);
+-			return;
++			return ret < 0 ? ret : -EIO;
+ 		}
+ 	}
+ 
+@@ -287,7 +291,10 @@ int imgloader_shutdown_status(struct imgloader_desc *desc)
+-		if (desc->ops->shutdown(desc))
++		ret = desc->ops->shutdown(desc);
++		if (ret) {
+ 			desc->shutdown_fail = true;
++			status = ret < 0 ? ret : -EIO;
++		} else {
+-		else
+ 			desc->shutdown_fail = false;
++		}
+ 	}
+ 
+ 	ret = imgloader_notify(desc, "off");
+@@ -295,7 +302,17 @@ int imgloader_shutdown_status(struct imgloader_desc *desc)
+ 	if (ret < 0)
+ 		imgloader_err(desc,
+ 			"failed to send OFF message to AOP rc:%d\n", ret);
++	if (ret && !status)
++		status = ret < 0 ? ret : -EIO;
++
++	return status;
+ }
++EXPORT_SYMBOL(imgloader_shutdown_status);
++
++void imgloader_shutdown(struct imgloader_desc *desc)
++{
++	(void)imgloader_shutdown_status(desc);
++}
+ EXPORT_SYMBOL(imgloader_shutdown);
+ 
+ static DEFINE_IDA(imgloader_ida);
+diff --git a/include/soc/samsung/imgloader.h b/include/soc/samsung/imgloader.h
+--- a/include/soc/samsung/imgloader.h
++++ b/include/soc/samsung/imgloader.h
+@@ -75,6 +75,7 @@
+ extern int imgloader_desc_init(struct imgloader_desc *desc);
+ extern int imgloader_boot(struct imgloader_desc *desc);
+ extern void imgloader_shutdown(struct imgloader_desc *desc);
++extern int imgloader_shutdown_status(struct imgloader_desc *desc);
+ extern void imgloader_desc_release(struct imgloader_desc *desc);
+ extern phys_addr_t imgloader_get_phys_base(struct imgloader_desc *desc);
+ #else
+@@ -83,5 +84,6 @@
+ static inline int imgloader_boot(struct imgloader_desc *desc) { return 0; }
+ static inline void imgloader_shutdown(struct imgloader_desc *desc) { }
++static inline int imgloader_shutdown_status(struct imgloader_desc *desc) { return 0; }
+ static inline void imgloader_desc_release(struct imgloader_desc *desc) { }
+ static inline phys_addr_t imgloader_get_phys_base(struct imgloader_desc *desc) { return 0; }
+ #endif
+diff --git a/drivers/vision/npu/core/npu-system.c b/drivers/vision/npu/core/npu-system.c
+--- a/drivers/vision/npu/core/npu-system.c
++++ b/drivers/vision/npu/core/npu-system.c
+@@ -77,10 +77,17 @@ static void npu_imgloader_desc_release(struct npu_system *system)
+ {
+ 	imgloader_desc_release(&system->binary.imgloader);
+ }
+ 
++static int npu_imgloader_shutdown_status(struct npu_system *system)
++{
++	int ret = imgloader_shutdown_status(&system->binary.imgloader);
++
++	return ret > 0 ? -EIO : ret;
++}
++
+ void npu_imgloader_shutdown(struct npu_system *system)
+ {
+-	imgloader_shutdown(&system->binary.imgloader);
++	(void)npu_imgloader_shutdown_status(system);
+ }
+ #else
+ static void npu_imgloader_desc_release(__attribute__((unused))struct npu_system *system)
+@@ -89,6 +94,11 @@ static void npu_imgloader_desc_release(__attribute__((unused))struct npu_system *system)
+ 	return;
+ }
+ 
++static int npu_imgloader_shutdown_status(__attribute__((unused))struct npu_system *system)
++{
++	return 0;
++}
++
+ static void npu_imgloader_shutdown(__attribute__((unused))struct npu_system *system)
+ {
+ 	return;
+@@ -315,6 +325,7 @@ enum npu_system_resume_steps {
+ 	NPU_SYS_RESUME_SETUP_WAKELOCK,
+ 	NPU_SYS_RESUME_INIT_FWBUF,
+ 	NPU_SYS_RESUME_FW_LOAD,
++	NPU_SYS_RESUME_FW_SHUTDOWN_UNCERTAIN,
+ 	NPU_SYS_RESUME_CLK_PREPARE,
+ 	NPU_SYS_RESUME_FW_VERIFY,
+ 	NPU_SYS_RESUME_SOC,
+@@ -1846,6 +1857,12 @@ int npu_system_suspend(struct npu_system *system)
+ 	device = container_of(system, struct npu_device, system);
+ 
+ 	npu_info("fw_cold_boot(%d)\n", system->fw_cold_boot);
++	if (test_bit(NPU_SYS_RESUME_FW_SHUTDOWN_UNCERTAIN,
++			&system->resume_steps)) {
++		npu_err("image-loader shutdown outcome is uncertain; preserving firmware and lower-stage ownership\n");
++		ret = -EUCLEAN;
++		goto p_err;
++	}
+ 
+ 	if (test_bit(NPU_SYS_RESUME_OPEN_INTERFACE_CLOSE_UNCERTAIN,
+ 			&system->resume_steps)) {
+@@ -1890,10 +1907,27 @@ int npu_system_suspend(struct npu_system *system)
+ #ifdef CONFIG_NPU_SECURE_MODE
+-		if (!system->mbox_hdr->warm_boot_enable && system->fw_cold_boot)
++		if (!system->mbox_hdr->warm_boot_enable && system->fw_cold_boot)
+ #else
+-		if (system->fw_cold_boot)
++		if (system->fw_cold_boot)
+ #endif
++		{
+-			npu_imgloader_shutdown(system);
+-		clear_bit(NPU_SYS_RESUME_FW_LOAD, &system->resume_steps);
++			/* The claim covers every provider substep, including partial success. */
++			if (test_and_set_bit(NPU_SYS_RESUME_FW_SHUTDOWN_UNCERTAIN,
++					&system->resume_steps)) {
++				ret = -EUCLEAN;
++				goto p_err;
++			}
++			ret = npu_imgloader_shutdown_status(system);
++			if (ret) {
++				npu_err("fail(%d) in npu_imgloader_shutdown_status; preserving firmware and lower-stage ownership\n",
++					ret);
++				goto p_err;
++			}
++			clear_bit(NPU_SYS_RESUME_FW_LOAD, &system->resume_steps);
++			clear_bit(NPU_SYS_RESUME_FW_SHUTDOWN_UNCERTAIN,
++				&system->resume_steps);
++		} else {
++			clear_bit(NPU_SYS_RESUME_FW_LOAD, &system->resume_steps);
++		}
+ 	}
+ 
+ 	/* Invoke platform specific suspend routine */

@@ -1,0 +1,56 @@
+{
+  "schema": "s22-npu-interface-open-unwind-review/v1",
+  "review_date": "2026-10-03",
+  "verdict": "clear_scoped_source_review_no_blocking_source_defect_found",
+  "scope": "NPU interface report-workqueue probe/open/close and acquired IRQ/affinity unwind source review; host-only tests",
+  "reviewed_author_commit": "3f14b7ba1a09d2e7b1f71dff42984579d3eece16",
+  "reviewed_author_tree": "8cc9321629eb79e4e514a521c5bf43b2f3743f60",
+  "review_import_commit": "9802a9a8effe22ea8310113e9d9168be5ed83ae1",
+  "review_import_tree": "384618352a7f14cda2dd35552ac4db519d08df26",
+  "inputs_sha256": {
+    "tools/hardware/npu-interface-open-unwind.patch": "95e63b45d60e0a2611c1f2dcab4428e5658a03ff9954b8197d175ac6fec139cb",
+    "tools/hardware/npu-interface-open-unwind-harness.c": "b9bf832f041ca5528d3b9a64fc37338b8313920d1f8c883dccf25de92bb66766",
+    "tools/hardware/test-npu-interface-open-unwind.py": "f094d43e3fbcd28ffc86b0f19b0909eaf8c2f916dbfa4f9190e491e39c4ba4a7",
+    "docs/research/NPU_INTERFACE_OPEN_UNWIND_2026-10-03.md": "e5ef4da3e5aaa0d46917eff9d8f41375037a3102967aaf91fa51e9060e97efcf"
+  },
+  "source_identity": {
+    "public_base_commit": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+    "derived_source_commit": "3fca50941422439b2019db2e4a3dc1016b2138a1",
+    "composed_npu12_commit": "e9c3016233a72ceccb13e537f0b7ef72426582b9",
+    "target_path": "drivers/vision/npu/core/interface/hardware/npu-interface.c",
+    "target_sha256_all_three": "c2deaa0abd990184b64373bb13983f048b925e0f5f421f6623de7de85f667108",
+    "ordinary_apply_check_public_and_local": "passed",
+    "ordinary_apply_check_composed_npu12": "passed"
+  },
+  "independent_test_matrix": {
+    "python": "3.12.3",
+    "c_compiler": "GCC 13.3.0",
+    "cases": [
+      {"fixture": "pinned_public_source", "python_mode": "normal", "result": "passed", "extracted_c": ["-O0", "-O2"]},
+      {"fixture": "pinned_public_source", "python_mode": "-O", "result": "passed", "extracted_c": ["-O0", "-O2"]},
+      {"fixture": "pinned_public_source", "python_mode": "PYTHONOPTIMIZE=1; optimize flag asserted 1", "result": "passed", "extracted_c": ["-O0", "-O2"]},
+      {"fixture": "clean_derived_local_source", "python_mode": "normal", "result": "passed", "extracted_c": ["-O0", "-O2"]},
+      {"fixture": "clean_derived_local_source", "python_mode": "-O", "result": "passed", "extracted_c": ["-O0", "-O2"]},
+      {"fixture": "clean_derived_local_source", "python_mode": "PYTHONOPTIMIZE=1; optimize flag asserted 1", "result": "passed", "extracted_c": ["-O0", "-O2"]}
+    ],
+    "per_invocation": "baseline and patched extracted production functions compiled and executed at -O0 and -O2; baseline defects reproduced and patched cases passed",
+    "public_fetch_result": "passed through existing bounded SHA-verified source loader",
+    "native_kernel_build": "not run"
+  },
+  "review_findings": {
+    "source_blocker": false,
+    "blocking_missing_test": false,
+    "nonblocking_test_gaps": [
+      "actual mailbox ISR function bodies are statically checked but not dynamically injected/executed",
+      "actual report worker callback and fw_rprt_gather are not executed by the harness",
+      "duplicate probe and probe-only-close-then-open transitions are not dynamically exercised",
+      "pthread/workqueue/free-IRQ shims do not model Linux scheduler or in-flight callback behavior"
+    ],
+    "unresolved_out_of_scope": [
+      "direct npu-log diagnostic fw_rprt_gather calls are outside queue detach/drain lifetime fence",
+      "npu_system_release and late npu_system_probe failure have no interface teardown integration; unbind/reprobe unsupported",
+      "npu_system_resume still swallows npu_interface_open failure after emergency marking",
+      "firmware ring retention, report delivery, real IRQ/PM/DMA, native build, and NPU BOOTUP unverified"
+    ]
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "schema": "s22-driver-host-tests-v1",
+  "date_utc": "2026-09-26",
+  "tested_code_commit": "1bac73960ac81dcfc5de81a03eaca6b1f14b0a84",
+  "scope": "Hardware-free tests in an isolated integration worktree; no phone execution",
+  "policy_suite": {"normal": 7, "optimized": 7, "failures": 0},
+  "fixed_allowlist": {
+    "normal_script_passes": 18,
+    "optimized_script_passes": 15,
+    "documented_optimized_script_skips": 3,
+    "failures": 0,
+    "avb_fixture_dependent_cases_skipped_per_mode": 3,
+    "avb_skip_reason": "Trusted avbtool unavailable in this isolated checkout"
+  },
+  "focused_suites_per_mode": {
+    "bt_c_bridge_and_lifecycle": 21,
+    "bt_registration_adapter": 17,
+    "audio_route_assessment": 33,
+    "audio_snapshot": 21,
+    "audio_wrapper_cleanup": 4
+  },
+  "npu_evidence": {
+    "lifecycle_and_preflight_suites": "passed normally and optimized",
+    "extracted_actual_c_helpers_executed_with_pthread_shims": true,
+    "kernel_driver_executed": false,
+    "mailbox_mmio_executed": false,
+    "publication_drain_liveness_fixed": false,
+    "bootup_authorized": false
+  },
+  "independent_review": {
+    "worker": "/root/driver_review_20260926",
+    "configured_model": "gpt-6-luna",
+    "configured_reasoning": "max",
+    "model_evidence": "explicit selection accepted; no independent backend attestation",
+    "additional_audio_reviewer": "/root/npu_next_20260926",
+    "code_acceptance": "host-only",
+    "device_trial_approved": false
+  },
+  "regression_evidence": [
+    "Actual C/PTY bridge tests cover exactly-once detach and zero post-loop raw-HCI queries.",
+    "Actual rendered remote stage is exercised on a temporary filesystem with optimization enabled in the environment.",
+    "A synthetic same-size one-byte artifact replacement is rejected through the actual board runner before remote staging.",
+    "Adapter tests pass without the ignored private probe artifact.",
+    "Audio diagnostics reject missing sequences, disjoint RDMA/pointer windows, and unsupported progress claims."
+  ],
+  "limits": [
+    "Host tests do not establish Bluetooth controller, audio streaming, or NPU hardware functionality.",
+    "A general device-trial serialization lock and exclusive remote audio trace reservation remain unresolved.",
+    "Kernel HCI initialization can run automatically; teardown has no overall deadline proven by these tests.",
+    "Hosted CI is verified separately against the published commit; this receipt records local execution."
+  ]
+}

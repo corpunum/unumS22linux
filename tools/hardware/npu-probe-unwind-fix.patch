@@ -1,0 +1,147 @@
+diff --git a/drivers/vision/npu/core/npu-clock.c b/drivers/vision/npu/core/npu-clock.c
+--- a/drivers/vision/npu/core/npu-clock.c
++++ b/drivers/vision/npu/core/npu-clock.c
+@@ -15,61 +15,95 @@
+-int npu_clk_get(struct npu_clocks *clocks, struct device *dev)
++static int __npu_clk_get(struct npu_clocks *clocks, struct device *dev,
++			 bool optional)
+ {
+ 	const char **clk_ids;
+ 	struct clk *clk;
+ 	int ret, i;
+ 
+ 	BUG_ON(!clocks);
+ 	BUG_ON(!dev);
+ 
++	/* Start every request from a known empty state, including failures. */
++	clocks->clocks = NULL;
++	clocks->clk_count = 0;
++	if (!of_find_property(dev->of_node, "clock-names", NULL)) {
++		if (optional) {
++			probe_info("no direct clocks in clock-names property\n");
++			return 0;
++		}
++		ret = -EINVAL;
++		probe_err("invalid clk list in %s node", dev->of_node->name);
++		goto err;
++	}
++
+ 	clocks->clk_count = of_property_count_strings(dev->of_node, "clock-names");
+-	if (IS_ERR_VALUE((unsigned long)clocks->clk_count)) {
++	if (clocks->clk_count < 0) {
+ 		probe_err("invalid clk list in %s node", dev->of_node->name);
+-		return -EINVAL;
++		ret = clocks->clk_count;
++		goto err;
+ 	}
+ 
+-	clk_ids = (const char **)devm_kmalloc(dev,
+-				(clocks->clk_count + 1) * sizeof(const char *),
+-				GFP_KERNEL);
++	clk_ids = devm_kcalloc(dev, clocks->clk_count + 1,
++				sizeof(*clk_ids), GFP_KERNEL);
+ 	if (!clk_ids) {
+ 		probe_err("failed to alloc for clock ids");
+-		return -ENOMEM;
++		ret = -ENOMEM;
++		goto err;
+ 	}
+ 
+ 	for (i = 0; i < clocks->clk_count; i++) {
+ 		ret = of_property_read_string_index(dev->of_node, "clock-names",
+ 								i, &clk_ids[i]);
+ 		if (ret) {
+ 			probe_err("failed to read clocks name %d from %s node\n",
+ 					i, dev->of_node->name);
+-			return ret;
++			goto err;
+ 		}
+ 	}
+ 	clk_ids[clocks->clk_count] = NULL;
+ 
+-	clocks->clocks = (struct clk **) devm_kmalloc(dev,
+-			(clocks->clk_count + 1) * sizeof(struct clk *), GFP_KERNEL);
++	clocks->clocks = devm_kcalloc(dev, clocks->clk_count + 1,
++				sizeof(*clocks->clocks), GFP_KERNEL);
+ 	if (!clocks->clocks) {
+ 		probe_err("couldn't alloc clk list");
+-		return -ENOMEM;
++		ret = -ENOMEM;
++		goto err;
+ 	}
+ 
+ 	for (i = 0; clk_ids[i] != NULL; i++) {
+ 		clk = devm_clk_get(dev, clk_ids[i]);
+ 		if (IS_ERR_OR_NULL(clk)) {
+-			probe_err("couldn't get %s clock\n", clk_ids[i]);
++			ret = IS_ERR(clk) ? PTR_ERR(clk) : -EINVAL;
++			probe_err("couldn't get %s clock (%d)\n", clk_ids[i], ret);
+ 			goto err;
+ 		}
+ 
+ 		clocks->clocks[i] = clk;
+ 		probe_info("got clock %s\n", clk_ids[i]);
+ 	}
+ 	clocks->clocks[i] = NULL;
+ 	if (i != clocks->clk_count) {
+ 		probe_err("clk count mismatch");
++		ret = -EINVAL;
+ 		goto err;
+ 	}
+ 
+ 	return 0;
+ err:
+-	return -EINVAL;
++	/*
++	 * Earlier devm_clk_get() acquisitions are released by probe's devres
++	 * unwind.  Do not explicitly put them here or expose partial state.
++	 */
++	clocks->clocks = NULL;
++	clocks->clk_count = 0;
++	return ret;
++}
++
++int npu_clk_get(struct npu_clocks *clocks, struct device *dev)
++{
++	return __npu_clk_get(clocks, dev, false);
++}
++
++int npu_clk_get_optional(struct npu_clocks *clocks, struct device *dev)
++{
++	return __npu_clk_get(clocks, dev, true);
+ }
+diff --git a/drivers/vision/npu/core/npu-clock.h b/drivers/vision/npu/core/npu-clock.h
+--- a/drivers/vision/npu/core/npu-clock.h
++++ b/drivers/vision/npu/core/npu-clock.h
+@@ -31,4 +31,5 @@
+ int npu_clk_get(struct npu_clocks *clocks, struct device *dev);
++int npu_clk_get_optional(struct npu_clocks *clocks, struct device *dev);
+ void npu_clk_put(struct npu_clocks *clocks, struct device *dev);
+ int npu_clk_prepare_enable(struct npu_clocks *clocks);
+ void npu_clk_disable_unprepare(struct npu_clocks *clocks);
+diff --git a/drivers/vision/npu/core/npu-hw-device.c b/drivers/vision/npu/core/npu-hw-device.c
+--- a/drivers/vision/npu/core/npu-hw-device.c
++++ b/drivers/vision/npu/core/npu-hw-device.c
+@@ -325,12 +325,19 @@
+ 	/* init parameters */
+ 	hdev->idle_load = 0;
+ 	hdev->status = NPU_HWDEV_STATUS_PWR_CLK_OFF;
+ 
+-	ret = npu_clk_get(&hdev->clks, dev);
+-	if (ret)
+-		probe_warn("fail(%d) in npu_clk_get\n", ret);
++	/* Non-DVFS clock-controlled hwdevs require their direct clock list. */
++	if ((hdev->type & NPU_HWDEV_TYPE_CLKCTRL) &&
++		!(hdev->type & NPU_HWDEV_TYPE_DVFS))
++		ret = npu_clk_get(&hdev->clks, dev);
++	else
++		ret = npu_clk_get_optional(&hdev->clks, dev);
++	if (ret) {
++		probe_err("fail(%d) in npu_clk_get for %s\n", ret, hdev->name);
++		goto err_exit;
++	}
+ 
+ 	pm_runtime_enable(dev);
+ 	dev_set_drvdata(dev, hdev);
+ 
+ 	ret = 0;

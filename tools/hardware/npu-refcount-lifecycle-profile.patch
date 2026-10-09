@@ -1,0 +1,441 @@
+From: NPU refcount/lifecycle compatibility profile
+Subject: [PATCH profile] Preserve refcount transaction C/H hunks after lifecycle replacement
+
+Profile of npu-refcount-transaction-fix.patch for the ordered lifecycle stack.
+All canonical npu-hw-device.c and npu-hw-device.h hunks are copied verbatim.
+The canonical npu-vertex.c hunk is superseded: lifecycle replaces
+npu_hwdev_normal_bootup() with lock_held/out_unlock ownership, so its
+baseline p_err unlock is already replaced by the conditional unlock.
+No refcount hunk is silently omitted; the source test compares every
+legacy refcount C/H helper body after applying this profile.
+
+---
+diff --git a/drivers/vision/npu/core/npu-hw-device.c b/drivers/vision/npu/core/npu-hw-device.c
+index 4f8e43f..b564ce3 100755
+--- a/drivers/vision/npu/core/npu-hw-device.c
++++ b/drivers/vision/npu/core/npu-hw-device.c
+@@ -193,6 +193,28 @@ static int npu_hwdev_npu_init(struct npu_hw_device *hdev, bool on)
+ 	return ret;
+ }
+ 
++/* NPU and DNC init-on are no-ops; their pre-STM rollback must not disable STM. */
++static int npu_hwdev_npu_init_abort(struct npu_hw_device *hdev)
++{
++	(void)hdev;
++	return 0;
++}
++
++static int npu_hwdev_dnc_init_abort(struct npu_hw_device *hdev)
++{
++	(void)hdev;
++	return 0;
++}
++
++/* DSP init owns the manager after a successful open; abort closes only it. */
++static int npu_hwdev_dsp_init_abort(struct npu_hw_device *hdev)
++{
++#ifdef CONFIG_DSP_USE_VS4L
++	dsp_kernel_manager_close(&hdev->device->kmgr, 1);
++#endif
++	return 0;
++}
++
+ static int npu_hwdev_dnc_init(struct npu_hw_device *hdev, bool on)
+ {
+ 	int ret = 0;
+@@ -305,12 +327,15 @@ static int npu_hwdev_probe(struct platform_device *pdev)
+ 	if (!strcmp(hdev->name, "DSP")) {
+ 		hdev->ops.boot = npu_hwdev_default_boot;
+ 		hdev->ops.init = npu_hwdev_dsp_init;
++		hdev->ops.init_abort = npu_hwdev_dsp_init_abort;
+ 	} else if (!strcmp(hdev->name, "DNC")) {
+ 		hdev->ops.boot = npu_hwdev_default_boot;
+ 		hdev->ops.init = npu_hwdev_dnc_init;
++		hdev->ops.init_abort = npu_hwdev_dnc_init_abort;
+ 	} else if (!strcmp(hdev->name, "NPU")) {
+ 		hdev->ops.boot = npu_hwdev_default_boot;
+ 		hdev->ops.init = npu_hwdev_npu_init;
++		hdev->ops.init_abort = npu_hwdev_npu_init_abort;
+ 	} else {
+ 		probe_warn("no boot/init function for %s\n", hdev->name);
+ 		hdev->ops.boot = NULL;
+@@ -318,9 +343,10 @@ static int npu_hwdev_probe(struct platform_device *pdev)
+ 	}
+ 
+ 	npu_hw_ref_setup(&hdev->boot_cnt, hdev,
+-			npu_hw_ref_open, npu_hw_ref_close);
++			npu_hw_ref_open, npu_hw_ref_close, NULL);
+ 	npu_hw_ref_setup(&hdev->init_cnt, hdev,
+-			npu_hw_ref_init, npu_hw_ref_deinit);
++			npu_hw_ref_init, npu_hw_ref_deinit,
++			npu_hw_ref_abort_init);
+ 
+ 	/* init parameters */
+ 	hdev->idle_load = 0;
+@@ -382,7 +408,9 @@ int npu_hwdev_close(struct npu_device *device)
+ int npu_hwdev_bootup(struct npu_device *device, __u32 hids)
+ {
+ 	int ret = 0;
++	int cleanup_ret;
+ 	int hi;
++	int undo;
+ 	struct npu_hw_device *hdev;
+ 
+ 	BUG_ON(!device);
+@@ -391,7 +419,19 @@ int npu_hwdev_bootup(struct npu_device *device, __u32 hids)
+ 	for (hi = 0; hi < g_hwdev_num; hi++) {
+ 		hdev = g_hwdev_list[hi];
+ 		if (hdev && (hids & hdev->id)) {
+-			npu_hw_ref_get(device, &hdev->boot_cnt);
++			ret = npu_hw_ref_get(device, &hdev->boot_cnt);
++			if (ret) {
++				for (undo = hi - 1; undo >= 0; undo--) {
++					hdev = g_hwdev_list[undo];
++					if (hdev && (hids & hdev->id)) {
++						cleanup_ret = npu_hw_ref_put(device,
++								&hdev->boot_cnt);
++						if (cleanup_ret)
++							return cleanup_ret;
++					}
++				}
++				return ret;
++			}
+ 			npu_info("boot %s (%d)\n", hdev->name, hdev->id);
+ 		}
+ 	}
+@@ -403,7 +443,34 @@ int npu_hwdev_bootup(struct npu_device *device, __u32 hids)
+ 		for (hi = 0; hi < g_hwdev_num; hi++) {
+ 			hdev = g_hwdev_list[hi];
+ 			if (hdev && (hids & hdev->id)) {
+-				npu_hw_ref_get(device, &hdev->init_cnt);
++				ret = npu_hw_ref_get(device, &hdev->init_cnt);
++				if (ret) {
++					/* These init acquisitions precede STM enable.  Use only
++					 * each source's proven abort, never the generic init(false)
++					 * callback which decrements the shared STM count.
++					 */
++					for (undo = hi - 1; undo >= 0; undo--) {
++						hdev = g_hwdev_list[undo];
++						if (hdev && (hids & hdev->id)) {
++							cleanup_ret = npu_hw_ref_abort_put(device,
++									&hdev->init_cnt);
++							if (cleanup_ret)
++								return cleanup_ret;
++						}
++					}
++
++					/* Init rollback succeeded; matching boot puts are safe. */
++					for (undo = g_hwdev_num - 1; undo >= 0; undo--) {
++						hdev = g_hwdev_list[undo];
++						if (hdev && (hids & hdev->id)) {
++							cleanup_ret = npu_hw_ref_put(device,
++									&hdev->boot_cnt);
++							if (cleanup_ret)
++								return cleanup_ret;
++						}
++					}
++					return ret;
++				}
+ 				npu_info("init %s (%d)\n", hdev->name, hdev->id);
+ 			}
+ 		}
+@@ -429,7 +496,9 @@ int npu_hwdev_shutdown(struct npu_device *device, __u32 hids)
+ 		for (hi = g_hwdev_num - 1; hi >= 0; hi--) {
+ 			hdev = g_hwdev_list[hi];
+ 			if (hdev && (hids & hdev->id)) {
+-				npu_hw_ref_put(device, &hdev->init_cnt);
++				ret = npu_hw_ref_put(device, &hdev->init_cnt);
++				if (ret)
++					return ret;
+ 				npu_info("init %s (%d)\n", hdev->name, hdev->id);
+ 			}
+ 		}
+@@ -438,7 +507,9 @@ int npu_hwdev_shutdown(struct npu_device *device, __u32 hids)
+ 	for (hi = g_hwdev_num - 1; hi >= 0; hi--) {
+ 		hdev = g_hwdev_list[hi];
+ 		if (hdev && (hids & hdev->id)) {
+-			npu_hw_ref_put(device, &hdev->boot_cnt);
++			ret = npu_hw_ref_put(device, &hdev->boot_cnt);
++			if (ret)
++				return ret;
+ 			npu_info("boot %s (%d)\n", hdev->name, hdev->id);
+ 		}
+ 	}
+@@ -462,7 +533,9 @@ int npu_hwdev_recovery_shutdown(struct npu_device *device)
+ 		for (hi = g_hwdev_num - 1; hi >= 0; hi--) {
+ 			hdev = g_hwdev_list[hi];
+ 			if (hdev && strcmp(hdev->name, "DNC") && hdev->status) {
+-				npu_hw_ref_put(device, &hdev->init_cnt);
++				ret = npu_hw_ref_put(device, &hdev->init_cnt);
++				if (ret)
++					return ret;
+ 				npu_dbg("%s deinit\n", hdev->name);
+ 				if (atomic_read(&hdev->init_cnt.refcount))
+ 					isleft = 1;
+@@ -477,7 +550,9 @@ int npu_hwdev_recovery_shutdown(struct npu_device *device)
+ 		for (hi = g_hwdev_num - 1; hi >= 0; hi--) {
+ 			hdev = g_hwdev_list[hi];
+ 			if (hdev && strcmp(hdev->name, "DNC") && hdev->status) {
+-				npu_hw_ref_put(device, &hdev->boot_cnt);
++				ret = npu_hw_ref_put(device, &hdev->boot_cnt);
++				if (ret)
++					return ret;
+ 				npu_dbg("%s shutdown\n", hdev->name);
+ 				if (atomic_read(&hdev->boot_cnt.refcount))
+ 					isleft = 1;
+diff --git a/drivers/vision/npu/core/npu-hw-device.h b/drivers/vision/npu/core/npu-hw-device.h
+index 93157b0..de29cb6 100755
+--- a/drivers/vision/npu/core/npu-hw-device.h
++++ b/drivers/vision/npu/core/npu-hw-device.h
+@@ -13,6 +13,9 @@
+ #ifndef _NPU_HWDEVICE_H_
+ #define _NPU_HWDEVICE_H_
+ 
++#include <linux/limits.h>
++#include <linux/mutex.h>
++
+ #include "npu-device.h"
+ #include "npu-scheduler.h"
+ 
+@@ -45,16 +48,21 @@ enum npu_hw_device_type {
+ struct npu_hw_device;
+ struct npu_hw_refcount {
+ 	atomic_t	refcount;
++	struct mutex	lock;
++	int		failure;
+ 	struct npu_hw_device	*hdev;
+ 	int	(*first)(struct npu_device *device,
+ 			struct npu_hw_device *hdev);
+ 	int	(*final)(struct npu_device *device,
+ 			struct npu_hw_device *hdev);
++	int	(*abort)(struct npu_device *device,
++			struct npu_hw_device *hdev);
+ };
+ 
+ struct npu_hw_ops {
+ 	int	(*boot)(struct npu_hw_device *hdev, bool on);
+ 	int	(*init)(struct npu_hw_device *hdev, bool on);
++	int	(*init_abort)(struct npu_hw_device *hdev);
+ };
+ 
+ struct npu_hw_device {
+@@ -98,21 +106,114 @@ struct npu_hw_device *npu_get_hdev_by_id(int id);
+ static inline int npu_hw_ref_get(
+ 		struct npu_device *device, struct npu_hw_refcount *hw_ref)
+ {
++	int count, ret = 0;
++
+ 	if (!hw_ref->first)
+ 		return 0;
+ 
+-	return (atomic_inc_return(&hw_ref->refcount) == 1) ?
+-		hw_ref->first(device, hw_ref->hdev) : 0;
++	mutex_lock(&hw_ref->lock);
++	if (hw_ref->failure) {
++		ret = hw_ref->failure;
++		goto out;
++	}
++
++	count = atomic_read(&hw_ref->refcount);
++	if (count < 0) {
++		ret = -EINVAL;
++		goto out;
++	}
++	if (count == INT_MAX) {
++		ret = -EOVERFLOW;
++		goto out;
++	}
++	if (count) {
++		atomic_set(&hw_ref->refcount, count + 1);
++		goto out;
++	}
++
++	/* Publish the first owner only after its callback has succeeded. */
++	ret = hw_ref->first(device, hw_ref->hdev);
++	if (ret)
++		hw_ref->failure = ret;
++	else
++		atomic_set(&hw_ref->refcount, 1);
++out:
++	mutex_unlock(&hw_ref->lock);
++	return ret;
+ }
+ 
+ static inline int npu_hw_ref_put(
+ 		struct npu_device *device, struct npu_hw_refcount *hw_ref)
+ {
++	int count, ret = 0;
++
++	if (!hw_ref->final)
++		return 0;
++
++	mutex_lock(&hw_ref->lock);
++	if (hw_ref->failure) {
++		ret = hw_ref->failure;
++		goto out;
++	}
++
++	count = atomic_read(&hw_ref->refcount);
++	if (count <= 0) {
++		ret = -EINVAL;
++		goto out;
++	}
++	if (count > 1) {
++		atomic_set(&hw_ref->refcount, count - 1);
++		goto out;
++	}
++
++	/* Keep the last owner published if teardown fails; never retry it. */
++	ret = hw_ref->final(device, hw_ref->hdev);
++	if (ret)
++		hw_ref->failure = ret;
++	else
++		atomic_set(&hw_ref->refcount, 0);
++out:
++	mutex_unlock(&hw_ref->lock);
++	return ret;
++}
++
++/* Roll back a successful init acquisition before STM ownership is published. */
++static inline int npu_hw_ref_abort_put(
++		struct npu_device *device, struct npu_hw_refcount *hw_ref)
++{
++	int count, ret = 0;
++
+ 	if (!hw_ref->final)
+ 		return 0;
+ 
+-	return (atomic_dec_return(&hw_ref->refcount) == 0) ?
+-		hw_ref->final(device, hw_ref->hdev) : 0;
++	mutex_lock(&hw_ref->lock);
++	if (hw_ref->failure) {
++		ret = hw_ref->failure;
++		goto out;
++	}
++
++	count = atomic_read(&hw_ref->refcount);
++	if (count <= 0) {
++		ret = -EINVAL;
++		goto out;
++	}
++	if (count > 1) {
++		atomic_set(&hw_ref->refcount, count - 1);
++		goto out;
++	}
++	if (!hw_ref->abort) {
++		ret = -EOPNOTSUPP;
++		goto out;
++	}
++
++	ret = hw_ref->abort(device, hw_ref->hdev);
++	if (ret)
++		hw_ref->failure = ret;
++	else
++		atomic_set(&hw_ref->refcount, 0);
++out:
++	mutex_unlock(&hw_ref->lock);
++	return ret;
+ }
+ 
+ static inline int npu_hw_ref_open(
+@@ -128,7 +229,9 @@ static inline int npu_hw_ref_open(
+ 			ret = -ENODEV;
+ 			goto error_hwref;
+ 		}
+-		npu_hw_ref_get(device, &phdev->boot_cnt);
++		ret = npu_hw_ref_get(device, &phdev->boot_cnt);
++		if (ret)
++			goto error_hwref;
+ 	}
+ 
+ 	if (hdev->ops.boot)
+@@ -156,7 +259,7 @@ static inline int npu_hw_ref_close(
+ 			ret = -ENODEV;
+ 			goto error_hwref;
+ 		}
+-		npu_hw_ref_put(device, &phdev->boot_cnt);
++		ret = npu_hw_ref_put(device, &phdev->boot_cnt);
+ 	}
+ error_hwref:
+ 	return ret;
+@@ -166,6 +269,8 @@ static inline int npu_hw_ref_init(
+ 		struct npu_device *device, struct npu_hw_device *hdev)
+ {
+ 	int ret = 0;
++	int cleanup_ret;
++	bool parent_ref = false;
+ 	struct npu_hw_device *phdev;
+ 
+ 	if (hdev->parent) {
+@@ -175,11 +280,45 @@ static inline int npu_hw_ref_init(
+ 			ret = -ENODEV;
+ 			goto error_hwref;
+ 		}
+-		npu_hw_ref_get(device, &phdev->init_cnt);
++		ret = npu_hw_ref_get(device, &phdev->init_cnt);
++		if (ret)
++			goto error_hwref;
++		parent_ref = true;
+ 	}
+ 
+ 	if (hdev->ops.init)
+ 		ret = (hdev->ops.init(hdev, true));
++	if (ret && parent_ref) {
++		/* The failed child has not earned a matching parent init put. */
++		cleanup_ret = npu_hw_ref_abort_put(device, &phdev->init_cnt);
++		if (cleanup_ret)
++			ret = cleanup_ret;
++	}
++error_hwref:
++	return ret;
++}
++
++static inline int npu_hw_ref_abort_init(
++		struct npu_device *device, struct npu_hw_device *hdev)
++{
++	int ret = 0;
++	struct npu_hw_device *phdev;
++
++	if (hdev->ops.init_abort) {
++		ret = hdev->ops.init_abort(hdev);
++		if (ret)
++			goto error_hwref;
++	}
++
++	if (hdev->parent) {
++		phdev = npu_get_hdev(hdev->parent);
++		if (!phdev) {
++			npu_err("no hw-device as %s\n", hdev->parent);
++			ret = -ENODEV;
++			goto error_hwref;
++		}
++		ret = npu_hw_ref_abort_put(device, &phdev->init_cnt);
++	}
+ error_hwref:
+ 	return ret;
+ }
+@@ -203,7 +342,7 @@ static inline int npu_hw_ref_deinit(
+ 			ret = -ENODEV;
+ 			goto error_hwref;
+ 		}
+-		npu_hw_ref_put(device, &phdev->init_cnt);
++		ret = npu_hw_ref_put(device, &phdev->init_cnt);
+ 	}
+ error_hwref:
+ 	return ret;
+@@ -212,8 +351,12 @@ error_hwref:
+ static inline void npu_hw_ref_setup(
+ 	struct npu_hw_refcount *hw_ref, struct npu_hw_device *hdev,
+ 	int (*first)(struct npu_device *device, struct npu_hw_device *hdev),
+-	int (*final)(struct npu_device *device, struct npu_hw_device *hdev))
++	int (*final)(struct npu_device *device, struct npu_hw_device *hdev),
++	int (*abort)(struct npu_device *device, struct npu_hw_device *hdev))
+ {
++	mutex_init(&hw_ref->lock);
++	hw_ref->failure = 0;
++	hw_ref->abort = abort;
+ 	if (!hdev->ops.boot || !hdev->ops.init) {
+ 		atomic_set(&hw_ref->refcount, 0);
+ 		return;
+
+

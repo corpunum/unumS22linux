@@ -1,0 +1,55 @@
+{
+  "schema": "s22-npu-kernel-frontend/v1",
+  "scope": "NPU14 uncertainty-ordering correction; complete ARM64 kernel translation units, frontend only",
+  "source_commit": "e9c3016233a72ceccb13e537f0b7ef72426582b9",
+  "patches_sha256": {
+    "npu-interface-open-unwind.patch": "95e63b45d60e0a2611c1f2dcab4428e5658a03ff9954b8197d175ac6fec139cb",
+    "npu-system-resume-error-unwind.patch": "f1af656f9e1b8ca2bf15e934031e0adf828c442267a17761ba64f7d7c611729a"
+  },
+  "compiler": "pinned Clang 18",
+  "compiler_sha256": "8ef402d453d1ba4902e4ee0f0f847f6cfa01400c95aa43c24e97818b9c0e3f45",
+  "generated_config_sha256": "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16",
+  "translation_units": [
+    {
+      "source_path": "drivers/vision/npu/core/npu-system.c",
+      "source_before_sha256": "96eaa6bf1511f3e6414e3e376d62592229454a2ea1687d760b7bb8e5952b1a05",
+      "patched_source_sha256": "4e2ab12ad4e47a122c62386e4c964e63eb9946298ea6e92ab8dd9103e63864b3",
+      "saved_native_command_sha256": "82e408f92f7d867f37585b07cbca94ee17447f16f6fafe029b6d99e9889ec101",
+      "unchanged_baseline_returncode": 0,
+      "corrected_source_returncode": 0,
+      "all_stdout_stderr_bytes": 0
+    },
+    {
+      "source_path": "drivers/vision/npu/core/npu-device.c",
+      "source_before_sha256": "a281fd35f2311951328d797824b8dbb165639bfc7977da30044bb764688cdc11",
+      "patched_source_sha256": "033bad9497be4618a526c2f4e04d3b83adc7a37077f64cd7cfc4c6e0a1db10b4",
+      "saved_native_command_sha256": "cba2a9bd7702f6b12954a2b2d656fb150e855888b7b645388e10bc18995ec3e0",
+      "unchanged_baseline_returncode": 0,
+      "corrected_source_returncode": 0,
+      "all_stdout_stderr_bytes": 0
+    }
+  ],
+  "execution": {
+    "ordinary_patch_check_and_apply": true,
+    "saved_commands_parsed_without_shell_eval": true,
+    "preserved_target": "aarch64-linux-gnu",
+    "preserved_flags": "original complete kernel flags including O2, Werror, KCFI and shadow call stack",
+    "removed_flags": ["-c", "-o and output", "-Wp,-MMD dependency output", "original source pathname"],
+    "added_flags": ["-iquote original source directory", "-fsyntax-only", "isolated patched source pathname"],
+    "filtered_environment": true,
+    "timeout_seconds_per_invocation": 30,
+    "original_source_config_saved_commands_unchanged_after": true,
+    "temporary_staging_automatically_removed": true,
+    "initial_preparation_refusal": "Saved command selected clang through PATH; first preparation incorrectly tried a relative filesystem resolve and stopped before compiler execution. Corrected preparation selected the existing hash-pinned LLVM18 binary explicitly; failed capture retained."
+  },
+  "object_module_Image_produced": false,
+  "phone_operations": 0,
+  "NPU_BOOTUP_authorized": false,
+  "limitations": [
+    "Syntax/type/warning validation is not code generation, linking, modpost, module CRC comparison or a new native module artifact.",
+    "Preserved private generated headers/config/commands were used; this frontend check is not a portable CI fixture.",
+    "The independent source-order pass does not resolve void image-loader completion, remove/release ownership or static log-buffer lifetime.",
+    "The mandatory pre-correction regression fixture portability defect remains under correction separately.",
+    "No provider, firmware, PM-core, CPU, clock, DMA or NPU hardware acceptance is established."
+  ]
+}

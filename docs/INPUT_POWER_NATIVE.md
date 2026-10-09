@@ -26,9 +26,28 @@ The probe also reports raw power-supply fields (`capacity`, `status`, `health`,
 `online`, voltage/current where exposed) and thermal-zone millidegrees. These
 are telemetry snapshots, not charging-cycle or battery-life acceptance.
 
+## Current install status (2026-09-23)
+
+The handset's current native root did not contain
+`/usr/local/bin/input-power-readiness.py` when checked over strict-host-key
+USB SSH, so the command above is the intended interface, not a currently
+verified installed command. No staging or installation was attempted. A
+read-only direct sysfs fallback found the touchscreen and key event nodes,
+battery telemetry, thermal zones, and Exynos camera-pipeline V4L2 nodes; it did
+not observe physical input or open a camera. The host-only tests below do not
+install this tool or establish physical acceptance.
+
 Camera mode is inventory-only: it lists `/dev/video*` and names from
 `/sys/class/video4linux`; it intentionally does not open a camera, stream,
 capture, or access microphone data.
+
+## Host-only collector tests
+
+Run `python3 tools/hardware/test-input-power-readiness.py` for focused tests
+against temporary synthetic sysfs and device roots. The tests cover input,
+power, thermal, and camera inventory plus bounded event observation, and fail
+if event handling opens a write-capable descriptor, writes an event, or grabs
+one. They do not access a phone or establish physical-device acceptance.
 
 ## Deployed acceptance evidence (2026-09-20)
 

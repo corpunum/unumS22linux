@@ -1,0 +1,56 @@
+{
+  "schema": "s22-host-regression-frozen-run/v1",
+  "scope": "hardware-free host tests, not driver or deployment acceptance",
+  "review_branch": "s22/luna-driver-completion-20260923",
+  "tested_source_head": "db23c885fd8f1825aa77117b387d8cee40bdcd4e",
+  "frozen_worktree": "host-suite-ninth-frozen-20261003",
+  "command": "python3 -I -B tools/hardware/run-host-regressions.py --mode both",
+  "exit_code": 0,
+  "normal_script_invocations_passed": 56,
+  "optimized_script_invocations_passed": 53,
+  "total_script_invocations_passed": 109,
+  "failed_script_invocations": 0,
+  "private_full_log_sha256": "82be8c979cff0b50659cc75224953866c94b142997d57548be0ac4b149f7eafa",
+  "runner_policy_cases_passed_normal": 7,
+  "runner_policy_cases_passed_optimized": 7,
+  "expected_coverage_limits": {
+    "assert_based_scripts_optimized_exclusions": 3,
+    "AVB_cases_explicitly_skipped_per_mode_without_local_fixture": 3,
+    "optional_audio_source_or_O_tree_cases_skipped_per_mode": 3,
+    "skipped_cases_are_not_claimed_executed": true,
+    "separate_trusted_public_AVB_fixture_matrix": "historical three-mode 45-case pass remains separate, not part of this run",
+    "kernel_C_tests": "actual extracted pinned C with host shims; not execution of the Linux kernel or firmware",
+    "hardware_operations": 0
+  },
+  "preserved_prior_frozen_runs": [
+    {
+      "source_head": "5d15a0b",
+      "passed_invocations": 105,
+      "failed_invocations": 2,
+      "total_invocations": 107,
+      "log_sha256": "89eb904b2f770d715b26bcf49181c28b9a1b49c0875c469bd7c9237e5c0f2f96",
+      "failure": "BT positive subprocess inherited controlled TMPDIR; fixed with positive environment isolation without weakening negative gates"
+    },
+    {
+      "source_head": "3da3d065e80d5af7cee9987331f7762373183d36",
+      "passed_invocations": 102,
+      "failed_invocations": 5,
+      "total_invocations": 107,
+      "log_sha256": "60b1479f72f01baae11608b1a9142b564fc05283db9b52736723a2ef3a2bd0dc",
+      "failure": "two inode-reuse fixture failures and three bounded public-source fetch failures; supplemental local passes did not relabel this full run"
+    },
+    {
+      "source_head": "c9cd6ac3426880e5f202b7064e1f685011afea72",
+      "passed_invocations": 106,
+      "failed_invocations": 1,
+      "total_invocations": 107,
+      "log_sha256": "0cfc6c7b4a1ef95ac72ab6c645cbba0f8fcca75a2138de5eb89c4a698c07983c",
+      "failure": "owned descendant already disappeared during proc/stat read: ProcessLookupError ESRCH; test-only fix ceeb217 includes deterministic pre-fix error control"
+    }
+  ],
+  "unresolved_source_review_finding_outside_test_shim": "NPU11 retained firmware-report NULL-buffer spinlock early-return defect; paired actual-C cleanup implementation/review required",
+  "new_audio_group_runtime_acceptance": false,
+  "NPU_BOOTUP_authorized": false,
+  "hosted_CI_for_new_head": "not_yet_run",
+  "master_changed": false
+}

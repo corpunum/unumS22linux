@@ -1,0 +1,136 @@
+{
+  "schema": "s22-npu-imgloader-status-independent-review/v1",
+  "date": "2026-10-03",
+  "reviewer_selection": {
+    "model": "gpt-6-luna",
+    "reasoning_effort": "max",
+    "selection_provenance": "task-requested configuration; not backend attestation"
+  },
+  "verdict": "PASS_LIMITED",
+  "scope": "exact frozen provider-status source behavior under pinned public-source extracted-C controls",
+  "source_candidate_accepted": false,
+  "kernel_or_module_acceptance": false,
+  "deployment_authority": false,
+  "npu_bootup_authorized": false,
+  "hardware_acceptance": false,
+  "review_worktree": {
+    "path": "/home/corpunum/s22-workers/npu-provider-review-20261003",
+    "branch": "codex/s22-npu-provider-review-20261003",
+    "head": "39735fcd68c6b175e1aa3bc3bb0c5d129906671f",
+    "tree": "bbb85595ec90b7359f837647c2f0a46436bf5614",
+    "clean_before_review_artifacts": true,
+    "only_owned_outputs": [
+      "docs/research/NPU_IMGLOADER_STATUS_REVIEW_2026-10-03.md",
+      "evidence/s22-npu-imgloader-status-review-20261003.json"
+    ]
+  },
+  "pinned_source": {
+    "repository": "LineageOS/android_kernel_samsung_s5e9925",
+    "commit": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+    "raw_source_files_verified": 5,
+    "public_fetch_route": true,
+    "local_git_history_used": false
+  },
+  "reviewed_artifacts": {
+    "tools/hardware/npu-imgloader-shutdown-status.patch": "e7355e8906b22f1decf00de59cd644aac7bfcf6d861d97cdb3ff9bf084428385",
+    "tools/hardware/npu-imgloader-shutdown-status-harness.c": "748eae416333f6aafa3926155e1e756c9152e6630360c6db89c3f840c548882e",
+    "tools/hardware/test-npu-imgloader-shutdown-status.py": "fe970bf5c8b224d594e28e09850ed9f877ade1f523044d51c940f4a3f0c0cbee",
+    "docs/research/NPU_IMGLOADER_SHUTDOWN_STATUS_2026-10-03.md": "1564bc73acb658b2be852623f67fedd3a377fd8d3a500461940f5579f8ed5fd3"
+  },
+  "independent_matrix": {
+    "runner": "tools/hardware/test-npu-imgloader-shutdown-status.py",
+    "compiler": "/usr/bin/cc",
+    "compiler_version": "Ubuntu GCC 13.3.0",
+    "optional_fixture_route": "host-default NPU12 fixture skipped explicitly; no local composed source used",
+    "default_fixture_path_state": "present on host but not inspected or used",
+    "python_modes": [
+      {"command": "python3 -B", "sys_flags_optimize": 0, "actual_c_jobs": 32, "result": "PASS"},
+      {"command": "python3 -B -O", "sys_flags_optimize": 1, "actual_c_jobs": 32, "result": "PASS"},
+      {"command": "PYTHONOPTIMIZE=1 python3 -B", "sys_flags_optimize": 1, "actual_c_jobs": 32, "result": "PASS"}
+    ],
+    "total_actual_c_compile_run_jobs": 96,
+    "coverage": [
+      "baseline false-success permission, callback, and notify failures",
+      "negative errno propagation and unexpected positive to -EIO normalization",
+      "failure ownership quarantine and repeated suspend/open/close refusal without provider retry",
+      "deterministic reentrant suspend during outstanding permission-release call",
+      "BOOT_IOCTL and runtime-PM/STM source variants at C -O0 and -O2",
+      "S2MPU-supported, non-S2MPU, and image-loader-disabled configurations",
+      "secure warm-boot provider skip",
+      "CPU_ON uncertainty refusal before interface/provider calls",
+      "legacy void provider API compatibility and runtime resume ownership guard"
+    ]
+  },
+  "supplemental_actual_c_control": {
+    "status_patch_sha256_checked_before_run": "e7355e8906b22f1decf00de59cd644aac7bfcf6d861d97cdb3ff9bf084428385",
+    "provider_callback_errno": "-EIO",
+    "notify_errno": "-ECOMM",
+    "result": "PASS",
+    "returned_errno": "-EIO",
+    "observed_order": ["interface_close", "permission_release", "callback", "notify"],
+    "cpu_off_called": false,
+    "quarantine_retained": true,
+    "temporary_review_harness_only": true
+  },
+  "fixture_controls": {
+    "skip_optional_local_fixtures": "PASS; public-source path continued",
+    "explicit_missing_composed_fixture_override": {
+      "result": "rejected",
+      "exit_code": 1,
+      "public_source_fetch_started": true,
+      "c_compile_started": false
+    }
+  },
+  "findings": [
+    {
+      "id": "provider_patch_digest_not_enforced_by_runner",
+      "classification": "nonblocking_runner_integrity_limit_for_this_exact_source_review",
+      "severity": "review_followup",
+      "source_refs": [
+        "tools/hardware/test-npu-imgloader-shutdown-status.py:301-306",
+        "tools/hardware/test-npu-imgloader-shutdown-status.py:546-549",
+        "docs/research/NPU_IMGLOADER_SHUTDOWN_STATUS_2026-10-03.md:47-56"
+      ],
+      "expected_patch_sha256": "e7355e8906b22f1decf00de59cd644aac7bfcf6d861d97cdb3ff9bf084428385",
+      "observed_patch_sha256": "e7355e8906b22f1decf00de59cd644aac7bfcf6d861d97cdb3ff9bf084428385",
+      "runner_behavior": "checks selected path set and prints digest after execution; no expected status-patch digest comparison",
+      "effect_on_this_review": "none; reviewer checked exact digest before interpreting all jobs",
+      "resolution_state": "corrected in a separate uncommitted integration follow-up, reviewed below",
+      "recommended_correction": "pin and check status patch SHA before selected-path application, then reject a mutated patch"
+    }
+  ],
+  "separate_coordinator_correction_review": {
+    "worktree": "/home/corpunum/s22-workers/integration-20261002",
+    "base_commit": "10846e9ad0a2b399a90148aa2e4d3d56231a1e52",
+    "reviewed_file": "tools/hardware/test-npu-imgloader-shutdown-status.py",
+    "reviewed_file_sha256": "b5319344c0ac811d4972c6ba221b3b4cb71eecf1cb560b3e54ab86f60fb56426",
+    "change_scope": "25 insertions, zero deletions, runner only; provider source patch unchanged",
+    "working_tree_state": "uncommitted during independent check",
+    "main_gate_order": "integrity controls run before public source fetch",
+    "pre_apply_revalidation": true,
+    "uses_python_assert_for_gate": false,
+    "focused_modes": [
+      {"mode": "normal", "exact_accepted": true, "applicable_newline_rejected": true, "empty_rejected": true, "oversize_rejected": true, "result": "PASS"},
+      {"mode": "python3 -O", "exact_accepted": true, "applicable_newline_rejected": true, "empty_rejected": true, "oversize_rejected": true, "result": "PASS"},
+      {"mode": "PYTHONOPTIMIZE=1", "exact_accepted": true, "applicable_newline_rejected": true, "empty_rejected": true, "oversize_rejected": true, "result": "PASS"}
+    ],
+    "applicable_newline_control": {
+      "applied_to_exact_pinned_public_composition": true,
+      "corrected_imgloader_c_hash_preserved": true,
+      "corrected_imgloader_h_hash_preserved": true,
+      "corrected_npu_system_c_hash_preserved": true
+    },
+    "full_matrix_rerun": false,
+    "disposition": "integrity gap cleared for this inspected follow-up diff; not part of reviewed frozen HEAD and not yet committed"
+  },
+  "preserved_limits": [
+    "No Kbuild or module compile/link/CRC generation",
+    "No provider or S2MPU execution; injected return status cannot establish partial permission-release effects",
+    "No firmware, CPU/STM, DMA, TrustZone, runtime, or hardware evidence",
+    "No threaded race or provider-stall liveness evidence",
+    "Provider-before-CPU_OFF/STM request order is observed but not physically endorsed",
+    "Driver release/remove/unbind ownership remains outside the new quarantine",
+    "Coordinator-reported ARM64 frontend results were not independently inspected or rerun and are excluded from this verdict",
+    "No phone, SSH, ADB, USB, BOOTUP, firmware, provider, S2MPU, or TrustZone action"
+  ]
+}

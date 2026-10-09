@@ -1,0 +1,49 @@
+From: NPU publication ownership follow-up
+Subject: [PATCH] npu: retain ambiguous POWER_CTL publication ownership
+
+The hardware callback writes the mailbox ring before waiting for its
+interrupt-status bit. If that finite wait expires, the command may already be
+visible to firmware. Keep the message ID and report retained ownership as a
+positive post result, so the existing POWER_CTL worker moves the entry to
+PROCESSING instead of retrying it. Preserve retry behavior for known
+pre-commit failures.
+
+---
+diff --git a/drivers/vision/npu/core/npu-if-protodrv-mbox2.c b/drivers/vision/npu/core/npu-if-protodrv-mbox2.c
+--- a/drivers/vision/npu/core/npu-if-protodrv-mbox2.c
++++ b/drivers/vision/npu/core/npu-if-protodrv-mbox2.c
+@@ -28,6 +28,10 @@
+ #endif
+ 
+ extern struct npu_proto_drv *protodr;
++#ifdef CONFIG_NPU_USE_BOOT_IOCTL
++extern int npu_session_save_power_result(struct npu_session *session,
++		struct nw_result result);
++#endif
+ 
+ const struct npu_if_protodrv_mbox protodrv_mbox = {
+ 	.dev = NULL,
+@@ -117,8 +121,21 @@ int npu_nw_mbox_ops_put(struct msgid_pool *pool, struct proto_req_nw *src)
+ 	if (unlikely(ret <= 0)) {
+ 		/* Push failed -> return msgid */
+-		npu_utrace("nw_post_request failed. Reclaiming msgid(%d)\n", &src->nw, msgid);
+-		msgid_claim(pool, msgid);
++#ifdef CONFIG_NPU_USE_BOOT_IOCTL
++		if (ret == -EWOULDBLOCK &&
++		    src->nw.cmd == NPU_NW_CMD_POWER_CTL &&
++		    src->nw.notify_func == npu_session_save_power_result &&
++		    protodrv_mbox.npu_if_protodrv_mbox_ops->nw_post_request == nw_req_manager) {
++			/* npu_set_cmd has already advanced the mailbox ring before this
++			 * interrupt wait can fail. Keep the ID for a possible late reply.
++			 */
++			npu_uwarn("POWER_CTL publication uncertain; retaining msgid(%d)\n",
++				&src->nw, msgid);
++			/* Keep the normal worker transition, but suppress this retry. */
++			ret = 1;
++		} else
++#endif
++			msgid_claim(pool, msgid);
+ 	}
+ 	npu_log_protodrv_set_data(&src->nw, PROTO_DRV_REQ_TYPE_NW, true);
+ 	return ret;
+ }

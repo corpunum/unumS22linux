@@ -1,0 +1,81 @@
+{
+  "schema": "s22-audio-package-debug-strip-independent-review/v1",
+  "review_scope": "frozen debug-strip implementation and focused host tests only; no package run",
+  "selection": {
+    "model": "gpt-6-luna",
+    "reasoning": "max",
+    "basis": "explicitly configured worker selection; not a backend-attestation claim"
+  },
+  "author_snapshot": {
+    "commit": "7a8ffd3d78179e80006247520080c3f981e1e27e",
+    "tree": "be16c55dca8148ac41ddd89697ca406009151d08",
+    "builder_sha256": "3b7e031974fb60930629d14dff2df62c01aea27c89383f3240cfb4921fa4e462",
+    "test_sha256": "21d00edce1ae0fa96e256b5d1cbbc4d78f9af8881047ab2a119d8b32de597616"
+  },
+  "review_work": {
+    "worktree_base_commit": "92b39d981ab0063de5f35b33fc345c14d1a0ec40",
+    "author_commit_imported_unchanged": true,
+    "package_builder_invoked": false,
+    "candidate_cpio_persisted": false,
+    "candidate_image_created": false,
+    "success_manifest_published": false,
+    "phone_or_device_access": false,
+    "module_load_deploy_or_boot": false
+  },
+  "focused_tests": {
+    "test_cases_per_invocation": 19,
+    "runs": [
+      {"mode": "normal", "passed": 19, "failed": 0, "skipped": 0},
+      {"mode": "-O", "passed": 19, "failed": 0, "skipped": 0},
+      {"mode": "PYTHONOPTIMIZE=1 effective", "passed": 19, "failed": 0, "skipped": 0}
+    ],
+    "additional_actual_abox_in_memory_negative_mutations": [
+      {"mutation": ".rela__ksymtab addend changed", "result": "rejected"},
+      {"mutation": ".bss SHT_NOBITS size increased", "result": "rejected"},
+      {"mutation": ".modinfo SHF_ALLOC flag changed", "result": "rejected"},
+      {"mutation": "in-range .symtab.sh_info local boundary decremented", "result": "rejected"}
+    ]
+  },
+  "static_in_memory_integration": {
+    "base_image_bytes": 100663296,
+    "base_image_sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+    "base_cpio_sha256": "f280aa4c1bee4545a281602d2f9f3551decfac47b7285c4fa5f9166ec85747ee",
+    "base_cpio_records": 963,
+    "changed_payloads": [
+      "lib/modules/exynos-usb-audio-offloading.ko",
+      "lib/modules/rainbow_prince.ko",
+      "lib/modules/snd-soc-samsung-abox.ko"
+    ],
+    "non_target_raw_records_byte_identical": true,
+    "metadata_modules_dep_alias_softdep_byte_identical": true,
+    "provider_map_rows": 17283,
+    "provider_map_sha256": "0c8e481225fe3ab071ba9be1d14faae06ce8a556fa7e89b07f3dcefb761bd470",
+    "ramdisk_modules": 324,
+    "ramdisk_imports": 16569,
+    "ramdisk_missing_crc_unknown_ambiguous": 0,
+    "external_wlan_internal_name": "wlan",
+    "external_wlan_imports": 495,
+    "module_layout_crc": "0x0e3c515c",
+    "scope": "static host ELF/MODVERSIONS only; not loader or runtime acceptance"
+  },
+  "prior_package_failure": {
+    "receipt_commit": "1edf236f266433e42a3d2e56500dcbafa25c9d78",
+    "status": "failed_before_publication",
+    "pre_footer_image_bytes": 101259264,
+    "maximum_pre_footer_bytes": 100593664,
+    "partition_bytes": 100663296,
+    "overage_bytes": 665600,
+    "debug_strip_fit_demonstrated": false,
+    "attempt_retried": false
+  },
+  "review_verdict": {
+    "implementation_or_focused_test_blocker_found": false,
+    "recommendation": "eligible for at most one separately coordinator-authorized host-only packaging attempt",
+    "not_an_authorization": true,
+    "remaining_gates": [
+      "compressed ramdisk and final AVB partition-size gate remain untested",
+      "package builder and output publication were not executed",
+      "no loader, current-phone membership, runtime audio, bootability, or hardware acceptance"
+    ]
+  }
+}

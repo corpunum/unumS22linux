@@ -1,0 +1,79 @@
+{
+  "schema": "s22-npu-system-resume-error-correction-host/v1",
+  "evidence_class": "host-only pinned-source and extracted-C regression",
+  "verdict": "narrow source ordering correction implemented; provider completion and removal ownership remain unresolved",
+  "source": {
+    "raw_base_commit": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+    "raw_selected_sha256": {
+      "drivers/vision/npu/core/npu-system.c": "96eaa6bf1511f3e6414e3e376d62592229454a2ea1687d760b7bb8e5952b1a05",
+      "drivers/vision/npu/core/npu-device.c": "98be21e422ca864cc971dfe6a78e71b292d7691cb625c1f029bf4502100644ab",
+      "drivers/vision/npu/core/npu-hw-device.c": "14617a6f8e5b08e1bb169618daa8544f2680ad6709cb9f3b9730919d4dc8e16f",
+      "drivers/vision/npu/core/interface/hardware/npu-interface.c": "c2deaa0abd990184b64373bb13983f048b925e0f5f421f6623de7de85f667108"
+    },
+    "npu12_fixture_commit_optional": "e9c3016233a72ceccb13e537f0b7ef72426582b9",
+    "npu12_selected_sha256": {
+      "drivers/vision/npu/core/npu-system.c": "96eaa6bf1511f3e6414e3e376d62592229454a2ea1687d760b7bb8e5952b1a05",
+      "drivers/vision/npu/core/npu-device.c": "a281fd35f2311951328d797824b8dbb165639bfc7977da30044bb764688cdc11",
+      "drivers/vision/npu/core/npu-hw-device.c": "b052462aa4919458a2b86c7ba0aed78bfdb938690cd58d5dcd01bdf0d75a312b",
+      "drivers/vision/npu/core/interface/hardware/npu-interface.c": "c2deaa0abd990184b64373bb13983f048b925e0f5f421f6623de7de85f667108"
+    },
+    "npu13_patch_sha256": "95e63b45d60e0a2611c1f2dcab4428e5658a03ff9954b8197d175ac6fec139cb",
+    "pre_correction_npu14_commit": "4a22948184f101f2bd80d2f44eef44b46004b790",
+    "pre_correction_npu14_patch_sha256": "464a78b43f7ef0cc7e26b5f69075980460211f9c789d0a418b36d44be548968e"
+  },
+  "correction": {
+    "patch_path": "tools/hardware/npu-system-resume-error-unwind.patch",
+    "patch_sha256": "f1af656f9e1b8ca2bf15e934031e0adf828c442267a17761ba64f7d7c611729a",
+    "harness_path": "tools/hardware/npu-system-resume-error-unwind-harness.c",
+    "harness_sha256": "bb9f2f631f7598e79a9638d0373a6a781a0a06a7e4c5e584aad3501a2edbd547",
+    "runner_path": "tools/hardware/test-npu-system-resume-error-unwind.py",
+    "runner_sha256": "e9215fb8abc54e208058df2a9c396726338f2372ea99f88a199b95ecdb2a0293",
+    "report_path": "docs/research/NPU_SYSTEM_RESUME_ERROR_UNWIND_2026-10-03.md",
+    "report_sha256": "77458785927399304ff566c145e3032e366d1c32bb4c86874a899b651d5d0231",
+    "behavior": [
+      "CPU_ON uncertainty is checked before interface and firmware-loader teardown",
+      "non-BOOT_IOCTL STM-enable uncertainty is checked before teardown",
+      "firmware, SoC, clock, and wake ownership remain quarantined while state may be live",
+      "known-on CPU_OFF ordering and existing one-shot inverse policy are unchanged"
+    ]
+  },
+  "verification": {
+    "public_source_route": {
+      "url_base": "https://raw.githubusercontent.com/LineageOS/android_kernel_samsung_s5e9925/4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+      "raw_files_fetched": 4,
+      "ordinary_selected_path_apply": true,
+      "npu12_selected_hashes_reproduced": true
+    },
+    "optional_fixture_behavior": {
+      "present_clean_derived_and_composed_fixtures_verified": true,
+      "simulated_absent_default_fixtures_skipped": true,
+      "explicit_missing_fixture_paths_rejected": true
+    },
+    "python_matrix": [
+      {"route": "public", "mode": "normal", "sys_flags_optimize": 0, "c_compile_run_jobs": 12},
+      {"route": "public", "mode": "-O", "sys_flags_optimize": 1, "c_compile_run_jobs": 12},
+      {"route": "public", "mode": "PYTHONOPTIMIZE=1", "sys_flags_optimize": 1, "c_compile_run_jobs": 12},
+      {"route": "local-only", "mode": "normal", "sys_flags_optimize": 0, "c_compile_run_jobs": 12},
+      {"route": "local-only", "mode": "-O", "sys_flags_optimize": 1, "c_compile_run_jobs": 12},
+      {"route": "local-only", "mode": "PYTHONOPTIMIZE=1", "sys_flags_optimize": 1, "c_compile_run_jobs": 12}
+    ],
+    "total_c_compile_run_jobs": 72,
+    "c_optimization_levels": ["-O0", "-O2"],
+    "variants": ["pre-NPU14 baseline", "frozen pre-correction NPU14 negative control", "corrected NPU14"],
+    "configurations": ["CONFIG_NPU_USE_BOOT_IOCTL", "alternate runtime-PM with STM"],
+    "negative_control": "actual extracted pre-correction NPU14 reproduces one loader-shutdown wrapper call before CPU_ON or STM uncertainty quarantine",
+    "corrected_control": "actual extracted corrected source preserves FW_LOAD, active wake source, and uncertain ownership; repeated suspend does not call shutdown or inverses again"
+  },
+  "compiler": {
+    "command": "cc",
+    "version": "Ubuntu 13.3.0-6ubuntu2~24.04.1",
+    "path_sha256": "1b99826121ae6682a634e5efe09bd3e3df58ce58e0b28f849114ab5b89139c26"
+  },
+  "limitations": [
+    "imgloader_shutdown is void; provider/S2MPU completion or failure is not observable or fixed",
+    "npu_system_release and remove/unbind ownership are not changed",
+    "file-static firmware log-buffer allocation/free lifecycle remains unresolved",
+    "all provider, CPU, STM, wake-source, clock, PM-core, and hardware effects in C are controlled host shims",
+    "no kernel build, firmware operation, phone access, module load, device run, NPU BOOTUP, or acceptance claim"
+  ]
+}

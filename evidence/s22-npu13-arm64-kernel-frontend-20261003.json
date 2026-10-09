@@ -1,0 +1,41 @@
+{
+  "schema": "s22-npu-kernel-frontend/v1",
+  "scope": "reviewed NPU13 interface source; actual complete ARM64 translation unit frontend only",
+  "source_commit": "e9c3016233a72ceccb13e537f0b7ef72426582b9",
+  "source_path": "drivers/vision/npu/core/interface/hardware/npu-interface.c",
+  "source_before_sha256": "c2deaa0abd990184b64373bb13983f048b925e0f5f421f6623de7de85f667108",
+  "reviewed_patch_sha256": "95e63b45d60e0a2611c1f2dcab4428e5658a03ff9954b8197d175ac6fec139cb",
+  "patched_source_sha256": "3d142e00fc77148f5c215c1c105ea6e7a6d036ece82e4872f2556dd97132e6ba",
+  "saved_native_command_sha256": "9db9ea9b9f79641c2ac38a8b00a564063988611acf2976ae336abad08eaf4f5f",
+  "generated_config_sha256": "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16",
+  "compiler": "pinned Clang 18",
+  "compiler_sha256": "8ef402d453d1ba4902e4ee0f0f847f6cfa01400c95aa43c24e97818b9c0e3f45",
+  "execution": {
+    "ordinary_git_apply_check_and_apply": true,
+    "original_saved_command_parsed_without_shell_eval": true,
+    "target": "aarch64-linux-gnu",
+    "preserved_flags": "original complete kernel compiler flags, including O2, Werror, KCFI and shadow call stack",
+    "removed_flags": ["-c", "-o and its destination", "-Wp,-MMD dependency output", "original source pathname"],
+    "added_flags": ["-iquote original source directory", "-fsyntax-only", "isolated patched source pathname"],
+    "generated_headers": "preserved NPU12 native output",
+    "filtered_environment": true,
+    "timeout_seconds": 30,
+    "returncode": 0,
+    "stdout_bytes": 0,
+    "stderr_bytes": 0,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "source_config_saved_command_unchanged_after": true,
+  "isolated_temporary_source_removed_by_TemporaryDirectory": true,
+  "object_module_Image_produced": false,
+  "new_full_kernel_worktree_or_build": false,
+  "phone_operations": 0,
+  "limitations": [
+    "Frontend syntax/type/warning validation is not code generation, linking, modpost, module CRC comparison or a native module build.",
+    "No native NPU13 module artifact or hardware acceptance is established.",
+    "The unchanged private generated headers/output are required; this is not a portable hosted-CI fixture.",
+    "Blocked NPU14 source is not included or cleared by this invocation."
+  ],
+  "NPU_BOOTUP_authorized": false
+}

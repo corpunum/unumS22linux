@@ -1,0 +1,177 @@
+{
+  "schema": "s22-audio-coherent-trial-adapter-review/v1",
+  "review_date": "2026-10-03",
+  "disposition": "BLOCKED",
+  "scope": "independent host-only review of the frozen audio coherent trial adapter",
+  "worktree": "/home/corpunum/s22-workers/audio-trial-adapter-review-20261003",
+  "base_commit": "c92dd13",
+  "author_commit": "a3f9349569660c1f9993f2a31a53b2d6cb66c881",
+  "import_commit": "d48e3d9d40dd46bb909d0a8d417ab3460eea6bf0",
+  "import_tree": "40b7cba33ede1798328173b46d3871555bd2a48b",
+  "worktree_clean_before_review_outputs": true,
+  "agent_instructions": {
+    "agents_md_found_under_s22_workers": false,
+    "reviewer_owned_paths_only": [
+      "docs/reviews/AUDIO_COHERENT_TRIAL_ADAPTER_REVIEW_2026-10-03.md",
+      "evidence/s22-audio-coherent-trial-adapter-review-20261003.json"
+    ],
+    "author_source_modified": false
+  },
+  "author_paths": {
+    "tools/hardware/deploy-audio-coherent-recovery.py": "859047a5018d697e510ef77855c5f841b1ef2e8890fb9890d47ba8dcb2a4aa66",
+    "tools/hardware/audio-coherent-recovery-reboot-once.py": "70dfccca7b4a36902c5f1ab8de2400c7f1dec641b59e6d3b78e0eae19cb8043d",
+    "tools/hardware/test-audio-coherent-trial-adapter.py": "9c106d7d48459a07d6c53ac8de7055641ee20883ae44874ae9c4da04211684b5",
+    "docs/research/AUDIO_COHERENT_TRIAL_ADAPTER_2026-10-03.md": "b9da3a8a8bfcbc2f956d336ad57eb8728cfb9f26875a7d02d8cbdb13c8cf1771",
+    "evidence/s22-audio-coherent-trial-adapter-host-20261003.json": "9bf1f970b01be9700df37b911a91abbbf4f5468cdfffb21ea82b75e084f0da46"
+  },
+  "reviewed_source_pins": {
+    "tools/hardware/audio-coherent-recovery-profile.py": "7a24b600d8e8054ce4266a084b7d227a108928eb4319b548a1bc34bd88e407d4",
+    "tools/hardware/deploy-audio-recovery.py": "4138413c16b9c90c70a46da6ed3b4f60b0f41f1c6c69b4b2047421895903a47f",
+    "tools/hardware/device-trial-guard.py": "6380fca8137a14f3574fe7bb29d644f12c522ec5e45e7915a38a48d81b4e6d30",
+    "tools/hardware/deploy-camera-recovery.py": "2c8554a5d17324b52765fa348fa047814f78116cfe3bcf5cb506aba1c6ee97de",
+    "tools/hardware/camera-recovery-reboot-once.py": "c97f0f161ec31149ce9e8ec989e895adef4802379e5888e3f1fabf31c092fe95",
+    "tools/hardware/audio-recovery-reboot-once.py": "5ec8fec300d514ef9e586dfe5635ca38995718acd0437caefe50c34358bd1ac4",
+    "tools/pi-web/pi_readiness.py": "61cb4f4640409d013ca1d65d5c52959d62610c71f5d76cc2d2e117b1be228e4f",
+    "tools/hardware/trustzone_log_classifier.py": "8faa2cd46d16818ebdd61d7a577b046489083f5c96a6a398ddea769ebbb6619a",
+    "tools/s22-ssh": "7e9d31035762de50ccc6c5614d8348532fd912bf59c41c9d410a4c7bfe49dd1d"
+  },
+  "blocking_finding": {
+    "id": "AUDIO-OBS-001",
+    "severity": "blocking",
+    "summary": "Initial post-reboot observer accepts an incomplete kernel diagnostic capture as successful readiness.",
+    "source_refs": [
+      {
+        "path": "tools/hardware/audio-recovery-reboot-once.py",
+        "lines": "122-131",
+        "evidence": "A successful bounded dmesg call marks capture_complete true and classifies its output."
+      },
+      {
+        "path": "tools/hardware/trustzone_log_classifier.py",
+        "lines": "144-162",
+        "evidence": "Coverage requires nonempty text; empty successful output has coverage_complete false and assessment incomplete."
+      },
+      {
+        "path": "tools/hardware/audio-recovery-reboot-once.py",
+        "lines": "232-244",
+        "evidence": "For available input with no fatal indicator, serious_fault is false while the incomplete coverage fields are emitted."
+      },
+      {
+        "path": "tools/hardware/audio-coherent-recovery-reboot-once.py",
+        "lines": "194-214",
+        "evidence": "The adapter parses and returns snapshot JSON without calling the stricter standalone readiness validator."
+      },
+      {
+        "path": "tools/hardware/audio-coherent-recovery-reboot-once.py",
+        "lines": "169-175",
+        "evidence": "Adapter validator checks no fatal indicator and liveness_unresolved false but ignores capture_complete, coverage_complete, and assessment."
+      },
+      {
+        "path": "tools/hardware/audio-coherent-recovery-reboot-once.py",
+        "lines": "466-516",
+        "evidence": "The accepted snapshot is followed by construction and persistence of an initial-observation-complete receipt and successful marker completion."
+      },
+      {
+        "path": "tools/hardware/audio-recovery-reboot-once.py",
+        "lines": "445-454",
+        "evidence": "The stricter helper validator does require complete capture and coverage, but the adapter path does not call it."
+      }
+    ],
+    "reproduction": {
+      "method": "Loaded the pinned classifier and actual observer module; classified empty text with capture_complete=true; populated the otherwise-valid host readiness fixture with the actual classifier fields and producer serious_fault mapping; called validate_readiness_snapshot(..., post_reboot=true).",
+      "classifier": {
+        "input_available": true,
+        "assessment": "incomplete",
+        "capture_complete": true,
+        "coverage_complete": false,
+        "fatal_indicators": [],
+        "liveness_unresolved": false,
+        "serious_fault": false
+      },
+      "result": "REPRODUCED_ACCEPT_EMPTY_DMESG_WITH_INCOMPLETE_COVERAGE",
+      "interpretation_limit": "Synthetic source-level counterexample only; no assertion that the phone has an empty dmesg ring."
+    },
+    "required_correction_gate": "Reject missing/malformed/incomplete diagnostic coverage before initial-observation success; add a regression for this exact classifier-derived empty-log case and retain exact boolean-type checks."
+  },
+  "host_validation": {
+    "author_suite": {
+      "test_count": 20,
+      "modes": [
+        {
+          "command": "CAMERA_EXPECT_PYTHONOPTIMIZE=0 python3 -I -B tools/hardware/test-audio-coherent-trial-adapter.py",
+          "result": "PASS",
+          "passed": 20,
+          "failed": 0,
+          "optimize": 0,
+          "isolated": 1,
+          "elapsed_seconds": 0.270
+        },
+        {
+          "command": "CAMERA_EXPECT_PYTHONOPTIMIZE=1 python3 -O -I -B tools/hardware/test-audio-coherent-trial-adapter.py",
+          "result": "PASS",
+          "passed": 20,
+          "failed": 0,
+          "optimize": 1,
+          "isolated": 1,
+          "elapsed_seconds": 0.287
+        },
+        {
+          "command": "CAMERA_EXPECT_PYTHONOPTIMIZE=1 PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-audio-coherent-trial-adapter.py",
+          "result": "PASS",
+          "passed": 20,
+          "failed": 0,
+          "optimize": 1,
+          "isolated": 0,
+          "elapsed_seconds": 0.289
+        }
+      ],
+      "coverage_note": "The passing suite exercises source-rendered remote bodies against a temporary fake filesystem and controlled transport; it does not exercise a real SSH endpoint/provider and does not test the incomplete diagnostic-coverage case found in this review."
+    },
+    "default_local_plans": {
+      "profiles": ["audio-forward", "audio-reverse"],
+      "commands": [
+        "python3 -I -B tools/hardware/deploy-audio-coherent-recovery.py --profile audio-forward",
+        "python3 -I -B tools/hardware/deploy-audio-coherent-recovery.py --profile audio-reverse",
+        "python3 -I -B tools/hardware/audio-coherent-recovery-reboot-once.py --profile audio-forward",
+        "python3 -I -B tools/hardware/audio-coherent-recovery-reboot-once.py --profile audio-reverse"
+      ],
+      "all_exit_zero": true,
+      "partition_size_bytes": 100663296,
+      "forward": {
+        "before_sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+        "target_sha256": "6b788b23f54b9b8e84212187544064949b72af20c167cbb02392cbe53ee5a6ab"
+      },
+      "reverse": {
+        "before_sha256": "6b788b23f54b9b8e84212187544064949b72af20c167cbb02392cbe53ee5a6ab",
+        "target_sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f"
+      },
+      "authorization_and_execution": false
+    },
+    "authorization_environment_negative_control": {
+      "attempted": ["stage", "request-reboot"],
+      "environment_values_could_not_override_guard": true,
+      "both_exit_code": 1,
+      "stderr": "refused: audio RECOVERY execution is not currently owner-authorized"
+    },
+    "trial_state_read_only_check": {
+      "reserved_receipt_directory_exists": false,
+      "forward_reverse_stage_flash_reboot_observe_markers_exist": false
+    }
+  },
+  "review_limits": {
+    "ssh_or_device_access": false,
+    "partition_write": false,
+    "reboot": false,
+    "pcm_or_audio_hardware_test": false,
+    "kernel_build": false,
+    "package_or_repack": false,
+    "actual_provider_or_flash_durability_claim": false,
+    "audio_hardware_acceptance": false,
+    "current_owner_deployment_authorization": false,
+    "independent_rescue_authority": false,
+    "host_plan_is_execution_permission": false
+  },
+  "reviewer_outputs_to_commit": [
+    "docs/reviews/AUDIO_COHERENT_TRIAL_ADAPTER_REVIEW_2026-10-03.md",
+    "evidence/s22-audio-coherent-trial-adapter-review-20261003.json"
+  ]
+}

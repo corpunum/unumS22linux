@@ -1,0 +1,217 @@
+{
+  "schema": "s22-camera-clock-ownership-revision-independent-review/v1",
+  "review_date": "2026-10-03",
+  "verdict": {
+    "status": "BLOCKED",
+    "summary": "The revision fixes the modeled off-retry/shared-vote ownership defect by latching unknown ICLK ownership and refusing normal retries, but enabled reboot and platform-shutdown cleanup still perform sensor/CSI stop and thread-deinit operations without consulting the latch. Safe shutdown/reboot, stream quiescence, and DMA safety are therefore unestablished.",
+    "scope": "Independent host-only source and extracted-C review; no kernel, provider, device, camera, or physical-clock acceptance."
+  },
+  "worktrees": {
+    "review": {
+      "path": "/home/corpunum/s22-workers/camera-clock-ownership-review-20261003",
+      "branch": "codex/s22-camera-clock-ownership-review-20261003",
+      "base_commit": "1784035960d264ab8406049ab11d397568c84546",
+      "imported_historical_review_commit": "33a3e0e49517a1f9c79f66bae0dffc7e721a5b81",
+      "imported_subject_commit": "877dea5b0bfbd9462ffebcb0d6b26ee7e8a7145f",
+      "imported_subject_tree": "69043907d422f9cd751a477248ed760fe8da4981",
+      "status_before_review_outputs": "clean"
+    },
+    "frozen_subject": {
+      "commit": "296441ec81caf3e2ed8f4d2a2764c3e9efee8056",
+      "tree": "15fcc141052d4ed4f0225d906a644863ad1441e5",
+      "four_reviewed_files_byte_identical": true
+    },
+    "pinned_original_source": {
+      "path": "/home/corpunum/s22-linux/lineage/android_kernel_samsung_s5e9925",
+      "commit": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+      "tree": "5c46cbe12dadbcdb64eec4344c9e8ff0f8a75dee",
+      "status": "clean"
+    },
+    "preserved_derived_source": {
+      "path": "/home/corpunum/s22-workers/camera-kernel-build-20260927",
+      "commit": "3fca50941422439b2019db2e4a3dc1016b2138a1",
+      "tree": "5aad5cf1dbaa0f430377737141f0547e971b0a2d",
+      "status": "clean"
+    },
+    "historical_review": {
+      "commit": "33a3e0e49517a1f9c79f66bae0dffc7e721a5b81",
+      "files_modified": false,
+      "disposition": "Preserved unchanged; its prior retry/shared-vote finding is historical and is corrected by this revision's tested quarantine path."
+    }
+  },
+  "frozen_subject_hashes": {
+    "tools/hardware/camera-sensor-clock-unwind.patch": "0d206b54b6d65d5e530d15cf2c2e21f9632defff154f459107645b3079abe8ba",
+    "tools/hardware/camera-sensor-clock-unwind-harness.c": "0f5d00814036cce568d85b18a4075d75fec3b8f67a61be51dd219ec014983a9b",
+    "tools/hardware/test-camera-sensor-clock-unwind.py": "9786506375e51d2e7aeca9b34536f9d21fe68edb924787d5cecd9a741ad4767f",
+    "docs/research/CAMERA_SENSOR_CLOCK_UNWIND_2026-10-03.md": "c4875cade7a36dc569b23aec6d464b8d0bcba0587a92b8587ae4b3e465cf1338"
+  },
+  "pinned_source_blob_sha256": {
+    "drivers/media/platform/exynos/camera/is-device-sensor_v2.c": "b88e203fa7ca7fdcf109f969d516601a9cba4702c98a3a0b338b3a6dbcf55265",
+    "drivers/media/platform/exynos/camera/is-core.c": "2f81e7342a74098e284cef0679afce4ef7e8be34bd81bac9c215bf7f695e1594",
+    "drivers/media/platform/exynos/camera/is-resourcemgr.c": "79dea9151d3294c082856d47be30bc3ffc7e165df8109be5fb62b35b338bcd7d",
+    "drivers/media/platform/exynos/camera/is-video.c": "66eceae9b3b6d6b8e3e6e600814adfad26d313b304ea09497755e04fd977f232"
+  },
+  "host_environment": {
+    "python": "Python 3.12.3",
+    "compiler": "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "extracted_c_compile_flags": [
+      "-std=gnu89",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-Wno-unused-parameter",
+      "-Wno-unused-function",
+      "-Wno-unused-but-set-variable",
+      "-O0",
+      "-O2"
+    ]
+  },
+  "checks": [
+    {
+      "name": "local frozen suite in normal Python mode",
+      "command": "CAMERA_EXPECT_PYTHONOPTIMIZE=0 python3 -I -B tools/hardware/test-camera-sensor-clock-unwind.py",
+      "exit_code": 0,
+      "python_flags": {
+        "isolated": 1,
+        "no_site": 0,
+        "optimize": 0,
+        "PYTHONOPTIMIZE": "unset"
+      },
+      "tests_passed": 8,
+      "result": "PASS"
+    },
+    {
+      "name": "local frozen suite under Python -O",
+      "command": "CAMERA_EXPECT_PYTHONOPTIMIZE=1 python3 -O -I -B tools/hardware/test-camera-sensor-clock-unwind.py",
+      "exit_code": 0,
+      "python_flags": {
+        "isolated": 1,
+        "no_site": 0,
+        "optimize": 1,
+        "PYTHONOPTIMIZE": "unset"
+      },
+      "tests_passed": 8,
+      "result": "PASS"
+    },
+    {
+      "name": "local frozen suite with environment optimization",
+      "command": "CAMERA_EXPECT_PYTHONOPTIMIZE=1 PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-camera-sensor-clock-unwind.py",
+      "exit_code": 0,
+      "python_flags": {
+        "isolated": 0,
+        "no_site": 0,
+        "optimize": 1,
+        "PYTHONOPTIMIZE": "1"
+      },
+      "tests_passed": 8,
+      "result": "PASS"
+    },
+    {
+      "name": "forced public source with private-derived fixture absent",
+      "invocation": "Imported the unchanged test module, set CAMERA_CLOCK_FORCE_PUBLIC=1 and PINNED_DERIVED=/tmp/camera-clock-derived-fixture-absent-review-20261003, then ran CameraSensorClockUnwindTests. The absent path caused only the explicit optional derived-tree check to skip.",
+      "python_optimize": 0,
+      "tests_passed": 7,
+      "tests_skipped": 1,
+      "skip_reason": "private derived source tree unavailable; public pinned fixtures remain tested",
+      "actual_extracted_c_baseline_and_patched_tests_ran": true,
+      "result": "PASS WITH ONE EXPECTED OPTIONAL SKIP"
+    },
+    {
+      "name": "explicitly wrong source fixture fails closed",
+      "command": "CAMERA_CLOCK_SOURCE_TREE=/home/corpunum/s22-workers/camera-clock-ownership-review-20261003 CAMERA_CLOCK_FORCE_PUBLIC=1 python3 -I -B tools/hardware/test-camera-sensor-clock-unwind.py",
+      "exit_code": 5,
+      "tests_run": 0,
+      "observed_result": "setUpClass error: source identity differs from the pinned source",
+      "fallback_occurred": false,
+      "result": "EXPECTED REJECTION"
+    },
+    {
+      "name": "actual extracted baseline and patched C functions",
+      "suite_executions": 4,
+      "compile_and_run_cases": 16,
+      "c_optimization_levels": [
+        "-O0",
+        "-O2"
+      ],
+      "baseline_result": "BASELINE_REPRODUCED",
+      "patched_result": "PASS: extracted clock quarantine lifecycle",
+      "coverage": [
+        "cfg acquisitions for CSIS0-6 and DMA with reverse owned-vote cleanup",
+        "selected-gate acquisition and setup-gate disable positions",
+        "invalid channel rejection before clock calls",
+        "first error and cleanup/restoration error handling",
+        "shared modeled vote remains after failed off restoration and is not consumed by subsequent quarantined callbacks",
+        "IS_SENSOR_ICLK_ON and IS_SENSOR_ICLK_UNKNOWN state behavior",
+        "runtime/suspend/open/close callback guard cases extracted into the harness",
+        "direct and ischain close retention cases including one module and video-device pin per context and idempotent repeated direct invocation"
+      ],
+      "result": "PASS"
+    },
+    {
+      "name": "pinned-derived patch and lifetime source assertions",
+      "observed": "The three local suite runs passed the exact pinned-derived tree apply check. Source assertions inspect VFS/V4L2/VB2 release semantics, queue/context cleanup, resource lookup, core allocation/driver callbacks, and the unguarded shutdown/reboot cleanup path.",
+      "execution_limit": "These Linux/provider callbacks are source-inspected, not executed by the extracted-C harness.",
+      "result": "PASS FOR SOURCE ASSERTIONS; DOES NOT CLEAR SHUTDOWN/REBOOT BLOCKER"
+    }
+  ],
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "positive",
+      "title": "Modeled shared-vote retry is quarantined after failed selected-gate restoration",
+      "locations": [
+        "drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is-sensor.c (patched cfg/on/off callbacks)",
+        "drivers/media/platform/exynos/camera/is-device-sensor_v2.c:443-526 (patched generic caller)",
+        "tools/hardware/test-camera-sensor-clock-unwind.py:617-643",
+        "tools/hardware/camera-sensor-clock-unwind-harness.c:281-413 and extracted lifecycle cases"
+      ],
+      "evidence": "After off returns -EUCLEAN for incomplete restoration, the caller retains ON, latches UNKNOWN, and later on/off return before clock callbacks. The extracted fake-clock model verifies a subsequent off does not decrement the remaining unrelated selected-gate reference.",
+      "limitation": "This validates source sequencing and an aggregate-vote model; it does not execute Linux clock-provider accounting or physical hardware."
+    },
+    {
+      "id": "F2",
+      "severity": "blocking",
+      "title": "Platform shutdown and registered reboot cleanup bypass unknown-ICLK quarantine",
+      "locations": [
+        "drivers/media/platform/exynos/camera/is-core.c:1597-1623 (is_cleanup)",
+        "drivers/media/platform/exynos/camera/is-core.c:1625-1702 (is_shutdown and platform_driver callback)",
+        "drivers/media/platform/exynos/camera/is-device-sensor_v2.c:869-958,3776-3837 (sensor/CSI stop actions)",
+        "drivers/media/platform/exynos/camera/is-resourcemgr.c:1385-1405,1549-1551 (registered reboot notifier)"
+      ],
+      "evidence": "is_cleanup calls is_sensor_front_stop for a probed front-started sensor without checking IS_SENSOR_ICLK_UNKNOWN. is_shutdown calls is_cleanup and then deinitializes sensor threads/cancels work without a latch check. The enabled and registered reboot handler also calls is_cleanup. is_sensor_front_stop/is_sensor_stop can issue module s_stream(false), CSI s_stream(IS_DISABLE_STREAM), and is_itf_stream_off calls.",
+      "consequence": "A quarantined sensor can still enter hardware-facing stop/deinit operations during shutdown or reboot. This source path prevents a safe-lifecycle claim; it does not by itself prove a physical adverse result."
+    },
+    {
+      "id": "F3",
+      "severity": "scope-limitation",
+      "title": "Terminal retention does not prove provider state, DMA quiescence, or generic parent lifetime",
+      "locations": [
+        "drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is.c:194-215",
+        "fs/file_table.c:255-300",
+        "drivers/media/v4l2-core/v4l2-dev.c:150-205,438-466",
+        "drivers/media/platform/exynos/camera/is-core.c:1313-1317,1588-1595,1694-1703"
+      ],
+      "evidence": "is_disable's negative result is only a clock lookup failure before the void clk_disable_unprepare call. VFS ignores release's return, V4L2 unconditionally drops its node reference, and final video-device release frees the node; the patch takes one idempotent node and module pin per retained context and skips normal VB2/context frees. In the exact inspected source, core is freed only on probe error and no platform .remove callback is declared.",
+      "consequence": "The retained queue/buffers/context are an intentional terminal leak, not proof of stopped asynchronous work or safe DMA. The device ref is not a generic parent-allocation ref; exact current core lifetime source facts do not certify altered/external teardown."
+    }
+  ],
+  "acceptance_limits": {
+    "kernel_compiled": false,
+    "clock_framework_or_provider_executed": false,
+    "physical_clock_state_measured": false,
+    "runtime_pm_wrapper_executed_on_device": false,
+    "shutdown_or_reboot_callback_executed": false,
+    "vfs_v4l2_vb2_release_path_executed": false,
+    "phone_or_ssh_accessed": false,
+    "ioctl_or_streaming_performed": false,
+    "firmware_or_inference_performed": false,
+    "module_loaded": false,
+    "repack_performed": false,
+    "prior_camera_trial": "not_accepted; unchanged",
+    "deployment_or_device_authority": false
+  },
+  "review_outputs": [
+    "docs/reviews/CAMERA_CLOCK_OWNERSHIP_REVISION_REVIEW_2026-10-03.md",
+    "evidence/s22-camera-clock-ownership-revision-review-20261003.json"
+  ]
+}

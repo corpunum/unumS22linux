@@ -1,0 +1,73 @@
+diff --git a/drivers/vision/npu/core/npu-hw-device.c b/drivers/vision/npu/core/npu-hw-device.c
+--- a/drivers/vision/npu/core/npu-hw-device.c
++++ b/drivers/vision/npu/core/npu-hw-device.c
+@@ -76,17 +76,29 @@
+ 
+ 	if (on) {
+ 		if (hdev->type & NPU_HWDEV_TYPE_PWRCTRL) {
+-			/* power control */
+-			ret = pm_runtime_get_sync(hdev->dev);
+-			if (ret)
++			/* Return zero on success and balance a failed resume reference. */
++			ret = pm_runtime_resume_and_get(hdev->dev);
++			if (ret) {
+ 				npu_err("fail in runtime resume(%d)\n", ret);
++				goto boot_error;
++			}
+ 			npu_info("%s power %s (%d)\n", hdev->name, on ? "on" : "off", ret);
+ 		}
+ 		if (hdev->type & NPU_HWDEV_TYPE_CLKCTRL) {
+-			/* clock control */
++			/* npu_clk_prepare_enable rolls back clocks enabled before failure. */
+ 			ret = npu_clk_prepare_enable(&hdev->clks);
+-			if (ret)
++			if (ret) {
++				int cleanup_ret = 0;
++
+ 				npu_err("fail to prepare/enable npu_clk(%d)\n", ret);
++				if (hdev->type & NPU_HWDEV_TYPE_PWRCTRL) {
++					cleanup_ret = pm_runtime_put_sync(hdev->dev);
++					if (cleanup_ret < 0)
++						npu_err("fail to release runtime PM after clock error(%d)\n",
++							cleanup_ret);
++				}
++				goto boot_error;
++			}
+ 			npu_info("%s clock %s (%d)\n", hdev->name, on ? "on" : "off", ret);
+ 		}
+ 		hdev->status = NPU_HWDEV_STATUS_ACTIVE << 16 | NPU_HWDEV_STATUS_PWR_CLK_ON;
+@@ -100,12 +112,22 @@
+ 		if (hdev->type & NPU_HWDEV_TYPE_PWRCTRL) {
+ 			/* power control */
+ 			ret = pm_runtime_put_sync(hdev->dev);
+-			if (ret)
++			if (ret < 0) {
+ 				npu_err("fail in runtime suspend(%d)\n", ret);
++				goto boot_error;
++			}
++			/* pm_runtime_put_sync uses nonnegative values for success. */
++			ret = 0;
+ 			npu_info("%s power %s (%d)\n", hdev->name, on ? "on" : "off", ret);
+ 		}
+ 		hdev->status = NPU_HWDEV_STATUS_PWR_CLK_OFF;
+ 	}
++	goto complete;
++
++boot_error:
++	/* Power/clock may be partially transitioned; neither ON nor OFF is proven. */
++	hdev->status = NPU_HWDEV_STATUS_ERROR;
++complete:
+ 	npu_log_hwdev_set_data(hdev->id);
+ 	npu_info("%s %s (%d)\n", __func__, on ? "on" : "off", ret);
+ 	return ret;
+diff --git a/drivers/vision/npu/core/npu-clock.c b/drivers/vision/npu/core/npu-clock.c
+--- a/drivers/vision/npu/core/npu-clock.c
++++ b/drivers/vision/npu/core/npu-clock.c
+@@ -95,6 +95,7 @@
+ 
+ 	for (i = 0; i < clocks->clk_count; i++) {
+ 		if (!clocks->clocks[i]) {
++			ret = -EINVAL;
+ 			npu_err("invalid clock in [%d]", i);
+ 			goto err;
+ 		}

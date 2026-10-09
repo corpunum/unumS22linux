@@ -1,0 +1,145 @@
+{
+  "schema": "s22-audio-receipt-json-types-independent-review/v1",
+  "review_date": "2026-10-03",
+  "verdict": {
+    "status": "PASS_LIMITED_NARROW_RECEIPT_TYPE_CORRECTION",
+    "pre_fix_bool_numeric_alias_blocker_cleared": true,
+    "new_blocker_found_in_reviewed_delta": false,
+    "deployment_authorized": false,
+    "independent_hardware_rescue_demonstrated": false,
+    "device_acceptance": false
+  },
+  "selection": {
+    "model": "gpt-6-luna",
+    "reasoning": "max",
+    "basis": "Explicit parent assignment; configuration evidence, not backend attestation."
+  },
+  "review_context": {
+    "worktree": "/home/corpunum/s22-workers/audio-receipt-types-review-20261003",
+    "review_source_commit": "eb35ac641b2dabf5f83283787fdfbfa0c3d2be67",
+    "review_base_commit": "214e9fd68414af122984df7dfefc44b5e360f142",
+    "author_correction_commit": "f2d1b41f3e3f92df9872aa150a55a78074467a45",
+    "pre_fix_author_commit": "bddb66ac717b3668898eb78c825d02aadbba254b",
+    "pre_fix_import_commit": "f28f6072312029e663c75f6dbc56e9dd83169d74",
+    "prior_reviewer_blocker_commit": "fdcc817f7972d37ddfecd4a6a6eea97a721ef33a",
+    "prior_reviewer_blocker_import_commit": "214e9fd68414af122984df7dfefc44b5e360f142",
+    "clean_before_review_outputs": true,
+    "five_code_and_test_files_match_author_correction": true,
+    "parent_delta_paths": 7,
+    "historical_blocker_note_and_evidence_unchanged": true
+  },
+  "reviewed_delta_paths": [
+    "tools/hardware/deploy-audio-recovery.py",
+    "tools/hardware/audio-coherent-recovery-profile.py",
+    "tools/hardware/run-bt-hci-bridge-once.py",
+    "tools/hardware/test-audio-coherent-recovery-profile.py",
+    "tools/hardware/test-recovery-deployment-hardening.py",
+    "docs/research/AUDIO_RECEIPT_JSON_TYPE_CORRECTION_2026-10-03.md",
+    "evidence/s22-audio-receipt-json-types-host-20261003.json"
+  ],
+  "source_hashes": {
+    "pre_fix_profile_sha256": "40526594559cc839d7d3b5371c4dff3480d6a5c69394476eedd8047abbe5f0cc",
+    "pre_fix_shared_helper_sha256": "d0c54cc306e3a8a80cb79d79958fceedf6bb5945dabc7606e02b12d27dc00fd3",
+    "corrected_profile_sha256": "7a24b600d8e8054ce4266a084b7d227a108928eb4319b548a1bc34bd88e407d4",
+    "corrected_profile_test_sha256": "3df3850fd39e1baaec5ad60fe592a10a3b2c0cb969628ba912c9a4ad5cf9a0fa",
+    "corrected_shared_helper_sha256": "4138413c16b9c90c70a46da6ed3b4f60b0f41f1c6c69b4b2047421895903a47f",
+    "corrected_shared_hardening_test_sha256": "0e7f6ca2769d562d50d8fe11dbf9c572cc342e9c5d71073bf9a1faac189004cf",
+    "corrected_bt_hci_runner_sha256": "7696d15fcdd7af33d130cb4cdfa78c823553d84a3eb2d830142c5bbd0a09198a"
+  },
+  "pre_fix_reproduction": {
+    "old_profile_source": "/home/corpunum/s22-workers/audio-profile-independent-review-20261003/tools/hardware/audio-coherent-recovery-profile.py",
+    "old_shared_helper_sha256": "d0c54cc306e3a8a80cb79d79958fceedf6bb5945dabc7606e02b12d27dc00fd3",
+    "expanded_regression_test_run_against_old_profile": {
+      "test_cases": 1,
+      "expected_subtest_failures": 10,
+      "errors": 0,
+      "exit_interpreted_as_expected_red": true
+    },
+    "invalid_values_accepted_before_and_rejected_after": [
+      "stage partition_written integer 0",
+      "stage partition_written float 0.0",
+      "flash bytes equal float",
+      "flash reboot_performed integer 0",
+      "flash reboot_performed float 0.0"
+    ],
+    "audio_forward_cases": 5,
+    "audio_reverse_cases": 5,
+    "post_fix_rejected_all_10": true,
+    "production_partition_size_equal_float_also_reproduced": true
+  },
+  "corrected_validation_review": {
+    "shared_helper_mode_requires_exact_str": true,
+    "shared_helper_expected_fields_require_exact_primitive_type_and_value": true,
+    "audio_profile_exact_key_set_preserved": true,
+    "audio_profile_identity_fields_require_exact_str": true,
+    "valid_stage_and_flash_receipts_both_directions_preserved": true,
+    "old_wrong_mode_identity_hash_missing_extra_and_ambiguous_cases_remain_rejected": true,
+    "generic_helper_enforces_exact_full_key_set": false,
+    "generic_exact_key_set_interpretation": "Pre-existing behavior; audio profile wrapper applies its own exact key-set contract."
+  },
+  "shared_helper_nonreceipt_behavior_unchanged": {
+    "remote_guards_equal": true,
+    "remote_guards_sha256": "8a435c6226a4478d1887739ffeccb1eaed329e04c7ad8e49fd3ee41c6d14e437",
+    "remote_template_equal": true,
+    "remote_template_sha256": "426fc74c05ef69ba5493a87460221fe2e2ceb7f691da2263a4752ed33f5f624b",
+    "rendered_remote_equal": true,
+    "rendered_remote_sha256": "2141ca511e1a6e34b82596b6b5fd3d5bf00e90521bfea69f2785465565ada982",
+    "build_approved_ssh_invocation_source_equal": true,
+    "build_approved_ssh_invocation_source_sha256": "c404dac33f9855f5e914cb26362933306b9c34a16fbddcc68db2327d735a5e58",
+    "validate_approved_ssh_wrapper_source_equal": true,
+    "validate_approved_ssh_wrapper_source_sha256": "395176ac07faf1a6b98bf8ce8c6db7b72e404a2b9c7df4f3e3b3fb22fc568d70",
+    "run_approved_ssh_wrapper_source_equal": true,
+    "run_approved_ssh_wrapper_source_sha256": "7dd68843cc80814e629d3e0838f9418f836f4eedc407f32db96cb30e8bad4148",
+    "remote_lock_stage_flash_write_readback_no_reboot_behavior_changed": false
+  },
+  "consumer_pin_review": {
+    "profile_expected_helper_sha256_matches_current": true,
+    "bt_runner_expected_helper_sha256_matches_current": true,
+    "bt_runner_helper_source_root": "observer.ROOT/tools/hardware/deploy-audio-recovery.py",
+    "updated_executable_helper_pins": [
+      "tools/hardware/audio-coherent-recovery-profile.py",
+      "tools/hardware/run-bt-hci-bridge-once.py"
+    ],
+    "old_helper_sha_in_executable_code": false,
+    "old_hash_occurrences_are_historical_records_only": true,
+    "focused_temp_observer_root_test": "passed; callback mocked; no SSH transport"
+  },
+  "test_matrix": {
+    "python_version": "3.12.3",
+    "python_optimize_flags_verified": [0, 1, 1],
+    "modes": ["normal", "python3 -O", "PYTHONOPTIMIZE=1 python3 -B"],
+    "environment": {
+      "private_audio_artifact_root": "unset; explicit portable skip",
+      "pinned_avbtool": "absent from isolated worktree; three explicit AVB test skips",
+      "external_avb_tool_substituted": false
+    },
+    "per_mode": {
+      "audio_profile": {"tests": 14, "passed": 13, "skipped": 1, "failed": 0},
+      "shared_recovery_hardening": {"tests": 47, "passed": 44, "skipped": 3, "failed": 0},
+      "hci_profile": {"tests": 22, "passed": 22, "skipped": 0, "failed": 0}
+    },
+    "focused_bt_observer_root_regression": {"tests": 1, "passed": 1, "failed": 0},
+    "audio_rendered_stage_both_directions": {"passed": true, "modeled_partition_write_bytes": 0},
+    "shared_rendered_stage_flash_syscall_shim_tests": {"passed": true, "filesystem": "temporary fake filesystem"},
+    "mocked_remote_transport_tests": "passed as part of suites; no live transport",
+    "local_ssh_version_selection_probe_in_suite": true,
+    "network_ssh_transport": false
+  },
+  "historical_and_safety_state": {
+    "previous_blocking_review_rewritten": false,
+    "old_receipts_markers_authorization_records_rewritten": false,
+    "phone_or_device_access": false,
+    "network_ssh_or_adb": false,
+    "build_or_repack": false,
+    "stage_or_flash_performed": false,
+    "operation_marker_created": false,
+    "reboot_performed": false,
+    "deployment_authorized": false,
+    "independent_hardware_rescue_demonstrated": false,
+    "bootability_module_load_or_audio_hardware_acceptance": false
+  },
+  "owned_outputs": [
+    "docs/reviews/AUDIO_RECEIPT_JSON_TYPE_CORRECTION_REVIEW_2026-10-03.md",
+    "evidence/s22-audio-receipt-json-types-review-20261003.json"
+  ]
+}

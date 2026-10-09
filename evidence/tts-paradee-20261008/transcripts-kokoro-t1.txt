@@ -1,0 +1,30 @@
+REF: As of August 2015, there were 169 proposed targets for these goals and 304 proposed indicators to show compliance.
+HYP: As of August 2015, there were 169 proposed targets for these goals and 304 proposed indicators to show compliance.
+REF: White dwarf stars, if they have a near companion, may then become Type Ia supernovae.
+HYP: White dwarf stars, if they have a near companion, may then become type I a supernova.
+REF: According to Herodotus, this was because they had decided in council that they could not beat the Allies in a naval battle.
+HYP: According to Herodotus, this was because they had decided in council that they could not beat the Allies in a naval battle.
+REF: In 1997 Hurlbut's career focused on light as applied to photography and film, and he owned a lighting business in Pasadena, California.
+HYP: In 1997 Holbut's career, focused on light as applied to photography and film, and he owned a lighting business in Pasadena, California.
+REF: Harvey ended with a century on his Ashes debut, scoring 112 from 183 balls in an innings noted for powerful driving on both sides of the wicket.
+HYP: Harvey ended with a century on his ashes debut, scoring 112 from 183 balls in an innings noted for powerful driving on both sides of the wicket.
+REF: Hello Antonis. This is your S22 speaking with a neural voice, running entirely on the phone.
+HYP: Hello, Antonis. This is your S22 speaking with a neural voice running entirely on the phone.
+REF: You have a missed call from your mother. Do you want me to call her back?
+HYP: You have a missed call from your mother. Do you want me to call her back?
+REF: The battery is at forty two percent, and the phone is not charging.
+HYP: The battery is at 42%, and the phone is not charging.
+REF: I set a timer for ten minutes. I will remind you when it goes off.
+HYP: I set a timer for 10 minutes. I will remind you when it goes off.
+REF: Sorry, I could not reach the server. Should I try again in a minute?
+HYP: Sorry, I could not reach the server. Should I try again in a minute?
+REF: The weather today is mostly sunny, with a high of twenty three degrees and a light breeze from the north.
+HYP: The weather today is mostly sunny, with a high of 23 degrees and a light breeze from the north.
+REF: Your next meeting starts at half past three, in the small conference room on the second floor.
+HYP: Your next meeting starts at half past three in the small conference room on the second floor.
+REF: Please hold on while I look that up for you.
+HYP: Please hold on while I look that up for you.
+REF: New message from Maria: running late, see you at the station around seven.
+HYP: New message from Maria, running late. See you at the station around 7.
+REF: Turning on do not disturb until tomorrow morning.
+HYP: Turning on do not disturb until tomorrow morning.

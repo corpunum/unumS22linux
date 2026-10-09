@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "review_date": "2026-10-03",
+  "review_worktree": {
+    "path": "/home/corpunum/s22-workers/npu-twelve-artifact-review-20261003",
+    "base_commit": "2d496048c3b14ef89ec3b2ba9635e7f9ae48f407",
+    "imported_build_receipt_commit": "e7f0035735f50349b1ab1732fe59edd78a1aa971",
+    "owned_paths": [
+      "docs/reviews/NPU_TWELVE_NATIVE_ARTIFACT_REVIEW_2026-10-03.md",
+      "evidence/s22-npu-twelve-artifact-review-20261003.json"
+    ]
+  },
+  "review_verdict": {
+    "host_compile_artifact_identity": "clear",
+    "static_symbol_version_compatibility_against_pinned_native_eight_symvers": "clear",
+    "deployment_or_device_acceptance": false,
+    "bootup_authorized": false
+  },
+  "source": {
+    "path": "/home/corpunum/s22-linux/builds/npu-native-twelve-kernel-20261003",
+    "branch": "codex/npu-native-twelve-kernel-20261003",
+    "commit": "e9c3016233a72ceccb13e537f0b7ef72426582b9",
+    "tree": "f917408e1c3388c87a8ed8f0220e4f9c3c9c6a4e",
+    "parent": "709ac38b573d092e300f3787d0d5ba97dd333c0a",
+    "clean_at_review": true,
+    "changed_paths_from_parent": [
+      "drivers/vision/npu/core/npu-log.c",
+      "drivers/vision/npu/core/npu-util-msgidgen.c"
+    ],
+    "patches": [
+      {
+        "source_path": "drivers/vision/npu/core/npu-util-msgidgen.c",
+        "patch_sha256": "c8366edfab42090ac09a6c366ad3c535a62e13384dd494ed685bbfe524a64d14"
+      },
+      {
+        "source_path": "drivers/vision/npu/core/npu-log.c",
+        "patch_sha256": "71c2fa44f0fe42bd94ee416fb09453185dd418b408ba15937ec3c787a5e9bf5d"
+      }
+    ]
+  },
+  "configuration": {
+    "export_path": "/home/corpunum/s22-linux/builds/native-config-export-20261002.config",
+    "export_sha256": "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16",
+    "output_config_sha256": "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16",
+    "olddefconfig_log_sha256": "88a885d080fd145f312d6dd20b008e8341fe832670b5aa1e908f1e58ceccddc7",
+    "olddefconfig_result": "no change to .config",
+    "kernel_release": "5.10.260-g4e5c5ad7d950",
+    "kernel_release_file_sha256": "42baea336b74cd6cdbd1d3dbd3c9709c3fff772b21ba109458b388b72d00d961",
+    "relevant_config": {
+      "CONFIG_EXYNOS_NPU": "m",
+      "CONFIG_MODVERSIONS": "y",
+      "CONFIG_CFI_CLANG": "y",
+      "CONFIG_SHADOW_CALL_STACK": "y",
+      "CONFIG_LTO_NONE": "y"
+    }
+  },
+  "build": {
+    "operation": "npu_twelve_module_only",
+    "target": "drivers/vision/npu.ko",
+    "finished_at_utc": "2026-10-02T22:54:57Z",
+    "exit_code": 0,
+    "resource_abort": false,
+    "bootup_ready": false,
+    "bootup_authorized": false,
+    "resource_gate": {
+      "start_minimum_disk_bytes": 25769803776,
+      "start_minimum_memory_bytes": 12884901888,
+      "monitor_minimum_disk_bytes": 17179869184,
+      "monitor_minimum_memory_bytes": 8589934592,
+      "start_disk_free_bytes": 30746574848,
+      "start_memory_available_bytes": 25870323712,
+      "monitor_sample_count": 6,
+      "sampled_min_disk_free_bytes": 30556766208,
+      "sampled_min_memory_available_bytes": 24155299840,
+      "is_reservation": false
+    },
+    "tool_identity_check": {
+      "recorded_invocation_tools": 17,
+      "recomputed_hash_matches": 17,
+      "mismatches": 0,
+      "clang": "Ubuntu clang version 18.1.3 (1ubuntu1)",
+      "lld": "Ubuntu LLD 18.1.3 (compatible with GNU linkers)"
+    },
+    "helpers": {
+      "wrapper_sha256": "8dab1a2c0ea2b01555645717b46c0f1506ff951a60a9256669d90bae6859d61d",
+      "filtered_symvers_helper_sha256": "2404fab4a2ed469eab1930a7275c28fd3f5a0bbb1b23c88369338ca23cd26c67",
+      "monitored_build_helper_sha256": "56f39759e4a098562cbafd634a659b007be2a540a4ada6234962711be026e5d5"
+    },
+    "retained_logs": {
+      "build_log_sha256": "e47b0b7f6a9562ff9943e6aecb3d1e26f7d0c98baa5238103dee3b7e4cedf389",
+      "phase_journal_sha256": "6077d2a714ddf98ea5f511058bd1b47dc30ad56e9be4841e542a27532fa1f16b",
+      "resource_monitor_sha256": "449b3727f3f2e649297cf7ff2de8fc45c07bd0dd474d932dc21991b8aa3ff064",
+      "symvers_filter_log_sha256": "c367aa97970b9769e6d3eed92642a887b23b7eadb862ae0289d88d692b40572e"
+    },
+    "process_cleanup": {
+      "recorded_builder_pid": 2463082,
+      "recorded_make_pid": 2463693,
+      "recorded_make_process_group": 2463693,
+      "surviving_recorded_processes_at_review": 0
+    }
+  },
+  "artifact": {
+    "private_path": "/home/corpunum/s22-linux/builds/npu-native-twelve-module-only-out-20261003/drivers/vision/npu.ko",
+    "bytes": 14796512,
+    "sha256": "03e1ad6403265d39e1d6c48d31c1defad3aad984cd972f8fe80f8ee0c4eaa621",
+    "elf_class": "ELF64",
+    "endianness": "little",
+    "machine": "AArch64",
+    "elf_type": "REL",
+    "gnu_build_id": "59da71800d33e0c7dac1936908ffab47ec99584c",
+    "internal_name": "npu",
+    "vermagic": "5.10.260-g4e5c5ad7d950 SMP preempt mod_unload modversions aarch64",
+    "output_inventory": {
+      "ko_count": 1,
+      "ko_paths": ["drivers/vision/npu.ko"],
+      "image_dtb_count": 0
+    },
+    "file_mode": "0664",
+    "parent_directory_mode": "0700"
+  },
+  "static_abi": {
+    "read_only_methods": [
+      "llvm-readelf ELF headers/notes/sections",
+      "modinfo module name and vermagic",
+      "modprobe --dump-modversions static module-file query",
+      "modprobe --show-exports static module-file query"
+    ],
+    "candidate_imports": {
+      "count": 234,
+      "unique_names": 234,
+      "canonical_sha256_crc_tab_name_newline": "99aef867af8439d5c5cf1954ff01cd3f70eff870c5e3dbc19c733b386f0aaf55",
+      "matched_native_ten_ordered_records": true,
+      "native_ten_artifact_sha256": "a221c110ca2833b499b1fc7fbd8d34fbef38a60673aa4a70f0e919d818021200"
+    },
+    "baseline_symvers": {
+      "path": "/home/corpunum/s22-linux/builds/npu-native-eight-out-clang18-recipe-20261002/Module.symvers",
+      "row_count": 17283,
+      "sha256": "15fc69e815cb4da6cb3372f4b5141005ab2e770b0414b67f230f1b185bf03df7"
+    },
+    "filtered_symvers": {
+      "path": "/home/corpunum/s22-linux/builds/npu-native-twelve-dependencies-20261003.symvers",
+      "row_count": 17282,
+      "sha256": "add620bc3a3732654f23161e4c966c7076b020568683f527402c6253cb59a334"
+    },
+    "crc_validation": {
+      "missing_imports_full": 0,
+      "ambiguous_imports_full": 0,
+      "mismatched_imports_full": 0,
+      "missing_imports_filtered": 0,
+      "ambiguous_imports_filtered": 0,
+      "mismatched_imports_filtered": 0,
+      "module_layout_import_crc": "0x0e3c515c",
+      "module_layout_full_symvers_crc": "0x0e3c515c",
+      "module_layout_filtered_symvers_crc": "0x0e3c515c"
+    },
+    "exports": [
+      {
+        "symbol": "vision_register_device",
+        "crc": "0x982f6fee",
+        "baseline_owner": "drivers/vision/npu",
+        "baseline_export": "EXPORT_SYMBOL",
+        "matched": true
+      }
+    ]
+  },
+  "changed_translation_units": [
+    {
+      "source": "drivers/vision/npu/core/npu-log.c",
+      "object_sha256": "a11f6fdc9ee11b2c33595d5b05f38011179ba83d0ef302818deb582d8843205a",
+      "compile_flags_observed": [
+        "-fsanitize=kcfi",
+        "-fsanitize=shadow-call-stack",
+        "-ffixed-x18",
+        "-mbranch-protection=pac-ret+leaf+bti",
+        "-O2"
+      ]
+    },
+    {
+      "source": "drivers/vision/npu/core/npu-util-msgidgen.c",
+      "object_sha256": "47690a97c38e0d6b050e97577381235adef10d8a075e2ab43f698c6bb8cca754",
+      "compile_flags_observed": [
+        "-fsanitize=kcfi",
+        "-fsanitize=shadow-call-stack",
+        "-ffixed-x18",
+        "-mbranch-protection=pac-ret+leaf+bti",
+        "-O2"
+      ]
+    }
+  ],
+  "limitations": [
+    "No kernel rebuild, package, module insertion, phone/SSH/ADB, or deployment action was performed for this review.",
+    "Static module metadata checks do not prove module-loader execution or current phone-kernel ABI compatibility.",
+    "No complete kernel image was built and no NPU firmware, BOOTUP, IRQ, publisher, workqueue, or driver-lifetime behavior was exercised.",
+    "The separate npu_interface_open IRQ/workqueue error-path finding is recorded by the build author and remains unresolved; it was not re-reviewed here."
+  ]
+}

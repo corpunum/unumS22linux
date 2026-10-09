@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "scope": "host-only camera sensor-clock ownership quarantine regression",
+  "worktree": {
+    "branch": "codex/s22-camera-shutdown-quarantine-20261003",
+    "base_review_commit": "18502bf25250daf836502fe8ff3a369f7eacfdf7",
+    "source_tree_mutated": false
+  },
+  "pinned_kernel_source": {
+    "repository": "/home/corpunum/s22-linux/lineage/android_kernel_samsung_s5e9925",
+    "commit": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+    "tree": "5c46cbe12dadbcdb64eec4344c9e8ff0f8a75dee",
+    "derived_optional": {
+      "commit": "3fca50941422439b2019db2e4a3dc1016b2138a1",
+      "tree": "5aad5cf1dbaa0f430377737141f0547e971b0a2d"
+    },
+    "source_sha256": {
+      "is-device-sensor_v2.c": "b88e203fa7ca7fdcf109f969d516601a9cba4702c98a3a0b338b3a6dbcf55265",
+      "is-device-sensor.h": "ee236f792d25ccd0ef63519b461878d933c29dc376627e6e3861fe816ce10d7e",
+      "is-core.c": "2f81e7342a74098e284cef0679afce4ef7e8be34bd81bac9c215bf7f695e1594",
+      "is-resourcemgr.c": "79dea9151d3294c082856d47be30bc3ffc7e165df8109be5fb62b35b338bcd7d",
+      "is-common-config.h": "88bc87df5cc2050a6342952ecfe6ebdae5724980544572ba17f0fda6a1973726",
+      "v10_1_0/is-config.h": "5f06bf13d9f626c084a88cf3f1e045e7d709e26d86efcd6cf74ef7806ee52738"
+    },
+    "reboot_notifier": {
+      "enabled_by_pinned_config": true,
+      "registration_present": true,
+      "handler_calls_is_cleanup": true
+    }
+  },
+  "candidate_files": {
+    "tools/hardware/camera-sensor-clock-unwind.patch": "7808ac0cabc806270a0d07aa2bb974bfd0fc924d3fef33035ba50bf494e768bd",
+    "tools/hardware/camera-sensor-clock-unwind-harness.c": "000e62c7091673a6b1260358ce6641aac763a830827175417647b2a392573619",
+    "tools/hardware/test-camera-sensor-clock-unwind.py": "f8fb0f52263631415e5a1ea616bb45316dcf5494159f999062e2a2b4c8508fc3",
+    "docs/research/CAMERA_SENSOR_CLOCK_UNWIND_2026-10-03.md": "4a64a5c80753b91f57958db7fe443ec6e1ff965080696782f226c213f2723920"
+  },
+  "python_matrix": [
+    {
+      "mode": "normal",
+      "sys_flags": {"isolated": 1, "no_site": 0, "optimize": 0},
+      "tests": 9,
+      "failures": 0,
+      "skips": 0,
+      "status": "passed"
+    },
+    {
+      "mode": "-O",
+      "sys_flags": {"isolated": 1, "no_site": 0, "optimize": 1},
+      "tests": 9,
+      "failures": 0,
+      "skips": 0,
+      "status": "passed"
+    },
+    {
+      "mode": "PYTHONOPTIMIZE=1",
+      "sys_flags": {"isolated": 0, "no_site": 0, "optimize": 1},
+      "tests": 9,
+      "failures": 0,
+      "skips": 0,
+      "status": "passed"
+    },
+    {
+      "mode": "forced public source with absent derived fixture",
+      "sys_flags": {"isolated": 1, "no_site": 0, "optimize": 0},
+      "tests": 9,
+      "failures": 0,
+      "skips": 1,
+      "executed_public_cases": 8,
+      "status": "passed"
+    }
+  ],
+  "wrong_fixture_control": {
+    "fixture": "pinned original source tree supplied as derived root",
+    "expected": "reject commit/tree mismatch",
+    "command": "CAMERA_CLOCK_DERIVED_ROOT=/home/corpunum/s22-linux/lineage/android_kernel_samsung_s5e9925 python3 -I -B tools/hardware/test-camera-sensor-clock-unwind.py CameraSensorClockUnwindTests.test_optional_private_derived_tree_apply_check",
+    "observed_exit_code": 1,
+    "tests_run": 1,
+    "observed_result": "FAIL as expected: camera source identity differs at supplied derived path",
+    "observed_commit_tree": "4e5c5ad7d950e4de0688b5663965f2075654b2ad/5c46cbe12dadbcdb64eec4344c9e8ff0f8a75dee",
+    "expected_derived_commit_tree": "3fca50941422439b2019db2e4a3dc1016b2138a1/5aad5cf1dbaa0f430377737141f0547e971b0a2d",
+    "separate_forced_public_attempt": {
+      "status": "not_counted",
+      "tests_run": 0,
+      "observed": "pinned public-source read timeout on drivers/media/common/videobuf2/videobuf2-core.c before the supplied derived fixture was checked"
+    }
+  },
+  "extracted_c_matrix": {
+    "optimizations": ["-O0", "-O2"],
+    "baseline_clock_failure_reproduction": "passed",
+    "patched_clock_ownership_and_retry_cases": "passed",
+    "baseline_cleanup_reboot_shutdown_escape_reproduction": "passed",
+    "baseline_queued_worker_reboot_branch_csi_stop_reproduction": "passed",
+    "patched_cleanup_reboot_shutdown_quarantine": "passed",
+    "patched_unknown_and_peer_workers_skip_csi_stop_and_sensor_start": "passed",
+    "clean_worker_and_shutdown_behavior_preservation": "passed"
+  },
+  "shutdown_quarantine_observed_behavior": {
+    "unknown_owner_policy": "core-wide retention when any sensor clock owner is unknown",
+    "cleanup": "marks probed sensors reboot=true under mutex_reboot; no front-stop callback",
+    "platform_shutdown": "returns before sensor-thread deinit and CIS work cancellation",
+    "healthy_peer": "retained when another sensor in the camera core is unknown",
+    "queued_start_worker": "before the reboot branch, scans current and peer sensor UNKNOWN state under the current sensor reboot mutex; on observed uncertainty it returns -EUCLEAN without sensor-start or CSI stream-off",
+    "repeat_calls": "idempotent in the extracted host fixture"
+  },
+  "limits": [
+    "The UNKNOWN preflight is not serialized with runtime-PM latching; a concurrent state transition can race the scan.",
+    "The worker skips the reboot branch's CSI stop only if it observes UNKNOWN before that branch; work already past the guard is not quiesced.",
+    "Kernel mutexes, front-stop, CSI calls, work cancellation, sensor-thread deinit, clocks, VFS/V4L2/VB2 lifetime calls are host shims or static checks.",
+    "Already-running asynchronous work, physical DMA/clock state, parent-device teardown, system power removal, and hardware acceptance remain unproven."
+  ],
+  "non_actions": [
+    "No kernel build or source-tree mutation.",
+    "No phone, camera, firmware, stream, module-load, reboot, or device operation.",
+    "No hardware acceptance or deploy authorization."
+  ]
+}

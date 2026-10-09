@@ -1,0 +1,35 @@
+{
+  "schema": "s22-host-regression-matrix/v1",
+  "tested_source_revision": "9472c8b1dbf141686ff8c26b15b7904602009bed",
+  "command": "python3 -I -B tools/hardware/run-host-regressions.py --mode both",
+  "execution": "coordinator on rig; hardware-free reviewed allowlist and clean child environments",
+  "full_matrix": {
+    "exit_code": 1,
+    "script_invocations": 129,
+    "normal_passes": 65,
+    "optimized_passes": 62,
+    "failure_count": 2,
+    "failures": [
+      {"script": "test-npu-publication-drain-ownership.py", "mode": "normal", "reason": "bounded pinned public-source read timeout before target C execution"},
+      {"script": "test-npu-publication-liveness-c.py", "mode": "optimized", "reason": "pinned public-source fetch network unreachable before target C execution"}
+    ],
+    "normal_only_optimized_skips": 3,
+    "corrected_Bluetooth_and_audio_suites": "passed in both modes",
+    "complete_private_log_sha256": "ad8235d9e18ebbc2613f38d6264e8de282855ceca5d049384f9b6116575604e6"
+  },
+  "distinct_fresh_checks": {
+    "attempts_per_affected_script_mode": 1,
+    "same_reviewed_command_and_clean_child_environment": true,
+    "private_fixture_fallback_added": false,
+    "failed_normal_drain_suite_exit": 0,
+    "failed_optimized_liveness_suite_exit": 0,
+    "actual_extracted_C_executed": true,
+    "complete_private_log_sha256": "016f6e45389ef5b8adf66ce235e9908788086f9619eadc1fcf1e37a73cd567f6"
+  },
+  "original_failed_matrix_preserved_and_not_relabelled": true,
+  "earlier_failed_71575f1_matrix_also_preserved": true,
+  "hosted_final_source_result": "not yet claimed by this receipt",
+  "new_phone_mutations": 0,
+  "hardware_acceptance": false,
+  "NPU_BOOTUP_authorized": false
+}

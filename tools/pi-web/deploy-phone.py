@@ -20,6 +20,7 @@ spec={
  'ttyd':(arch/'opt/s22-pi-web/ttyd',0o755),
  'pi-web-session':(arch/'usr/local/bin/pi-web-session',0o755),
  'start-agent-web.py':(p('/srv/s22/agent-web/start-agent-web.py'),0o755),
+ 'pi-readiness.py':(p('/srv/s22/agent-web/pi_readiness.py'),0o644),
 }
 incoming=json.load(sys.stdin)
 assert set(incoming)==set(spec)
@@ -49,7 +50,8 @@ def main():
     args=parser.parse_args()
     paths={'ttyd':ROOT/'rootfs/pi-web-20260921/ttyd.aarch64',
            'pi-web-session':Path(__file__).with_name('pi-web-session'),
-           'start-agent-web.py':Path(__file__).with_name('start-agent-web.py')}
+           'start-agent-web.py':Path(__file__).with_name('start-agent-web.py'),
+           'pi-readiness.py':Path(__file__).with_name('pi_readiness.py')}
     files={name:{'data':base64.b64encode(path.read_bytes()).decode(),
                  'sha256':hashlib.sha256(path.read_bytes()).hexdigest()} for name,path in paths.items()}
     if not args.install:

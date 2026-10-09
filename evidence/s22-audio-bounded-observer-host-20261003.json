@@ -1,0 +1,159 @@
+{
+  "schema": "s22-audio-bounded-observer-host/v1",
+  "date": "2026-10-03",
+  "scope": "host-only bounded stability observer implementation and verification",
+  "worktree": "/home/corpunum/s22-workers/audio-stability-observer-20261003",
+  "branch": "codex/s22-audio-stability-20261003",
+  "base_commit": "e51e13e95607c430a46212e6d4d7e4026fc73a1b",
+  "model_selection": {
+    "model": "gpt-6-luna",
+    "reasoning_effort": "max",
+    "selection_status": "accepted",
+    "backend_attestation": false
+  },
+  "identity_binding": {
+    "trial_identity": "audio-coherent-20261003-first",
+    "pinned_candidate_image_sha256": "6b788b23f54b9b8e84212187544064949b72af20c167cbb02392cbe53ee5a6ab",
+    "pinned_baseline_image_sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+    "candidate_manifest_sha256": "f78bbaddf94ef6d1ae37b059b7455b24a15cbb7c2fab1ec9bbc4e1df5fd1edf8",
+    "expected_unchanged_kernel_gnu_build_id": "b2dda820b18d410d9bf12f1bd2584567d545991d",
+    "expected_profile_module_ids": {
+      "audio-forward": {
+        "snd_soc_samsung_abox": "34a5354a75980688ee7dbeb6a848e04a7d54558f",
+        "rainbow_prince": "510b984887b640ad4ad3c1e9a556ef16c30b38c9",
+        "exynos_usb_audio_offloading": "4f35c50b0eca0d22b2060f7b8d84f03359feacd1"
+      },
+      "audio-reverse": {
+        "snd_soc_samsung_abox": "26347c3373e155fa6badf7883ff162f1d9f6723f",
+        "rainbow_prince": "8a7227b58cb7f4faf73ea92974781d34870bbfac",
+        "exynos_usb_audio_offloading": "8c9b0d4787ea32eae7de0086a4d662b0f351675d"
+      }
+    }
+  },
+  "bounded_policy": {
+    "total_deadline_seconds": 600,
+    "clock": "monotonic",
+    "startup_uptime_gate_seconds": 180,
+    "uptime_probe_offsets_seconds": [
+      0,
+      15,
+      30,
+      45,
+      60,
+      75,
+      90,
+      105,
+      120,
+      135,
+      150,
+      165,
+      180
+    ],
+    "startup_uptime_query_cap_seconds": 3,
+    "full_readiness_startup_polls_max": 2,
+    "startup_readiness_poll_gap_seconds": 15,
+    "readiness_query_cap_seconds": 15,
+    "identity_full_hash_query_cap_seconds": 30,
+    "stability_sample_offsets_from_first_pair_start_seconds": [
+      0,
+      90,
+      180
+    ],
+    "minimum_sample_start_gap_seconds": 60,
+    "minimum_observed_interval_seconds": 180,
+    "maximum_read_only_reconnects_total": 1,
+    "reconnect_backoff_seconds": 2,
+    "capped_query_and_wait_schedule_upper_bound_seconds": 505,
+    "deadline_includes_startup_queries_readiness_identity_full_hash_reconnects_and_spacing": true,
+    "deadline_is_not_a_claim_of_ten_minute_or_full_boot_coverage": true
+  },
+  "verification": {
+    "fake_clock_and_transport_execute_actual_observer": true,
+    "real_waits_used": false,
+    "host_test_matrix": [
+      {
+        "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=0 python3 -B tools/hardware/test-audio-coherent-trial-adapter.py",
+        "result": "PASS",
+        "passed": 35,
+        "failed": 0,
+        "sys_flags_optimize": 0
+      },
+      {
+        "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=1 python3 -O -B tools/hardware/test-audio-coherent-trial-adapter.py",
+        "result": "PASS",
+        "passed": 35,
+        "failed": 0,
+        "sys_flags_optimize": 1
+      },
+      {
+        "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=1 PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-audio-coherent-trial-adapter.py",
+        "result": "PASS",
+        "passed": 35,
+        "failed": 0,
+        "sys_flags_optimize": 1
+      }
+    ],
+    "py_compile": "PASS",
+    "git_diff_check": "PASS",
+    "default_observer_plans": {
+      "audio-forward": {
+        "result": "PASS",
+        "authorized": false,
+        "execution": false,
+        "trial_allowlist": []
+      },
+      "audio-reverse": {
+        "result": "PASS",
+        "authorized": false,
+        "execution": false,
+        "trial_allowlist": []
+      }
+    },
+    "covered_failure_cases": [
+      "delayed connection with one bounded read-only reconnect",
+      "uptime below 180 seconds followed by the uptime gate",
+      "delayed native/model readiness followed by ready state",
+      "three fresh same-boot samples with bound full image and module IDs",
+      "startup and later changed boot ID",
+      "wrong image hash and wrong module IDs",
+      "fatal and hung-task diagnostic terminal failures",
+      "trace-only readiness rejection without fatal relabeling",
+      "later serious fault",
+      "exhausted read-only transport gap",
+      "overall deadline exhaustion",
+      "empty kernel log coverage",
+      "non-progressing fake clock",
+      "UNKNOWN reboot marker remains unresolved with no reboot resend",
+      "old stability receipt and consumed marker refusal without overwrite"
+    ]
+  },
+  "source_sha256": {
+    "tools/hardware/audio-coherent-recovery-reboot-once.py": "3dadaad14953a67339479b534ddee11710463bc7f4382d916899a0924e5b5f80",
+    "tools/hardware/test-audio-coherent-trial-adapter.py": "5c9cf264f2b1707527e8bfd171458c84f3d689d5cd5bce21caf4ba4263054d3d",
+    "docs/research/AUDIO_COHERENT_TRIAL_ADAPTER_2026-10-03.md": "d447b213e55a9d7f83f3dc698597151157f7b69e455954cd8f3848ec1d8b0477"
+  },
+  "safety_and_limits": {
+    "production_authorized": false,
+    "production_trial_allowlist": [],
+    "phone_or_device_contact": false,
+    "ssh": false,
+    "partition_write": false,
+    "reboot": false,
+    "inference_or_service_restart": false,
+    "package_or_image_repack": false,
+    "kernel_build": false,
+    "live_observation_success": false,
+    "audio_hardware_acceptance": false,
+    "bootability_claim": false,
+    "full_boot_log_coverage_established": false,
+    "trustzone_progress_established": false,
+    "unknown_reboot_marker_cleared_or_replayed": false,
+    "host_tests_are_hardware_acceptance": false
+  },
+  "limitations": [
+    "This receipt reports host-only code and fake-transport verification, not a live post-reboot stability interval.",
+    "A complete current ring does not establish full-boot log coverage.",
+    "Three samples spanning 180 seconds do not establish ten-minute, full-boot, or audio-hardware acceptance.",
+    "A future production trial requires fresh exact-image owner authorization and independent review."
+  ]
+}

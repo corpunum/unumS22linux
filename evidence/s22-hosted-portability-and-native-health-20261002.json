@@ -1,0 +1,55 @@
+{
+  "schema": "s22-source-followup-checkpoint/v1",
+  "scope": "hosted_source_tests_and_read_only_native_health_not_hardware_acceptance",
+  "publication": {
+    "branch": "s22/luna-driver-completion-20260923",
+    "verified_remote_sha": "3466dcb4294870616b6d52c3635b4af8b981f7f0",
+    "origin_master_sha_unchanged": "20605dbe623e0909cf219c3cae9ef7bb597b15a6",
+    "local_master_sha_unchanged": "fb60a2c1fd69544f525f48de19e1af266880b2ba",
+    "original_five_tracked_changes_preserved": true,
+    "published_images_firmware_weights_credentials_or_private_traces": false
+  },
+  "hosted_tests": {
+    "run_id": 36995251510,
+    "head_sha": "3466dcb4294870616b6d52c3635b4af8b981f7f0",
+    "conclusion": "success",
+    "audio_loader_regressions_executed_in_normal_and_optimized_modes": 8,
+    "audio_actual_c_scenarios_per_c_optimization_executed": 9,
+    "c_optimization_modes": ["-O0", "-O2"],
+    "complete_allowlisted_suite_failure_count": 0,
+    "audio_source_fixture_unavailability_skip": false,
+    "unrelated_fixture_availability_and_three_optimization_exclusions_retained": true
+  },
+  "read_only_native_snapshot": {
+    "captured_at": "2026-10-02T10:26:44.351391+00:00",
+    "same_boot_as_0853_baseline": true,
+    "same_kernel_as_0853_baseline": true,
+    "kernel_gnu_build_id": "b2dda820b18d410d9bf12f1bd2584567d545991d",
+    "uptime_seconds": 428772.04,
+    "pid1": "native-guardian",
+    "native_remote_control_ready": true,
+    "assistant_health_ok": true,
+    "assistant_idle": true,
+    "desktop_environment_ready": true,
+    "desktop_pi_status": "ready",
+    "browser_terminal_status": "ready",
+    "dedicated_pi_session_status": "ready",
+    "loaded_module_count": 325,
+    "serious_fault_in_available_ring": false,
+    "full_boot_log_coverage": false,
+    "recovery_partition_full_hash_reread_at_this_checkpoint": false,
+    "trustzone_request_completion_proven": false
+  },
+  "operation_limits": {
+    "new_partition_writes": 0,
+    "new_reboot_requests": 0,
+    "new_pi_session_startups": 0,
+    "new_inference_requests": 0,
+    "new_npu_bootup_requests": 0,
+    "new_raw_hci_socket_tests": 0,
+    "new_camera_or_audio_stream_tests": 0,
+    "host_control_services_changed": false,
+    "independent_hardware_rescue_demonstrated": false,
+    "new_driver_hardware_acceptance": false
+  }
+}

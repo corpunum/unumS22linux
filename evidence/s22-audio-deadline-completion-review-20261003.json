@@ -1,0 +1,290 @@
+{
+  "schema": "s22-audio-deadline-completion-independent-review/v1",
+  "review_date": "2026-10-03",
+  "disposition": "PASS_LIMITED",
+  "scope": "Independent host-only review of the frozen finalization-deadline correction and its receipt/guard acceptance contract.",
+  "review_context": {
+    "worktree": "/home/corpunum/s22-workers/audio-deadline-review-20261003",
+    "branch": "codex/s22-audio-deadline-review-20261003",
+    "reviewed_head": "9472c8b1dbf141686ff8c26b15b7904602009bed",
+    "author_commit": "fb7f5c5ab86b1c8dd3cc6175d10ca3d689426169",
+    "explicit_worker_selection": "gpt-6-luna/max",
+    "inference_backend_attested": false,
+    "reviewer_owned_paths": [
+      "docs/research/AUDIO_DEADLINE_COMPLETION_REVIEW_2026-10-03.md",
+      "evidence/s22-audio-deadline-completion-review-20261003.json"
+    ]
+  },
+  "frozen_inputs": {
+    "observer_source_sha256": "68827be195abf9afbe176b6af7261f9153cc4c435d539d98f1706c2af5f34dce",
+    "test_source_sha256": "436ef4f97c3ac9b934b7b2ec379d266c89cfef27a41222cc563b1c74325a8cb5",
+    "author_note_sha256": "95753e371454de67716358f5754491c06bd3611b22082fe5308563779dc804d7",
+    "author_receipt_sha256": "4ba6dc761beae7e1a4ae383b84818efef1a4d56ac1e627a38bc4800d35a8c7ef",
+    "prior_freshness_observer_sha256": "eee1e2a467bf1df57325966b6573e1a8dc5dd031d71ef0e8088bd23272f349ea",
+    "prior_freshness_tests_sha256": "8cbfab6fcee0da24b93ed0d75af5b66b7cc09b32c21a24f1997af15607eccca4",
+    "prior_blocked_review_sha256": "1c606da8cce90d98e7b1c3fd017a24e328a02ce2e53f69243e71699c9ca8027b",
+    "prior_blocked_review_receipt_sha256": "5c8d6827ee83b8ca2724770becae1e81aa5b70021d99088662c66b8845e20247",
+    "preserved_pre_fix_witness_reused": true,
+    "pre_fix_witness_source": "evidence/s22-audio-deadline-completion-host-20261003.json#pre_correction_counterexample",
+    "pre_fix_witness_repeated": false,
+    "prior_review_records_modified": false
+  },
+  "documentation_scope_clarification": {
+    "commit": "1239c02cd5419276e89960ef89dd8eaf0f394c58",
+    "change_type": "documentation-only; not cherry-picked into the frozen review worktree",
+    "clarified_note_sha256": "efd375f8916ac0e0e0c2c899c6f4aaeadfdefcb7fc82fdaaee9762dc2bad68f6",
+    "accurately_describes_reproduced_cleanup_seam": true,
+    "summary": "A timely acceptance point precedes operation-lock cleanup. Cleanup, method return and CLI output are not bounded by the 600-second cutoff; this does not weaken the remote observation deadline."
+  },
+  "acceptance_contract": {
+    "persisted_result_status": "provisional-bounded-stability-observed",
+    "receipt_alone_is_acceptance": false,
+    "required": [
+      "same active stability operation under the global operation lock",
+      "exact stability marker ID and operation kind",
+      "durable result receipt path and SHA-256 match",
+      "global marker status complete and outcome success",
+      "final monotonic deadline check before the acceptance point"
+    ],
+    "unbound_provisional_cli_exit": 2,
+    "late_result_persist_behavior": "Refuses to complete the pending stability marker; records UNKNOWN and does not return acceptance.",
+    "late_completion_behavior": "Under the held global lock, verify the exact active operation and matching completed marker, demote only that current completion to UNKNOWN, and nest the original completion and provisional receipt reference.",
+    "replay_policy": "Consumed receipts/markers are preserved and same-trial replay makes no transport call."
+  },
+  "host_test_matrix": [
+    {
+      "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=0 python3 -B tools/hardware/test-audio-coherent-trial-adapter.py -q",
+      "exit_code": 0,
+      "result": "PASS",
+      "passed": 42,
+      "failed": 0,
+      "sys_flags_optimize": 0
+    },
+    {
+      "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=1 python3 -O -B tools/hardware/test-audio-coherent-trial-adapter.py -q",
+      "exit_code": 0,
+      "result": "PASS",
+      "passed": 42,
+      "failed": 0,
+      "sys_flags_optimize": 1
+    },
+    {
+      "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=1 PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-audio-coherent-trial-adapter.py -q",
+      "exit_code": 0,
+      "result": "PASS",
+      "passed": 42,
+      "failed": 0,
+      "sys_flags_optimize": 1
+    }
+  ],
+  "plan_checks": [
+    {
+      "command": "python3 -B tools/hardware/deploy-audio-coherent-recovery.py --profile audio-forward",
+      "exit_code": 0,
+      "authorized": false,
+      "allowlist": [],
+      "execution": false,
+      "operation_marker_created": false,
+      "partition_written": false,
+      "reboot_performed": false
+    },
+    {
+      "command": "python3 -B tools/hardware/deploy-audio-coherent-recovery.py --profile audio-reverse",
+      "exit_code": 0,
+      "authorized": false,
+      "allowlist": [],
+      "execution": false,
+      "operation_marker_created": false,
+      "partition_written": false,
+      "reboot_performed": false
+    },
+    {
+      "command": "python3 -B tools/hardware/audio-coherent-recovery-reboot-once.py --profile audio-forward",
+      "exit_code": 0,
+      "authorized": false,
+      "allowlist": [],
+      "execution": false,
+      "operation_marker_created": false,
+      "reboot_marker_created": false,
+      "reboot_performed": false,
+      "stability_deadline_seconds": 600,
+      "minimum_remote_interval_seconds": 180,
+      "minimum_final_sample_start_seconds": 195
+    },
+    {
+      "command": "python3 -B tools/hardware/audio-coherent-recovery-reboot-once.py --profile audio-reverse",
+      "exit_code": 0,
+      "authorized": false,
+      "allowlist": [],
+      "execution": false,
+      "operation_marker_created": false,
+      "reboot_marker_created": false,
+      "reboot_performed": false,
+      "stability_deadline_seconds": 600,
+      "minimum_remote_interval_seconds": 180,
+      "minimum_final_sample_start_seconds": 195
+    }
+  ],
+  "freshness_and_interval_controls": {
+    "actual_tested_profiles": ["audio-forward", "audio-reverse"],
+    "forward_and_reverse_success": true,
+    "sample_host_offsets_seconds": [0.0, 90.0, 195.0],
+    "sample_remote_uptime_seconds": [180.1, 270.09999999999997, 375.09999999999997],
+    "host_intervals_seconds": [null, 90.0, 105.0],
+    "remote_intervals_seconds": [null, 89.99999999999997, 105.0],
+    "host_stability_seconds": 195.0,
+    "remote_stability_seconds": 194.99999999999997,
+    "exact_finite_numeric_uptime_required": true,
+    "per_gap_host_remote_reconciliation_within_skew": true,
+    "unchanged_quiet_dmesg_sha_accepted_with_other_gates": true,
+    "failure_controls": [
+      "replayed uptime/readiness",
+      "decreasing uptime",
+      "implausibly slow same-boot progression",
+      "NaN and positive infinity",
+      "negative and out-of-range values",
+      "boolean and numeric-string values",
+      "different boot ID",
+      "195-second host interval with 165-second remote interval"
+    ],
+    "failure_result": "UNKNOWN with retry_allowed=false and no success receipt"
+  },
+  "deadline_and_finalization_probes": {
+    "pre_fix_witness": {
+      "reused_not_repeated": true,
+      "prior_behavior": "Late final receipt persistence at fake t=601 was followed by bounded-stability-observed, complete/success marker with matching path/digest, and CLI zero exit."
+    },
+    "late_result_persist": {
+      "actual_observer_test": "test_deadline_after_final_receipt_persist_keeps_candidate_unknown_and_refused",
+      "late_at_seconds": 601,
+      "pending_marker_completed": false,
+      "failure_status": "UNKNOWN",
+      "retry_allowed": false,
+      "success_returned": false
+    },
+    "late_guard_completion": {
+      "actual_observer_test": "test_deadline_after_guard_completion_demotes_only_matching_marker_and_preserves_history",
+      "late_at_seconds": 601,
+      "marker_status": "unknown",
+      "marker_outcome": "UNKNOWN",
+      "original_success_nested": true,
+      "provisional_receipt_path_and_digest_nested": true,
+      "transient_first_demotion_write_failure_retried": true,
+      "same_trial_retry_transport_calls": 0
+    },
+    "wrong_completed_marker_identity": [
+      {
+        "mismatch": "receipt_path",
+        "observer_error": "TerminalObservationError",
+        "marker_unchanged_after_refusal": true,
+        "acceptance_returned": false
+      },
+      {
+        "mismatch": "receipt_sha256",
+        "observer_error": "TerminalObservationError",
+        "marker_unchanged_after_refusal": true,
+        "acceptance_returned": false
+      },
+      {
+        "mismatch": "operation_kind",
+        "observer_error": "TerminalObservationError",
+        "marker_unchanged_after_refusal": true,
+        "acceptance_returned": false
+      },
+      {
+        "mismatch": "open_marker_inode_vs_replaced_path_inode",
+        "observer_error": "TerminalObservationError",
+        "marker_unchanged_after_refusal": true,
+        "acceptance_returned": false
+      }
+    ],
+    "delayed_final_marker_readback": {
+      "injected_fake_time_seconds": 601,
+      "observer_error": "TimeoutError",
+      "marker_status": "unknown",
+      "marker_outcome": "UNKNOWN",
+      "original_success_nested": true,
+      "acceptance_returned": false
+    },
+    "permanent_demotion_write_failure": {
+      "observer_error": "RuntimeError",
+      "error": "late stability success marker could not be durably changed to UNKNOWN",
+      "failure_receipt_category": "timeout",
+      "success_returned": false,
+      "observed_marker_state_when_all_unknown_writes_failed": {
+        "status": "complete",
+        "outcome": "success",
+        "receipt_digest_matches_provisional_candidate": true
+      },
+      "interpretation": "No observer acceptance is returned. Local durability failure leaves the marker unresolved for separate inspection; marker-only success interpretation is unsupported."
+    },
+    "post_acceptance_cleanup_delay": {
+      "probe": "Actual synthetic observer invoked through the CLI; _LockedOperation.__exit__ performed real cleanup, then the fake monotonic clock advanced to 601 before control returned to observe_stability().",
+      "clock_at_method_and_cli_return_seconds": 601,
+      "returned_status": "bounded-stability-observed",
+      "finalization_accepted": true,
+      "cli_exit_code": 0,
+      "marker_status": "complete",
+      "marker_outcome": "success",
+      "marker_receipt_digest_matches": true,
+      "seven_synthetic_remote_calls": true,
+      "acceptance_check_and_marker_readback_were_timely": true,
+      "remote_observation_overrun_demonstrated": false,
+      "finding": "Method/CLI return latency is unbounded after timely acceptance; this does not contradict the <=600 remote observation/acceptance cutoff."
+    }
+  },
+  "regression_and_identity_review": {
+    "one_shot_request_and_initial_observe_source_hunks_changed": false,
+    "inactive_cli_plan_path_changed": false,
+    "only_cli_change": "Unaccepted stability result exits nonzero.",
+    "authorization_false_and_allowlist_empty": true,
+    "unknown_reboot_marker_preserved_and_not_replayed": true,
+    "old_stability_receipt_and_consumed_marker_preserved_and_refused": true,
+    "npu_operation_or_authorization_path_added_or_modified": false,
+    "baseline_image_sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+    "candidate_image_sha256": "6b788b23f54b9b8e84212187544064949b72af20c167cbb02392cbe53ee5a6ab",
+    "candidate_manifest_sha256": "f78bbaddf94ef6d1ae37b059b7455b24a15cbb7c2fab1ec9bbc4e1df5fd1edf8",
+    "kernel_gnu_build_id": "b2dda820b18d410d9bf12f1bd2584567d545991d",
+    "forward_postboot_module_ids": {
+      "snd_soc_samsung_abox": "26347c3373e155fa6badf7883ff162f1d9f6723f",
+      "rainbow_prince": "8a7227b58cb7f4faf73ea92974781d34870bbfac",
+      "exynos_usb_audio_offloading": "8c9b0d4787ea32eae7de0086a4d662b0f351675d"
+    },
+    "reverse_postboot_module_ids": {
+      "snd_soc_samsung_abox": "34a5354a75980688ee7dbeb6a848e04a7d54558f",
+      "rainbow_prince": "510b984887b640ad4ad3c1e9a556ef16c30b38c9",
+      "exynos_usb_audio_offloading": "4f35c50b0eca0d22b2060f7b8d84f03359feacd1"
+    }
+  },
+  "consumer_analysis": {
+    "in_repo_acceptance_consumer": "Observer CLI consumes finalization.accepted and exits nonzero unless exactly true; the normal script entrypoint reports raised finalization errors as refusal.",
+    "separate_stability_marker_or_receipt_acceptance_parser_found": false,
+    "marker_only_complete_success_is_supported_acceptance": false,
+    "permanent_demotion_failure_note": "The on-disk marker may remain late complete/success when every local UNKNOWN write fails, although no observer success result or CLI zero exit is produced. Any such state requires separate inspection; no durability guarantee is made."
+  },
+  "verification": {
+    "source_diff_reviewed": true,
+    "source_diff_check": "PASS",
+    "full_42_case_suite": "PASS in normal, -O, and PYTHONOPTIMIZE=1 modes",
+    "default_plan_commands": "PASS for deploy and observer profiles, forward and reverse",
+    "temporary_probe_files_removed_with_fixtures": true,
+    "review_artifacts_only_written_in_worktree": true
+  },
+  "safety_and_limits": {
+    "phone_or_device_contact": false,
+    "ssh": false,
+    "adb": false,
+    "usb": false,
+    "partition_write": false,
+    "reboot": false,
+    "service_restart": false,
+    "inference": false,
+    "ci": false,
+    "heavy_build_or_package_operation": false,
+    "audio_hardware_acceptance": false,
+    "bootability_claim": false,
+    "local_durability_syscall_hard_bounded_to_600_seconds": false,
+    "method_or_cli_return_hard_bounded_to_600_seconds": false,
+    "host_only_evidence_is_device_acceptance": false
+  }
+}

@@ -1,0 +1,43 @@
+diff --git a/sound/soc/samsung/abox/abox.c b/sound/soc/samsung/abox/abox.c
+--- a/sound/soc/samsung/abox/abox.c
++++ b/sound/soc/samsung/abox/abox.c
+@@ -559,6 +559,6 @@ static int abox_ipc_queue_put(struct abox_data *data, struct device *dev,
+ 		int hw_irq, const ABOX_IPC_MSG *msg, size_t size,
+ 		u64 trace_seq, bool *trigger_enabled, bool trigger_start,
+-		bool *duplicate)
++		bool *duplicate, bool *duplicate_pending)
+ {
+ 	spinlock_t *lock = &data->ipc_queue_lock;
+ 	size_t length = ARRAY_SIZE(data->ipc_queue);
+@@ -577,5 +577,6 @@ static int abox_ipc_queue_put(struct abox_data *data, struct device *dev,
+ 	int ret;
+ 
+ 	*duplicate = false;
++	*duplicate_pending = false;
+ 	if (unlikely(sizeof(ipc->msg) < size))
+ 		return -EINVAL;
+@@ -585,4 +586,5 @@ static int abox_ipc_queue_put(struct abox_data *data, struct device *dev,
+ 	if (trigger_enabled && *trigger_enabled == trigger_start) {
+ 		*duplicate = true;
++		*duplicate_pending = !__abox_ipc_queue_empty(data);
+ 		ret = 0;
+ 	} else if (!__abox_ipc_queue_full(data)) {
+@@ -700,4 +702,5 @@ static int abox_schedule_ipc(struct device *dev, struct abox_data *data,
+ 	int retry = 0;
+ 	int ret;
+ 	bool duplicate;
++	bool duplicate_pending;
+ 	u64 trace_seq = 0;
+@@ -723,7 +726,10 @@ static int abox_schedule_ipc(struct device *dev, struct abox_data *data,
+ 		ret = abox_ipc_queue_put(data, dev, hw_irq, msg, size,
+ 				trace_seq, trigger_enabled, trigger_start,
+-				&duplicate);
+-		if (duplicate)
++				&duplicate, &duplicate_pending);
++		if (duplicate) {
++			if (duplicate_pending)
++				queue_work(data->ipc_workqueue, &data->ipc_work);
+ 			break;
++		}
+ 		if (trace_seq && trace_abox_pcm_trigger_queue_enabled())
+ 			trace_abox_pcm_trigger_queue(trace_seq, ktime_get_ns(),

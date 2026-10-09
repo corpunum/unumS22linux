@@ -1,0 +1,90 @@
+{
+  "schema": "s22-audio-coherent-recovery-profile-host/v1",
+  "date": "2026-10-03",
+  "result": "host_only_profile_and_receipt_validation_complete_no_device_operation",
+  "base_commit": "7765ce59ea96aaa04958811c8eabbd229e1a6921",
+  "owned_code_sha256": {
+    "tools/hardware/audio-coherent-recovery-profile.py": "40526594559cc839d7d3b5371c4dff3480d6a5c69394476eedd8047abbe5f0cc",
+    "tools/hardware/test-audio-coherent-recovery-profile.py": "c13b8269d5bb9f4dea7f0862f76203f9a7a8d99aeb79fb1e4f54ab02c60d32d3"
+  },
+  "reused_helpers": {
+    "tools/hardware/deploy-audio-recovery.py": "d0c54cc306e3a8a80cb79d79958fceedf6bb5945dabc7606e02b12d27dc00fd3",
+    "tools/hardware/test-recovery-deployment-hardening.py": "10efaccce960c9fb7a0bc774715b56e16b00debeaf65cdd8ce8c6a59501fb424"
+  },
+  "artifact_pins": {
+    "candidate_image": {
+      "path": "builds/audio-coherent-recovery-stripped-host-20261003/recovery.img",
+      "bytes": 100663296,
+      "sha256": "6b788b23f54b9b8e84212187544064949b72af20c167cbb02392cbe53ee5a6ab"
+    },
+    "candidate_manifest": {
+      "path": "builds/audio-coherent-recovery-stripped-host-20261003/manifest.json",
+      "sha256": "f78bbaddf94ef6d1ae37b059b7455b24a15cbb7c2fab1ec9bbc4e1df5fd1edf8",
+      "schema": "s22-audio-coherent-recovery-package/v1",
+      "phone_access": false,
+      "deployed": false,
+      "module_loaded": false,
+      "boot_authorized": false,
+      "avb_algorithm": "NONE"
+    },
+    "camera_baseline": {
+      "path": "builds/camera-module-recovery-20260927/recovery.img",
+      "bytes": 100663296,
+      "sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f"
+    },
+    "lineage_reference_sha256": "b5bf01c4a47091eb95078fc69b133b44c2b453b31c23433594c5b605e3747b55",
+    "static_inventory": {
+      "ramdisk_modules": 324,
+      "ramdisk_imports": 16569,
+      "selected_external_wlan_imports": 495,
+      "module_loader_or_runtime_membership_proven": false
+    }
+  },
+  "profiles": {
+    "audio-forward": {
+      "before_sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+      "target_sha256": "6b788b23f54b9b8e84212187544064949b72af20c167cbb02392cbe53ee5a6ab",
+      "staging_directory": "/srv/s22/audio-coherent-forward-20261003",
+      "rollback_filename": "camera-baseline-rollback.img",
+      "rendered_remote_sha256": "7eac798fa9420b2b7275fea94e754558992ba5cceea17d709fff42f1c195e526",
+      "actual_artifact_plan_validation": "passed"
+    },
+    "audio-reverse": {
+      "before_sha256": "6b788b23f54b9b8e84212187544064949b72af20c167cbb02392cbe53ee5a6ab",
+      "target_sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+      "staging_directory": "/srv/s22/audio-coherent-reverse-20261003",
+      "rollback_filename": "audio-candidate-rollback.img",
+      "rendered_remote_sha256": "115d2f9a5f7961b719db95e767efc8826c5a48a819b16b3d46fb86493d4a9f12",
+      "actual_artifact_plan_validation": "passed"
+    }
+  },
+  "test_matrix": {
+    "suite_cases": 13,
+    "private_artifact_fixture_enabled": true,
+    "modes": [
+      {"mode": "normal", "sys_flags_optimize": 0, "passed": 13, "failed": 0},
+      {"mode": "python3 -O", "sys_flags_optimize": 1, "passed": 13, "failed": 0},
+      {"mode": "PYTHONOPTIMIZE=1 python3 -B", "sys_flags_optimize": 1, "passed": 13, "failed": 0}
+    ],
+    "rendered_stage_fake_filesystem": {
+      "both_profile_directions": true,
+      "exact_shared_remote_body_executed": true,
+      "modeled_partition_write_bytes": 0,
+      "flash_body_executed": false
+    },
+    "transport_called": false,
+    "operation_marker_created": false
+  },
+  "safety_and_acceptance": {
+    "stage_or_flash_cli_available": false,
+    "current_deployment_authorized": false,
+    "independent_hardware_rescue_demonstrated": false,
+    "phone_access": false,
+    "ssh_or_adb_used": false,
+    "partition_written": false,
+    "reboot_performed": false,
+    "bootability_established": false,
+    "audio_hardware_acceptance": false
+  },
+  "reserved_trial_identity_created": false
+}

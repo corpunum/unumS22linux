@@ -1,0 +1,45 @@
+{
+  "schema": "s22-frozen-host-regression-run/v1",
+  "source_head": "c189649aa75389180a3d4916df9cf0906043edaa",
+  "hardware_free": true,
+  "full_run": {
+    "normal_invocations": 58,
+    "optimized_invocations": 55,
+    "normal_passed": 56,
+    "optimized_passed": 52,
+    "failed": 5,
+    "exit_code": 1,
+    "log_sha256": "27f0b03e6e648a4dd774e40c6878d5723f681d0dcf5d6062e5a1fa317817c2df",
+    "passed": false,
+    "failures": [
+      {"mode": "normal", "script": "test-npu-publication-drain-ownership.py", "exit_code": 1, "reason": "pinned public source SSL handshake timeout"},
+      {"mode": "normal", "script": "test-bt-hci-lifecycle-c.py", "exit_code": 77, "reason": "pinned public source network unavailable"},
+      {"mode": "optimized", "script": "test-npu-full-lifecycle-profile.py", "exit_code": 77, "reason": "pinned public source read timeout"},
+      {"mode": "optimized", "script": "test-npu-publication-liveness-c.py", "exit_code": 1, "reason": "pinned public source SSL handshake timeout"},
+      {"mode": "optimized", "script": "test-audio-ipc-worker-pm.py", "exit_code": 77, "reason": "pinned public source read timeout"}
+    ],
+    "explicit_case_skips_per_mode": {"optional_audio_source_output": 3, "unavailable_AVB_tool_fixtures": 3},
+    "normal_only_scripts": 3
+  },
+  "separate_local_fixture_supplement": {
+    "same_frozen_test_source": true,
+    "existing_clean_derived_fixture_head": "3fca50941422439b2019db2e4a3dc1016b2138a1",
+    "pinned_public_base": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+    "existing_each_test_source_hash_and_revision_checks_preserved": true,
+    "runner_environment_policy_changed": false,
+    "tests": [
+      {"mode": "normal", "script": "test-npu-publication-drain-ownership.py", "exit_code": 0, "log_sha256": "771914bf795c7485e36bbc018a748c7f04156b9b79cda9d2a7ccdd6b3019ed75"},
+      {"mode": "normal", "script": "test-bt-hci-lifecycle-c.py", "exit_code": 0, "log_sha256": "dfc7113b337863cc598fa2e954e5c923843909c2b3c3f8711a6b27414cadeb8b"},
+      {"mode": "optimized", "script": "test-npu-full-lifecycle-profile.py", "exit_code": 0, "log_sha256": "eccd0392e56942069b69bf6010dd547e4c8c1be15a2784252b583172d459d951"},
+      {"mode": "optimized", "script": "test-npu-publication-liveness-c.py", "exit_code": 0, "log_sha256": "d3bd62f0f150c272e628bf34bca77ca68f7bd74bbbf9b4a06e4eca78792de180"},
+      {"mode": "optimized", "script": "test-audio-ipc-worker-pm.py", "exit_code": 0, "log_sha256": "8a7b1405d4c8e5591f1164970af1902b2145879b8e275965f671b12b8d8fb2bd"}
+    ],
+    "does_not_relabel_failed_full_run": true
+  },
+  "limits": [
+    "The five supplemental checks are distinct local-fixture executions, not a successful full public-fixture run.",
+    "Passing extracted C and synthetic tests does not prove driver operation on the phone.",
+    "The eight-case audio packager tests did not cover its separately reproduced WLAN label and isolated mkbootimg import blockers.",
+    "No image packaging, module load, device write, reboot, or powered hardware test was performed by this run."
+  ]
+}

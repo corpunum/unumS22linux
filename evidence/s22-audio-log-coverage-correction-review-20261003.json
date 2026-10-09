@@ -1,0 +1,137 @@
+{
+  "schema": "s22-audio-log-coverage-correction-review/v1",
+  "review_date": "2026-10-03",
+  "disposition": "PASS_LIMITED",
+  "scope": "independent host-only review of the frozen audio observer coverage correction",
+  "worktree": "/home/corpunum/s22-workers/audio-coverage-review-20261003",
+  "review_head": "d06bb09bcb69fd1418863ae000181afa66fa1938",
+  "correction_author_commit": "473de37bb9590bee05e3173a961ff42e6841e37b",
+  "correction_import_commit": "6028839b9fda74b283bac172935fc5abbffeb4d1",
+  "correction_import_parent": "7986c0559cf170006eb33e5699f95ff194463796",
+  "previous_blocked_review": {
+    "commit": "8b42d94e3810b81566b3701918d6c617ede64a57",
+    "preserved_byte_for_byte": true,
+    "sha256": "955138685161fce089b41a034e80fb1063cc95f7de90c7f5ecf2c4a41cf5071c"
+  },
+  "audio_path_unchanged_after_import": true,
+  "reviewer_owned_paths": [
+    "docs/reviews/AUDIO_LOG_COVERAGE_CORRECTION_REVIEW_2026-10-03.md",
+    "evidence/s22-audio-log-coverage-correction-review-20261003.json"
+  ],
+  "corrected_source_hashes": {
+    "tools/hardware/audio-coherent-recovery-reboot-once.py": "8721b247df2b97b83c56a895f1b26dbb1a588595fae4beef5983cbdf9d3f1cc2",
+    "tools/hardware/test-audio-coherent-trial-adapter.py": "17b1c1a201e979708f106280744ae20dcfb4bba05a3d3ce38dc19519f843b4b2",
+    "docs/research/AUDIO_COHERENT_TRIAL_ADAPTER_2026-10-03.md": "b8f33e65fd2ce355ce23c1982c8e5e2e9f15aa9b5b5f8138cd00ea6d355dffb5",
+    "evidence/s22-audio-coherent-log-coverage-host-20261003.json": "98821c2cca69cc211499cac7715f0b34a1c83a1e799c68a9c9de8bd0888eefd9"
+  },
+  "prior_counterexample": {
+    "pre_fix_observer_source": "correction import parent 7986c0559cf170006eb33e5699f95ff194463796",
+    "actual_rendered_collector_run": true,
+    "harness_controls": "dmesg output stubbed to empty success; local HTTP and non-dmesg subprocess probes disabled",
+    "dmesg_result": "success with empty stdout",
+    "classifier_fields": {
+      "assessment": "incomplete",
+      "capture_complete": true,
+      "coverage_complete": false,
+      "fatal_indicators": [],
+      "liveness_unresolved": false,
+      "serious_fault": false
+    },
+    "old_validator_result": "ACCEPTED_EMPTY_SUCCESSFUL_DMESG"
+  },
+  "corrected_counterexample": {
+    "actual_rendered_collector_run": true,
+    "harness_controls": "dmesg output stubbed to empty success; local HTTP and non-dmesg subprocess probes disabled",
+    "classifier_input_available_export": "inserted fixed expression reads log_classification.input_available at the unique pinned JSON output point",
+    "no_fixture_fabricated_input_available": true,
+    "collector_fields": {
+      "input_available": true,
+      "assessment": "incomplete",
+      "capture_complete": true,
+      "coverage_complete": false,
+      "fatal_indicators": [],
+      "liveness_unresolved": false,
+      "serious_fault": false
+    },
+    "corrected_validator_result": "REJECTED: kernel diagnostic input/capture/coverage is unavailable or incomplete"
+  },
+  "reviewed_predicate": {
+    "source": "tools/hardware/audio-coherent-recovery-reboot-once.py:171-189",
+    "requires_exact_true": ["input_available", "capture_complete", "coverage_complete"],
+    "requires_empty": ["fatal_indicators"],
+    "requires_exact_zero_int": ["hung_task_warning_count", "call_trace_count"],
+    "requires_exact_false": ["liveness_unresolved"],
+    "requires_assessment": "no_indicators",
+    "full_boot_log_coverage": "requires exact bool and preserves either true or false; does not promote current-ring coverage"
+  },
+  "additional_count_field_controls": {
+    "fields": ["hung_task_warning_count", "call_trace_count"],
+    "values_tested_per_field": ["missing", false, true, 0.0, "0", 1],
+    "rejected": 12,
+    "total": 12
+  },
+  "observation_failure_integration_test": {
+    "test": "test_incomplete_rendered_log_cannot_complete_initial_observation",
+    "guarded_fake_reboot_requests": 1,
+    "success_observation_receipt_created": false,
+    "failure_receipt_status": "UNKNOWN",
+    "temporary_observation_marker_status": "unknown",
+    "marker_outcome_success": false
+  },
+  "other_review_checks": {
+    "trace_only_is_rejected_for_this_operation": true,
+    "trace_only_is_reclassified_as_fatal": false,
+    "full_boot_false_and_true_preserved_as_bool": true,
+    "identity_readback_and_one_request_source_paths_changed_by_correction": false,
+    "current_deployment_authorized": false,
+    "execution_allowlist": [],
+    "four_default_plans_exit_zero_and_do_not_execute": true,
+    "actual_trial_receipt_directory_exists": false,
+    "actual_trial_markers_present": []
+  },
+  "host_test_matrix": [
+    {
+      "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=0 python3 -B tools/hardware/test-audio-coherent-trial-adapter.py",
+      "result": "PASS",
+      "passed": 28,
+      "failed": 0,
+      "optimize": 0,
+      "elapsed_seconds": 0.356
+    },
+    {
+      "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=1 python3 -O -B tools/hardware/test-audio-coherent-trial-adapter.py",
+      "result": "PASS",
+      "passed": 28,
+      "failed": 0,
+      "optimize": 1,
+      "elapsed_seconds": 0.407
+    },
+    {
+      "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=1 PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-audio-coherent-trial-adapter.py",
+      "result": "PASS",
+      "passed": 28,
+      "failed": 0,
+      "optimize": 1,
+      "elapsed_seconds": 0.398
+    }
+  ],
+  "verification_limits": {
+    "ssh": false,
+    "phone_or_device_access": false,
+    "partition_write": false,
+    "reboot": false,
+    "pcm_or_audio_hardware_test": false,
+    "kernel_build": false,
+    "package_or_repack": false,
+    "new_boot_or_hardware_acceptance": false,
+    "ten_minute_stability_observation_implemented": false,
+    "ten_minute_stability_observation_authorized": false,
+    "full_boot_log_coverage_established": false,
+    "trustzone_progress_established": false
+  },
+  "unresolved_next_steps": [
+    "A future ten-minute, 11-sample, read-only stability observer requires separate owner authorization and independent review.",
+    "Full-boot log coverage requires independent proof of collection from boot start without truncation or overrun.",
+    "TrustZone progress requires a separate relevant progress signal."
+  ]
+}

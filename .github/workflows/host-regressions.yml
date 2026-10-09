@@ -1,0 +1,24 @@
+name: Hardware-free host regressions
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Report Python version
+        run: python3 --version
+      - name: Test runner policy
+        run: python3 -I -B tools/hardware/test-host-regression-runner.py
+      - name: Run fixed hardware-free host suite
+        run: python3 -I -B tools/hardware/run-host-regressions.py --mode both

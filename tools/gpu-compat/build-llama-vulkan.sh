@@ -13,6 +13,9 @@ DEPS="$ROOT/vulkan-build-deps"
 NDK=${ANDROID_NDK:-"$ROOT/toolchain/android-ndk-r27c"}
 HOST_GLSLC=${GLSLC:-/usr/bin/glslc}
 JOBS=${JOBS:-2}
+# T2 (2026-10-08): LLAMA_SERVER=ON adds llama-server; default keeps the accepted recipe.
+LLAMA_SERVER=${LLAMA_SERVER:-OFF}
+TARGETS=${TARGETS:-"llama-bench test-backend-ops"}
 
 check_sha() {
     actual=$(sha256sum "$1" | awk '{print $1}')
@@ -97,7 +100,7 @@ cmake -S "$SRC" -B "$BUILD" -G Ninja \
     -DLLAMA_BUILD_TESTS=ON \
     -DLLAMA_BUILD_TOOLS=ON \
     -DLLAMA_BUILD_EXAMPLES=ON \
-    -DLLAMA_BUILD_SERVER=OFF \
+    -DLLAMA_BUILD_SERVER="$LLAMA_SERVER" \
     -DLLAMA_BUILD_APP=OFF \
     -DLLAMA_BUILD_UI=OFF \
     -DLLAMA_OPENSSL=OFF \
@@ -105,7 +108,8 @@ cmake -S "$SRC" -B "$BUILD" -G Ninja \
     -DLLAMA_USE_SYSTEM_GGML=OFF \
     -DGGML_VULKAN_RUN_TESTS=OFF
 
-cmake --build "$BUILD" --target llama-bench test-backend-ops -j"$JOBS"
+# shellcheck disable=SC2086
+cmake --build "$BUILD" --target $TARGETS -j"$JOBS"
 
 file "$BUILD/bin/llama-bench" "$BUILD/bin/test-backend-ops"
 readelf -h "$BUILD/bin/llama-bench" | grep -E 'Class:|Machine:|Type:'

@@ -1,0 +1,94 @@
+{
+  "first_collection": "completed exit zero but overlarge stdout was truncated; this bounded summary is the fully captured collection",
+  "image_sha256": "42da267f3dd9f94f30f62a95fb2ac13f91d4cf98f1a2307f7cc14e45d9c49be5",
+  "module_count": 324,
+  "module_inventory_sha256": "076c92065c97be5b4b7a443e2e2ad09c570fe555fc98ae9a1885ee578fb57361",
+  "scope": "host-only original HCI ramdisk and selected external WLAN against new native-eight exports; not current loaded membership",
+  "symbol_versions": {
+    "ambiguous_candidate_crc_count": 0,
+    "ambiguous_candidate_crc_examples": [],
+    "compatible": true,
+    "config_modversions": true,
+    "crc_mismatch_count": 0,
+    "crc_mismatch_examples": [],
+    "evidence_complete": true,
+    "import_count": 16547,
+    "missing_module_layout_version_record_count": 0,
+    "missing_symbol_count": 0,
+    "missing_symbol_examples": [],
+    "missing_versions_section_count": 0,
+    "module_layout_crc_mismatch_count": 0,
+    "module_layout_crc_unverified_count": 0,
+    "unknown_candidate_crc_count": 0,
+    "unknown_candidate_crc_examples": []
+  },
+  "symvers_sha256": "15fc69e815cb4da6cb3372f4b5141005ab2e770b0414b67f230f1b185bf03df7",
+  "vermagic": {
+    "compatible": true,
+    "config_modversions": true,
+    "expected_full_vermagic": "5.10.260-g4e5c5ad7d950 SMP preempt mod_unload modversions aarch64",
+    "expected_module_count": 324,
+    "missing_required_modules": [],
+    "module_count": 324,
+    "required_modules": {
+      "btpower.ko": {
+        "comparison_mode": "flags_after_release",
+        "kernel_flags": " SMP preempt mod_unload modversions aarch64",
+        "kernel_release": "5.10.260-g4e5c5ad7d950",
+        "loader_compatible": true,
+        "module_flags": " SMP preempt mod_unload modversions aarch64",
+        "module_release": "5.10.260-g4e5c5ad7d950",
+        "release_prefix_differs": false,
+        "vermagic": "5.10.260-g4e5c5ad7d950 SMP preempt mod_unload modversions aarch64",
+        "versions_section_present": true
+      },
+      "exynos_tty.ko": {
+        "comparison_mode": "flags_after_release",
+        "kernel_flags": " SMP preempt mod_unload modversions aarch64",
+        "kernel_release": "5.10.260-g4e5c5ad7d950",
+        "loader_compatible": true,
+        "module_flags": " SMP preempt mod_unload modversions aarch64",
+        "module_release": "5.10.260-g4e5c5ad7d950",
+        "release_prefix_differs": false,
+        "vermagic": "5.10.260-g4e5c5ad7d950 SMP preempt mod_unload modversions aarch64",
+        "versions_section_present": true
+      }
+    },
+    "vermagic_mismatch_count": 0,
+    "vermagic_mismatch_examples": [],
+    "versions_presence_unverified_count": 0,
+    "versions_presence_unverified_examples": []
+  },
+  "wlan": [
+    {
+      "compatible": true,
+      "crc_mismatch_count": 0,
+      "evidence_complete": true,
+      "import_count": 495,
+      "module_layout_crc_mismatch": false,
+      "selected": true,
+      "sha256": "cbf8932d079e97006a5b7aae0e1b5acfe65b3e8b5113ab8fa095daa36796738d"
+    },
+    {
+      "compatible": false,
+      "crc_mismatch_count": 218,
+      "evidence_complete": false,
+      "import_count": 480,
+      "module_layout_crc_mismatch": true,
+      "selected": false,
+      "sha256": "9a552afa34ff90937c679def3f1b6a54b824ddffd2c8d44b2520009d609d7881"
+    }
+  ],
+  "observed_at_utc": "2026-10-02T19:37:38Z",
+  "coordinator": "root",
+  "parser_sha256": "715383e85d4c5b426f8b6fa43961da2481b57a8fc52dcd54c335faf68d5c4155",
+  "execution": {
+    "first_exit_code": 0,
+    "summary_exit_code": 0,
+    "reason_for_summary_recollection": "first tool result exceeded output budget; no build or phone operation repeated",
+    "new_phone_operations": 0,
+    "kernel_loader_execution": false,
+    "current_loaded_membership_complete": false,
+    "deployment_authorized": false
+  }
+}

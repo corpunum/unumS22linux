@@ -42,6 +42,54 @@ class SupervisorUnitTests(unittest.TestCase):
                 MOD.optional_agent_web('--start')
                 command.assert_not_called()
 
+    def test_openunum_autostart_is_opt_in(self):
+        with tempfile.TemporaryDirectory() as td, \
+             mock.patch.object(MOD, 'OPENUNUM_AUTOSTART', Path(td) / 'autostart'), \
+             mock.patch.object(MOD.subprocess, 'Popen') as popen:
+            self.assertIsNone(MOD.start_optional_openunum())
+            popen.assert_not_called()
+
+    def test_openunum_autostart_detached_and_checks_ownership(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td); marker = root / 'autostart'; marker.write_text('')
+            control = root / 's22-openunum'; control.write_text('#!/bin/sh\n'); control.chmod(0o755)
+            with mock.patch.object(MOD, 'OPENUNUM_AUTOSTART', marker), \
+                 mock.patch.object(MOD, 'OPENUNUM_CONTROL', control), \
+                 mock.patch.object(MOD.subprocess, 'Popen') as popen:
+                if os.getuid() == 0:
+                    self.assertIs(MOD.start_optional_openunum(), popen.return_value)
+                    self.assertEqual(popen.call_args.args[0], ['/bin/sh', str(control), 'start'])
+                    self.assertTrue(popen.call_args.kwargs['start_new_session'])
+                else:   # not root-owned: refused, and the refusal is non-fatal
+                    self.assertIsNone(MOD.start_optional_openunum())
+                    popen.assert_not_called()
+                control.chmod(0o777)
+                popen.reset_mock()
+                self.assertIsNone(MOD.start_optional_openunum())
+                popen.assert_not_called()
+
+    def test_keepalive_is_opt_in_and_checks_ownership(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td); marker = root / 'enabled'
+            daemon = root / 's22-keepalive'; daemon.write_text('#!/usr/bin/python3\n'); daemon.chmod(0o755)
+            with mock.patch.object(MOD, 'KEEPALIVE_ENABLED', marker), \
+                 mock.patch.object(MOD, 'KEEPALIVE_DAEMON', daemon), \
+                 mock.patch.object(MOD.subprocess, 'Popen') as popen:
+                self.assertIsNone(MOD.start_optional_keepalive())
+                popen.assert_not_called()
+                marker.write_text('')
+                if os.getuid() == 0:
+                    self.assertIs(MOD.start_optional_keepalive(), popen.return_value)
+                    self.assertEqual(popen.call_args.args[0], ['/usr/bin/python3', str(daemon)])
+                    self.assertTrue(popen.call_args.kwargs['start_new_session'])
+                else:
+                    self.assertIsNone(MOD.start_optional_keepalive())
+                    popen.assert_not_called()
+                daemon.chmod(0o777)
+                popen.reset_mock()
+                self.assertIsNone(MOD.start_optional_keepalive())
+                popen.assert_not_called()
+
     def test_wifi_disabled_by_default_and_explicit_marker(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -152,6 +200,50 @@ class SupervisorUnitTests(unittest.TestCase):
         self.assertEqual(killpg.call_args_list,
                          [mock.call(4242, signal.SIGTERM),
                           mock.call(4242, signal.SIGKILL)])
+
+    def test_audio_firmware_staging_copies_only_missing_files(self):
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / 'src'; dst = Path(td) / 'dst'
+            src.mkdir(); dst.mkdir()
+            (src / 'sectiongraph_tplg.bin').write_bytes(b'graph')
+            (src / 'abox_tplg.bin').write_bytes(b'new')
+            (dst / 'abox_tplg.bin').write_bytes(b'ramdisk')
+            (src / 'link.bin').symlink_to(src / 'abox_tplg.bin')
+            with mock.patch.object(MOD, 'say'):
+                self.assertEqual(MOD.stage_optional_audio_firmware(src, dst), 1)
+                self.assertEqual(MOD.stage_optional_audio_firmware(src, dst), 0)
+                self.assertEqual(MOD.stage_optional_audio_firmware(src / 'absent', dst), 0)
+            self.assertEqual((dst / 'sectiongraph_tplg.bin').read_bytes(), b'graph')
+            self.assertEqual((dst / 'abox_tplg.bin').read_bytes(), b'ramdisk')
+            self.assertFalse((dst / 'link.bin').exists())
+            self.assertEqual(sorted(x.name for x in dst.iterdir()),
+                             ['abox_tplg.bin', 'sectiongraph_tplg.bin'])
+
+    def test_firmware_fallback_answers_only_known_audio_names(self):
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / 'src'; req = Path(td) / 'firmware'
+            src.mkdir(); req.mkdir()
+            (src / 'sectiongraph_tplg.bin').write_bytes(b'graph-bytes')
+            for name in ('sectiongraph_tplg.bin', 'mfc!mfc_fw_flash.bin', 'unknown.bin'):
+                (req / name).mkdir()
+                (req / name / 'loading').write_text('')
+                (req / name / 'data').write_bytes(b'')
+            (req / 'timeout').write_text('60')
+            with mock.patch.object(MOD, 'say'):
+                served = MOD.answer_audio_firmware_requests(src, req, seconds=0.05, interval=0.01)
+            self.assertEqual(served, ['sectiongraph_tplg.bin'])
+            self.assertEqual((req / 'sectiongraph_tplg.bin/data').read_bytes(), b'graph-bytes')
+            self.assertEqual((req / 'sectiongraph_tplg.bin/loading').read_text(), '0\n')
+            self.assertEqual((req / 'mfc!mfc_fw_flash.bin/loading').read_text(), '')
+            self.assertEqual((req / 'unknown.bin/loading').read_text(), '')
+
+    def test_llvmpipe_threads_default_and_override(self):
+        with tempfile.TemporaryDirectory() as td:
+            f = Path(td) / 'threads'
+            self.assertEqual(MOD.llvmpipe_threads(f), '0')
+            f.write_text('4\n'); self.assertEqual(MOD.llvmpipe_threads(f), '4')
+            f.write_text('lots'); self.assertEqual(MOD.llvmpipe_threads(f), '0')
+            f.write_text('99'); self.assertEqual(MOD.llvmpipe_threads(f), '0')
 
     def test_preflight_rejects_wrong_uuid_before_mount(self):
         mount = Path(tempfile.mkdtemp())

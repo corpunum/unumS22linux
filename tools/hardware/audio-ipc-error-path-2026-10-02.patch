@@ -1,0 +1,149 @@
+diff --git a/sound/soc/samsung/abox/abox.h b/sound/soc/samsung/abox/abox.h
+index c448089..d9e91af 100755
+--- a/sound/soc/samsung/abox/abox.h
++++ b/sound/soc/samsung/abox/abox.h
+@@ -673,6 +673,13 @@ extern struct abox_data *abox_get_abox_data(void);
+  */
+ extern struct abox_data *abox_get_data(struct device *dev);
+ 
++/*
++ * Queue a PCM trigger and linearize duplicate suppression with queue
++ * publication. @enabled is borrowed only until this synchronous call returns.
++ */
++extern int abox_request_pcm_trigger_ipc(struct device *dev, int channel,
++		bool atomic, bool *enabled, bool start);
++
+ /**
+  * set system state
+  * @param[in]	data	pointer to abox_data structure
+diff --git a/sound/soc/samsung/abox/abox.c b/sound/soc/samsung/abox/abox.c
+index 29fd585..76b809a 100755
+--- a/sound/soc/samsung/abox/abox.c
++++ b/sound/soc/samsung/abox/abox.c
+@@ -550,7 +550,8 @@ static bool __abox_ipc_queue_full(struct abox_data *data)
+ 
+ static int abox_ipc_queue_put(struct abox_data *data, struct device *dev,
+ 		int hw_irq, const ABOX_IPC_MSG *msg, size_t size,
+-		u64 trace_seq)
++		u64 trace_seq, bool *trigger_enabled, bool trigger_start,
++		bool *duplicate)
+ {
+ 	spinlock_t *lock = &data->ipc_queue_lock;
+ 	size_t length = ARRAY_SIZE(data->ipc_queue);
+@@ -558,11 +559,15 @@ static int abox_ipc_queue_put(struct abox_data *data, struct device *dev,
+ 	unsigned long flags;
+ 	int ret;
+ 
++	*duplicate = false;
+ 	if (unlikely(sizeof(ipc->msg) < size))
+ 		return -EINVAL;
+ 
+ 	spin_lock_irqsave(lock, flags);
+-	if (!__abox_ipc_queue_full(data)) {
++	if (trigger_enabled && *trigger_enabled == trigger_start) {
++		*duplicate = true;
++		ret = 0;
++	} else if (!__abox_ipc_queue_full(data)) {
+ 		ipc = &data->ipc_queue[data->ipc_queue_end];
+ 		ipc->dev = dev;
+ 		ipc->hw_irq = hw_irq;
+@@ -567,8 +570,10 @@ static int abox_ipc_queue_put(struct abox_data *data, struct device *dev,
+ 		if (trace_seq || ipc->trace_seq)
+ 			ipc->trace_seq = trace_seq;
+ 		memcpy(&ipc->msg, msg, size);
+ 		ipc->size = size;
+ 		data->ipc_queue_end = (data->ipc_queue_end + 1) % length;
++		if (trigger_enabled)
++			*trigger_enabled = trigger_start;
+ 		ret = 0;
+ 	} else {
+ 		ret = -EBUSY;
+@@ -665,7 +670,9 @@ static int abox_schedule_ipc(struct device *dev, struct abox_data *data,
+ 		int hw_irq, const ABOX_IPC_MSG *msg, size_t size,
+-		bool atomic, bool sync)
++		bool atomic, bool sync, bool *trigger_enabled,
++		bool trigger_start)
+ {
+ 	int retry = 0;
+ 	int ret;
++	bool duplicate;
+ 	u64 trace_seq = 0;
+ 
+@@ -686,11 +692,14 @@ static int abox_schedule_ipc(struct device *dev, struct abox_data *data,
+ 		trace_seq = atomic64_inc_return(&abox_pcm_trigger_trace_seq);
+ 
+ 	do {
+-		ret = abox_ipc_queue_put(data, dev, hw_irq, msg, size,
+-				trace_seq);
++		ret = abox_ipc_queue_put(data, dev, hw_irq, msg, size,
++				trace_seq, trigger_enabled, trigger_start,
++				&duplicate);
++		if (duplicate)
++			break;
+ 		if (trace_seq && trace_abox_pcm_trigger_queue_enabled())
+ 			trace_abox_pcm_trigger_queue(trace_seq, ktime_get_ns(),
+ 					msg->ipcid, msg->msg.pcmtask.channel_id,
+ 					msg->msg.pcmtask.msgtype, ret, retry,
+ 					atomic, sync);
+ 		queue_work(data->ipc_workqueue, &data->ipc_work);
+@@ -718,6 +726,6 @@ int abox_request_ipc(struct device *dev,
+ 	} else {
+ 		ret = abox_schedule_ipc(dev, data, hw_irq, msg, size,
+-				!!atomic, !!sync);
++				!!atomic, !!sync, NULL, false);
+ 	}
+ 
+ 	return ret;
+@@ -727,6 +736,26 @@ int abox_request_ipc(struct device *dev,
+ }
+ EXPORT_SYMBOL(abox_request_ipc);
+ 
++int abox_request_pcm_trigger_ipc(struct device *dev, int channel,
++		bool atomic, bool *enabled, bool start)
++{
++	struct abox_data *data;
++	ABOX_IPC_MSG msg = { 0 };
++
++	if (!enabled)
++		return -EINVAL;
++
++	data = dev_get_drvdata(dev);
++	msg.ipcid = IPC_PCMPLAYBACK;
++	msg.task_id = channel;
++	msg.msg.pcmtask.msgtype = PCM_PLTDAI_TRIGGER;
++	msg.msg.pcmtask.channel_id = channel;
++	msg.msg.pcmtask.param.trigger = start;
++
++	return abox_schedule_ipc(dev, data, msg.ipcid, &msg, sizeof(msg),
++			!!atomic, false, enabled, start);
++}
++
+ bool abox_is_on(void)
+ {
+ 	return p_abox_data && p_abox_data->enabled;
+diff --git a/sound/soc/samsung/abox/abox_rdma.c b/sound/soc/samsung/abox/abox_rdma.c
+index 37179c3..cebf2ca 100755
+--- a/sound/soc/samsung/abox/abox_rdma.c
++++ b/sound/soc/samsung/abox/abox_rdma.c
+@@ -1638,18 +1638,7 @@ static int abox_rdma_trigger_ipc(struct abox_dma_data *data, bool atomic,
+ static int abox_rdma_trigger_ipc(struct abox_dma_data *data, bool atomic,
+ 		bool start)
+ {
+-	ABOX_IPC_MSG msg;
+-	struct IPC_PCMTASK_MSG *pcmtask_msg = &msg.msg.pcmtask;
+-
+-	if (data->enabled == start)
+-		return 0;
+-
+-	data->enabled = start;
+-
+-	msg.ipcid = IPC_PCMPLAYBACK;
+-	pcmtask_msg->msgtype = PCM_PLTDAI_TRIGGER;
+-	msg.task_id = pcmtask_msg->channel_id = data->id;
+-	pcmtask_msg->param.trigger = start;
+-	return abox_rdma_request_ipc(data, &msg, atomic, 0);
++	return abox_request_pcm_trigger_ipc(data->dev_abox, data->id,
++			atomic, &data->enabled, start);
+ }
+ 
+ static int abox_rdma_trigger(struct snd_soc_component *component,

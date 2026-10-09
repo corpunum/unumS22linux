@@ -1,0 +1,105 @@
+{
+  "schema": "s22-npu-report-close-lifetime-host/v1",
+  "evidence_class": "host-only pinned-public-source and extracted-C regression",
+  "verdict": "report-ring direct-reader storage lifetime is fenced against close; command/response and device-removal ownership remain unresolved",
+  "source": {
+    "raw_base_commit": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+    "raw_selected_sha256": {
+      "drivers/vision/npu/core/interface/hardware/npu-interface.c": "c2deaa0abd990184b64373bb13983f048b925e0f5f421f6623de7de85f667108",
+      "drivers/vision/npu/core/npu-log.c": "e98c22dc4d005b350d9c82bf067ada5b01a0059f766f13bce39594cc44172d5c",
+      "drivers/vision/npu/core/npu-util-msgidgen.c": "271dfe4f0b591a9a6d5a3f996e5fd2fe7a05d9b839513ce8691863bae79d3e2e",
+      "drivers/vision/npu/core/npu-system.c": "96eaa6bf1511f3e6414e3e376d62592229454a2ea1687d760b7bb8e5952b1a05",
+      "drivers/vision/npu/core/npu-device.c": "98be21e422ca864cc971dfe6a78e71b292d7691cb625c1f029bf4502100644ab",
+      "drivers/vision/npu/core/npu-hw-device.c": "14617a6f8e5b08e1bb169618daa8544f2680ad6709cb9f3b9730919d4dc8e16f",
+      "include/linux/refcount.h": "82f75597f6899f61e9a2b4097ad6f4bf1ac53d8ace1113426e708f0da6316692",
+      "lib/refcount.c": "b8d08fc1f8a678a54587149ff084b3ef15e9173df1dde1a0282027ac5b999d56"
+    },
+    "ordered_patch_stack": [
+      {"name": "npu-session-lifecycle-fix.patch", "sha256": "1554436cb6624c542f9e04ac22a3b3545e55f94c59d3025ee6bdc1ec43168251"},
+      {"name": "npu-refcount-lifecycle-profile.patch", "sha256": "8385e4210a807f96f972757cd6ca74a8077b0127ab112d8b877d012ccdc3cb7b"},
+      {"name": "npu-default-boot-callback-fix.patch", "sha256": "f5ce216e34df11d8c6adee4a99c36d63f73593cf379e29de3a9de828ec2ee1e7"},
+      {"name": "npu-probe-unwind-fix.patch", "sha256": "d3e2e590d4d3c956b10c724a15db996dacd07def204332f50a1c0513f56b4948"},
+      {"name": "npu-shutdown-lifecycle-profile.patch", "sha256": "b986e1896305fda55f1d702ed6f12dde646e4a84b3ce91009203b9d77b7a00e7"},
+      {"name": "npu-shutdown-error-propagation.patch", "sha256": "08374e96792f24d1e0e4fbca594bfce35537af8acace9296b66f27b531564e43"},
+      {"name": "npu-mailbox-missing-callback-reclaim.patch", "sha256": "f109b57381b3f2afcf2638b518f50db59ef8c9f784debd949488c74f8ea5c39b"},
+      {"name": "npu-mailbox-debug-walk-bounds.patch", "sha256": "20c700bfa11f13836c76c88cca28a4f8dfa459e5cf146292a814880cd5850b29"},
+      {"name": "npu-mailbox-msgid-validation.patch", "sha256": "c8366edfab42090ac09a6c366ad3c535a62e13384dd494ed685bbfe524a64d14"},
+      {"name": "npu-fw-report-lock-unwind.patch", "sha256": "71c2fa44f0fe42bd94ee416fb09453185dd418b408ba15937ec3c787a5e9bf5d"},
+      {"name": "npu-interface-open-unwind.patch", "sha256": "95e63b45d60e0a2611c1f2dcab4428e5658a03ff9954b8197d175ac6fec139cb"},
+      {"name": "npu-system-resume-error-unwind.patch", "sha256": "f1af656f9e1b8ca2bf15e934031e0adf828c442267a17761ba64f7d7c611729a"},
+      {"name": "npu-report-close-lifetime.patch", "sha256": "9bf6eef33be3b8f2c49744e362dada21613a0969576ef78a725d356cdebb0060"}
+    ],
+    "npu12_selected_sha256": {
+      "drivers/vision/npu/core/npu-system.c": "96eaa6bf1511f3e6414e3e376d62592229454a2ea1687d760b7bb8e5952b1a05",
+      "drivers/vision/npu/core/npu-device.c": "a281fd35f2311951328d797824b8dbb165639bfc7977da30044bb764688cdc11",
+      "drivers/vision/npu/core/npu-hw-device.c": "b052462aa4919458a2b86c7ba0aed78bfdb938690cd58d5dcd01bdf0d75a312b",
+      "drivers/vision/npu/core/interface/hardware/npu-interface.c": "c2deaa0abd990184b64373bb13983f048b925e0f5f421f6623de7de85f667108"
+    },
+    "npu13_interface_sha256": "3d142e00fc77148f5c215c1c105ea6e7a6d036ece82e4872f2556dd97132e6ba",
+    "final_report_owner_interface_sha256": "3e1c9198f8317beb05f0e978f08c270fbc6e25cb73224784ccd92e959a0c4ef7",
+    "optional_clean_npu12_fixture_commit": "e9c3016233a72ceccb13e537f0b7ef72426582b9"
+  },
+  "implementation": {
+    "patch_path": "tools/hardware/npu-report-close-lifetime.patch",
+    "patch_sha256": "9bf6eef33be3b8f2c49744e362dada21613a0969576ef78a725d356cdebb0060",
+    "harness_path": "tools/hardware/npu-report-close-lifetime-harness.c",
+    "harness_sha256": "d61c083d719271c57476d15b1cecbe19a80583f5ee459c964cb9a727e3812c19",
+    "runner_path": "tools/hardware/test-npu-report-close-lifetime.py",
+    "runner_sha256": "3d960904c85b6b7147e0023f213802a76f6007a327983d05ebbc933c07107434",
+    "report_path": "docs/research/NPU_REPORT_CLOSE_LIFETIME_2026-10-03.md",
+    "report_sha256": "c34dde351108156d6d3ebc54d37bd828570c840fd078b454072660f268b35124",
+    "behavior": [
+      "report owner is published only after mailbox_init succeeds and uses static, non-probe-reset reader lifetime state",
+      "publication sentinel drop uses pinned refcount_dec_and_test; the pinned kernel refcount_dec helper would saturate at one",
+      "fw_rprt_gather, dbg_print_error, and npu_check_unposted_mbox pin a local report mailbox before mailbox access",
+      "close drains IRQ/workqueue producers, detaches publication, waits for active direct readers, then deinitializes and clears the mailbox pointer",
+      "the inherited lifecycle mutex serializes probe/open/close; selected IRQ, queue, worker, and direct-reader bodies do not acquire it",
+      "command/response mailbox publication and other mailbox users remain outside the report-owner scope"
+    ]
+  },
+  "verification": {
+    "public_source_route": {
+      "url_base": "https://raw.githubusercontent.com/LineageOS/android_kernel_samsung_s5e9925/4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+      "raw_files_fetched": 8,
+      "ordered_patches_sha256_checked": true,
+      "ordinary_git_apply_check_whitespace_error_all": true,
+      "npu12_selected_hashes_reproduced": true,
+      "npu13_interface_hash_reproduced": true,
+      "final_patched_interface_hash": "3e1c9198f8317beb05f0e978f08c270fbc6e25cb73224784ccd92e959a0c4ef7",
+      "pinned_refcount_header_sha256_checked": true,
+      "pinned_refcount_warn_helper_sha256_checked": true
+    },
+    "optional_fixture": {
+      "private_fixture_supplied": false,
+      "public_composition_remains_mandatory": true,
+      "explicit_absent_fixture_rejected": true
+    },
+    "python_matrix": [
+      {"command": "python3 tools/hardware/test-npu-report-close-lifetime.py --expect-opt 0", "exit_code": 0, "sys_flags_optimize": 0, "actual_c_compile_run_jobs": 6},
+      {"command": "python3 -O tools/hardware/test-npu-report-close-lifetime.py --expect-opt 1", "exit_code": 0, "sys_flags_optimize": 1, "actual_c_compile_run_jobs": 6},
+      {"command": "PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-npu-report-close-lifetime.py --expect-opt 1", "exit_code": 0, "sys_flags_optimize": 1, "actual_c_compile_run_jobs": 6}
+    ],
+    "actual_c_compile_run_jobs_total": 18,
+    "c_optimization_levels": ["-O0", "-O2"],
+    "baseline_races_reproduced": ["direct npu-log caller passes pre-lock check; close deinitializes before stale dereference", "interrupt-context profiler reader passes pre-lock check and outlives mailbox deinit"],
+    "pre_fix_refcount_negative_control": "actual pinned refcount_dec and refcount_warn_saturate bodies at publication refcount one saturate the counter; bounded wait stub exposes that the real wait condition remains unsatisfied",
+    "fixed_scenarios": ["pre-probe", "before-open", "mailbox-open-error", "duplicate-probe", "duplicate-open", "reopen", "repeat-close", "no-reader close releases sole publication sentinel", "both direct npu-log callers", "debug reader", "interrupt-context profiler reader", "post-detach reader refusal", "refcount saturation and underflow fail closed", "caller and close progress"],
+    "cc": "Ubuntu 13.3.0-6ubuntu2~24.04.1",
+    "explicit_absent_fixture_negative_run_exit_code": 1,
+    "earlier_failed_attempts": [
+      {"status": "failed", "phase": "bounded public fixture fetch", "reason": "Network is unreachable before compilation; not counted among later fresh passing invocations"},
+      {"status": "failed", "phase": "first bounded lib/refcount.c fetch", "reason": "five-second fetch timed out; later fresh public fetch matched pinned SHA; failure retained separately"},
+      {"status": "failed", "phase": "intermediate normal-mode C compile", "reason": "-Werror unused host wait-observer variable; template corrected before final matrix"},
+      {"status": "failed_semantic_candidate", "phase": "superseded report patch 47647d18bb869af639f11a6d9b00b578db10a01a2bcb2c7b7cdd95805b9aa2c3", "reason": "refcount_dec on sole publication ref saturates and leaves wait unsatisfied; replaced by dec_and_test"}
+    ]
+  },
+  "limits": [
+    "C functions are extracted from exact public/patched source and run with pthread/kernel-operation shims; this is not Linux-kernel execution",
+    "selected pinned refcount decrement and warning-saturation bodies execute with controlled C11 atomic/warning shims; other kernel locking and atomic behavior is not executed",
+    "baseline controlled readers exit before stale-pointer dereference to avoid host undefined behavior",
+    "kernel wait_event has no deadline; a reader that never exits can block close indefinitely; the negative-control stub only exposes the unsatisfied condition, and host timeouts are failing test-process leashes",
+    "command/response raw-pointer readers and writers, parser/result ownership, report-store buffer lifetime, mailbox DMA quiescence, provider/removal ordering, and firmware lifecycle remain unresolved",
+    "no kernel build or ARM64 front-end check is claimed in this receipt",
+    "hardware operations: 0; no phone, SSH, ADB, USB, firmware/provider, TrustZone, BOOTUP, module, or Image operation was performed"
+  ]
+}

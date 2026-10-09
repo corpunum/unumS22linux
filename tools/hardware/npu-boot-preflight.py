@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Host-only NPU BOOTUP preflight; never opens a device or stages firmware.
+"""Host-only NPU artifact/source audit; never authorizes BOOTUP.
 
-This checks the pinned source/config and private host artifacts needed before a
-separate device decision. It never authorizes or performs a device probe.
+This checks the source/config and host artifacts. A successful artifact audit
+is not BOOTUP readiness or authorization. Lifecycle regressions, firmware
+boot/shutdown, live validation, rescue readiness and owner authorization are
+separate required gates. This script has no option to assert those gates.
 """
 from __future__ import annotations
 
@@ -56,6 +58,84 @@ def function_body(text: str, marker: str) -> str:
     return ""
 
 
+def read_source(path: Path) -> tuple[str, bool]:
+    """Read source without mistaking absent or unreadable input for evidence."""
+    try:
+        return path.read_text(), True
+    except (OSError, UnicodeError):
+        return "", False
+
+
+def evaluate_readiness(
+    *,
+    config_matches: bool,
+    required_artifacts_match: bool,
+    source_route_pass: bool,
+    lifecycle_gaps: dict[str, bool | None],
+    lifecycle_source_available: bool = False,
+    hwdev_source_available: bool = False,
+) -> dict[str, object]:
+    """Keep host artifact checks separate from permission to touch the NPU.
+
+    The response-timeout property is source-derived. Caller return under a
+    stalled publisher, publisher progress, retained-resource cleanup after a
+    detached call, callback lifetime, late power-state safety, device teardown
+    ordering, and authorization remain false: this candidate preserves an
+    unbounded publication drain and does not implement a detached waiter. A
+    passing artifact audit still exits 2.
+    """
+    artifact_pass = bool(config_matches and required_artifacts_match and source_route_pass)
+    lifecycle_source_available = bool(lifecycle_source_available)
+    gates = {
+        # The POWER response wait can time out even though the caller may
+        # still block forever while draining an in-flight publication. Keep
+        # these separate so the response timeout is not mistaken for full
+        # publication-path liveness.
+        "power_response_timeout_bounded": (
+            lifecycle_source_available
+            and not lifecycle_gaps.get("power_response_timeout_missing", True)
+        ),
+        # The safe stack-waiter path deliberately waits for the publisher to
+        # return. No independently reviewed detach/resource-pin path exists.
+        "publication_caller_return_bounded": False,
+        # The current drain waits indefinitely for a publisher lease. A host
+        # checker cannot promise liveness if that publication stalls.
+        "publication_drain_liveness_resolved": False,
+        "publisher_progress_bounded": False,
+        "detached_waiter_resource_cleanup_kernel_validated": False,
+        "detached_waiter_outstanding_cap_validated": False,
+        "normal_boot_error_unwind_resolved": (
+            lifecycle_source_available and hwdev_source_available
+            and lifecycle_gaps.get("normal_boot_unwind_missing") is False
+            and lifecycle_gaps.get("hwdev_bootup_callback_errors_ignored") is False
+        ),
+        "hwdev_failed_first_acquire_ownership_kernel_validated": False,
+        "hwdev_first_callback_concurrency_serialized_kernel_validated": False,
+        "hwdev_shared_stm_callback_ownership_kernel_validated": False,
+        "publication_storage_lifetime_kernel_validated": False,
+        "callback_lifetime_kernel_validated": False,
+        "late_power_transition_safe_after_close": False,
+        "device_teardown_resources_pinned_through_publication": False,
+        "firmware_boot_and_shutdown_device_tested": False,
+        "live_probe_validated": False,
+        "independent_recovery_path_verified": False,
+        "owner_authorized_for_bootup": False,
+    }
+    bootup_ready = artifact_pass and all(gates.values())
+    # Readiness is still not permission. This host-only tool never grants it.
+    bootup_authorized = False
+    blockers = [name for name, passed in gates.items() if not passed]
+    exit_code = 0 if bootup_ready and bootup_authorized else 2
+    return {
+        "artifact_preflight_pass": artifact_pass,
+        "bootup_ready": bootup_ready,
+        "bootup_authorized": bootup_authorized,
+        "readiness_gates": gates,
+        "readiness_blockers": blockers,
+        "exit_code": exit_code,
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[2])
@@ -91,11 +171,69 @@ def main() -> int:
     session_c = source / "drivers/vision/npu/core/npu-session.c"
     vertex_c = source / "drivers/vision/npu/core/npu-vertex.c"
     system_c = source / "drivers/vision/npu/core/npu-system.c"
-    binary = binary_h.read_text() if binary_h.is_file() else ""
-    session = session_c.read_text() if session_c.is_file() else ""
-    vertex = vertex_c.read_text() if vertex_c.is_file() else ""
-    system = system_c.read_text() if system_c.is_file() else ""
+    protodrv_c = source / "drivers/vision/npu/core/npu-protodrv.c"
+    hwdev_c = source / "drivers/vision/npu/core/npu-hw-device.c"
+    hwdev_h = source / "drivers/vision/npu/core/npu-hw-device.h"
+    stm_c = source / "drivers/vision/npu/core/npu-stm.c"
+    binary, binary_available = read_source(binary_h)
+    session, session_available = read_source(session_c)
+    vertex, vertex_available = read_source(vertex_c)
+    system, system_available = read_source(system_c)
+    proto, proto_available = read_source(protodrv_c)
+    hwdev, hwdev_available = read_source(hwdev_c)
+    hwdev_header, hwdev_header_available = read_source(hwdev_h)
+    stm, stm_available = read_source(stm_c)
+    lifecycle_source_available = all((session_available, vertex_available, proto_available))
+    hwdev_source_available = all((hwdev_available, hwdev_header_available, stm_available))
     normal_boot = function_body(vertex, "int npu_hwdev_normal_bootup(")
+    power_notify = function_body(session, "int npu_session_NW_CMD_POWER_NOTIFY(")
+    power_wait = function_body(session, "static int npu_session_wait_power_request(")
+    publish_drain = function_body(session, "static void npu_power_wait_cancel_and_drain(")
+    timeout_ms = re.search(
+        r"^#define\s+NPU_POWER_WAIT_TIMEOUT_MS\s+(\d+)\s*$",
+        session,
+        re.MULTILINE,
+    )
+    power_response_timeout_bounded = (
+        "npu_session_wait_power_request(session, NPU_NW_CMD_POWER_CTL)" in power_notify
+        and "timeout = msecs_to_jiffies(NPU_POWER_WAIT_TIMEOUT_MS)" in power_wait
+        and "wait_for_completion_timeout(&waiter.completion, timeout)" in power_wait
+        and timeout_ms is not None
+        and int(timeout_ms.group(1)) > 0
+    )
+    callback = function_body(session, "int npu_session_save_power_result(")
+    hwdev_boot = function_body(hwdev, "int npu_hwdev_bootup(")
+    ref_get = function_body(hwdev_header, "static inline int npu_hw_ref_get(")
+    ref_init = function_body(hwdev_header, "static inline int npu_hw_ref_init(")
+    stm_disable = function_body(stm, "int npu_stm_disable(")
+    hwdev_bootup_callback_errors_ignored = (
+        bool(hwdev_boot)
+        and "npu_hw_ref_get(device, &hdev->boot_cnt);" in hwdev_boot
+        and "npu_hw_ref_get(device, &hdev->init_cnt);" in hwdev_boot
+        and "ret = npu_hw_ref_get" not in hwdev_boot
+        and "if (ret)" not in hwdev_boot
+    ) if hwdev_source_available and hwdev_boot else None
+    first_callback_error_keeps_increment = (
+        bool(ref_get)
+        and "atomic_inc_return(&hw_ref->refcount) == 1" in ref_get
+        and "hw_ref->first(device, hw_ref->hdev)" in ref_get
+        and "if (ret)" not in ref_get
+    ) if hwdev_source_available and ref_get else None
+    parent_get_error_ignored = (
+        bool(ref_init)
+        and "npu_hw_ref_get(device, &phdev->init_cnt);" in ref_init
+        and "ret = npu_hw_ref_get" not in ref_init
+    ) if hwdev_source_available and ref_init else None
+    shared_stm_disable_unmatched_decrement = (
+        bool(stm_disable)
+        and "npu_stm_data.enable_cnt--;" in stm_disable
+        and "if (!npu_stm_data.enable_cnt)" not in stm_disable
+    ) if hwdev_source_available and stm_disable else None
+    normal_boot_body_available = bool(normal_boot) if lifecycle_source_available else None
+    hwdev_bodies_available = (
+        all((bool(hwdev_boot), bool(ref_get), bool(ref_init), bool(stm_disable)))
+        if hwdev_source_available else None
+    )
 
     checks["source"] = {
         "normal_fw_name_AIE": (
@@ -103,9 +241,39 @@ def main() -> int:
             and '#define NPU_FW_NAME\t\t(FW_BASE_NAME ".bin")' in binary
         ),
         "normal_boot_has_power_notify": "npu_session_NW_CMD_POWER_NOTIFY(session, true)" in normal_boot,
-        "power_notify_has_unbounded_wait": "wait_event(session->wq" in session,
-        "normal_boot_unwind_missing": "npu_hwdev_shutdown(device, ctrl->value)" not in normal_boot,
+        "power_response_timeout_bounded": power_response_timeout_bounded,
+        "publication_drain_wait_unbounded": (
+            "npu_power_wait_cancel_and_drain(&waiter)" in power_wait
+            and "wait_for_completion(&waiter->publish_done)" in publish_drain
+            and "wait_for_completion_timeout" not in publish_drain
+        ),
+        "stack_waiter_drain_source_contract": (
+            "struct npu_power_waiter waiter;" in power_wait
+            and "npu_power_wait_cancel_and_drain(&waiter)" in power_wait
+            and "wait_for_completion(&waiter->publish_done)" in publish_drain
+            and "wait_for_completion_timeout" not in publish_drain
+        ),
+        "callback_lookup_is_cookie_and_req_id_scoped": (
+            "spin_lock_irqsave(&npu_power_waiters_lock, flags)" in callback
+            and "npu_power_waiter_find(cookie)" in callback
+            and "waiter->req_id == result.nw.npu_req_id" in callback
+            and "!waiter->cancelled" in callback
+        ),
+        "normal_boot_body_available": normal_boot_body_available,
+        "normal_boot_unwind_missing": (
+            "npu_hwdev_shutdown(device, ctrl->value)" not in normal_boot
+            if normal_boot else None
+        ),
+        "hwdev_bootup_callback_errors_ignored": hwdev_bootup_callback_errors_ignored,
+        "hwdev_first_callback_failure_keeps_increment": first_callback_error_keeps_increment,
+        "hwdev_parent_get_error_ignored": parent_get_error_ignored,
+        "shared_stm_disable_unmatched_decrement": shared_stm_disable_unmatched_decrement,
+        "hwdev_sources_available": hwdev_source_available,
+        "hwdev_callback_bodies_available": hwdev_bodies_available,
         "system_calls_signature_loader": "npu_firmware_file_read_signature" in system,
+        "lifecycle_sources_available": lifecycle_source_available,
+        "binary_source_available": binary_available,
+        "system_source_available": system_available,
     }
 
     checks["artifacts"] = {}
@@ -125,19 +293,61 @@ def main() -> int:
         "normal_fw_name_AIE": checks["source"]["normal_fw_name_AIE"],
         "normal_boot_has_power_notify": checks["source"]["normal_boot_has_power_notify"],
         "system_calls_signature_loader": checks["source"]["system_calls_signature_loader"],
+        "lifecycle_sources_available": lifecycle_source_available,
     }
     checks["known_lifecycle_gaps"] = {
-        "normal_boot_unwind_missing": checks["source"]["normal_boot_unwind_missing"],
-        "power_notify_has_unbounded_wait": checks["source"]["power_notify_has_unbounded_wait"],
+        "normal_boot_unwind_missing": (
+            checks["source"]["normal_boot_unwind_missing"]
+            if lifecycle_source_available and normal_boot_body_available else None
+        ),
+        "hwdev_bootup_callback_errors_ignored": (
+            checks["source"]["hwdev_bootup_callback_errors_ignored"]
+            if hwdev_source_available else None
+        ),
+        "hwdev_first_callback_failure_keeps_increment": (
+            checks["source"]["hwdev_first_callback_failure_keeps_increment"]
+            if hwdev_source_available else None
+        ),
+        "hwdev_parent_get_error_ignored": (
+            checks["source"]["hwdev_parent_get_error_ignored"]
+            if hwdev_source_available else None
+        ),
+        "shared_stm_disable_unmatched_decrement": (
+            checks["source"]["shared_stm_disable_unmatched_decrement"]
+            if hwdev_source_available else None
+        ),
+        "power_response_timeout_missing": (
+            not checks["source"]["power_response_timeout_bounded"]
+            if lifecycle_source_available else None
+        ),
+        "publication_drain_wait_unbounded": (
+            checks["source"]["publication_drain_wait_unbounded"]
+            if lifecycle_source_available else None
+        ),
     }
-    result["live_probe_validated"] = False
-    result["reason"] = "host preflight only; lifecycle gaps remain and no device probe was performed"
     result["config_matches"] = checks["config"]["matches"]
     result["artifact_closure_pass"] = checks["artifact_closure"]["required_matches"]
     result["source_route_pass"] = all(checks["source_route"].values())
-    result["preflight_pass"] = bool(result["config_matches"] and result["artifact_closure_pass"] and result["source_route_pass"])
+    readiness = evaluate_readiness(
+        config_matches=bool(result["config_matches"]),
+        required_artifacts_match=bool(result["artifact_closure_pass"]),
+        source_route_pass=bool(result["source_route_pass"]),
+        lifecycle_gaps=checks["known_lifecycle_gaps"],
+        lifecycle_source_available=lifecycle_source_available,
+        hwdev_source_available=hwdev_source_available,
+    )
+    result.update(readiness)
+    result["live_probe_validated"] = readiness["readiness_gates"]["live_probe_validated"]
+    result["reason"] = (
+        "host artifact/source audit only; the POWER response timeout does not establish "
+        "bounded caller return under a stalled publisher, publisher progress, detached "
+        "resource cleanup, failed-first-acquire ownership, callback serialization, shared "
+        "STM ownership, kernel callback lifetime, late power-state safety, device "
+        "teardown pinning, or firmware runtime; live probe, independent recovery, and "
+        "BOOTUP authorization remain unestablished"
+    )
     print(json.dumps(result, indent=2, sort_keys=True))
-    return 0 if result["preflight_pass"] else 2
+    return int(result["exit_code"])
 
 
 if __name__ == "__main__":

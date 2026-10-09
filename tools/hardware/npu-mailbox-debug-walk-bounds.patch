@@ -1,0 +1,70 @@
+diff --git a/drivers/vision/npu/core/interface/hardware/mailbox_ipc.c b/drivers/vision/npu/core/interface/hardware/mailbox_ipc.c
+--- a/drivers/vision/npu/core/interface/hardware/mailbox_ipc.c
++++ b/drivers/vision/npu/core/interface/hardware/mailbox_ipc.c
+@@ -250,5 +250,7 @@ static void __mbx_ipc_print(char *underlay, volatile struct mailbox_ctrl *ctrl, u32 log_level)
+ {
+ 	u32 wptr, rptr, sgmt_len;
++	u32 next_rptr, walk_count = 0;
++	u32 max_walk;
+ 	struct message msg;
+ 	struct command cmd;
+ 	char *base;
+@@ -262,16 +264,48 @@ static void __mbx_ipc_print(char *underlay, volatile struct mailbox_ctrl *ctrl, u32 log_level)
+ 	npu_dbg("   MAGIC        MID      CMD       LEN       DATA       PAYLOAD    LEN\n");
+ 	npu_dbg("-----------------------------------------------------------------------------------\n");
+ 
++	/* The mailbox pointers are monotonically increasing byte counters. */
++	if (!sgmt_len || (sgmt_len & (sgmt_len - 1)) || wptr < rptr ||
++			(wptr - rptr) > sgmt_len ||
++			(rptr & (sizeof(u32) - 1)) || (wptr & (sizeof(u32) - 1))) {
++		npu_err("Invalid mailbox ring state for debug dump\n");
++		return;
++	}
++
++	/* Every record consumes at least one message header and one command. */
++	max_walk = sgmt_len / (sizeof(struct message) + sizeof(struct command));
+ 	while (rptr < wptr) {
++		if (walk_count >= max_walk) {
++			npu_err("Mailbox debug walk exceeded ring record bound\n");
++			return;
++		}
++		walk_count++;
++
++		if ((wptr - rptr) < sizeof(struct message)) {
++			npu_err("Incomplete message header in mailbox debug dump\n");
++			return;
++		}
+ 		__copy_message_from_line(base, sgmt_len, rptr, &msg);
+ 		if (msg.length != sizeof(struct command)) {
+ 			npu_err("Please check the msg->length\n");
+ 			return;
+ 		}
++		/* mbx_ipc_put may insert padding before a wrapped command. */
++		if ((msg.data & (sizeof(u32) - 1)) || msg.data < rptr ||
++				(msg.data - rptr) < sizeof(struct message) ||
++				msg.data > wptr || msg.length > (wptr - msg.data)) {
++			npu_err("Invalid message data range in mailbox debug dump\n");
++			return;
++		}
++		next_rptr = msg.data + msg.length;
++		if (next_rptr <= rptr || next_rptr > wptr) {
++			npu_err("Mailbox debug walk made no valid progress\n");
++			return;
++		}
+ 		/* copy_command should copy only command part else payload */
+ 		__copy_command_from_line(base, sgmt_len, msg.data, &cmd, sizeof(struct command));
+ 
+ 		if (msg.magic == MESSAGE_MARK) {
+-			rptr = msg.data + msg.length;
++			rptr = next_rptr;
+ 			continue;
+ 		}
+@@ -296,7 +330,7 @@ static void __mbx_ipc_print(char *underlay, volatile struct mailbox_ctrl *ctrl, u32 log_level)
+ 			break;
+ 		}
+ 
+-		rptr = msg.data + msg.length;
++		rptr = next_rptr;
+ 	}
+ 	npu_dbg("-----------------------------------------------------------------------------------\n");
+ }

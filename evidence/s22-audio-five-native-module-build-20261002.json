@@ -1,0 +1,225 @@
+{
+  "schema": "s22-audio-native-five-module-build/v1",
+  "scope": "single_native_abox5_module_compile_and_static_abi_review",
+  "selection": {
+    "model": "gpt-6-luna",
+    "reasoning": "max",
+    "evidence": "explicit_configured_selection_not_backend_attestation"
+  },
+  "verdict": {
+    "single_target_compile": "passed",
+    "candidate_imports_vs_filtered_baseline": "passed",
+    "unchanged_native_eight_module_set": "blocked_by_10_changed_exports_and_6_stale_imports",
+    "device_or_deployment_approval": false
+  },
+  "source": {
+    "base_commit": "872bffb8ea2ea657f94d10b866dc655b5718d6db",
+    "base_tree": "417e4a55e222b99ecca0f198e081d2d808ef5628",
+    "parent_commit": "3c11bdda6ba6ba27fb4eb7e2cb096d98c514d6d3",
+    "commit": "7363ab97d917a20f2c96632c94efd9ab7df7729e",
+    "tree": "84325be79eab0244dd9a130e51d0974f6eadd4f5",
+    "clean_after_build": true,
+    "changed_paths": [
+      "include/trace/events/samsung_abox.h",
+      "sound/soc/samsung/abox/abox.c",
+      "sound/soc/samsung/abox/abox.h",
+      "sound/soc/samsung/abox/abox_rdma.c"
+    ],
+    "patches": [
+      {"name": "audio-ipc-observation-fix.patch", "sha256": "afe1cbd271559b9aba5907ec732613a6efabb730e4763b8356c3c72906c93a4d"},
+      {"name": "audio-ipc-error-path-2026-10-02.patch", "sha256": "676735886d88441232d3e56aa07c77e38f63f823ffa09b90addc51918ef9fc9d"},
+      {"name": "audio-ipc-worker-pm.patch", "sha256": "eeb5e15727fddbc3b153a08a1c77edee5e7be4a527d7ef1dbffb4ad3e4722c8a"},
+      {"name": "audio-ipc-duplicate-rekick.patch", "sha256": "f0d53a74a7099376d53e8c029e127a93a6aeaa097b6f2c1c8611ac6ebb571869"},
+      {"name": "audio-ipc-trace-private-abi.patch", "sha256": "2c85c2603a31f8a5535a21a2efdd60f6e3750174b6c706828f777a7bb109e1d6"}
+    ],
+    "excluded": ["NPU9", "NPU10", "kernel_core_changes", "configuration_changes"]
+  },
+  "source_review": {
+    "clearance_commit": "55485bda",
+    "integrated_commit": "c4562a8",
+    "generic_physical_slot_test_gap": "unresolved_and_not_exercised_by_build",
+    "abi_crc_cause": "not_proven"
+  },
+  "configuration": {
+    "sha256": "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16",
+    "raw_config_published": false,
+    "copied_from_exact_native_export": true,
+    "olddefconfig_exit_code": 0,
+    "olddefconfig_unchanged_bytes": true,
+    "olddefconfig_sha256_before": "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16",
+    "olddefconfig_sha256_after": "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16",
+    "relevant_settings": {
+      "CONFIG_SND_SOC_SAMSUNG_ABOX": "m",
+      "CONFIG_TRACEPOINTS": "y",
+      "CONFIG_CFI_CLANG": "y",
+      "CONFIG_SHADOW_CALL_STACK": "y",
+      "CONFIG_MODVERSIONS": "y",
+      "CONFIG_LTO_NONE": "y"
+    }
+  },
+  "symvers": {
+    "baseline_sha256": "15fc69e815cb4da6cb3372f4b5141005ab2e770b0414b67f230f1b185bf03df7",
+    "baseline_rows": 17283,
+    "excluded_target_owner": "sound/soc/samsung/abox/snd-soc-samsung-abox",
+    "excluded_target_owner_rows": 28,
+    "excluded_target_owner_sha256": "7b7e8246796a1ea9965a31c4eaebd9b1af3cf19dfdb564984732c4f3ba79be37",
+    "filtered_sha256": "ada1bf87ea2f99233622f4b75a7a88a93952cb24fc1f806d727bf6177352cafa",
+    "filtered_rows": 17255,
+    "direct_comparison_equals_baseline_minus_target_owner": true,
+    "candidate_modules_only_symvers_sha256": "e73d89c9637e3cea289c4bc61d999967d9cd20ae33a73bf71bfd13c7439f67ac",
+    "candidate_export_rows": 28,
+    "candidate_export_rows_match_old_names": true,
+    "candidate_export_crc_unchanged_count": 18,
+    "candidate_export_crc_changed_count": 10,
+    "candidate_export_crc_changes": [
+      {"name": "abox_hw_params_fixup_helper", "baseline_crc": "0x97d1fec7", "candidate_crc": "0x2004e1bc"},
+      {"name": "abox_iommu_map", "baseline_crc": "0xc12c99a2", "candidate_crc": "0x67a41b5b"},
+      {"name": "abox_iommu_map_sg", "baseline_crc": "0x73a131d9", "candidate_crc": "0xfb1a2964"},
+      {"name": "abox_iommu_unmap", "baseline_crc": "0xdbbfe1df", "candidate_crc": "0xe8251aec"},
+      {"name": "abox_iova_to_phys", "baseline_crc": "0x46589d01", "candidate_crc": "0xac033b11"},
+      {"name": "abox_iova_to_virt", "baseline_crc": "0x6f844da0", "candidate_crc": "0x9aa832d4"},
+      {"name": "abox_register_ipc_handler", "baseline_crc": "0x9318da9c", "candidate_crc": "0x2242e539"},
+      {"name": "abox_request_cpu_gear_ext", "baseline_crc": "0xb57ee649", "candidate_crc": "0x7d80e140"},
+      {"name": "abox_request_dram_on", "baseline_crc": "0xc59d7e2f", "candidate_crc": "0x7fe9fa89"},
+      {"name": "abox_request_ipc", "baseline_crc": "0xded8a290", "candidate_crc": "0xf2895e57"}
+    ],
+    "helper_sha256": "2404fab4a2ed469eab1930a7275c28fd3f5a0bbb1b23c88369338ca23cd26c67"
+  },
+  "toolchain": {
+    "matches_native_eight_receipt": true,
+    "clang_version": "Ubuntu clang version 18.1.3 (1ubuntu1)",
+    "ld_lld_version": "Ubuntu LLD 18.1.3 (compatible with GNU linkers)",
+    "resolved_tools": [
+      {"name": "clang", "sha256": "8ef402d453d1ba4902e4ee0f0f847f6cfa01400c95aa43c24e97818b9c0e3f45"},
+      {"name": "ld.lld", "sha256": "7ad9a0e8fe6d0e79b71172d731e33872c0274e49fceb7b516d774876d5a58ade"},
+      {"name": "llvm-ar", "sha256": "eedd2efbdee80acf60e17e10adeddf31be0347226245f935be95efa3ae00ec79"},
+      {"name": "llvm-nm", "sha256": "3f85dd567c2806f2c031e317871e7145f858072fc9595aba4dc33d2e3a671402"},
+      {"name": "llvm-objcopy", "sha256": "f52b9997b3c5019b4b3043e12b1ae2e821df67996ca344921c234c89c4d23e34"},
+      {"name": "llvm-objdump", "sha256": "4f98b86448d23bd1f858c50e93fbfc799f1c3640961a95e3b6c89d229a1b91bb"},
+      {"name": "llvm-readelf", "sha256": "8ed942a8c33f191480253ff7f236b7e49966c7441d12063d49dce9743aba9a6d"},
+      {"name": "llvm-strip", "sha256": "f52b9997b3c5019b4b3043e12b1ae2e821df67996ca344921c234c89c4d23e34"},
+      {"name": "llvm-ranlib", "sha256": "eedd2efbdee80acf60e17e10adeddf31be0347226245f935be95efa3ae00ec79"},
+      {"name": "llvm-size", "sha256": "401e6835686b116baeaa8b98a5ebee54fbe66148b4a3fcda5436ef243a3653f3"},
+      {"name": "aarch64-linux-gnu-gcc", "sha256": "cd90adc7801f4595267f61a5d25bd3a0c6beb2f9f1f107ab919a97a12972dc9a"},
+      {"name": "aarch64-linux-gnu-ld", "sha256": "7c903ac277dd1f5c4397277db865f12d8239fe45782f71afbeb3d42180a4b1ae"},
+      {"name": "aarch64-linux-gnu-nm", "sha256": "96dbed79b11f6cc13b060dd5ca705a277bb5bdecd714df1c470ffaafb2513727"}
+    ]
+  },
+  "build": {
+    "profile": "native-abox-five-module-only",
+    "make_target": "sound/soc/samsung/abox/snd-soc-samsung-abox.ko",
+    "make_arguments": [
+      "ARCH=arm64", "LLVM=1", "CROSS_COMPILE=aarch64-linux-gnu-",
+      "LOCALVERSION=", "input-symdump=<fresh-output>/abox-dependencies.symvers",
+      "-j1", "V=1"
+    ],
+    "environment": "env -i PATH=<pinned-LLVM18-and-system-path> LANG=C LC_ALL=C",
+    "nice_level": 10,
+    "jobs": 1,
+    "llvm_ias_override": false,
+    "ld_override": false,
+    "wrapper_sha256": "b4720b418e8a735894cf7f796fd732a117d5622b743829327f1a10a2622a1bc1",
+    "python_interpreter": {
+      "version": "CPython 3.12",
+      "sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+      "isolated": true,
+      "dont_write_bytecode": true,
+      "optimize": 0
+    },
+    "monitored_helper_sha256": "56f39759e4a098562cbafd634a659b007be2a540a4ada6234962711be026e5d5",
+    "build_exit_code": 0,
+    "resource_abort": false,
+    "owned_process_group_absent_after": true,
+    "finished_at_utc": "2026-10-02T20:24:37.575635+00:00",
+    "builder_pid": 2127296,
+    "make_process_group": 2129237,
+    "minimum_available_memory_bytes": 23180677120,
+    "minimum_free_disk_bytes": 46303342592,
+    "preflight_available_memory_bytes": 25521627136,
+    "preflight_free_disk_bytes": 46524821504,
+    "resource_monitor_samples": 5,
+    "abox_source_translation_units": 28,
+    "all_abox_source_units_have_kcfi_scs_fixed_x18": true,
+    "generated_mod_metadata_translation_units": 1,
+    "link_contains_flto": false,
+    "warning_or_error_diagnostics": 0,
+    "build_log_sha256": "53e2b3aeebfa2f46ea0f35b9c94366ec77d11ec900b719e7aafe38b050f2db41",
+    "build_phase_sha256": "48b4093a58da6bbf8b6724c667a2dcc6e128b97fb6377f408a8055102176a035",
+    "resource_monitor_sha256": "c329d658548621115c709a7f00de3fe46feaad34aafbbb77037d2968e25cbf67",
+    "olddefconfig_exit_code": 0,
+    "olddefconfig_sha256_before": "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16",
+    "olddefconfig_sha256_after": "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16",
+    "olddefconfig_log_sha256": "bdf0e144b1aee67971fde5615465bf0a0bdfe183771bf1cec236910dc2769f58",
+    "olddefconfig_phase_sha256": "a00bbcbed72baa93f5f74b2444c0d757046812743a6bf3fac13226f718f5ae89",
+    "private_logs_and_receipts_in_repository": false,
+    "wrapper_status_message_quirk": "normal SystemExit(0) was caught and printed as ABOX5_BUILD_ABORT; wrapper and target exit codes are both 0"
+  },
+  "artifact": {
+    "name": "snd-soc-samsung-abox.ko",
+    "module_name": "snd_soc_samsung_abox",
+    "format": "ELF64_AArch64_relocatable",
+    "size_bytes": 9596112,
+    "sha256": "55bae9f12135a2134337d7d520ddfadc85cdd049cedefd2a3c41f871fdd329bf",
+    "gnu_build_id_sha1": "26347c3373e155fa6badf7883ff162f1d9f6723f",
+    "vermagic": "5.10.260-g4e5c5ad7d950 SMP preempt mod_unload modversions aarch64",
+    "kernel_release_matches_native_eight": true,
+    "has___versions": true,
+    "import_rows": 363,
+    "canonical_import_rows_sha256": "9cbcc6798c73a73d55ae63ca07bfe0072d8e5ce8a7b31ca0015e87f90d6b337f",
+    "import_missing": 0,
+    "import_ambiguous": 0,
+    "import_unknown_crc": 0,
+    "import_crc_mismatches_vs_filtered_dependencies": 0,
+    "module_layout_module_crc": "0x0e3c515c",
+    "module_layout_candidate_crc": "0x0e3c515c",
+    "candidate_output_ko_count": 1,
+    "image_generated": false,
+    "vmlinux_generated": false
+  },
+  "native_eight_integration": {
+    "baseline_modules_order_count": 329,
+    "baseline_actual_ko_count": 329,
+    "baseline_inventory_paths_sha256": "d79baeab5ac13f13227b9f9ab71894f22ccab6f8157ceddb81f78624f83ec6ad",
+    "baseline_total_import_rows": 17233,
+    "baseline_modules_with_versions_section": 329,
+    "baseline_module_layout_records": 329,
+    "baseline_module_layout_crc_mismatch_count": 0,
+    "baseline_module_layout_crc_unverified_count": 0,
+    "baseline_vermagic_suffix_mismatch_count": 0,
+    "baseline_abox_export_import_rows": 14,
+    "baseline_abox_export_consumer_modules": 7,
+    "stale_abox_import_count": 6,
+    "stale_abox_consumer_modules": [
+      {
+        "module": "sound/usb/exynos-usb-audio-offloading.ko",
+        "stale_imports": [
+          "abox_iova_to_phys", "abox_request_ipc", "abox_iommu_map",
+          "abox_iommu_unmap", "abox_register_ipc_handler"
+        ]
+      },
+      {
+        "module": "sound/soc/samsung/rainbow_prince.ko",
+        "stale_imports": ["abox_hw_params_fixup_helper"]
+      }
+    ],
+    "baseline_module_set_integration": "blocked",
+    "no_force_load_or_crc_suppression": true
+  },
+  "safety_boundaries": {
+    "phone_access": false,
+    "ssh_adb_or_device_action": false,
+    "firmware_or_weights_action": false,
+    "module_install_or_load": false,
+    "image_or_kernel_package": false,
+    "publish_or_deploy": false,
+    "bootup_authorized": false,
+    "audio_hardware_accepted": false
+  },
+  "limitations": [
+    "This result is one host-side module-target compile, not a full-image or current-phone ABI/deployment result.",
+    "All ten changed ABOX CRCs and six stale imports remain; the genksyms cause is not established by this build.",
+    "A successful target build and matching imports do not prove kernel workqueue, runtime-PM, device IPC, DMA, PCM progress, or physical audio.",
+    "The generic trace test's physical-slot reuse gap remains open and was not covered by this compilation.",
+    "NPU9/NPU10, Image/vmlinux, packaging, loading, phone operations, firmware, and deployment were out of scope."
+  ]
+}

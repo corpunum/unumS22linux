@@ -1,0 +1,190 @@
+{
+  "schema": "s22-audio-camera-executable-review/v1",
+  "date": "2026-10-03",
+  "worktree": "/home/corpunum/s22-workers/audio-camera-review-20261003",
+  "branch": "codex/s22-audio-camera-review-20261003",
+  "review_head_before_artifacts": "da92be3561449632c7a94e6ca198c218a47cda10",
+  "reviewed_commits": {
+    "audio_bounded_observer": "da92be3561449632c7a94e6ca198c218a47cda10",
+    "camera_logging_correction": "c9119f4c1256b057b8f3af5edb3e9552d69f37dd"
+  },
+  "model_selection": {
+    "requested_model": "gpt-6-luna",
+    "requested_reasoning_effort": "max",
+    "backend_attestation": false
+  },
+  "scope": {
+    "host_only": true,
+    "device_contact": false,
+    "ssh_or_adb": false,
+    "production_markers_touched": false,
+    "kernel_module_or_package_build": false,
+    "image_repack": false,
+    "inference_or_service_restart": false,
+    "phone_or_hardware_acceptance": false,
+    "camera_arm64_frontend_rerun": false
+  },
+  "verdicts": {
+    "audio": {
+      "verdict": "BLOCKED",
+      "reason": "Three fresh remote captures and a remote 180-second interval are not proven: replayed identical valid remote JSON is accepted based on host-clock spacing.",
+      "source_claim": "The implementation issues a new readiness and full-identity query for each sample pair, reads /proc/uptime in the collector, and enforces a 600-second monotonic deadline.",
+      "data_gap": "The returned readiness uptime is only checked against >=180, omitted from the persisted sample, and never required to advance. Stability seconds are computed from host sample-start times.",
+      "counterexample": {
+        "fixture": "Source-pinned AudioOperationFixture temporary profile/receipt/guard roots with fake monotonic clock and fake transport.",
+        "same_readiness_json_calls": 3,
+        "same_identity_json_calls": 3,
+        "remote_readiness_uptime_seconds": [240.0, 240.0, 240.0],
+        "host_readiness_query_offsets_seconds": [0.0, 90.0, 180.0],
+        "observer_status": "bounded-stability-observed",
+        "reported_stability_seconds": 180.0,
+        "reported_sample_count": 3,
+        "actual_device_contact": false
+      },
+      "recommended_correction": [
+        "Require finite same-boot remote uptime to advance consistently across accepted samples.",
+        "Require at least 180 seconds of remote uptime difference as well as at least 180 seconds of host monotonic spacing.",
+        "Persist the exact remote uptime for each sample; do not require a quiet dmesg fingerprint to change."
+      ],
+      "budget_review": {
+        "total_deadline_seconds": 600,
+        "capped_query_wait_upper_bound_seconds": 505,
+        "assessment": "Internally consistent conservative bound; the remaining-time checks govern actual execution. Does not establish remote sample freshness."
+      },
+      "receipt_role_map_addendum": {
+        "author_receipt_field": "identity_binding.expected_profile_module_ids",
+        "interpretation": "The recorded values are prewrite roles (before=True), despite an ambiguous field name.",
+        "prewrite_modules": {
+          "audio-forward": {
+            "role": "camera_recovery_baseline",
+            "snd_soc_samsung_abox": "34a5354a75980688ee7dbeb6a848e04a7d54558f",
+            "rainbow_prince": "510b984887b640ad4ad3c1e9a556ef16c30b38c9",
+            "exynos_usb_audio_offloading": "4f35c50b0eca0d22b2060f7b8d84f03359feacd1"
+          },
+          "audio-reverse": {
+            "role": "audio_candidate",
+            "snd_soc_samsung_abox": "26347c3373e155fa6badf7883ff162f1d9f6723f",
+            "rainbow_prince": "8a7227b58cb7f4faf73ea92974781d34870bbfac",
+            "exynos_usb_audio_offloading": "8c9b0d4787ea32eae7de0086a4d662b0f351675d"
+          }
+        },
+        "postboot_target_modules_actually_checked_by_observer": {
+          "audio-forward": {
+            "role": "audio_candidate",
+            "snd_soc_samsung_abox": "26347c3373e155fa6badf7883ff162f1d9f6723f",
+            "rainbow_prince": "8a7227b58cb7f4faf73ea92974781d34870bbfac",
+            "exynos_usb_audio_offloading": "8c9b0d4787ea32eae7de0086a4d662b0f351675d"
+          },
+          "audio-reverse": {
+            "role": "camera_recovery_baseline",
+            "snd_soc_samsung_abox": "34a5354a75980688ee7dbeb6a848e04a7d54558f",
+            "rainbow_prince": "510b984887b640ad4ad3c1e9a556ef16c30b38c9",
+            "exynos_usb_audio_offloading": "4f35c50b0eca0d22b2060f7b8d84f03359feacd1"
+          }
+        },
+        "runtime_role_check": "tools/hardware/audio-coherent-recovery-reboot-once.py calls expected_profile_modules(profile_name, before=False)."
+      },
+      "unknown_marker_note": "ACK markers bind exact result path and SHA-256. UNKNOWN reboot markers retain status=unknown but carry no receipt digest; the read-only follow-up validates trial/kind/status and does not clear or replay it. Guard lock acquisition refuses unresolved markers."
+    },
+    "camera": {
+      "verdict": "PASS_LIMITED",
+      "reason": "The corrected object-free warn call matches the pinned macro, and the extracted actual C negative control rejects the old objectless mwarn call.",
+      "change_scope": "One warning macro call, host shim signatures, and a pinned-macro compile good/bad regression; no ownership or cleanup behavior change.",
+      "private_source_identity": {
+        "commit": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+        "tree": "5c46cbe12dadbcdb64eec4344c9e8ff0f8a75dee",
+        "clean_at_review": true
+      },
+      "independent_host_c_regression": {
+        "corrected_call_compiles": true,
+        "old_objectless_call_rejected": true,
+        "c_optimization_levels": ["-O0", "-O2"],
+        "camera_host_cases_per_python_mode": 10
+      },
+      "author_arm64_evidence": {
+        "recorded_frontend_jobs": 8,
+        "recorded_failures": 0,
+        "independently_rerun": false,
+        "receipt": "evidence/s22-camera-logging-frontend-host-20261003.json"
+      },
+      "limits": [
+        "Not a kernel/module/Image build or phone operation.",
+        "Camera concurrency, clock provider behavior, DMA, external teardown, and quiescence remain unresolved.",
+        "Prior powered camera observation remains not_accepted."
+      ]
+    }
+  },
+  "independent_tests": [
+    {
+      "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=0 python3 -B tools/hardware/test-audio-coherent-trial-adapter.py",
+      "result": "PASS",
+      "passed": 35,
+      "failed": 0,
+      "python_optimize": 0
+    },
+    {
+      "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=1 python3 -O -B tools/hardware/test-audio-coherent-trial-adapter.py",
+      "result": "PASS",
+      "passed": 35,
+      "failed": 0,
+      "python_optimize": 1
+    },
+    {
+      "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=1 PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-audio-coherent-trial-adapter.py",
+      "result": "PASS",
+      "passed": 35,
+      "failed": 0,
+      "python_optimize": 1
+    },
+    {
+      "command": "CAMERA_EXPECT_PYTHONOPTIMIZE=0 python3 -B tools/hardware/test-camera-sensor-clock-unwind.py",
+      "result": "PASS",
+      "passed": 10,
+      "failed": 0,
+      "python_optimize": 0
+    },
+    {
+      "command": "CAMERA_EXPECT_PYTHONOPTIMIZE=1 python3 -O -B tools/hardware/test-camera-sensor-clock-unwind.py",
+      "result": "PASS",
+      "passed": 10,
+      "failed": 0,
+      "python_optimize": 1
+    },
+    {
+      "command": "CAMERA_EXPECT_PYTHONOPTIMIZE=1 PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-camera-sensor-clock-unwind.py",
+      "result": "PASS",
+      "passed": 10,
+      "failed": 0,
+      "python_optimize": 1
+    }
+  ],
+  "default_plan_checks": {
+    "audio-forward": {
+      "exit_code": 0,
+      "authorized": false,
+      "execution": false,
+      "reboot_performed": false,
+      "stability_observation_execution": false,
+      "partition_written": false,
+      "audio_hardware_acceptance": false
+    },
+    "audio-reverse": {
+      "exit_code": 0,
+      "authorized": false,
+      "execution": false,
+      "reboot_performed": false,
+      "stability_observation_execution": false,
+      "partition_written": false,
+      "audio_hardware_acceptance": false
+    }
+  },
+  "source_sha256": {
+    "tools/hardware/audio-coherent-recovery-reboot-once.py": "3dadaad14953a67339479b534ddee11710463bc7f4382d916899a0924e5b5f80",
+    "tools/hardware/test-audio-coherent-trial-adapter.py": "5c9cf264f2b1707527e8bfd171458c84f3d689d5cd5bce21caf4ba4263054d3d",
+    "tools/hardware/deploy-audio-coherent-recovery.py": "859047a5018d697e510ef77855c5f841b1ef2e8890fb9890d47ba8dcb2a4aa66",
+    "tools/hardware/audio-coherent-recovery-profile.py": "7a24b600d8e8054ce4266a084b7d227a108928eb4319b548a1bc34bd88e407d4",
+    "tools/hardware/camera-sensor-clock-unwind.patch": "1f1965b1ed85ffffdd77fb474fc6dd2ab02cdf7f641f2da8e6fcd4c7233f9c24",
+    "tools/hardware/camera-sensor-clock-unwind-harness.c": "42fb37d946ea954fe6c296981001564b428fedea8e688f24faeb8c0d23242721",
+    "tools/hardware/test-camera-sensor-clock-unwind.py": "16eec48fb30d7aa87725ba945e595c6c6a80ab9d81f88a3c157cf9a32e0b3f60"
+  }
+}

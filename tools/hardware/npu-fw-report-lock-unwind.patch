@@ -1,0 +1,47 @@
+diff --git a/drivers/vision/npu/core/npu-log.c b/drivers/vision/npu/core/npu-log.c
+--- a/drivers/vision/npu/core/npu-log.c
++++ b/drivers/vision/npu/core/npu-log.c
+@@ -1045,6 +1045,8 @@ int npu_fw_report_store(char *strRep, int nSize)
+ 
+ 	spin_lock_irqsave(&fw_report_lock, intr_flags);
+-	if (fw_report.st_buf == NULL)
++	if (fw_report.st_buf == NULL) {
++		spin_unlock_irqrestore(&fw_report_lock, intr_flags);
+ 		return -ENOMEM;
++	}
+ 
+ 	buf = fw_report.st_buf + fw_report.wr_pos;
+@@ -1081,8 +1083,9 @@ int npu_fw_profile_store(char *strRep, int nSize)
+ 	unsigned long intr_flags;
+ 
+ 	spin_lock_irqsave(&fw_profile_lock, intr_flags);
+-
+-	if (fw_profile.st_buf == NULL)
++	if (fw_profile.st_buf == NULL) {
++		spin_unlock_irqrestore(&fw_profile_lock, intr_flags);
+ 		return -ENOMEM;
++	}
+ 
+ 	buf = fw_profile.st_buf + fw_profile.wr_pos;
+@@ -1711,7 +1714,9 @@ int fw_will_note_to_kernel(size_t len)
+ 	spin_lock_irqsave(&fw_report_lock, intr_flags);
+ 
+-	if (fw_report.st_buf == NULL)
++	if (fw_report.st_buf == NULL) {
++		spin_unlock_irqrestore(&fw_report_lock, intr_flags);
+ 		return -ENOMEM;
++	}
+ 
+ 	//Consideration for early phase
+ 	if (fw_report.wr_pos < len) {
+@@ -1763,7 +1768,9 @@ int fw_will_note(size_t len)
+ 	spin_lock_irqsave(&fw_report_lock, intr_flags);
+ 
+-	if (fw_report.st_buf == NULL)
++	if (fw_report.st_buf == NULL) {
++		spin_unlock_irqrestore(&fw_report_lock, intr_flags);
+ 		return -ENOMEM;
++	}
+ 
+ 	//Consideration for early phase
+ 	if (fw_report.wr_pos < len) {

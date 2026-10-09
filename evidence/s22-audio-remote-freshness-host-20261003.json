@@ -1,0 +1,297 @@
+{
+  "schema": "s22-audio-remote-freshness-host/v1",
+  "date": "2026-10-03",
+  "scope": "host-only correction of remote sample freshness in the bounded audio stability observer",
+  "worktree": "/home/corpunum/s22-workers/audio-observer-freshness-20261003",
+  "branch": "codex/s22-audio-observer-freshness-20261003",
+  "base_commit": "39735fcd68c6b175e1aa3bc3bb0c5d129906671f",
+  "preservation": {
+    "frozen_observer_commit": "da92be3561449632c7a94e6ca198c218a47cda10",
+    "independent_blocked_review_commit": "4c516d2803189be3aea95acac77560a7a3dcc17f",
+    "frozen_author_receipt": "evidence/s22-audio-bounded-observer-host-20261003.json",
+    "frozen_author_receipt_sha256": "5c8d6827ee83b8ca2724770becae1e81aa5b70021d99088662c66b8845e20247",
+    "independent_review": "docs/research/AUDIO_CAMERA_EXECUTABLE_REVIEW_2026-10-03.md",
+    "independent_review_sha256": "1c606da8cce90d98e7b1c3fd017a24e328a02ce2e53f69243e71699c9ca8027b",
+    "frozen_receipt_and_review_modified": false,
+    "historical_module_role_map_modified": false,
+    "pre_fix_failure_preserved_below": true
+  },
+  "pre_fix_reproduction": {
+    "observer_source_commit": "da92be3561449632c7a94e6ca198c218a47cda10",
+    "execution_worktree_head": "39735fcd68c6b175e1aa3bc3bb0c5d129906671f",
+    "observer_source_sha256": "3dadaad14953a67339479b534ddee11710463bc7f4382d916899a0924e5b5f80",
+    "actual_frozen_observer_executed": true,
+    "returned_status": "bounded-stability-observed",
+    "replayed_remote_readiness_uptime_seconds": [
+      240.0,
+      240.0,
+      240.0
+    ],
+    "readiness_payload_sha256_each_sample": "9a0c0fc849e2a95cd3067f7cacfc89d8700cd861d4a8bf1e731c0ccd6ec72dea",
+    "identity_payload_sha256_each_sample": "3a399be491b87b06f6c17247b512c974b70f4fa4b6661ec6f0d71c211954582f",
+    "host_sample_offsets_seconds": [
+      0.0,
+      90.0,
+      180.0
+    ],
+    "host_stability_seconds": 180.0,
+    "sample_count": 3,
+    "remote_query_counts": {
+      "startup": 1,
+      "readiness": 3,
+      "identity": 3
+    },
+    "sample_receipts_stored_remote_uptime": [
+      false,
+      false,
+      false
+    ],
+    "device_contact": false,
+    "authorization_override_scope": "temporary synthetic test fixture only"
+  },
+  "correction_policy": {
+    "accepted_uptime_json_types": [
+      "int",
+      "float"
+    ],
+    "rejects_boolean_numeric_subtype": true,
+    "rejects_nonfinite_values": true,
+    "accepted_uptime_range_seconds": "0 <= value < 10000000; ready samples must be >= 180",
+    "boot_id_must_match_initial_and_all_samples": true,
+    "same_boot_remote_uptime_must_strictly_increase": true,
+    "per_sample_remote_delta_must_match_host_sample_start_delta_within_seconds": 15,
+    "minimum_host_sample_interval_seconds": 180,
+    "minimum_remote_sample_interval_seconds": 180,
+    "planned_sample_offsets_seconds": [
+      0,
+      90,
+      180
+    ],
+    "effective_final_sample_start_offset_minimum_seconds": 195,
+    "final_offset_covers_readiness_capture_skew": true,
+    "remote_uptime_and_intervals_are_saved_in_each_sample_receipt": true,
+    "remote_uptimes_and_interval_are_repeated_in_final_receipt": true,
+    "unchanged_quiet_dmesg_sha256_is_allowed": true,
+    "total_deadline_seconds_including_nested_queries": 600,
+    "read_only_reconnects_total_maximum": 1
+  },
+  "identity_binding": {
+    "trial_identity": "audio-coherent-20261003-first",
+    "baseline_image_sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+    "candidate_image_sha256": "6b788b23f54b9b8e84212187544064949b72af20c167cbb02392cbe53ee5a6ab",
+    "image_size_bytes": 100663296,
+    "candidate_manifest_sha256": "f78bbaddf94ef6d1ae37b059b7455b24a15cbb7c2fab1ec9bbc4e1df5fd1edf8",
+    "unchanged_kernel_gnu_build_id": "b2dda820b18d410d9bf12f1bd2584567d545991d",
+    "before_reboot_module_ids": {
+      "audio-forward": {
+        "snd_soc_samsung_abox": "34a5354a75980688ee7dbeb6a848e04a7d54558f",
+        "rainbow_prince": "510b984887b640ad4ad3c1e9a556ef16c30b38c9",
+        "exynos_usb_audio_offloading": "4f35c50b0eca0d22b2060f7b8d84f03359feacd1"
+      },
+      "audio-reverse": {
+        "snd_soc_samsung_abox": "26347c3373e155fa6badf7883ff162f1d9f6723f",
+        "rainbow_prince": "8a7227b58cb7f4faf73ea92974781d34870bbfac",
+        "exynos_usb_audio_offloading": "8c9b0d4787ea32eae7de0086a4d662b0f351675d"
+      }
+    },
+    "postboot_target_module_ids": {
+      "audio-forward": {
+        "snd_soc_samsung_abox": "26347c3373e155fa6badf7883ff162f1d9f6723f",
+        "rainbow_prince": "8a7227b58cb7f4faf73ea92974781d34870bbfac",
+        "exynos_usb_audio_offloading": "8c9b0d4787ea32eae7de0086a4d662b0f351675d"
+      },
+      "audio-reverse": {
+        "snd_soc_samsung_abox": "34a5354a75980688ee7dbeb6a848e04a7d54558f",
+        "rainbow_prince": "510b984887b640ad4ad3c1e9a556ef16c30b38c9",
+        "exynos_usb_audio_offloading": "4f35c50b0eca0d22b2060f7b8d84f03359feacd1"
+      }
+    }
+  },
+  "post_fix_fake_profiles": {
+    "execution": "actual observe_stability code with fake transport, synthetic filesystem and fake clock; no real waits",
+    "audio-forward": {
+      "status": "bounded-stability-observed",
+      "host_sample_offsets_seconds": [
+        0.0,
+        90.0,
+        195.0
+      ],
+      "remote_sample_uptimes_seconds": [
+        180.0,
+        270.0,
+        375.0
+      ],
+      "remote_sample_intervals_seconds": [
+        null,
+        90.0,
+        105.0
+      ],
+      "host_stability_seconds": 195.0,
+      "remote_stability_seconds": 195.0,
+      "sample_count": 3,
+      "query_counts": {
+        "startup": 1,
+        "readiness": 3,
+        "identity": 3
+      },
+      "remote_query_attempts": 7,
+      "sample_receipts_contain_same_uptimes": true,
+      "synthetic_reboot_fixture_calls": 1,
+      "audio_hardware_acceptance": false,
+      "bootability_claim": false
+    },
+    "audio-reverse": {
+      "status": "bounded-stability-observed",
+      "host_sample_offsets_seconds": [
+        0.0,
+        90.0,
+        195.0
+      ],
+      "remote_sample_uptimes_seconds": [
+        180.0,
+        270.0,
+        375.0
+      ],
+      "remote_sample_intervals_seconds": [
+        null,
+        90.0,
+        105.0
+      ],
+      "host_stability_seconds": 195.0,
+      "remote_stability_seconds": 195.0,
+      "sample_count": 3,
+      "query_counts": {
+        "startup": 1,
+        "readiness": 3,
+        "identity": 3
+      },
+      "remote_query_attempts": 7,
+      "sample_receipts_contain_same_uptimes": true,
+      "synthetic_reboot_fixture_calls": 1,
+      "audio_hardware_acceptance": false,
+      "bootability_claim": false
+    }
+  },
+  "freshness_failure_controls": [
+    {
+      "case": "identical replayed uptime and payloads",
+      "result": "UNKNOWN",
+      "failure_category": "remote_uptime_not_advancing"
+    },
+    {
+      "case": "decreasing same-boot uptime",
+      "result": "UNKNOWN",
+      "failure_category": "remote_uptime_not_advancing"
+    },
+    {
+      "case": "uptime progression too slow for host sample interval",
+      "result": "UNKNOWN",
+      "failure_category": "remote_uptime_progression_mismatch"
+    },
+    {
+      "case": "nonfinite uptime",
+      "result": "UNKNOWN",
+      "failure_category": "ambiguous_response"
+    },
+    {
+      "case": "boolean uptime",
+      "result": "UNKNOWN",
+      "failure_category": "ambiguous_response"
+    },
+    {
+      "case": "string uptime",
+      "result": "UNKNOWN",
+      "failure_category": "ambiguous_response"
+    },
+    {
+      "case": "host sample interval exceeds 180 seconds while remote interval is 165 seconds",
+      "result": "UNKNOWN",
+      "failure_category": "remote_interval_short",
+      "host_sample_offsets_seconds": [
+        0.0,
+        90.0,
+        195.0
+      ],
+      "remote_sample_uptimes_seconds": [
+        240.0,
+        315.0,
+        405.0
+      ]
+    }
+  ],
+  "verification": {
+    "host_test_matrix": [
+      {
+        "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=0 python3 -B tools/hardware/test-audio-coherent-trial-adapter.py -q",
+        "result": "PASS",
+        "passed": 37,
+        "failed": 0,
+        "sys_flags_optimize": 0
+      },
+      {
+        "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=1 python3 -O -B tools/hardware/test-audio-coherent-trial-adapter.py -q",
+        "result": "PASS",
+        "passed": 37,
+        "failed": 0,
+        "sys_flags_optimize": 1
+      },
+      {
+        "command": "AUDIO_EXPECT_PYTHONOPTIMIZE=1 PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-audio-coherent-trial-adapter.py -q",
+        "result": "PASS",
+        "passed": 37,
+        "failed": 0,
+        "sys_flags_optimize": 1
+      }
+    ],
+    "python_compile": "PASS",
+    "git_diff_check": "PASS",
+    "default_observer_plans": {
+      "audio-forward": {
+        "result": "PASS",
+        "authorized": false,
+        "execution": false,
+        "trial_allowlist": []
+      },
+      "audio-reverse": {
+        "result": "PASS",
+        "authorized": false,
+        "execution": false,
+        "trial_allowlist": []
+      }
+    },
+    "actual_observe_stability_executed": true,
+    "real_waits_used": false
+  },
+  "source_sha256": {
+    "tools/hardware/audio-coherent-recovery-reboot-once.py": "eee1e2a467bf1df57325966b6573e1a8dc5dd031d71ef0e8088bd23272f349ea",
+    "tools/hardware/test-audio-coherent-trial-adapter.py": "8cbfab6fcee0da24b93ed0d75af5b66b7cc09b32c21a24f1997af15607eccca4",
+    "docs/research/AUDIO_COHERENT_TRIAL_ADAPTER_2026-10-03.md": "319aeeade6e1ea2d1ac446e9e0bf5251bfb47a90d718b2e7e6c16d9a68ea1632"
+  },
+  "safety_and_limits": {
+    "production_authorized": false,
+    "production_trial_allowlist": [],
+    "synthetic_fixture_authorization_used_only_in_temporary_test_root": true,
+    "phone_or_device_contact": false,
+    "ssh": false,
+    "adb": false,
+    "usb": false,
+    "production_marker_or_service_change": false,
+    "partition_written": false,
+    "reboot_performed": false,
+    "inference_or_service_restart": false,
+    "package_or_image_repack": false,
+    "kernel_build": false,
+    "audio_hardware_acceptance": false,
+    "bootability_claim": false,
+    "full_boot_log_coverage_established": false,
+    "trustzone_progress_established": false,
+    "unknown_reboot_marker_cleared_or_replayed": false,
+    "host_tests_are_hardware_acceptance": false
+  },
+  "changed_paths": [
+    "tools/hardware/audio-coherent-recovery-reboot-once.py",
+    "tools/hardware/test-audio-coherent-trial-adapter.py",
+    "docs/research/AUDIO_COHERENT_TRIAL_ADAPTER_2026-10-03.md",
+    "evidence/s22-audio-remote-freshness-host-20261003.json"
+  ]
+}

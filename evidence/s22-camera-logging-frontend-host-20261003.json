@@ -1,0 +1,119 @@
+{
+  "schema": "s22-camera-logging-frontend-host/v1",
+  "source_commit": "872bffb8ea2ea657f94d10b866dc655b5718d6db",
+  "config_sha256": "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16",
+  "patch_sha256": "1f1965b1ed85ffffdd77fb474fc6dd2ab02cdf7f641f2da8e6fcd4c7233f9c24",
+  "camera_headers_shadowed": 579,
+  "jobs": [
+    {
+      "role": "unchanged-baseline",
+      "relative_source": "drivers/media/platform/exynos/camera/is-core.c",
+      "source_sha256": "2f81e7342a74098e284cef0679afce4ef7e8be34bd81bac9c215bf7f695e1594",
+      "saved_command_sha256": "18a0fd303a9f37dd8216cbde48a1827b120548ef6136dbddba80167ee3869036",
+      "returncode": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "role": "patched-camera-quarantine",
+      "relative_source": "drivers/media/platform/exynos/camera/is-core.c",
+      "source_sha256": "fd9b7cb9b60419aaa9f5a604e634210f63d1b9ced3dcdfe2ac6b4217293541ee",
+      "saved_command_sha256": "18a0fd303a9f37dd8216cbde48a1827b120548ef6136dbddba80167ee3869036",
+      "returncode": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "role": "unchanged-baseline",
+      "relative_source": "drivers/media/platform/exynos/camera/is-video.c",
+      "source_sha256": "66eceae9b3b6d6b8e3e6e600814adfad26d313b304ea09497755e04fd977f232",
+      "saved_command_sha256": "8741ff48566eb580ed8467a7d4fbce7c8374d9bcd64618e67bfa8505217c9a44",
+      "returncode": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "role": "patched-camera-quarantine",
+      "relative_source": "drivers/media/platform/exynos/camera/is-video.c",
+      "source_sha256": "bb76012415fa2c12854c1c339b614c78716b36401aabf9688521656d0d8f85a2",
+      "saved_command_sha256": "8741ff48566eb580ed8467a7d4fbce7c8374d9bcd64618e67bfa8505217c9a44",
+      "returncode": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "role": "unchanged-baseline",
+      "relative_source": "drivers/media/platform/exynos/camera/is-device-sensor_v2.c",
+      "source_sha256": "b88e203fa7ca7fdcf109f969d516601a9cba4702c98a3a0b338b3a6dbcf55265",
+      "saved_command_sha256": "7d7870aa3b03d76578221c0b9e27ab8b3c18b8d71a4878e8417f1d07be4eefb6",
+      "returncode": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "role": "patched-camera-quarantine",
+      "relative_source": "drivers/media/platform/exynos/camera/is-device-sensor_v2.c",
+      "source_sha256": "62fe30f95c599924fe42dbe5834913f614ce1cf25d04424e7f643322d4d83fa9",
+      "saved_command_sha256": "7d7870aa3b03d76578221c0b9e27ab8b3c18b8d71a4878e8417f1d07be4eefb6",
+      "returncode": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "role": "unchanged-baseline",
+      "relative_source": "drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is-sensor.c",
+      "source_sha256": "be9ea9769e2b1678cea68f1a86514aa0ccd559bfa9316840a1a83268bfef1182",
+      "saved_command_sha256": "f17464acf813c855f59756b3e05eb9dd1efb0929d5a124a2685ad5f577e669b5",
+      "returncode": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "role": "patched-camera-quarantine",
+      "relative_source": "drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is-sensor.c",
+      "source_sha256": "d7c35f56dfcdd69d8aa125f0101d9a62877302f232b0dfd46d3babc7832450f3",
+      "saved_command_sha256": "f17464acf813c855f59756b3e05eb9dd1efb0929d5a124a2685ad5f577e669b5",
+      "returncode": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "input_bytes_unchanged": true,
+  "object_module_or_Image_produced": false,
+  "phone_operations": 0,
+  "hardware_acceptance": false,
+  "reproduced_before_fix": {
+    "actual_ARM64_is_core_failed_missing_mwarn_object": true,
+    "other_error_was_temporary_camera_pp_include_shadowing_fixture_corrected": true,
+    "strict_host_suite_failed_tests": 3,
+    "old_camera_patch_sha256": "7808ac0cabc806270a0d07aa2bb974bfd0fc924d3fef33035ba50bf494e768bd",
+    "private_corrected_fixture_failure_log_sha256": "a6fae8ae55f5203fdd4c0356a327bae402e964e2d7cae3271c74f3f8539c235f",
+    "private_strict_host_failure_log_sha256": "0e8bfa59bdcb6dd8aa5924a92c51df08233d5e448dcabaf2e356306081bb7e92"
+  },
+  "after_fix": {
+    "actual_ARM64_frontend_jobs": 8,
+    "failed_jobs": 0,
+    "host_tests_per_mode": 10,
+    "observed_python_optimization_flags": [
+      0,
+      1,
+      1
+    ],
+    "actual_pinned_macro_negative_controls_per_mode": 2,
+    "private_ARM64_complete_receipt_sha256": "af22b282de2bea71bc448e568df3528e7973258a45577baa5f8df01e227ccb68"
+  },
+  "independent_review": "pending",
+  "scope_limits": [
+    "Syntax checking is not an object/module/Image build, link, modpost or symbol-version compatibility result.",
+    "Logging correction only; prior camera concurrency, provider, DMA and external teardown uncertainty remain.",
+    "Earlier physical camera trial remains not_accepted; no new authority or hardware experiment."
+  ]
+}
