@@ -56,7 +56,7 @@ LOCK = Path('/run/s22-touchd.lock')
 OPENUNUM_API = 'http://127.0.0.1:18880'
 PIN_FILE = Path('/srv/s22/state/keepalive/openunum.pinned.json')   # s22-keepalive pin_source
 MODEL_CHOICES = {'luna': ('openai', 'openai/gpt-6-luna'),
-                 'local': ('llama-cpp-local', '/models/Qwen3.5-2B-Q4_0.gguf')}
+                 'local': ('llama-cpp-local', '/models/Qwen3.5-0.8B-Q4_0.gguf')}
 DEFAULT_MODEL_CHOICE = 'luna'
 LOG_MAX = 1 << 20
 
