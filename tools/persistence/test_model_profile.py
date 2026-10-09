@@ -42,6 +42,18 @@ class ModelProfileTests(unittest.TestCase):
             self.assertEqual(command[command.index("--port") + 1], "8089")
             self.assertEqual(command[command.index("-n") + 1], "20")
 
+    def test_none_profile_starts_no_model(self):
+        with tempfile.TemporaryDirectory() as td:
+            selector = Path(td) / "profile"
+            selector.write_text("none\n")
+            profile = MOD.selected_model_profile(selector)
+            self.assertEqual(profile, "none")
+            self.assertIsNone(MOD.model_id(profile))
+            with mock.patch.object(MOD.subprocess, "Popen") as popen, \
+                    mock.patch.object(MOD, "say"):
+                self.assertIsNone(MOD.start_model(Path(td) / "model.log", profile=profile))
+            popen.assert_not_called()
+
     def test_unknown_and_empty_profiles_are_rejected(self):
         for value in ("bad", "", "qwen3b"):
             with tempfile.TemporaryDirectory() as td:
