@@ -107,6 +107,91 @@ inside the Arch chroot, but only when the output directory is under
 - `/vendor/firmware` was dropped from the firmware search: the kernel never looks there.
 - Struct offsets were cross-checked against DWARF from `fimc-is.ko`, and all match.
 
+## Manual exposure and gain (review 2026-10-09)
+
+The first captures (`evidence/lead2-20261008/camera`) were black: the raw values sat at
+the black level of 64. Without the DDK, nothing programs the GN3 integration time.
+`is_sensor_setting_mode_change()` logs `invalid exp_gain_count(0)` and returns before any
+exposure write, because only the DDK sets `exp_gain_cnt` and `mode_chg`. The `shot.ctl`
+exposure from `--exposure-us`/`--iso` is also never read: `copy_sensor_ctl()` is a DDK
+callback. The full code-path trace is in the rig-local brief `s22-camera-exposure-review-20261009.md`.
+
+The one path from user space to the CIS that works on this kernel is
+`VIDIOC_S_EXT_CTRLS` on `/dev/video101`. It runs `is_ssx_video_s_ext_ctrls()`, then
+`is_sensor_s_ext_ctrls()`, then `sensor_module_s_ext_ctrls()`, and its `default:` case calls
+`sensor_module_s_ctrl()`:
+- `V4L2_CID_SENSOR_SET_AE_TARGET` (µs) goes to `sensor_gn3_cis_set_exposure_time()`, which writes 0x0202 and 0x0704.
+- `V4L2_CID_SENSOR_SET_ANALOG_GAIN` (permille) goes to `sensor_gn3_cis_set_analog_gain()`, which writes 0x0204.
+
+Plain `VIDIOC_S_CTRL` with `SET_AE_TARGET`, `SHUTTER` or `GAIN` returns success but does
+nothing: `is_ssx_video_s_ctrl()` catches those IDs and calls `CALL_MOPS` on
+`module->ops == NULL`.
+
+`--cis-exposure-us N --cis-again X` sends one `S_EXT_CTRLS` after the blocking
+`IS_S_STREAM` on, and only if `IS_G_STREAM` reads 1. The client clamps the values to
+100–30000 µs and 1–16x, and the CIS driver clamps them again.
+
+The gain goes out as three writes: `(g-1, g, digital 1x)`. This works around a
+fall-through in `sensor_module_s_ctrl()`: when the requested analog gain equals the cached
+value, the driver sets the digital gain instead. That cache survives close and open with
+`CONFIG_CAMERA_VENDER_MCD`. If the call fails, the error is recorded in `result["cis"]`,
+nothing is retried, and the capture continues. The driver stops at the first failing
+control, so an earlier control in the list may already have been written. The result
+also reports the analog gain read back from register 0x0204.
+
+```sh
+python3 -I -B tools/hardware/camera/s22-camera.py capture -v --out /tmp/e1.png \
+    --raw /tmp/e1.raw --frames 1 --skip 6 --deadline 120 \
+    --cis-exposure-us 10000 --cis-again 1
+```
+
+## Read-only sensor state dump (review v2, 2026-10-09)
+
+Exposure and gain now reach the sensor (`cis.applied`, and register 0x0204 reads back 0x80), but
+the frames still read 62–66. Two opt-in, read-only probes look at what the sensor is
+actually doing. Both take a snapshot after the stream starts (`after_start`) and another
+after the last kept frame (`before_stop`), and record it in `result["dump"]`:
+
+- `--cis-dump` sends `VIDIOC_G_CTRL` for:
+  - `IS_G_STREAM`, `IS_G_DTPSTATUS` and `IS_G_MIPI_ERR` (the CSIS `error_id_last`): kernel state bits only, no I2C.
+  - `GET_ANALOG_GAIN` and `GET_DIGITAL_GAIN`: GN3 I2C reads of 0x0204 and 0x020E.
+- `--cis-i2c-bus N` reads a fixed list of GN3 registers through `/dev/i2c-N`.
+  - Each read is one `I2C_RDWR` containing a 2-byte address write and a 1- or 2-byte read to address 0x10. This is the same framing as `is_sensor_read16()`. No register is written.
+  - The list covers 0x0100 mode, 0x0005 frame count, 0x0202 CIT, 0x0204 and 0x020E gains, 0x0340 and 0x0342 timing, 0x0344–0x034E window, 0x0600 and 0x0620 test pattern, 0x0900 binning, 0x0112 format, and the retention flags.
+  - Every address is a page-0x4000 CCI register below 0x6000. The client never reads 0x6000 and above, because those are the page and indirect-access controls.
+  - The dump stops if 0x0002 does not read the GN3 revision 0xC000.
+  - The client refuses to run unless `/sys/bus/i2c/devices/N-0010/of_node/compatible` is `samsung,exynos-is-cis-gn3`.
+  - It does not load `i2c-dev` itself. Loading that module is a separate step.
+
+## Analog-rail and setfile-echo probes (review v3, 2026-10-09)
+
+The v2 dump showed that the sensor's digital side matches the driver's configuration on every
+register read: it is streaming, the frame counter advances, CIT 0x0830, gains 0x80/0x100,
+timing, window, RAW10, binning, and the test pattern off. Yet the pixels contribute nothing.
+Two more opt-in, read-only probes:
+
+- `--rails` reads `/sys/class/regulator/*/{name,state,microvolts,num_users}` for the GN3
+  power-table rails: S2MPB02 BUCK1/2, BB and LDO1/6/7/10/11/13/14, including VDDA_2.2V_CAM =
+  LDO14. It snapshots before open, after start, before stop and after close. The S2MPB02
+  driver reads `state` and `microvolts` from the PMIC itself and does not cache them.
+- `--cis-i2c-extended`, used together with `--cis-i2c-bus N`, reads back the 47 page-0x4000
+  registers below 0x6000 that the driver's Global and mode-18 setfiles write, plus SMIA 0x0006
+  (pixel order) and 0x0008 (data pedestal). It lists every mismatch. A mismatch is a hint
+  only, because the firmware may rewrite some of these registers.
+
+## Front camera preset (review v5, 2026-10-09)
+
+`--sensor front` selects the IMX374. Its DT node is `is_sensor_imx374@10`: `position = 1`, which is
+SP_FRONT, and module `id = 1`, which maps to `core->sensor[1]`. That gives:
+- leader `/dev/video102` (`exynos-is-ss1`; S_INPUT vindex 2, so S_INPUT = `0x04010201`);
+- VC0 `/dev/video214` (shot `capture[0].vid` 114). Its sysfs name is the kernel-bug name, which
+  the client accepts only on video214 for this preset.
+
+The geometry is locked to DT mode9, which is setfile 8: 1824x1368@30 RAW10, stride 3648, CFA
+GRBG. Sensor-write and raw-I2C flags are refused with `--sensor front`; they were reviewed for
+the GN3 only. `--sensor rear` is the default and sends the same ioctls with the same bytes as
+before.
+
 ## Risks and rollback
 
 - **First real DMA write by CSIS VC0 into memory.** The buffer is sized from
@@ -117,7 +202,8 @@ inside the Arch chroot, but only when the output directory is under
   - `capture[n].buf.length` must be at most 17. It stays 0, so no user plane pointers are read.
   - `frame->stream` must be non-NULL. It is set from the VC0 meta plane.
 - If the image is black or noise, try these one at a time:
-  - `--exposure-us 20000 --iso 400` (manual sensor exposure through `shot.ctl`, AE off).
+  - `--cis-exposure-us 10000 --cis-again 2` (see "Manual exposure" above). `--exposure-us`/`--iso` only fill
+    `shot.ctl`, which nothing reads without the DDK. The 2026-10-08 run proved this.
   - `--bayer` with a different order.
   - `--pixfmt raw10p` (packed; the decoder tries MIPI and LSB packing and picks the better fit).
 - Hangs: the frame timeout counts from the last VC0 frame (default 5 s; 20 s
