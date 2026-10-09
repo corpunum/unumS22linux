@@ -8,7 +8,7 @@
 -- Loading this file only defines s22_kbd_on() / s22_kbd_off(). It binds keys only
 -- when the flag file exists. Use the s22-kbd-bindings helper, which does this:
 --   on:  touch FLAG; hyprctl eval 'dofile("/opt/s22-touch/omarchy-keyboard.lua")'
---   off: rm FLAG;    hyprctl eval 's22_kbd_off()'
+--   off: rm FLAG only; takes effect at the next desktop restart (live unbind crashes Hyprland)
 -- Hyprland's config is NOT edited: an edit would trigger a live config autoreload.
 -- After a Hyprland restart the flag survives but the binds do not. Run
 -- `s22-kbd-bindings on` again (`status` shows "flag: on, active: 0" in that case).
@@ -63,16 +63,18 @@ local function bindings()
   return b
 end
 
+-- NEVER unbind live: on Hyprland 0.56 (Lua config) a live handle:unbind() crashes the
+-- compositor natively (reproduced on the S22 2026-10-09: Hyprland gone within 5 s of
+-- "off"; pcall cannot catch it). "off" therefore only clears the flag file; the
+-- bindings disappear at the next desktop restart (they are never loaded without the flag).
 function s22_kbd_off()
-  for _, h in ipairs(s22_kbd.handles) do
-    pcall(function() h:unbind() end)
-  end
-  s22_kbd.handles = {}
-  return "off"
+  return "off after next desktop restart (" .. tostring(#s22_kbd.handles) .. " still bound now)"
 end
 
 function s22_kbd_on()
-  s22_kbd_off()  -- idempotent: never stack duplicate binds
+  if #s22_kbd.handles > 0 then  -- idempotent without unbinding: never stack duplicates
+    return "on " .. tostring(#s22_kbd.handles) .. " (already)"
+  end
   for _, spec in ipairs(bindings()) do
     table.insert(s22_kbd.handles, hl.bind(spec[1], spec[3], { description = "s22: " .. spec[2] }))
   end
