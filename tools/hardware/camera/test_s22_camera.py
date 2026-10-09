@@ -37,10 +37,64 @@ KERNEL = {
 }
 
 
+# Not in the 2026-10-08 probe: derived from include/uapi/linux/videodev2.h of the
+# fimc_is source (3fca5094) with struct sizes read from fimc-is.ko DWARF
+# (v4l2_ext_controls 0x20, v4l2_ext_control 0x14, packed).
+UAPI_DERIVED = {"VIDIOC_G_CTRL": 3221771803, "VIDIOC_S_EXT_CTRLS": 3223344712}
+IOCTL_NAMES = {v: k for k, v in {**KERNEL, **UAPI_DERIVED}.items()}
+
+
 class AbiTest(unittest.TestCase):
     def test_ioctl_numbers_match_kernel(self):
         for name, value in KERNEL.items():
             self.assertEqual(getattr(cam, name), value, name)
+
+    def test_ext_ctrl_abi(self):
+        for name, value in UAPI_DERIVED.items():
+            self.assertEqual(getattr(cam, name), value, name)
+        self.assertEqual((cam.VIDIOC_S_EXT_CTRLS >> 16) & 0x3FFF, 32)
+        self.assertEqual((cam.VIDIOC_G_CTRL >> 16) & 0x3FFF, 8)
+        self.assertEqual(struct.calcsize(cam.EXT_CTRL_FMT), 20)
+        self.assertEqual(struct.calcsize(cam.EXT_CTRLS_FMT), 32)
+        # videodev2_exynos_camera.h: SENSOR_BASE = CLASS_CAMERA | 0x3000
+        self.assertEqual(cam.CID_SENSOR_SET_EXTENDED_MODE, cam.CID_SENSOR_BASE + 21)
+        self.assertEqual(cam.CID_IS_G_STREAM, cam.CID_IS_S_STREAM + 1)
+        self.assertEqual((cam.CID_SENSOR_SET_AE_TARGET, cam.CID_SENSOR_SET_ANALOG_GAIN,
+                          cam.CID_SENSOR_SET_DIGITAL_GAIN, cam.CID_SENSOR_GET_ANALOG_GAIN),
+                         (0x9A3001, 0x9A3012, 0x9A3013, 0x9A306C))
+        ext = cam.ExtControls([(cam.CID_SENSOR_SET_AE_TARGET, 20000),
+                               (cam.CID_SENSOR_SET_ANALOG_GAIN, 4000)])
+        which, count, err, req_fd, _rsvd, ptr = struct.unpack(cam.EXT_CTRLS_FMT, ext.buf)
+        self.assertEqual((which, count, req_fd), (0x009A0000, 2, 0))
+        raw = ctypes.string_at(ptr, 40)
+        self.assertEqual(struct.unpack_from(cam.EXT_CTRL_FMT, raw, 0),
+                         (0x9A3001, 0, 0, 20000))
+        self.assertEqual(struct.unpack_from(cam.EXT_CTRL_FMT, raw, 20), (0x9A3012, 0, 0, 4000))
+        with self.assertRaises(ValueError):
+            cam.ExtControls([])
+
+    def test_cis_plan_clamps_and_gain_sequence(self):
+        self.assertEqual(cam.cis_exposure_plan(0, 0), ([], {}))
+        controls, summary = cam.cis_exposure_plan(20000, 4.0)
+        self.assertEqual(controls, [(cam.CID_SENSOR_SET_AE_TARGET, 20000),
+                                    (cam.CID_SENSOR_SET_ANALOG_GAIN, 3999),
+                                    (cam.CID_SENSOR_SET_ANALOG_GAIN, 4000),
+                                    (cam.CID_SENSOR_SET_DIGITAL_GAIN, 1000)])
+        self.assertEqual(summary, {"exposure_us": 20000, "exposure_clamped": False,
+                                   "again_permille": 4000, "again_clamped": False})
+        controls, summary = cam.cis_exposure_plan(10_000_000, 100.0)
+        self.assertEqual(controls[0], (cam.CID_SENSOR_SET_AE_TARGET, 30000))
+        self.assertEqual(controls[2], (cam.CID_SENSOR_SET_ANALOG_GAIN, 16000))
+        self.assertTrue(summary["exposure_clamped"] and summary["again_clamped"])
+        controls, summary = cam.cis_exposure_plan(5, 0.5)
+        self.assertEqual([v for _, v in controls], [100, 999, 1000, 1000])
+        # exposure only: gain registers are not touched; negative values mean "off"
+        self.assertEqual(cam.cis_exposure_plan(8000, 0)[0],
+                         [(cam.CID_SENSOR_SET_AE_TARGET, 8000)])
+        self.assertEqual(cam.cis_exposure_plan(-1, -2.0), ([], {}))
+        for bad in (float("nan"), float("inf"), float("-inf")):   # non-finite = not requested
+            self.assertEqual(cam.cis_exposure_plan(0, bad), ([], {}))
+        self.assertEqual(cam.cis_exposure_plan(0, 1e300)[1]["again_permille"], 16000)
 
     def test_struct_sizes_match_kernel(self):
         self.assertEqual(struct.calcsize(cam.BUFFER_FMT), 88)   # v4l2_buffer w/ 16-byte timeval
@@ -230,8 +284,16 @@ class PngTest(unittest.TestCase):
 class FakeSys:
     W, H = 16, 8
 
-    def __init__(self, deliver=True, fw=True, names=None, fail=None):
+    def __init__(self, deliver=True, fw=True, names=None, fail=None, again_cache=0,
+                 g_stream=None, raise_on=None):
         self.deliver = deliver
+        # GN3 model: registers reset at every open; the analog-gain cache in
+        # cis_data persists across sessions (CONFIG_CAMERA_VENDER_MCD: no memset).
+        self.regs = {"cit_us": None, "again": None, "dgain": None}
+        self.again_cache = again_cache
+        self.g_stream = g_stream          # force IS_G_STREAM's answer
+        self.raise_on = raise_on          # ioctl name -> exception instance
+        self.ext_writes = []
         self.fail = fail or {}
         self.next_fd = 100
         self.fds = {}            # fd -> path
@@ -298,8 +360,10 @@ class FakeSys:
 
     def ioctl(self, fd, req, buf):
         role = self._role(fd)
-        name = {v: k for k, v in KERNEL.items()}.get(req, hex(req))
+        name = IOCTL_NAMES.get(req, hex(req))
         self.calls.append((name, role))
+        if self.raise_on and name in self.raise_on:
+            raise self.raise_on[name]
         if (req >> 16) & 0x3FFF != len(buf):
             raise AssertionError(f"{name}: size {len(buf)} != encoded {(req >> 16) & 0x3FFF}")
         if (name, role) in self.fail:
@@ -341,6 +405,38 @@ class FakeSys:
             if cid == cam.CID_IS_S_STREAM:
                 self.__dict__.setdefault("s_stream_values", []).append(value)
                 self.stream["front"] = bool(value & 0xF)
+        elif name == "VIDIOC_G_CTRL":
+            cid, _ = struct.unpack("<Ii", buf)
+            if cid == cam.CID_IS_G_STREAM:
+                value = self.g_stream if self.g_stream is not None else int(self.stream["front"])
+            elif cid == cam.CID_SENSOR_GET_ANALOG_GAIN:
+                code = self.regs["again"] or 0
+                value = (code * 1000 + 16) // 32              # sensor_cis_calc_again_permile
+            else:
+                raise OSError(22, "unknown g_ctrl")
+            struct.pack_into("<Ii", buf, 0, cid, value)
+        elif name == "VIDIOC_S_EXT_CTRLS":
+            if role != "leader" or not self.s_input:
+                raise OSError(22, "subdev_module NULL")    # FIMC_BUG -> -EINVAL
+            which, count, _e, _r, _rs, ptr = struct.unpack(cam.EXT_CTRLS_FMT, bytes(buf))
+            raw = ctypes.string_at(ptr, 20 * count)
+            for i in range(count):
+                cid, _size, _r2, value = struct.unpack_from(cam.EXT_CTRL_FMT, raw, 20 * i)
+                if which not in (0, cid & 0x0FFF0000):
+                    struct.pack_into("<I", buf, 8, count)
+                    raise OSError(22, "control class")
+                self.ext_writes.append((cid, value, self.stream["front"]))
+                if cid == cam.CID_SENSOR_SET_AE_TARGET:
+                    self.regs["cit_us"] = value
+                elif cid in (cam.CID_SENSOR_SET_ANALOG_GAIN, cam.CID_SENSOR_SET_DIGITAL_GAIN):
+                    if cid == cam.CID_SENSOR_SET_ANALOG_GAIN and value != self.again_cache:
+                        self.regs["again"] = min(max((value * 32 + 500) // 1000, 0x20), 0x800)
+                        self.again_cache = value
+                    else:   # is-device-module-base.c: case ANALOG_GAIN falls through
+                        self.regs["dgain"] = value
+                else:
+                    struct.pack_into("<I", buf, 8, i)
+                    raise OSError(22, "Unknown CID")
         elif name == "VIDIOC_DQBUF":
             if not self.queued[role]:
                 raise OSError(11, "EAGAIN")
@@ -365,7 +461,9 @@ def run_quiet(func, *a, **kw):
     return rc, out.getvalue()
 
 
-class FakeCaptureTest(unittest.TestCase):
+class CaptureHelpers(unittest.TestCase):
+    """setUp/teardown and run helpers shared by the fake-device capture tests."""
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
 
@@ -390,6 +488,8 @@ class FakeCaptureTest(unittest.TestCase):
         self.assertFalse(any(fake.stream.values()), fake.stream)
         self.assertLess(names.index("close") if "close" in names else 0, len(names))
 
+
+class FakeCaptureTest(CaptureHelpers):
     def test_capture_ok_and_order(self):
         fake = FakeSys()
         rc, res, out, raw = self._capture(fake, "--skip", "2")
@@ -503,6 +603,126 @@ class FakeCaptureTest(unittest.TestCase):
         self.assertFalse(any(fake.stream.values()))
         for fd in fake.fds:
             self.assertIn(fd, fake.closed)
+
+
+class CisExposureTest(CaptureHelpers):
+    """Exposure review 2026-10-09: manual GN3 exposure/gain via S_EXT_CTRLS."""
+
+    CIS = ("--cis-exposure-us", "20000", "--cis-again", "4")
+
+    def _order(self, fake):
+        return [c[0] + ":" + c[1] for c in fake.calls]
+
+    def test_applied_once_after_blocking_stream_on(self):
+        fake = FakeSys()
+        rc, res, _, _ = self._capture(fake, *self.CIS)
+        self.assertEqual(rc, 0, res)
+        order = self._order(fake)
+        self.assertEqual(order.count("VIDIOC_S_EXT_CTRLS:leader"), 1)
+        stream_on = [i for i, c in enumerate(order) if c == "VIDIOC_S_CTRL:leader"][2]
+        self.assertEqual(fake.s_stream_values[0], 1)
+        ext = order.index("VIDIOC_S_EXT_CTRLS:leader")
+        self.assertLess(stream_on, ext)
+        self.assertLess(order.index("VIDIOC_G_CTRL:leader"), ext)     # IS_G_STREAM gate
+        self.assertLess(ext, order.index("VIDIOC_DQBUF:vc"))
+        self.assertLess(ext, order.index("VIDIOC_STREAMOFF:leader"))
+        self.assertTrue(all(streaming for _, _, streaming in fake.ext_writes))
+        self.assertEqual(fake.regs, {"cit_us": 20000, "again": 128, "dgain": 1000})
+        self.assertEqual(res["cis"]["applied"], True)
+        self.assertIsNone(res["cis"]["error"])
+        self.assertEqual(res["cis"]["readback_again_permille"], 4000)
+        self.assertEqual(res["cis"]["requested"]["exposure_us"], 20000)
+        self._assert_rolled_back(fake)
+
+    def test_cached_gain_fallthrough_is_neutralised(self):
+        for cache in (0, 3999, 4000):
+            fake = FakeSys(again_cache=cache)
+            rc, res, _, _ = self._capture(fake, *self.CIS)
+            self.assertEqual(rc, 0, res)
+            self.assertEqual((fake.regs["again"], fake.regs["dgain"]), (128, 1000), cache)
+
+    def test_ioctl_failure_keeps_sensor_defaults(self):
+        fake = FakeSys(fail={("VIDIOC_S_EXT_CTRLS", "leader"): 22})
+        rc, res, _, _ = self._capture(fake, *self.CIS)
+        self.assertEqual(rc, 0, res)                 # capture still succeeds
+        self.assertTrue(res["ok"])
+        self.assertFalse(res["cis"]["applied"])
+        self.assertIn("not retried", res["cis"]["error"])
+        self.assertEqual(fake.regs, {"cit_us": None, "again": None, "dgain": None})
+        self.assertNotIn("VIDIOC_G_CTRL:leader",
+                         self._order(fake)[self._order(fake).index("VIDIOC_S_EXT_CTRLS:leader"):])
+        self._assert_rolled_back(fake)
+
+    def test_gate_failure_is_no_change(self):
+        for fake in (FakeSys(g_stream=0), FakeSys(g_stream=-22),
+                     FakeSys(fail={("VIDIOC_G_CTRL", "leader"): 25})):
+            rc, res, _, _ = self._capture(fake, *self.CIS)
+            self.assertEqual(rc, 0, res)
+            self.assertNotIn("VIDIOC_S_EXT_CTRLS:leader", self._order(fake))
+            self.assertFalse(res["cis"]["applied"])
+            self.assertIn("no change", res["cis"]["error"])
+            self._assert_rolled_back(fake)
+
+    def test_not_sent_when_start_fails(self):
+        fake = FakeSys(fail={("VIDIOC_STREAMON", "leader"): 22})
+        rc, res, _, _ = self._capture(fake, *self.CIS)
+        self.assertEqual(rc, 1)
+        self.assertNotIn("VIDIOC_S_EXT_CTRLS:leader", self._order(fake))
+        self.assertNotIn("VIDIOC_G_CTRL:leader", self._order(fake))
+        self.assertFalse(res["cis"]["applied"])
+        self._assert_rolled_back(fake)
+
+    def test_deadline_during_apply_still_rolls_back(self):
+        fake = FakeSys(raise_on={"VIDIOC_S_EXT_CTRLS": cam.DeadlineExceeded("SIGALRM")})
+        rc, res, _, _ = self._capture(fake, *self.CIS)
+        self.assertEqual(rc, 1)
+        self.assertIn("SIGALRM", res["error"])
+        self.assertFalse(res["cis"]["applied"])
+        self.assertIn("VIDIOC_STREAMOFF:leader", self._order(fake))
+        self._assert_rolled_back(fake)
+
+    def test_readback_failure_is_reported_not_fatal(self):
+        class R(FakeSys):
+            def ioctl(self, fd, req, buf):
+                if req == cam.VIDIOC_G_CTRL and struct.unpack_from("<I", buf)[0] == \
+                        cam.CID_SENSOR_GET_ANALOG_GAIN:
+                    self.calls.append(("VIDIOC_G_CTRL", "leader"))
+                    raise OSError(121, "Remote I/O error")
+                return super().ioctl(fd, req, buf)
+        fake = R()
+        rc, res, _, _ = self._capture(fake, *self.CIS)
+        self.assertEqual(rc, 0, res)
+        self.assertTrue(res["cis"]["applied"])
+        self.assertIn("readback_error", res["cis"])
+
+    def test_exposure_only_leaves_gain_alone(self):
+        fake = FakeSys()
+        rc, res, _, _ = self._capture(fake, "--cis-exposure-us", "50000")
+        self.assertEqual(rc, 0, res)
+        self.assertEqual(fake.regs, {"cit_us": 30000, "again": None, "dgain": None})
+        self.assertTrue(res["cis"]["requested"]["exposure_clamped"])
+        self.assertNotIn("readback_again_permille", [k for k, v in res["cis"].items()
+                                                      if v is not None])
+
+    def test_default_run_sends_no_sensor_writes(self):
+        fake = FakeSys()
+        rc, res, _, _ = self._capture(fake)
+        self.assertEqual(rc, 0, res)
+        names = [c[0] for c in fake.calls]
+        self.assertNotIn("VIDIOC_S_EXT_CTRLS", names)
+        self.assertNotIn("VIDIOC_G_CTRL", names)
+        self.assertNotIn("cis", res)
+
+    def test_record_applies_too(self):
+        fake = FakeSys()
+        args = make_args("record", "--seconds", "0", "--fps-limit", "0", "--scale", "2",
+                         "--first-timeout", "0.01", "--timeout", "0.01", *self.CIS)
+        args.out = os.path.join(self.tmp.name, "seq")
+        rc, text = run_quiet(cam.cmd_record, args, fake, alarm=False)
+        res = json.loads(text.strip().splitlines()[-1])
+        self.assertEqual(rc, 0, res)
+        self.assertTrue(res["cis"]["applied"])
+        self.assertEqual(fake.regs["cit_us"], 20000)
 
 
 class ListTest(unittest.TestCase):

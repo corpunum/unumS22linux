@@ -25,6 +25,12 @@ RISK / SAFETY NOTES (read before running on the phone)
   finally block, each step independent. A SIGALRM hard deadline backs this up.
 * Kernel BUG() trap avoided: node_group.capture[0].buf.length stays 0 so
   _is_queue_subbuf_prepare() never maps user plane pointers.
+* --cis-exposure-us / --cis-again (opt-in, off by default) write GN3 CIS
+  registers 0x0202/0x0704 (integration) and 0x0204/0x020E (gains) over I2C:
+  ONE VIDIOC_S_EXT_CTRLS on the leader, only after the blocking IS_S_STREAM
+  on and an IS_G_STREAM == 1 check, values clamped here and again in the CIS
+  driver. On any failure the client sends nothing more (no retry). The older
+  --exposure-us/--iso only fill shot.ctl, which nothing reads without the DDK.
 
 PIPELINE (derived from kernel source, fimc_is GNU id 59e54c03; see CAMERA.md)
 -----------------------------------------------------------------------------
@@ -50,6 +56,7 @@ import ctypes
 import errno
 import fcntl
 import json
+import math
 import mmap
 import os
 import select
@@ -83,7 +90,7 @@ SIZEOF = {
     "v4l2_capability": 104, "v4l2_fmtdesc": 64, "v4l2_format": 208,
     "v4l2_requestbuffers": 20, "v4l2_buffer": 88, "v4l2_plane": 64,
     "v4l2_control": 8, "v4l2_streamparm": 204, "dma_heap_allocation_data": 24,
-    "dma_buf_sync": 8,
+    "dma_buf_sync": 8, "v4l2_ext_control": 20, "v4l2_ext_controls": 32,
 }
 VIDIOC_QUERYCAP = _ioc(_IOC_READ, "V", 0, 104)
 VIDIOC_ENUM_FMT = _iowr("V", 2, 64)
@@ -97,6 +104,8 @@ VIDIOC_STREAMON = _ioc(_IOC_WRITE, "V", 18, 4)
 VIDIOC_STREAMOFF = _ioc(_IOC_WRITE, "V", 19, 4)
 VIDIOC_S_PARM = _iowr("V", 22, 204)
 VIDIOC_S_CTRL = _iowr("V", 28, 8)
+VIDIOC_G_CTRL = _iowr("V", 27, 8)
+VIDIOC_S_EXT_CTRLS = _iowr("V", 72, 32)   # struct v4l2_ext_controls: 32 bytes (DWARF)
 VIDIOC_S_INPUT = _iowr("V", 39, 4)
 DMA_HEAP_IOCTL_ALLOC = _iowr("H", 0, 24)
 DMA_BUF_IOCTL_SYNC = _ioc(_IOC_WRITE, "b", 0, 8)
@@ -124,6 +133,26 @@ PIX_SBGGR10P = fourcc("pBAA")
 CID_IS_S_STREAM = 10096654
 CID_IS_S_SENSOR_SIZE = 10096709
 CID_SENSOR_SET_EXTENDED_MODE = 10104853
+CID_IS_G_STREAM = 10096655                  # V4L2_CID_FIMC_IS_BASE + 15
+IS_ENABLE_STREAM = 1
+# Sensor (CIS) controls, V4L2_CID_SENSOR_BASE = V4L2_CTRL_CLASS_CAMERA | 0x3000
+# (include/videodev2_exynos_camera.h). SET_EXTENDED_MODE above is base + 21.
+V4L2_CTRL_CLASS_CAMERA = 0x009A0000
+CID_SENSOR_BASE = V4L2_CTRL_CLASS_CAMERA | 0x3000
+CID_SENSOR_SET_AE_TARGET = CID_SENSOR_BASE + 1        # exposure, microseconds
+CID_SENSOR_SET_ANALOG_GAIN = CID_SENSOR_BASE + 18     # permille (1000 = 1x)
+CID_SENSOR_SET_DIGITAL_GAIN = CID_SENSOR_BASE + 19    # permille
+CID_SENSOR_GET_ANALOG_GAIN = CID_SENSOR_BASE + 108    # reads GN3 reg 0x0204 back
+# Manual CIS exposure without the DDK (exposure review 2026-10-09, see CAMERA.md).
+# Only VIDIOC_S_EXT_CTRLS on the leader reaches sensor_module_s_ctrl():
+# VIDIOC_S_CTRL with AE_TARGET/SHUTTER/GAIN is caught by is_ssx_video_s_ctrl()
+# and ends in CALL_MOPS on module->ops == NULL, a silent no-op. The values are
+# applied once, after the blocking IS_S_STREAM on, and clamped here first.
+CIS_EXPOSURE_US_RANGE = (100, 30000)        # 30 fps frame is 33.3 ms; u16 CIT stays safe
+CIS_AGAIN_PERMILLE_RANGE = (1000, 16000)    # GN3 mode 18 allows 64x; first runs stay <=16x
+CIS_DGAIN_UNITY = 1000
+EXT_CTRL_FMT = "<IIIq"                      # struct v4l2_ext_control (packed), 20 bytes
+EXT_CTRLS_FMT = "<IIIiI4xQ"                 # which,count,error_idx,request_fd,rsvd,controls
 SENSOR_SCENARIO_VISION = 1
 SENSOR_NOBLOCK_SHIFT = 28
 
@@ -214,6 +243,39 @@ def make_streamparm_capture(fps: int) -> bytearray:
 
 def make_control(cid: int, value: int) -> bytearray:
     return bytearray(struct.pack("<Ii", cid, value))
+
+
+def _clamp(value: int, lo: int, hi: int) -> int:
+    return max(lo, min(hi, value))
+
+
+def cis_exposure_plan(exposure_us: int = 0, again: float = 0.0) -> tuple[list, dict]:
+    """(controls, summary) for one S_EXT_CTRLS on the leader; ([], {}) = leave the sensor alone.
+
+    exposure_us -> V4L2_CID_SENSOR_SET_AE_TARGET -> GN3 coarse integration (0x0202).
+    again (x, e.g. 4.0) -> V4L2_CID_SENSOR_SET_ANALOG_GAIN -> GN3 0x0204.
+
+    sensor_module_s_ctrl() skips the analog write and FALLS THROUGH to the
+    digital gain when the value equals the cached cis_data->analog_gain[1]. With
+    CONFIG_CAMERA_VENDER_MCD that cache survives close/open while the sensor
+    register does not. So the gain goes out as (g-1, g, dgain=1x): the second
+    write always differs from the cache, and a fall-through on the first is
+    undone by the explicit unity digital gain.
+    """
+    controls, summary = [], {}
+    if exposure_us and exposure_us > 0:
+        exp = _clamp(int(exposure_us), *CIS_EXPOSURE_US_RANGE)
+        controls.append((CID_SENSOR_SET_AE_TARGET, exp))
+        summary["exposure_us"] = exp
+        summary["exposure_clamped"] = exp != int(exposure_us)
+    if again and math.isfinite(again) and again > 0:
+        want = int(round(min(float(again), 1000.0) * 1000))
+        gain = _clamp(want, *CIS_AGAIN_PERMILLE_RANGE)
+        controls += [(CID_SENSOR_SET_ANALOG_GAIN, gain - 1), (CID_SENSOR_SET_ANALOG_GAIN, gain),
+                     (CID_SENSOR_SET_DIGITAL_GAIN, CIS_DGAIN_UNITY)]
+        summary["again_permille"] = gain
+        summary["again_clamped"] = gain != want
+    return controls, summary
 
 
 def make_buffer(index: int, buf_type: int, planes_addr: int, num_planes: int,
@@ -380,6 +442,24 @@ class PlaneArray:
         return struct.unpack_from(PLANE_FMT, self.mem, idx * 64)
 
 
+class ExtControls:
+    """struct v4l2_ext_controls + a stable-address v4l2_ext_control[n] (value controls only)."""
+
+    def __init__(self, controls, which: int = V4L2_CTRL_CLASS_CAMERA):
+        if not controls:
+            raise ValueError("no controls")
+        self.mem = ctypes.create_string_buffer(SIZEOF["v4l2_ext_control"] * len(controls))
+        for i, (cid, value) in enumerate(controls):
+            struct.pack_into(EXT_CTRL_FMT, self.mem, i * SIZEOF["v4l2_ext_control"],
+                             cid, 0, 0, int(value))
+        self.buf = bytearray(struct.pack(EXT_CTRLS_FMT, which, len(controls), 0, 0, 0,
+                                         ctypes.addressof(self.mem)))
+
+    @property
+    def error_idx(self) -> int:
+        return struct.unpack_from("<I", self.buf, 8)[0]
+
+
 # --------------------------------------------------------------------------
 # Prechecks
 # --------------------------------------------------------------------------
@@ -439,7 +519,7 @@ class Session:
 
     def __init__(self, sysif, width=2040, height=1532, fps=30, pixfmt=PIX_SBGGR16,
                  leader_bufs=2, vc_bufs=3, leader=LEADER_NODE, vc0=VC0_NODE,
-                 exposure_us=0, iso=0, position=0, log=None):
+                 exposure_us=0, iso=0, position=0, log=None, cis_exposure_us=0, cis_again=0.0):
         self.sys = sysif
         self.width, self.height, self.fps, self.pixfmt = width, height, fps, pixfmt
         self.n_leader, self.n_vc = leader_bufs, vc_bufs
@@ -457,6 +537,9 @@ class Session:
                       "leader_streamon": False, "front_start": False}
         self.teardown_errors: list[str] = []
         self.steps: list[str] = []
+        self.cis_controls, summary = cis_exposure_plan(cis_exposure_us, cis_again)
+        self.cis = ({"requested": summary, "applied": False, "error": None,
+                     "readback_again_permille": None} if self.cis_controls else None)
 
     # -- helpers
     def _ioctl(self, fd, req, buf, what):
@@ -545,6 +628,55 @@ class Session:
         # fault -> panic). Review 2026-10-08.
         self._ioctl(self.lfd, VIDIOC_S_CTRL, make_control(CID_IS_S_STREAM, 1),
                     "S_CTRL IS_S_STREAM on (blocking)")
+        self._apply_cis()
+
+    def _apply_cis(self):
+        """Write exposure/gain to the GN3 once, only while the sensor streams.
+
+        Never raises for an ioctl failure. If the gate or the call fails,
+        nothing more is sent: no retry and no second attempt, and the capture
+        goes on. The hard deadline (DeadlineExceeded) still propagates to the
+        teardown.
+        """
+        if not self.cis_controls:
+            return
+        rec = self.cis
+        try:
+            ctl = make_control(CID_IS_G_STREAM, 0)
+            self._ioctl(self.lfd, VIDIOC_G_CTRL, ctl, "G_CTRL IS_G_STREAM")
+            value = struct.unpack("<Ii", ctl)[1]
+            if value != IS_ENABLE_STREAM:
+                rec["error"] = f"sensor not streaming (IS_G_STREAM={value}); no change"
+                return
+            ext = ExtControls(self.cis_controls)
+            try:
+                self._ioctl(self.lfd, VIDIOC_S_EXT_CTRLS, ext.buf,
+                            "S_EXT_CTRLS cis " + " ".join(f"{c:#x}={v}" for c, v in
+                                                          self.cis_controls))
+            except CameraError as exc:
+                if isinstance(exc, DeadlineExceeded):
+                    raise
+                # The driver stops at the first failing control and leaves
+                # error_idx == count, so earlier controls in the list may have
+                # been written. Nothing is retried; the capture goes on.
+                rec["error"] = (f"{exc}; not retried, sensor keeps its defaults or a "
+                                "partial write (error_idx is not set by this driver)")
+                return
+            rec["applied"] = True
+        except DeadlineExceeded:
+            raise
+        except CameraError as exc:
+            rec["error"] = f"{exc}; no change"
+            return
+        if "again_permille" in rec["requested"]:
+            try:   # best effort: one I2C read of 0x0204
+                ctl = make_control(CID_SENSOR_GET_ANALOG_GAIN, 0)
+                self._ioctl(self.lfd, VIDIOC_G_CTRL, ctl, "G_CTRL GET_ANALOG_GAIN")
+                rec["readback_again_permille"] = struct.unpack("<Ii", ctl)[1]
+            except DeadlineExceeded:
+                raise
+            except CameraError as exc:
+                rec["readback_error"] = str(exc)
 
     def frames(self, timeout_first: float, timeout_next: float, deadline: float):
         """Yield (raw_bytes, info) for each VC0 frame; requeues buffers."""
@@ -649,8 +781,11 @@ class _Alarm:
         return False
 
 
-def run_stream(sysif, args, consume, alarm=True) -> dict:
-    """Common capture/record driver; `consume(raw, info) -> bool` (True = done)."""
+def run_stream(sysif, args, consume, alarm=True, report=None) -> dict:
+    """Common capture/record driver; `consume(raw, info) -> bool` (True = done).
+
+    `report` (the caller's result dict) also receives "cis" when the run
+    raises, so a failed run still shows whether exposure/gain were written."""
     if isinstance(sysif, RealSys) and (args.width, args.height, args.fps) != LOCKED_GEOMETRY:
         raise CameraError("geometry locked to %dx%d@%d until a capture is proven" % LOCKED_GEOMETRY)
     info = prechecks(sysif, args)
@@ -658,6 +793,7 @@ def run_stream(sysif, args, consume, alarm=True) -> dict:
     session = Session(sysif, args.width, args.height, args.fps, pixfmt,
                       vc_bufs=args.buffers, leader=args.leader, vc0=args.vc0,
                       exposure_us=args.exposure_us, iso=args.iso,
+                      cis_exposure_us=args.cis_exposure_us, cis_again=args.cis_again,
                       log=(lambda m: print("# " + m, file=sys.stderr)) if args.verbose else None)
     started = time.monotonic()
     deadline = started + args.deadline
@@ -677,6 +813,10 @@ def run_stream(sysif, args, consume, alarm=True) -> dict:
         finally:
             backstop.rearm(30)   # teardown gets its own bounded window
             session.stop()
+            if session.cis is not None:
+                result["cis"] = session.cis
+                if report is not None:
+                    report["cis"] = session.cis
     result["ms"] = int((time.monotonic() - started) * 1000)
     result["teardown_errors"] = session.teardown_errors
     return result
@@ -996,7 +1136,7 @@ def cmd_capture(args, sysif=None, alarm=True) -> int:
     result = {"ok": False, "path": args.out, "node": args.vc0, "leader": args.leader,
               "width": None, "height": None, "format": None}
     try:
-        stream = run_stream(sysif, args, consume, alarm=alarm)
+        stream = run_stream(sysif, args, consume, alarm=alarm, report=result)
         result.update(stream)
         if holder["raw"] is None:
             raise CameraError("no frame captured")
@@ -1043,7 +1183,7 @@ def cmd_record(args, sysif=None, alarm=True) -> int:
 
     args.deadline = max(args.deadline, args.seconds + args.first_timeout + 30)
     try:
-        stream = run_stream(sysif, args, consume, alarm=alarm)
+        stream = run_stream(sysif, args, consume, alarm=alarm, report=result)
         result.update(stream)
         meta = {"width": args.width, "height": args.height, "stride": stream["stride"],
                 "pixfmt": stream["pixfmt"], "bayer": args.bayer, "frames": state["kept"]}
@@ -1128,8 +1268,17 @@ def _add_stream_args(p):
     p.add_argument("--timeout", type=float, default=5.0, help="per-frame select timeout (s)")
     p.add_argument("--first-timeout", type=float, default=20.0)
     p.add_argument("--deadline", type=float, default=120.0, help="hard total deadline (s)")
-    p.add_argument("--exposure-us", type=int, default=0, help="manual exposure (0 = sensor default)")
-    p.add_argument("--iso", type=int, default=0, help="manual sensitivity (0 = default)")
+    p.add_argument("--exposure-us", type=int, default=0,
+                   help="shot.ctl exposure; IGNORED without the DDK (use --cis-exposure-us)")
+    p.add_argument("--iso", type=int, default=0,
+                   help="shot.ctl sensitivity; IGNORED without the DDK (use --cis-again)")
+    p.add_argument("--cis-exposure-us", type=int, default=0,
+                   help="GN3 integration time in us, written once after stream-on "
+                        "(clamped %d..%d; 0 = leave sensor default)" % CIS_EXPOSURE_US_RANGE)
+    p.add_argument("--cis-again", type=float, default=0.0,
+                   help="GN3 analog gain multiplier, written once after stream-on "
+                        "(clamped %g..%g; 0 = leave default)" % tuple(
+                            v / 1000 for v in CIS_AGAIN_PERMILLE_RANGE))
     p.add_argument("--allow-fw-stall", action="store_true",
                    help="run even if is_mcu_fw.bin is not staged (~60 s stall)")
     p.add_argument("--skip-node-check", action="store_true")
