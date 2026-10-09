@@ -1,0 +1,169 @@
+{
+  "schema": "s22-npu-system-resume-error-unwind-independent-review/v1",
+  "date": "2026-10-03",
+  "reviewer_selection": {
+    "model": "gpt-6-luna",
+    "reasoning_effort": "max",
+    "selection_provenance": "explicit configured selection; not backend attestation"
+  },
+  "verdict": "BLOCKED",
+  "source_candidate_accepted": false,
+  "deployment_authority": false,
+  "independent_rescue_authority": false,
+  "npu_bootup_authorized": false,
+  "review_worktree": {
+    "branch": "codex/s22-npu-system-resume-review-20261003",
+    "frozen_import_commit": "4edfc5c34242ee7d0b54c4f1a4691a0afefa291a",
+    "frozen_author_commit": "4a22948184f101f2bd80d2f44eef44b46004b790",
+    "review_source_modified": false
+  },
+  "pinned_source": {
+    "kernel_commit": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+    "derived_fixture_commit": "3fca50941422439b2019db2e4a3dc1016b2138a1",
+    "composed_npu12_fixture_commit": "e9c3016233a72ceccb13e537f0b7ef72426582b9",
+    "npu13_then_npu14_patch_order_verified": true,
+    "target_config": {
+      "CONFIG_NPU_USE_BOOT_IOCTL": "y",
+      "CONFIG_EXYNOS_IMGLOADER": "m",
+      "CONFIG_EXYNOS_S2MPU": "m",
+      "CONFIG_EXYNOS_NPU_DRAM_FW_LOG_BUF": "y",
+      "CONFIG_NPU_CORE_DRIVER": "n"
+    },
+    "relevant_source_sha256": {
+      "drivers/vision/npu/core/npu-system.c": "96eaa6bf1511f3e6414e3e376d62592229454a2ea1687d760b7bb8e5952b1a05",
+      "drivers/vision/npu/core/npu-device.c": "98be21e422ca864cc971dfe6a78e71b292d7691cb625c1f029bf4502100644ab",
+      "drivers/soc/samsung/imgloader.c": "e9898c3ac9b0c5210603028b7c0b7bc3623869762a99f35438d3d480d33e27f7",
+      "drivers/vision/npu/core/npu-binary.c": "87b08d398d3468de827853544177af5a1264a35ee69a4648a728e35306ef5d36",
+      "drivers/vision/npu/core/npu-memory.c": "a9751ea59fb1f97fde653b0d522e32c923c31933ac9795ef2fa38b09c0299b79",
+      "drivers/vision/npu/core/npu-stm.c": "f2fbf5acc751b72775976b04af5d21035edbb05de24400a35b49cdf2bae93684",
+      "arch/arm64/configs/s5e9925_defconfig": "de87dbdff5a4082b2aa6fd511a69b9766ddfb0369738c76885c9766178f2b4f5",
+      "arch/arm64/boot/dts/exynos/s5e9925.dts": "0271bf6b781ec1b3b09d559fa175a7f614e1fd211672dc65c748db9a396798e0"
+    }
+  },
+  "author_files_sha256": {
+    "tools/hardware/npu-system-resume-error-unwind.patch": "464a78b43f7ef0cc7e26b5f69075980460211f9c789d0a418b36d44be548968e",
+    "tools/hardware/npu-system-resume-error-unwind-harness.c": "09eab198f0cd83b0f55765b115e7d8f682ccad04fd518ba671843b62b2f72d38",
+    "tools/hardware/test-npu-system-resume-error-unwind.py": "116448ad91e317f6a1f8f3f499e55dd4bf19f5f36a99abed05745043b6a3eb92",
+    "docs/research/NPU_SYSTEM_RESUME_ERROR_UNWIND_2026-10-03.md": "edf1629d7a4b896718ffdd5edab50ffe8d83b5feb7084e5a5f67e71d6925f0f6"
+  },
+  "findings": [
+    {
+      "id": "cpu_on_uncertain_before_imgloader_quarantine",
+      "severity": "blocker",
+      "source_refs": [
+        "tools/hardware/npu-system-resume-error-unwind.patch:64-71",
+        "tools/hardware/npu-system-resume-error-unwind.patch:178-192",
+        "tools/hardware/npu-system-resume-error-unwind.patch:234-256",
+        "tools/hardware/npu-system-resume-error-unwind.patch:88-93",
+        "drivers/vision/npu/core/npu-system.c:81-84",
+        "drivers/soc/samsung/imgloader.c:123-131",
+        "drivers/soc/samsung/imgloader.c:271-296",
+        "drivers/vision/npu/core/npu-binary.c:103-110"
+      ],
+      "selected_config_path": true,
+      "extracted_boot_ioctl_negative_control": {
+        "partial_cpu_on_errno": "-ETIMEDOUT",
+        "modeled_cpu_still_live": true,
+        "expected_shutdown_wrapper_calls_before_quarantine": 0,
+        "observed_shutdown_wrapper_calls_before_quarantine": 1,
+        "cpu_off_inverse_calls": 0,
+        "oracle_result": "failed as intended; process exit 2",
+        "provider_or_remote_shutdown_executed": false
+      },
+      "conclusion": "unwind can enter the void image-loader shutdown path before the CPU_ON_UNCERTAIN guard; provider permission state is not observable through this API"
+    },
+    {
+      "id": "void_imgloader_error_clears_fw_load_stage",
+      "severity": "blocker",
+      "source_refs": [
+        "tools/hardware/npu-system-resume-error-unwind.patch:234-242",
+        "drivers/soc/samsung/imgloader.c:123-131",
+        "drivers/soc/samsung/imgloader.c:271-283"
+      ],
+      "provider_failure_covered_by_harness": false,
+      "conclusion": "provider may log and return early on S2MPU release failure, but the void caller cannot observe failure and patch clears FW_LOAD regardless"
+    },
+    {
+      "id": "remove_release_bypasses_stage_quarantine",
+      "severity": "lifecycle_gap",
+      "source_refs": [
+        "drivers/vision/npu/core/npu-device.c:1022-1074",
+        "drivers/vision/npu/core/npu-system.c:1435-1468"
+      ],
+      "remove_or_unbind_executed": false,
+      "conclusion": "remove calls system release without checking resume ownership bits; provider/device lifetime on this path is unverified"
+    },
+    {
+      "id": "static_fw_log_free_is_noop",
+      "severity": "ownership_limit",
+      "source_refs": [
+        "drivers/vision/npu/core/npu-system.c:560-617",
+        "tools/hardware/npu-system-resume-error-unwind.patch:277-295",
+        "drivers/vision/npu/core/npu-memory.c:253-259"
+      ],
+      "conclusion": "current free and memory-close implementations are TODO/no-op; return-zero does not prove static buffers were released; no immediate UAF is asserted"
+    },
+    {
+      "id": "runner_requires_private_fixtures_after_public_fetch",
+      "severity": "host_test_portability",
+      "source_refs": [
+        "tools/hardware/test-npu-system-resume-error-unwind.py:195-215"
+      ],
+      "public_source_fetch_succeeded_in_review_environment": true,
+      "private_derived_and_composed_fixtures_still_required": true,
+      "conclusion": "public fetch does not make the suite portable to environments without the pinned private worktrees"
+    },
+    {
+      "id": "composed_tempdir_scope_ends_before_use",
+      "severity": "host_test_hygiene",
+      "source_refs": [
+        "tools/hardware/test-npu-system-resume-error-unwind.py:167-180",
+        "tools/hardware/test-npu-system-resume-error-unwind.py:220-222"
+      ],
+      "conclusion": "TemporaryDirectory cleanup occurs before build_composed_source writes to that destination; test can recreate an unowned temp path"
+    }
+  ],
+  "negative_controls": {
+    "boot_ioctl_cpu_on_uncertain": "assertion requiring zero shutdown-wrapper calls before quarantine failed; observed one call while modeled CPU remained live",
+    "boot_ioctl_cpu_off_uncertain": "first normal teardown called shutdown once before CPU-off attempt; injected CPU-off failure retained live CPU/uncertainty; retry made no duplicate shutdown or CPU-off attempt; this is not zero initial shutdown before the marker",
+    "stm_path": "tested only as alternate runtime-PM configuration; excluded by selected CONFIG_NPU_USE_BOOT_IOCTL=y"
+  },
+  "test_matrix": [
+    {
+      "invocation": "python3 tools/hardware/test-npu-system-resume-error-unwind.py",
+      "python_optimize_flag": 0,
+      "source_route": "bounded raw-pinned public fetch with private fixtures present",
+      "c_jobs_passed": 8,
+      "exit_code": 0
+    },
+    {
+      "invocation": "python3 tools/hardware/test-npu-system-resume-error-unwind.py --local-only",
+      "python_optimize_flag": 0,
+      "source_route": "clean derived fixture",
+      "c_jobs_passed": 8,
+      "exit_code": 0
+    },
+    {
+      "invocation": "python3 -O tools/hardware/test-npu-system-resume-error-unwind.py --local-only",
+      "python_optimize_flag": 1,
+      "source_route": "clean derived fixture",
+      "c_jobs_passed": 8,
+      "exit_code": 0
+    },
+    {
+      "invocation": "PYTHONOPTIMIZE=1 python3 tools/hardware/test-npu-system-resume-error-unwind.py --local-only",
+      "python_optimize_flag": 1,
+      "source_route": "clean derived fixture",
+      "c_jobs_passed": 8,
+      "exit_code": 0
+    }
+  ],
+  "total_extracted_c_jobs_passed": 32,
+  "ordinary_apply_and_patch_order_checks_passed": true,
+  "actual_npu14_kernel_or_module_build": false,
+  "firmware_or_provider_execution": false,
+  "phone_ssh_adb_or_device_access": false,
+  "physical_npu_state_observed": false,
+  "tests_are_host_shim_evidence_only": true,
+  "review_artifacts_only_change": true
+}

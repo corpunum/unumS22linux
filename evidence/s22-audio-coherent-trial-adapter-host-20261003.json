@@ -1,0 +1,90 @@
+{
+  "schema": "s22-audio-coherent-trial-adapter-host/v1",
+  "date": "2026-10-03",
+  "result": "host_adapter_tested_inactive_no_device_operation",
+  "base_commit": "a58cf729ff86cb73c84830369bafa0e5644a6fe8",
+  "owned_source_sha256": {
+    "tools/hardware/deploy-audio-coherent-recovery.py": "859047a5018d697e510ef77855c5f841b1ef2e8890fb9890d47ba8dcb2a4aa66",
+    "tools/hardware/audio-coherent-recovery-reboot-once.py": "70dfccca7b4a36902c5f1ab8de2400c7f1dec641b59e6d3b78e0eae19cb8043d",
+    "tools/hardware/test-audio-coherent-trial-adapter.py": "9c106d7d48459a07d6c53ac8de7055641ee20883ae44874ae9c4da04211684b5"
+  },
+  "pinned_source_sha256": {
+    "tools/hardware/audio-coherent-recovery-profile.py": "7a24b600d8e8054ce4266a084b7d227a108928eb4319b548a1bc34bd88e407d4",
+    "tools/hardware/deploy-audio-recovery.py": "4138413c16b9c90c70a46da6ed3b4f60b0f41f1c6c69b4b2047421895903a47f",
+    "tools/hardware/device-trial-guard.py": "6380fca8137a14f3574fe7bb29d644f12c522ec5e45e7915a38a48d81b4e6d30",
+    "tools/hardware/deploy-camera-recovery.py": "2c8554a5d17324b52765fa348fa047814f78116cfe3bcf5cb506aba1c6ee97de",
+    "tools/hardware/camera-recovery-reboot-once.py": "c97f0f161ec31149ce9e8ec989e895adef4802379e5888e3f1fabf31c092fe95",
+    "tools/hardware/audio-recovery-reboot-once.py": "5ec8fec300d514ef9e586dfe5635ca38995718acd0437caefe50c34358bd1ac4",
+    "tools/pi-web/pi_readiness.py": "61cb4f4640409d013ca1d65d5c52959d62610c71f5d76cc2d2e117b1be228e4f",
+    "tools/hardware/trustzone_log_classifier.py": "8faa2cd46d16818ebdd61d7a577b046489083f5c96a6a398ddea769ebbb6619a",
+    "tools/s22-ssh": "7e9d31035762de50ccc6c5614d8348532fd912bf59c41c9d410a4c7bfe49dd1d",
+    "tools/hardware/test-recovery-deployment-hardening.py": "0e7f6ca2769d562d50d8fe11dbf9c572cc342e9c5d71073bf9a1faac189004cf"
+  },
+  "artifact_plan_validation": {
+    "candidate_bytes": 100663296,
+    "candidate_sha256": "6b788b23f54b9b8e84212187544064949b72af20c167cbb02392cbe53ee5a6ab",
+    "candidate_manifest_sha256": "f78bbaddf94ef6d1ae37b059b7455b24a15cbb7c2fab1ec9bbc4e1df5fd1edf8",
+    "baseline_bytes": 100663296,
+    "baseline_sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+    "forward_plan": "passed",
+    "reverse_plan": "passed",
+    "default_cli_plans": 4,
+    "default_cli_plan_exit_zero": true,
+    "forward_and_reverse_execution_authorized": false,
+    "production_trial_allowlist": [],
+    "operation_marker_created": false,
+    "partition_written": false,
+    "reboot_performed": false
+  },
+  "test_matrix": {
+    "suite_cases": 20,
+    "modes": [
+      {"mode": "normal", "sys_flags_optimize": 0, "passed": 20, "failed": 0},
+      {"mode": "python3 -O", "sys_flags_optimize": 1, "passed": 20, "failed": 0},
+      {"mode": "PYTHONOPTIMIZE=1 python3 -B", "sys_flags_optimize": 1, "passed": 20, "failed": 0}
+    ],
+    "py_compile": "passed",
+    "git_diff_check": "passed",
+    "actual_rendered_remote_in_temporary_fake_filesystem": {
+      "directions": ["audio-forward", "audio-reverse"],
+      "synthetic_partition_bytes": 4096,
+      "stage_partition_write_bytes": 0,
+      "flash_exact_write_and_readback": true,
+      "live_transport_used": false
+    },
+    "covered_negative_cases": [
+      "wrong current partition baseline",
+      "wrong direction-specific prewrite module GNU IDs",
+      "wrong pre-reboot module GNU IDs",
+      "malformed or type-confused receipt",
+      "extra receipt fields",
+      "receipt and marker replay",
+      "boot change during flash",
+      "partial flash write",
+      "unknown stage transport",
+      "reboot helper mismatch",
+      "reboot disconnect is not retried",
+      "wrong initial-observation boot ID, image hash, or module IDs"
+    ]
+  },
+  "authorization_and_acceptance": {
+    "reserved_trial_identity": "audio-coherent-20261003-first",
+    "owner_authorization_recorded": false,
+    "current_deployment_authorized": false,
+    "audio_hardware_acceptance": false,
+    "bootability_claim": false,
+    "phone_access": false,
+    "ssh_or_adb_used": false,
+    "stage_or_flash_invoked": false,
+    "reboot_invoked": false,
+    "kernel_build_or_package_build": false,
+    "audio_runtime_or_powered_test": false
+  },
+  "remaining_limits": [
+    "fake filesystem tests are not device or kernel-loader evidence",
+    "no actual stage, flash, reboot, or post-reboot observation occurred",
+    "one initial readiness sample does not prove sustained system stability",
+    "powered audio/PCM/DMA and audio-quality acceptance remain untested",
+    "separate owner authority and independent review are still required"
+  ]
+}

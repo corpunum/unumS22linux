@@ -1,0 +1,51 @@
+{
+  "schema": "s22-camera-trial-host-followup-20260927/v1",
+  "evidence_level": "host implementations, executable synthetic regressions and independent source review; separate from actual camera boot receipt",
+  "worker_configuration": "Reused accepted explicit gpt-6-luna/max selections; no independent backend identity attestation claimed.",
+  "audio_dma_interpreter": {
+    "worker": "/root/audio_ipc_20260927",
+    "worker_commit": "7e1a969b31694eb1470b97ac11af0ccc14435be8",
+    "integrated_commit": "83274b5cdb354de0fb4df84d4d5c8a579c1680e7",
+    "independent_reviewer": "/root/camera_build_20260927",
+    "focused_tests_per_mode": 7,
+    "modes": ["normal", "-O", "PYTHONOPTIMIZE=1 without -I"],
+    "coordinator_repeated_genuine_PYTHONOPTIMIZE": true,
+    "saved_actual_trial_pairs": 19,
+    "saved_actual_trial_adjacent_comparisons": 18,
+    "saved_actual_trial_result": "No change in sampled ALSA hardware pointer or RDMA values; absent IPC markers remain unknown, not proof of failed firmware delivery.",
+    "new_device_operation": false
+  },
+  "completed_observer_replay_fix": {
+    "worker": "/root/audio_ipc_20260927",
+    "worker_commit": "7a1d74324816b8f70c4649c70bef2e1fd6df0836",
+    "integrated_commit": "63a8312",
+    "independent_reviewer": "/root/camera_build_20260927",
+    "review_commit": "37f052158d1cbf0af8864283efa248ff5699ecd5",
+    "focused_tests_per_mode": 24,
+    "modes": ["normal", "-O", "PYTHONOPTIMIZE=1 without -I"],
+    "author_and_reviewer_executed_all_modes": true,
+    "coordinator_repeated_genuine_PYTHONOPTIMIZE": true,
+    "completed_positive_and_negative_receipts_refused_before_transport": true,
+    "malformed_prior_receipt_fails_closed": true,
+    "interrupted_run_with_no_final_receipt_resumable": true,
+    "global_trial_marker_unchanged_by_fix": true,
+    "actual_completed_phone_observation_rerun": false,
+    "limitation": "This prevents a new window after a completed result. It does not serialize two simultaneously launched read-only observers that both start before either result exists. The actual trial used one coordinator-owned serialized observer."
+  },
+  "ci_allowlist": {
+    "integrated_commit": "60650f0",
+    "independent_reviewer": "/root/review_wave2_20260927",
+    "change": "Add test-audio-dma-evidence.py to both runner allowlists and the independent expected list.",
+    "runner_policy_normal_passed": 7,
+    "runner_policy_optimized_passed": 7
+  },
+  "integrated_regressions": {
+    "normal_scripts_passed": 30,
+    "optimized_scripts_passed": 27,
+    "documented_optimized_script_skips": 3,
+    "failed_scripts": 0,
+    "optional_fixture_skips": "Retained source/O-tree/package fixtures are explicitly skipped where unavailable. Three deployment AVB-specific cases skipped locally because the trusted public tool was absent from this worktree.",
+    "source_build_or_model_tests_imply_hardware_acceptance": false
+  },
+  "publication_limits": "No images, firmware, model weights, raw traces, boot UUIDs, endpoints or credentials are included. Hosted CI and remote SHA are verified separately after publication."
+}

@@ -1,0 +1,90 @@
+# Camera sensor-clock ownership quarantine
+
+Status: bounded host-only source repair candidate and regression evidence. This is not a kernel build, device test, clock-provider acceptance, or authorization to boot or deploy.
+
+## Real frontend correction — 2026-10-03
+
+The coordinator's configured ARM64 frontend check found a concrete defect in
+the prior patch: `is_cleanup()` called `mwarn` with only a format string, but the
+SHA-pinned native macro requires an object argument. The variadic host shim had
+hidden it. This call now uses the existing object-free `warn` macro; the clock
+ownership and quarantine behavior is unchanged. Both host `mwarn` shims now
+retain the real required argument shape. A new executable negative control
+injects the actual pinned macro definition into the extracted shutdown harness,
+then confirms the corrected call compiles and the old objectless call fails at
+both C optimization levels. This is not merely a text assertion.
+
+Before the fix, the stricter ten-case suite failed three cases and the real
+ARM64 `is-core.c` frontend failed. After correction all ten cases pass with
+observed Python optimization flags 0/1/1, and all eight real configured ARM64
+frontend jobs pass: baseline and patched core, video, sensor-v2 and sensor
+clock setup. All 579 local camera headers were mechanically shadowed so nested
+quoted includes see the patched definitions. The initial temporary fixture
+also overmatched the separate `camera-pp` include prefix; that fixture error
+was corrected and rerun before attributing the remaining macro error to source.
+Both failed captures are preserved privately, not rewritten as success.
+
+The frontend uses the preserved clean native-eight source commit
+`872bffb8ea2ea657f94d10b866dc655b5718d6db`, its saved native compiler commands,
+the unchanged configuration SHA-256
+`d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16`, and
+hash-pinned Clang 18. It retains ARM64, `-O2`, warnings-as-errors, KCFI and shadow
+call stack while removing only object/dependency outputs for `-fsyntax-only`.
+Original source/header/config/command bytes are unchanged. No object, module,
+image, link/modpost, CRC acceptance or phone operation was produced. The
+sanitized receipt is `evidence/s22-camera-logging-frontend-host-20261003.json`.
+Independent review of this narrow correction is pending. All concurrency,
+provider, DMA and external teardown limitations below remain in force.
+
+## Scope and pinned sources
+
+The owning worktree is `codex/s22-camera-shutdown-quarantine-20261003`, based on independent blocker review commit `18502bf`. The patch touches the v10.1 clock helpers, sensor-state and generic caller/PM paths, V4L2 context/open/release paths, and the camera core cleanup/shutdown paths. It does not change MCLK helpers, shared clock APIs, other camera variants, or global reboot policy.
+
+The original source is `/home/corpunum/s22-linux/lineage/android_kernel_samsung_s5e9925`, commit `4e5c5ad7d950e4de0688b5663965f2075654b2ad`, tree `5c46cbe12dadbcdb64eec4344c9e8ff0f8a75dee`. The retained derived camera tree is commit `3fca50941422439b2019db2e4a3dc1016b2138a1`, tree `5aad5cf1dbaa0f430377737141f0547e971b0a2d`. Both worktrees were read-only during this work. The patch-target blobs match across them; the patch applies to both exact trees in a disposable fixture. The bounded loader pins the clock functions, V4L2/VB2/VFS lifetime sources and headers, ischain sensor association, core cleanup/shutdown and allocation/driver structure, reboot handler/registration switch, representative sensor and ischain video-node owners, resourcemanager lookup, camera Kbuild, v10.1 six-sensor configuration, and S5E9925 defconfig. Public fallback hashes each fetched blob and enforces byte/time caps; the derived-tree apply check is a separate private-tree-only case.
+
+The defect is at the actual generic call chain: cfg acquires seven CSIS gate votes and a DMA vote, then on converts those votes to one selected gate. Baseline helpers/wrappers discarded lower-level error returns, so the caller could mark ICLK on after a failed acquisition or clear its ON bit after partially failed release. The extracted baseline reproduces the hidden failures.
+
+## Candidate ownership behavior
+
+The v10.1 cfg/on/off helpers now propagate helper returns, reject channels above 6 before touching clocks, and unwind only votes acquired by that call. Successful earlier cfg acquisitions are rolled back in reverse order. If a later on transition fails, remaining cfg votes are unwound in reverse order after the DMA vote. The off path releases the selected CSIS vote before DMA; if DMA release fails, it tries to reacquire the selected vote.
+
+If cleanup or selected-vote restoration is incomplete, the callback returns `-EUCLEAN` and its diagnostic includes both the initiating errno and cleanup errno. The generic caller appends `IS_SENSOR_ICLK_UNKNOWN` to the state enum without shifting existing bits, latches it on `-EUCLEAN`, and does not clear `IS_SENSOR_ICLK_ON` after failed off. No normal path retries a quarantined clock transition. On/off refuse before invoking the clock callbacks; open, close, probe, system suspend, and runtime PM paths also refuse before their relevant state reset, queue/device teardown, PM preparation, vendor suspend, or MCLK action. Runtime suspend propagates any ICLK-off error before unregistering the module subdevice or performing later secure/QoS cleanup. Ordinary non-quarantine failures can still return their original errors; earlier runtime-suspend preparation and GPIO steps may already have run in that ordinary-error case.
+
+The video open guard rejects an already-unknown sensor association before allocating an `is_video_ctx`. It resolves both direct sensor-node contexts and ischain contexts through `idi->sensor`. The close guard covers both kinds of context, including nonleader capture nodes. This prevents a subsequent open/close loop from continuously creating new retained contexts after quarantine.
+
+The independent review found a remaining shutdown escape: the enabled/registered reboot notifier called `is_cleanup()`, which stopped every front-started sensor, while platform `is_shutdown()` called that function and then deinitialized sensor threads and canceled CIS work without checking unknown ownership. The patch adds a small six-sensor scan. If any sensor is unknown, `is_cleanup()` marks each probed sensor's existing `reboot` start gate under `mutex_reboot`, then returns before any front-stop. The platform shutdown path calls cleanup, rescans, and returns before any sensor-thread deinit or CIS-work cancellation. This is core-wide rather than per-sensor: source ties front-stop to stream-off and the sensor array/work to the same camera core, so the patch retains peer/shared dependencies instead of assuming they are independent. The reboot handler and notifier registration policy are unchanged.
+
+A follow-up trace of the queued `is_sensor_instanton()` worker found another bypass: after observing `device->reboot`, the worker itself calls CSI `s_stream(IS_DISABLE_STREAM)` before declining sensor start. Since cleanup sets that same reboot flag, a worker queued behind cleanup could still issue that hardware-facing stop. The patch now checks the UNKNOWN bit for the worker's sensor and every sensor in its core while holding the worker's `mutex_reboot`, before the reboot branch; if any owner is unknown it records `-EUCLEAN` and returns through the existing no-start label without calling sensor start or CSI stream-off. Core-wide scope matches the cleanup policy and protects a healthy peer whose reboot flag was also latched. This does not serialize the UNKNOWN bit's runtime-PM writer with the worker/core scans and is not a quiescence guarantee for work already past the guard.
+
+These guards only protect an unknown state observed by their checks. `is_sensor_iclk_off()` latches the unknown bit outside `mutex_reboot`; neither shutdown preflight nor the worker's scan serializes with runtime-PM state changes, so a concurrent transition can still race a scan. The worker guard avoids the reboot branch's CSI stop only when UNKNOWN is observed before that branch; it is not a proof of a race-free quiescence point. A work item already past the guard, external parent-device teardown, or system power removal may still affect retained objects. No DMA-stop, physical clock rollback, or globally safe reboot/shutdown claim follows.
+
+## Why VFS return alone is not a close veto
+
+The pinned `fs/file_table.c` (`d74699023b0062aefbbb35462e155c7485dd3264fd2476aecef0e4fc48f3cc0f`) shows `__fput()` calls `file->f_op->release(inode, file)`, ignores its integer return, then calls `fops_put()` and `file_free()`. Therefore `-EUCLEAN` cannot keep the `struct file` alive. The pinned `v4l2-dev.c` additionally shows `v4l2_release()` invokes the camera release callback and unconditionally calls `video_put(vdev)` afterward; if the video node had been unregistered, the final put could run `v4l2_device_release()` and `vdev->release()`, which for this driver is `video_device_release()`/`kfree(vdev)`.
+
+The retention path is deliberately terminal instead: a per-context latch makes repeat direct calls idempotent, then `get_device(&iv->vd.dev)` and `__module_get(THIS_MODULE)` each take one intentionally leaked reference before returning. This protects the V4L2 node and driver module from the respective wrapper/VFS puts; it does not itself pin arbitrary parent storage. The pinned camera `is_vctx_open()` stores `file->private_data` as the video context; queue setup stores that context in `vb2_queue.drv_priv`, and VB2's owner field also stores `file->private_data`, not `struct file *`. The pinned `is_video_ctx` definition contains no file pointer. Normal `__is_video_close()` calls `vb2_queue_release()`, frees the queue and closes it; `vb2_core_queue_release()` cleans file I/O, cancels the queue and frees buffer storage; `is_vctx_close()` frees the video context. The quarantine return bypasses those frees, so the VFS may free its file object without freeing the retained context or queue.
+
+The pinned camera Kbuild groups `is-video.o` and `is-device-sensor_v2.o` into `fimc-is.o`; the camera's default sub-fops declare `.owner = THIS_MODULE`, while the registered V4L2 wrapper has its own file-operations lifetime. The explicit `__module_get()` is therefore treated as a separate intentional pin, not an inference from the sub-fops owner field. The V4L2 device reference prevents the retained node's final release callback. Source inspection shows `is_probe()` allocates `struct is_core` with `pablo_zalloc()`, returns success before its error-only `pablo_free(core)`, and the platform driver declares no `.remove` callback; the core embeds the sensor array and ischain video-node structures, while sensor video nodes are embedded in each sensor. Those facts support the exact inspected source lifetime, but do not certify arbitrary external driver unbind, changed teardown, or system/device lifetime. `is_resource_open()` itself only selects/returns the resource pointer; it does not increment the resource count, so the open guard's early refusal before context allocation does not strand a resource reference.
+
+This is a terminal leak/quarantine policy, not cleanup or a recovery design. It retains the video context, VB2 queue and allocated buffers, sensor open/resource state, one V4L2-node reference, and one module reference per retained open context. Future opens are refused; the pinned source also caps per-node video-context opens. There is no autonomous retry or release of those references. Static source evidence shows this close path does not free the retained objects; it does not establish that asynchronous camera work has stopped, that DMA has stopped, that physical clock state is safe, or that changed/external teardown paths cannot free parent storage. The new reboot/shutdown and queued-start-worker guards avoid the pinned front-stop, worker CSI-stop, and thread/work teardown operations when unknown ownership is observed, but they do not prove that already-running work is quiescent or that external teardown cannot free parent storage. Retained buffers avoid freeing storage through this release path, but live work may still use them. No claim of safe physical rollback or teardown follows.
+
+## Regression evidence
+
+`tools/hardware/test-camera-sensor-clock-unwind.py` loads pinned source bytes, applies the patch in a temporary tree, extracts the actual baseline or patched C clock helpers, generic ICLK caller, system/runtime PM functions, `is_video_close()`, `is_cleanup()`, `is_shutdown()`, the registered reboot callback, and queued `is_sensor_instanton()` worker, then compiles and runs those functions in bounded host harnesses. Static source checks cover probe/open/close and shutdown/worker ordering, VFS/V4L2/VB2 lifetime, reboot enable/registration, and exact core-allocation facts; VFS, V4L2 and VB2 core are not executed in these harnesses. Kernel service helpers, mutexes, clock votes, stream-stop, work cancellation, sensor-thread deinit, `get_device()`, `__module_get()`, and queue/vctx cleanup are shims.
+
+All nine Python tests passed in the normal, `-O`, and effective `PYTHONOPTIMIZE=1` invocations, with observed `sys.flags.optimize` values `0`, `1`, and `1`. The exact private derived-tree apply check passed in those runs. Baseline and patched extracted clock and shutdown functions compiled and ran at C `-O0` and `-O2`.
+
+```text
+CAMERA_EXPECT_PYTHONOPTIMIZE=0 python3 -I -B tools/hardware/test-camera-sensor-clock-unwind.py
+CAMERA_EXPECT_PYTHONOPTIMIZE=1 python3 -O -I -B tools/hardware/test-camera-sensor-clock-unwind.py
+CAMERA_EXPECT_PYTHONOPTIMIZE=1 PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-camera-sensor-clock-unwind.py
+CAMERA_CLOCK_FORCE_PUBLIC=1 CAMERA_CLOCK_DERIVED_ROOT=/tmp/camera-clock-derived-absent-20261003 CAMERA_EXPECT_PYTHONOPTIMIZE=0 python3 -I -B tools/hardware/test-camera-sensor-clock-unwind.py
+```
+
+The patched clock C cases cover every one of the eight cfg acquisitions, all seven selected-gate acquisitions, all seven setup-gate disable positions, shared votes, normal repeated on/off idempotence, reverse cleanup order, first-error diagnostics, failed cleanup quarantine, and the critical off-DMA failure plus failed selected-gate restoration. That last case observes the caller's ON bit retained while only the unrelated shared selected-gate vote remains; repeated on/off, system suspend, runtime suspend/resume, and outer sensor/ischain capture closes must stop before any further clock operation or queue/context cleanup. The outer-close C case checks one module and one V4L2-device pin per retained context, checks a repeated direct invocation does not double-pin, and observes the queue/context pointers remain untouched. The shutdown C cases first reproduce baseline stream-stop in direct cleanup and the real reboot callback, plus stream-stop/thread/work teardown in platform shutdown, with UNKNOWN and FRONT_START set. They also execute the pinned baseline `is_sensor_instanton()` after cleanup has latched `reboot=true` and observe its CSI stream-off. Patched cases verify core-wide retention on mixed unknown/healthy sensors, idempotent repeated cleanup/shutdown, queued worker suppression of both CSI stream-off and sensor-start for unknown and healthy peers, and unchanged clean-state worker-start/cleanup/shutdown behavior. Source assertions establish VFS/V4L2 puts, object ownership, reboot registration, and the shutdown/worker operations skipped by the guards.
+
+Negative disable injections model the pinned `is_disable()` clock-lookup failure path: it returns `-EINVAL` before `clk_disable_unprepare()`, which is `void`. They do not model a provider-reported physical disable failure. A test model also lets a failed enable leave a physical-on marker set after vote rollback to represent uncertainty; that is not evidence of target provider behavior.
+
+With `CAMERA_CLOCK_FORCE_PUBLIC=1` and `CAMERA_CLOCK_DERIVED_ROOT` pointed at an absent path, all public-pinned cases passed and only the optional derived-tree case skipped. `CAMERA_CLOCK_FORCE_PUBLIC=1` takes precedence over a configured/private source-tree path. Pointing the derived-root override at the wrong pinned source tree failed the expected derived commit/tree identity check. A supplied fixture is therefore not trusted by path alone.
+
+No kernel build, actual clock operation, module load, phone access, queue streaming, camera firmware action, or device-side experiment occurred. This candidate and its host tests do not establish safe physical rollback, sensor streaming, camera acceptance, or authorization to boot or deploy. The earlier camera hardware trial remains unchanged and `not_accepted`.

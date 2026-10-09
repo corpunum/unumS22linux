@@ -3,9 +3,25 @@
 Native Linux experiments on the **Samsung Galaxy S22 SM-S901B/DS**,
 Exynos 2200, codename `r0s`, unlocked bootloader. This is the S22, not S22+.
 
-## Current result — 2026-09-23
+## Current result — 2026-09-27
 
-**Latest measured checkpoint:** BORE767 is still running native Linux with
+The HCI-only native RECOVERY candidate is installed and passed one raw
+Bluetooth socket create/close test. A new live trial registered controller
+`hci0`; after fixing a firmware-profile/IBS mismatch, it exchanged 41 commands
+and 41 events successfully, then detached and powered down with Wi-Fi preserved.
+An exact missing ALSA node was repaired for this boot: playback now accepts
+buffers, but synchronized samples still show no DMA progress. Desktop/Pi/model
+services and networking remain healthy on the same candidate. Persistent
+Bluetooth service/pairing, usable audio, NPU inference, cellular and camera
+operation remain unfinished; GPU compute
+and desktop acceleration have separate acceptance requirements. See
+[current status](STATUS.md), the [HCI trial receipt](evidence/s22-hci-trial-second-20260924.json),
+the [new live results](evidence/s22-hardware-continuation-20260927.json),
+and the [active driver work](docs/S22_LUNA_TASK_BOARD_2026-09-27.md).
+
+## Earlier results — 2026-09-23 and before
+
+**September 23 checkpoint (superseded):** BORE767 was running native Linux with
 Hyprland, the 1080×2340 DSI panel, touchscreen input nodes, Wi-Fi/HTTPS,
 Tailscale and a healthy local 4B server. The resident 4B remains CPU-only. A
 Bluetooth HCI socket repair passed source checks and a full ThinLTO kernel
@@ -128,10 +144,10 @@ and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 | GPU | Samsung OpenCL/Vulkan compute passes; llama.cpp Vulkan Qwen0.8B all-layer offload and CPU-matching text verified. Resident4B remains CPU; RADV/desktop acceleration and sustained stability remain unaccepted |
 | NPU | Real ENN loads; vertex10 open/close passed. BOOTUP audit found unbounded waits and unsafe error cleanup; no speculative patch or firmware-boot acceptance |
 | Sensors | Accelerometer/gyro and now magnetometer/light frames sampled twice each. Compass accuracy is zero and light response untested; calibration, auto-rotation and autostart remain unaccepted |
-| Audio DSP | Card and1754 controls work after20extra firmware files; control-only Arch exposure reboot-tested at BORE765. RDMA still does not advance; speaker/microphone unfinished |
+| Audio DSP | Card/controls work; missing native PCM node repaired for this boot. PREPARE/write accepted, but 19 RUNNING samples show no RDMA/pointer progress; cleanup verified, speaker/microphone unfinished |
 | Modem | Dependencies recovered; real Samsung RIL library loads in isolated phone runtime without a RIL call. CPIF remains INIT; SIM/data/calls not working |
-| Bluetooth | Full195848-byte RAM patch and7023-byte configuration (29ACKs) accepted at3M; WLAN preserved. Diagnostic address is zero; no HCI/reset/pairing/RF acceptance |
-| Connectivity | USB rescue retained; Wi-Fi association, DHCP, DNS and HTTPS passed after two automatic recovery-boot startups |
+| Bluetooth | Real hci0 registration and 41-command/41-event plain-H4 exchange pass after IBS-profile fix; detach/power-off/WLAN preservation verified. Persistent service, pairing and Bluetooth audio unfinished |
+| Connectivity | Native USB SSH and Wi-Fi work; independent hardware rescue is not yet demonstrated. Association, DHCP, DNS and HTTPS previously passed after two automatic recovery startups |
 | Other everyday hardware | Usable audio, cellular, camera, GPS and suspend remain unaccepted |
 
 Previous [hardware follow-up and evidence](docs/HARDWARE_FOLLOWUP_2026-09-21.md):

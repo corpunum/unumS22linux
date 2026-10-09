@@ -1,0 +1,32 @@
+{
+  "schema": "s22-hosted-driver-ci/v1",
+  "repository": "corpunum/unumS22linux",
+  "branch": "s22/luna-driver-completion-20260923",
+  "tested_commit": "4587c6a3efeb32cdfd3d2aeec2d92822111540f3",
+  "run_id": 37100910426,
+  "run_url": "https://github.com/corpunum/unumS22linux/actions/runs/37100910426",
+  "conclusion": "success",
+  "job_started_utc": "2026-10-03T05:46:39Z",
+  "job_completed_utc": "2026-10-03T05:49:22Z",
+  "normal_script_invocations_passed": 64,
+  "optimized_script_invocations_passed": 61,
+  "runner_failures": 0,
+  "runner_policy_cases": 7,
+  "explicit_optional_fixture_skip_log_lines": 28,
+  "new_suites_passed_normal_and_optimized": [
+    "test-npu-system-resume-error-unwind.py",
+    "test-camera-sensor-clock-unwind.py",
+    "test-audio-coherent-trial-adapter.py"
+  ],
+  "complete_private_log_sha256": "ee9bae867aee9d9028a26c9ef6718480f1c05899ebefc89d339cf0d423a73de2",
+  "limitations": [
+    "Host/source/fake-operation tests are not working hardware or deployment acceptance.",
+    "Optional private/verified-tool fixtures retain explicit skips; three standalone scripts remain intentionally normal-only.",
+    "NPU provider/release/static-storage ownership, real camera concurrency/DMA safety, bounded new-boot audio stability and physical acceptance remain unresolved.",
+    "The audio candidate is not installed or newly owner-authorized; NPU BOOTUP remains refused.",
+    "The Node.js checkout-action deprecation annotation is not a driver test failure."
+  ],
+  "phone_operations": 0,
+  "hardware_acceptance": false,
+  "master_changed": false
+}

@@ -1,0 +1,53 @@
+{
+  "schema": "s22-audio-receipt-json-types-host/v1",
+  "scope": "host-only exact JSON primitive type validation for recovery receipts",
+  "reviewed_pre_fix_author_commit": "bddb66ac717b3668898eb78c825d02aadbba254b",
+  "reviewed_pre_fix_import_commit": "f16e39025e51958efd0b4b1492657d64e3b88cdd",
+  "blocking_review_commit": "31c248e857ae0db60762532d96df8c696a3cea27",
+  "pre_fix": {
+    "shared_helper_sha256": "d0c54cc306e3a8a80cb79d79958fceedf6bb5945dabc7606e02b12d27dc00fd3",
+    "reproduction": {
+      "stage_partition_written_json_integer_zero_accepted": true,
+      "flash_reboot_performed_json_integer_zero_accepted": true,
+      "both_returned_receipt_validated_true": true
+    },
+    "new_matrix_failures": 10,
+    "failed_cases": [
+      "audio-forward/audio-reverse stage partition_written integer 0 and float 0.0",
+      "audio-forward/audio-reverse flash reboot_performed integer 0 and float 0.0",
+      "audio-forward/audio-reverse flash bytes float equal to expected integer"
+    ]
+  },
+  "post_fix": {
+    "shared_helper_sha256": "4138413c16b9c90c70a46da6ed3b4f60b0f41f1c6c69b4b2047421895903a47f",
+    "profile_tool_sha256": "7a24b600d8e8054ce4266a084b7d227a108928eb4319b548a1bc34bd88e407d4",
+    "bt_hci_runner_sha256": "7696d15fcdd7af33d130cb4cdfa78c823553d84a3eb2d830142c5bbd0a09198a",
+    "bt_hci_runner_helper_pin": "4138413c16b9c90c70a46da6ed3b4f60b0f41f1c6c69b4b2047421895903a47f",
+    "test_audio_profile_sha256": "3df3850fd39e1baaec5ad60fe592a10a3b2c0cb969628ba912c9a4ad5cf9a0fa",
+    "test_recovery_hardening_sha256": "0e7f6ca2769d562d50d8fe11dbf9c572cc342e9c5d71073bf9a1faac189004cf",
+    "tests": {
+      "python_modes": [
+        {"mode": "normal", "sys_flags_optimize": 0},
+        {"mode": "-O", "sys_flags_optimize": 1},
+        {"mode": "PYTHONOPTIMIZE=1 python3 -B", "sys_flags_optimize": 1}
+      ],
+      "audio_profile_suite_per_mode": {"passed": 13, "skipped": 1, "skip_reason": "private artifact root unset"},
+      "shared_recovery_hardening_suite_per_mode": {"passed": 44, "skipped": 3, "skip_reason": "pinned AVB tool unavailable in isolated worktree"},
+      "hci_profile_suite_per_mode": {"passed": 22, "skipped": 0},
+      "runner_helper_pin_test": "passed using temporary roots; SSH was not called",
+      "rendered_remote_fake_filesystem": "passed; stage directions modeled zero partition writes; flash confined to temporary shims"
+    },
+    "authorization": {
+      "host_only": true,
+      "phone_or_device_access": false,
+      "ssh_or_adb": false,
+      "build_or_repack": false,
+      "stage_or_flash": false,
+      "operation_marker_created": false,
+      "reboot_performed": false,
+      "current_deployment_authorized": false,
+      "independent_hardware_rescue_demonstrated": false
+    }
+  },
+  "historical_records_rewritten": false
+}

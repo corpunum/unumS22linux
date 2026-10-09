@@ -1,9 +1,216 @@
 # S22 native Linux status
 
-Updated 2026-09-20. Older states and experiments remain in `EXPERIMENTS.md`
-and Git history; the old claim that nothing custom was flashed is obsolete.
+Updated 2026-10-06 by the Claude lead session (directly on the device).
+The 2026-10-02 task board and earlier checkpoints below are historical.
 
-## Current accepted state — 20:41 UTC
+## Resident agent, phone stack, GPU fallback — 2026-10-08 (lead2)
+
+- **GPU:** the resident 2B runs on the Xclipse 920 (vendor Vulkan, isolated Bionic root) as
+  `llama-server` on 127.0.0.1:8090 next to the CPU 4B on :8089. It decodes 1.1–1.25x faster than the
+  CPU at depth 4096, with byte-identical greedy text and a clean 32-min soak. It is OpenUnum's
+  offline fallback; Luna stays the default, and keepalive pins it back after any fallback switch.
+- **Always-on:** `s22-keepalive` supervises openunum, unumsearch, modem (cbd), s22-phoned and llama-8090,
+  keeps the amp at 0 and pins the model. Config-drift root cause: OpenUnum saves its in-memory config
+  after every turn, and provider-timeout recovery switches to the fallback.
+- **Phone:** `s22-phoned` (SIPC 4.1 SMS/call/SIM daemon) runs against the real CP: SIM absent, LTE
+  denied. Outbound is off until `tx_enabled` + allowlist. The OpenUnum `s22-phone` plugin's tools and
+  incoming bridge work through Luna. SIM-day plan: `tools/hardware/phoned/README.md`.
+- **Voice:** `s22-sip` (stdlib SIP/RTP) carries agent voice calls with all audio in software
+  (rig↔phone verified with whisper). `s22-converse` gives hands-free turns (verified silently).
+  Paradee TTS is installed (RTF ≈0.07); supertonic stays the default.
+- **Camera:** the raw V4L2 client (video101 + video210, independently reviewed) DMA'd frames with no fault, but the
+  frames are black (black pedestal only). Next: rear camera facing light, then exposure via sensor-peri.
+[Evidence](evidence/lead2-20261008/README.md).
+
+## Push-to-talk voice assistant — 2026-10-08
+
+**Hold Volume Up, speak after the beep, release: the phone answers aloud.**
+Speech recognition runs on the phone (sherpa-onnx Parakeet 110M int8, about
+1 s per utterance on the big cores). The phone's own OpenUnum answers in a
+`voice` session, and `s22-say` speaks the reply. Verified on the device
+through the real hook with mic loopback (transcripts exact). OpenUnum is now
+started at boot (opt-in marker), and the hook also starts it on demand. The
+owner's physical press test is pending.
+[Evidence](evidence/push-to-talk-20261008/README.md).
+
+## Current checkpoint — 2026-10-06
+
+**Speaker audio and text-to-speech work on the device.** The new
+`s22-say "text"` (espeak-ng → ALSA RDMA6 → stock `media-speaker` route →
+CS35L41 amps with the speaker-protection DSP running) speaks through the
+loudspeakers. Device evidence: the amps' protection telemetry recorded
+speaker excursion and coil temperature, and an on-device mic loopback picked
+up a test tone and the spoken phrase. The fixes were boot-time staging of the
+missing stock audio firmware (ABOX `sectiongraph_tplg.bin`, amp and haptic
+DSP images) plus the stock HAL mixer defaults generated from the vendor
+`mixer_paths.xml`. See
+[the evidence](evidence/audio-buttons-20261006/README.md).
+
+**Physical buttons: volume keys accepted by the owner's physical test; Power reworked.** `s22-buttons`
+autostarts and logs every Power/Volume press to `/srv/s22/buttons/events.jsonl`.
+Volume keys step the speaker volume and announce the level. Holding Volume Up
+runs the `assistant` hook (agent push-to-talk). A short Power press runs `s22-display toggle`. Off is DPMS off: the kernel
+log shows panel sleep-in and the panel regulators switched off; touch is
+disabled while off. On is followed by two forced full repaints. Hyprland now
+uses synchronous llvmpipe (`LP_NUM_THREADS=0`) because half-drawn frames
+reached the command-mode panel. The owner's physical re-test of Power is pending.
+
+**Microphone and earpiece (later the same day):** `s22-rec SECONDS OUT.wav`
+records the main mic. The loudspeaker and earpiece are verified end to end:
+the phone's own mic recording of `s22-say` output, transcribed with
+whisper.cpp, gives the spoken sentence back word for word (the earpiece run
+had one misheard word).
+
+**Neural on-device TTS.** `s22-say` now defaults to Supertonic with a female voice (int8,
+sherpa-onnx, CPU, real-time factor 0.16), with Kitten, Piper and Kokoro
+available and espeak-ng as the fallback. Verified acoustically: the phone's
+mic recording of its own speaker was transcribed by whisper word for word.
+[Evidence](evidence/tts-20261006/README.md).
+
+**OpenUnum on the phone, using the rig's Halogen over Tailscale.** The
+server and WebUI run in the Arch chroot (127.0.0.1:18880, `s22-openunum
+start`). The model is the rig's Halogen at 100.76.5.104:8080, and speech
+stays local. Device-verified agent turn: the rig model ran shell tools on the
+phone, then `s22-say` spoke "CPU architecture is aarch64 and the modem state
+is ONLINE." [Evidence](evidence/openunum-phone-20261006/README.md).
+
+**Bluetooth discovery works (bounded).** The running kernel has the raw-HCI
+socket fix (build b2dda820). `s22-bt-scan` brings up the QCA6490 for the
+bridge's 20 s window (pinned to the X2 core, which fixed a timing-sensitive
+baud switch), confirms BT 5.3, Qualcomm, and finds 6 LE + 2 classic devices
+with a passive LE scan and an inquiry. The chip is then powered off with
+Wi-Fi unaffected. `s22-bt up/down` now keeps hci0 up until stopped (verified
+for more than 70 s with two scans, clean power-off). Pairing needs the owner.
+[Evidence](evidence/bt-scan-20261006/README.md).
+
+**Camera: the rear sensor streams (83 frames over CSI), no image yet.**
+The kernel's Pablo sensor self-test powered the GN3, streamed 2040x1532@30
+and powered it down cleanly. The TrustZone dependency only affects the ISP
+library path. Capturing a frame needs a V4L2 client, which is not done yet.
+[Evidence](evidence/camera-20261006/README.md).
+
+**NPU works: a stock vendor model runs on the NPU through ENN.** After one recovery
+reboot, BOOTUP on the stock module succeeded (firmware verified by S2MPU). A stock
+object-detection `.nnc` then ran 3000 times at 3.1 ms mean, with deterministic outputs.
+NPU devfreq rose to 1066 MHz and `/dev/vertex10` was in use. A runtime module swap is
+not viable (the stock remove leaks an IOMMU mapping). TTS on the NPU needs Samsung's
+proprietary `.nnc` compiler. [Evidence](evidence/npu-20261007/README.md).
+
+**Modem: AP-side init complete, identity/SIM/signal readable (no SIM inserted).**
+The CP was looping on PHONE_START because cpif only sends INIT_END once
+`umts_ipc0` and `umts_rfs0` are both open. The new `s22-modem` (a minimal
+Samsung SIPC client) opens them and queries the CP. Device results: modem SW
+`S901BXXSIFYI3`, a Luhn-valid IMEI (masked in the evidence), SIM
+`CARD_NOT_PRESENT`, and LTE limited service (`reg_status denied`, RSRP −95 dBm,
+SNR 30 dB). The CP stayed ONLINE with no crash. Bring-up is manual
+(`s22-modem-up`, no boot hook). `s22-modem --serve-rfs` now answers the CP's
+NV writes into the private EFS copy only, updating its md5. The real EFS is
+never touched. Data, voice and SMS need a SIM, and calls/SMS need the owner's go-ahead.
+[Evidence](evidence/modem-20261006/README.md).
+
+Still open: the firmware-graph DMAs (RDMA2/3, most WDMAs) do not advance, so
+only the hardware-direct RDMA6/9 playback and WDMA4 capture work. GPU is unchanged
+from the checkpoints below. A runtime rebind of `0.abox-tplg` panics the
+kernel (recovered automatically); do not repeat it. RECOVERY image unchanged
+(`b1041271…`); no partition writes.
+
+
+## Historical checkpoint header — 2026-09-27
+
+Updated 2026-09-27 from coordinator hardware trials and independent host review.
+The current work is tracked in [the September 27 task board](docs/S22_LUNA_TASK_BOARD_2026-09-27.md).
+Earlier checkpoints below are historical.
+
+## Historical checkpoint — 2026-09-27
+
+The same HCI-only RECOVERY kernel remains running; no new flash, reboot or raw
+HCI socket-test repetition occurred. The new plain-H4 helper fixed the observed
+firmware-profile/IBS mismatch: real hci0 registration, 41 commands/41 events,
+empty queue, successful detach/power-off and preservation of WLAN were verified
+in one bounded trial. Native guardian, desktop/Pi/model, networking and the full
+RECOVERY image/build identity passed postflight. The controller was deliberately
+detached afterward; a permanent service, pairing and Bluetooth audio are not
+accepted. [Sanitized receipts](evidence/s22-hardware-continuation-20260927.json)
+preserve the earlier staging refusal and failed IBS-mode trial separately.
+
+Audio's missing exact native PCM node was repaired for this boot. PREPARE and
+buffer writes now work, but 19 paired RUNNING samples show no DMA/pointer
+advance. The timed diagnostic restored selectors/mute and closed the PCM;
+usable sound and persistent node creation remain unfinished. Camera firmware
+was recovered privately on the host, and a reviewed LDO error-unwind patch has
+host C tests but no build/deployment/capture. A second reviewed camera patch
+checks runtime-PM failures and preserves shared owners, with portable host C
+regressions. The attempted NPU generic unwind
+was rejected and removed after review found shared-STM side effects. NPU BOOTUP
+remains refused and its underlying ownership problem unfixed; extracted vendor
+callbacks now reproduce its reference/STM/concurrency failures, and missing
+source functions cannot incorrectly satisfy the intermediate unwind gate.
+Cellular and the
+physical/sustained acceptance items below remain unaccepted.
+
+The root overlay remains nearly full; substantial staging stayed on `/srv/s22`,
+and logs/firmware stayed private on the rig. Independent hardware rescue is
+still unproven. The dirty original checkout and master were preserved.
+
+## Historical checkpoint — 2026-09-26
+
+The SM-S901B/DS r0s remains on the HCI-only native RECOVERY candidate, running
+GNU build ID `b2dda820b18d410d9bf12f1bd2584567d545991d`. The completed
+[second trial](evidence/s22-hci-trial-second-20260924.json) verified the full
+RECOVERY hash, changed boot identity, and one successful raw-HCI socket
+create/close. The candidate was not rolled back. This is socket-lifecycle
+acceptance; controller registration, radio operation and pairing remain untested.
+
+At approximately 50 hours uptime, the native guardian, 325 loaded modules,
+Hyprland, desktop Pi, model API/idleness, browser service and networking were
+healthy. The dedicated browser tmux session remained absent on demand. The
+available kernel-log ring had no fatal indicators or hung-task warnings;
+full-boot log coverage and TrustZone progress are not established.
+
+Audio playback DMA and physical output/input remain unaccepted. NPU BOOTUP
+remains disabled pending ownership/liveness and hardware prerequisites.
+The modem is still in `INIT`; SIM/data/voice are not accepted. Camera nodes
+enumerate but no captured frame is accepted. Physical touch/sensors, suspend,
+desktop GPU acceleration and normal cold boot still need their separate tests.
+The existing GPU compute result is historical bounded headless evidence; the
+resident 4B remains CPU-configured.
+
+The root overlay has about 35 MB free; `/srv/s22` and Arch share a persistent
+filesystem with about 102 GB free. No cleanup, package install, flash, reboot,
+raw-HCI retry, controller attachment, audio stream or NPU operation occurred in
+the September 26 checks. Independent hardware rescue remains unproven.
+
+## Historical checkpoint — 2026-09-23, BORE 767 (superseded)
+
+- Live device tree identifies Samsung R0S / S5E9925 (SM-S901B/DS, Exynos
+  2200). Native kernel `5.10.260-g4e5c5ad7d950`, guardian PID 1, RECOVERY
+  mode. The live RECOVERY partition is exactly 100,663,296 bytes and hashes
+  to the accepted audio-extras baseline
+  `758fc9d30491e17b7c829a89d338ba69476efa15a1280deb8a1b9b8009687f4b`.
+- Hyprland and the internal 1080×2340 DSI panel are running; 60/120 Hz modes
+  are exposed. Touch and 11 evdev nodes enumerate, but physical finger input
+  has not been accepted.
+- WLAN-bound HTTPS returned 200. `tailscaled` is active, but the current
+  `tailscale0` operstate is unknown and this check did not prove peer reachability.
+- The local model API returned HTTP 200. The resident Qwen3.5-4B remains
+  CPU-only; Samsung GPU compute has separate bounded test evidence, not
+  accelerated Hyprland or resident-4B acceptance.
+- The live kernel has 325 loaded modules despite lacking a conventional
+  `/lib/modules` directory. Their boot-time source/loader closure is not yet
+  fully mapped.
+- Audio controls and route preparation work; measured RDMA2/hardware pointer
+  progress remained zero. No speaker/microphone acceptance. Bluetooth
+  firmware/configuration transport was acknowledged, but the HCI kernel
+  candidate is unflashed and `/sys/class/bluetooth` is empty. NPU inference,
+  SIM/data/calls, cameras, suspend and physical touch remain unaccepted.
+- CACHE-backed `/` has about 34 MiB free; do not add packages or bulk files
+  there. The persistent userdata filesystem has about 99.98 GiB free.
+
+No reboot or partition write occurred during this refresh. The current
+readiness and remaining gates are tracked in the driver ledger, not inferred
+from this summary.
+
+## Historical checkpoint — 2026-09-20 (superseded)
 
 Native RECOVERY **BORE760** is running, USB SSH is reachable, and the resident
 CPU model reports `ok`. Two intentional recovery-target software reboots

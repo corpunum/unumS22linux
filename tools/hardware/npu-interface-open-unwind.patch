@@ -1,0 +1,294 @@
+diff --git a/drivers/vision/npu/core/interface/hardware/npu-interface.c b/drivers/vision/npu/core/interface/hardware/npu-interface.c
+--- a/drivers/vision/npu/core/interface/hardware/npu-interface.c
++++ b/drivers/vision/npu/core/interface/hardware/npu-interface.c
+@@ -18,6 +18,8 @@
+ #include <linux/device.h>
+ #include <linux/time.h>
+ #include <linux/workqueue.h>
++#include <linux/spinlock.h>
++#include <linux/mutex.h>
+ #include "npu-interface.h"
+ #include "npu-util-llq.h"
+ #include "npu-vertex.h"
+@@ -31,6 +33,53 @@
+ #define LINE_TO_SGMT(sgmt_len, ptr)	((ptr) & ((sgmt_len) - 1))
+ static struct workqueue_struct *wq;
+ static struct work_struct work_report;
++static DEFINE_SPINLOCK(report_wq_lock);
++static DEFINE_MUTEX(report_wq_lifecycle_lock);
++static int report_irq_count;
++static int report_affinity_count;
++static bool report_interface_probed;
++static bool report_interface_open;
++
++/* Queue producers run in both hardirq and process context. */
++static void npu_report_queue_work(void)
++{
++	unsigned long flags;
++
++	spin_lock_irqsave(&report_wq_lock, flags);
++	if (wq)
++		queue_work(wq, &work_report);
++	spin_unlock_irqrestore(&report_wq_lock, flags);
++}
++
++static void npu_report_workqueue_install(struct workqueue_struct *queue)
++{
++	unsigned long flags;
++
++	spin_lock_irqsave(&report_wq_lock, flags);
++	wq = queue;
++	spin_unlock_irqrestore(&report_wq_lock, flags);
++}
++
++static struct workqueue_struct *npu_report_workqueue_detach(void)
++{
++	unsigned long flags;
++	struct workqueue_struct *queue;
++
++	spin_lock_irqsave(&report_wq_lock, flags);
++	queue = wq;
++	wq = NULL;
++	spin_unlock_irqrestore(&report_wq_lock, flags);
++	return queue;
++}
++
++/* Call only after detaching the queue from every producer. */
++static void npu_report_workqueue_destroy(struct workqueue_struct *queue)
++{
++	if (!queue)
++		return;
++	flush_workqueue(queue);
++	destroy_workqueue(queue);
++}
+ 
+ /* Modify strArr, when changes are there in cmd_done structure */
+ static const u8 strArr[][128] = {{"fid : "}, {"duration : "}, };
+@@ -214,8 +263,7 @@
+ 	if (interface.rslt_notifier != NULL)
+ 		interface.rslt_notifier(NULL);
+ #else
+-	if (wq)
+-		queue_work(wq, &work_report);
++	npu_report_queue_work();
+ #endif
+ #else
+ #if (CONFIG_NPU_MAILBOX_VERSION >= 8)
+@@ -242,8 +290,7 @@
+ #endif
+ 	if (val)
+ 		interface.sfr2->grp[0].c = val;
+-	if (wq)
+-		queue_work(wq, &work_report);
++	npu_report_queue_work();
+ 	return IRQ_HANDLED;
+ }
+ 
+@@ -470,6 +517,7 @@
+ int npu_interface_probe(struct device *dev, void *regs1, void *regs2)
+ {
+ 	int ret = 0;
++	struct workqueue_struct *probe_wq;
+ 
+ 	BUG_ON(!dev);
+ 	if (!regs1 || !regs2) {
+@@ -478,24 +526,57 @@
+ 		return ret;
+ 	}
+ 
++	mutex_lock(&report_wq_lifecycle_lock);
++	if (report_interface_probed || report_interface_open) {
++		ret = -EBUSY;
++		goto out_probe;
++	}
++
+ 	interface.sfr = (volatile struct mailbox_sfr *)regs1;
+ 	interface.sfr2 = (volatile struct mailbox_sfr *)regs2;
+ 	mutex_init(&interface.lock);
+-	wq = alloc_workqueue("my work", WQ_FREEZABLE|WQ_HIGHPRI, 1);
+ 	INIT_WORK(&work_report, __rprt_manager);
++	probe_wq = alloc_workqueue("my work", WQ_FREEZABLE|WQ_HIGHPRI, 1);
++	if (!probe_wq) {
++		ret = -ENOMEM;
++		interface.sfr = NULL;
++		interface.sfr2 = NULL;
++		interface.mbox_hdr = NULL;
++		interface.addr = NULL;
++		goto out_probe;
++	}
++	npu_report_workqueue_install(probe_wq);
++	report_interface_probed = true;
+ 
+ 	probe_info("complete in %s\n", __func__);
++out_probe:
++	mutex_unlock(&report_wq_lifecycle_lock);
+ 	return ret;
+ }
+ 
+ int npu_interface_open(struct npu_system *system)
+ {
+ 	int i, ret = 0;
++	int requested_irqs = 0;
++	int affinity_irqs = 0;
+ 	unsigned int isr_cpu_affinity = 0;
+ 	struct npu_device *device;
+-	struct device *dev = &system->pdev->dev;
++	struct device *dev;
++	struct workqueue_struct *report_wq = NULL;
++	struct workqueue_struct *old_wq;
+ 
+ 	BUG_ON(!system);
++	dev = &system->pdev->dev;
++	mutex_lock(&report_wq_lifecycle_lock);
++	if (report_interface_open) {
++		ret = -EBUSY;
++		goto out_open;
++	}
++	if (!report_interface_probed) {
++		ret = -ENODEV;
++		goto out_open;
++	}
++
+ 	device = container_of(system, struct npu_device, system);
+ 	interface.mbox_hdr = system->mbox_hdr;
+ #ifdef CONFIG_DSP_USE_VS4L
+@@ -509,6 +590,7 @@
+ 			npu_err("fail(%d) in devm_request_irq(%d)\n", ret, i);
+ 			goto err_probe_irq;
+ 		}
++		requested_irqs++;
+ 	}
+ 
+ 	ret = of_property_read_u32(dev->of_node,
+@@ -523,12 +605,14 @@
+ 			npu_err("fail(%d) in irq_set_affinity_hint(%d)\n", ret, i);
+ 			goto err_probe_irq;
+ 		}
++		affinity_irqs++;
+ 	}
+ 
+-	wq = alloc_workqueue("rprt_manager", __WQ_LEGACY | __WQ_ORDERED, 0);
+-	if (!wq) {
++	report_wq = alloc_workqueue("rprt_manager", __WQ_LEGACY | __WQ_ORDERED, 0);
++	if (!report_wq) {
+ 		npu_err("err in alloc_worqueue.\n");
+-		goto err_exit;
++		ret = -ENOMEM;
++		goto err_probe_irq;
+ 	}
+ 	ret = mailbox_init(interface.mbox_hdr, system);
+ 	if (ret) {
+@@ -536,20 +620,35 @@
+ 		dbg_print_interface();
+ 		goto err_workqueue;
+ 	}
++
++	/* Detach and drain the probe queue before publishing the active queue. */
++	old_wq = npu_report_workqueue_detach();
++	npu_report_workqueue_destroy(old_wq);
++	npu_report_workqueue_install(report_wq);
++	report_wq = NULL;
++	report_irq_count = requested_irqs;
++	report_affinity_count = affinity_irqs;
++	report_interface_open = true;
++	/* Recover report-ring data whose interrupt arrived during the queue swap. */
++	npu_report_queue_work();
++	mutex_unlock(&report_wq_lifecycle_lock);
+ 	return ret;
+ 
+ err_workqueue:
+-	destroy_workqueue(wq);
++	npu_report_workqueue_destroy(report_wq);
+ err_probe_irq:
+-	for (i = 0; i < system->irq_num; i++) {
++	old_wq = npu_report_workqueue_detach();
++	for (i = affinity_irqs - 1; i >= 0; i--)
+ 		irq_set_affinity_hint(system->irq[i], NULL);
++	for (i = requested_irqs - 1; i >= 0; i--)
+ 		devm_free_irq(dev, system->irq[i], NULL);
+-	}
+-err_exit:
++	npu_report_workqueue_destroy(old_wq);
+ 	interface.addr = NULL;
+ 	interface.mbox_hdr = NULL;
+ 	set_bit(NPU_DEVICE_ERR_STATE_EMERGENCY, &device->err_state);
+ 	npu_err("EMERGENCY_RECOVERY is triggered.\n");
++out_open:
++	mutex_unlock(&report_wq_lifecycle_lock);
+ 	return ret;
+ }
+ 
+@@ -557,38 +656,43 @@
+ {
+ 	int i, wptr, rptr;
+ 	struct device *dev;
++	struct workqueue_struct *report_wq;
+ 
+ 	if (!system) {
+ 		npu_err("fail in %s\n", __func__);
+ 		return -EINVAL;
+ 	}
+ 
+-	if (likely(interface.mbox_hdr))
+-		mailbox_deinit(interface.mbox_hdr, system);
+-
+ 	dev = &system->pdev->dev;
++	mutex_lock(&report_wq_lifecycle_lock);
++	if (report_interface_open && likely(interface.mbox_hdr))
++		mailbox_deinit(interface.mbox_hdr, system);
+ 
+-	queue_work(wq, &work_report);
+-	if ((wq) && (interface.mbox_hdr)) {
++	if (report_interface_open)
++		npu_report_queue_work();
++	report_wq = npu_report_workqueue_detach();
++	for (i = report_affinity_count - 1; i >= 0; i--)
++		irq_set_affinity_hint(system->irq[i], NULL);
++	for (i = report_irq_count - 1; i >= 0; i--)
++		devm_free_irq(dev, system->irq[i], NULL);
++	report_affinity_count = 0;
++	report_irq_count = 0;
++	if (report_wq) {
+ 		if (work_pending(&work_report)) {
+ 			cancel_work_sync(&work_report);
+-			wptr = interface.mbox_hdr->f2hctrl[1].wptr;
+-			rptr = interface.mbox_hdr->f2hctrl[1].rptr;
+-			npu_dbg("work was canceled due to interface close, rptr/wptr : %d/%d\n", wptr, rptr);
++			if (interface.mbox_hdr) {
++				wptr = interface.mbox_hdr->f2hctrl[1].wptr;
++				rptr = interface.mbox_hdr->f2hctrl[1].rptr;
++				npu_dbg("work was canceled due to interface close, rptr/wptr : %d/%d\n", wptr, rptr);
++			}
+ 		}
+-		flush_workqueue(wq);
+-		destroy_workqueue(wq);
+-		wq = NULL;
++		npu_report_workqueue_destroy(report_wq);
+ 	}
+ 
+-	for (i = 0; i < system->irq_num; i++)
+-		irq_set_affinity_hint(system->irq[i], NULL);
+-
+-	for (i = 0; i < system->irq_num; i++)
+-		devm_free_irq(dev, system->irq[i], NULL);
+-
+ 	interface.addr = NULL;
+ 	interface.mbox_hdr = NULL;
++	report_interface_open = false;
++	mutex_unlock(&report_wq_lifecycle_lock);
+ 	return 0;
+ }
+ 
+@@ -1220,10 +1324,7 @@
+ 
+ void fw_rprt_manager(void)
+ {
+-	if (wq)
+-		queue_work(wq, &work_report);
+-	else//not opened, or already closed.
+-		return;
++	npu_report_queue_work();
+ }
+ 
+ int mbx_rslt_fault_listener(void)
+

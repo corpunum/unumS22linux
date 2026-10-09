@@ -1,0 +1,150 @@
+[ 1171.396652] [7:        python3: 8122] [@][0][V:SS0]is_video_open
+[ 1171.397868] [7:        python3: 8122] [@][0][CSI2][D0] DMA state(1)
+[ 1171.397878] [7:        python3: 8122] [ewf] ewf_grp_cam0 / en: 1 / reg: 6110
+[ 1171.397881] [7:        python3: 8122] [ewf] ewf_grp_cam1 / en: 1 / reg: 200000f
+[ 1171.397888] [7:        python3: 8122] [@]is_resource_get: is secure state has reset
+[ 1171.397890] [7:        python3: 8122] [@]is_init_mem - ION
+[ 1171.397892] [7:        python3: 8122] [@][RSC] is_resourcemgr_init_dynamic_mem done
+[ 1171.400088] [7:        python3: 8122] [@][0][SS0:D] is_sensor_runtime_resume():0
+[ 1171.400092] [7:        python3: 8122] [@][OIS_MCU]ois_mcu_power_ctrl E
+[ 1171.400095] [7:        python3: 8122] [@][OIS_MCU]ois_mcu_runtime_resume E
+[ 1171.400128] [7:        python3: 8122] [@][OIS_MCU]__is_mcu_pmu_control onoff = 1
+[ 1171.401259] [7:        python3: 8122] [@][OIS_MCU]__is_mcu_hw_enable started
+[ 1171.401293] [7:        python3: 8122] [@][OIS_MCU]__is_mcu_hw_enable end
+[ 1171.405551] [7:        python3: 8122] [@][OIS_MCU]ois_mcu_runtime_resume X
+[ 1171.405554] [7:        python3: 8122] [@][OIS_MCU]ois_mcu_power_ctrl: (1) X
+[ 1171.405556] [7:        python3: 8122] [@][OIS_MCU]__is_mcu_load_fw started
+[ 1171.405559] [7:        python3: 8122] [@][ERR]get_filesystem_binary:192:not support get_filesystem_binary API!
+[ 1171.405600] [7:        python3: 8122] Sensor-OIS-MCU 173f0000.ois_mcu: Direct firmware load for is_mcu_fw.bin failed with error -2
+[ 1171.405603] [7:        python3: 8122] Sensor-OIS-MCU 173f0000.ois_mcu: Falling back to sysfs fallback for: is_mcu_fw.bin
+[ 1174.495713] [7:    kworker/7:2:  222] stm_ts_spi spi2.0: [sec_input] tc:0 noise:0/0 ext_n:0 wet:0 wc:0(f:0) lp:0 fn:0061/0000 irqd:0 ED:0 PK:0 LS:0// v:ST07180033 C01T0022.LCIA.L Cal_flag:1 fail_cnt:0 chk:0 // tmp:30 // #39 39
+[ 1176.705497] [0:  phoned-worker: 2978] cpif: LNK-TX(11): f8 eb 0b 00 07 00 c4 00 05 01 02
+[ 1176.710530]I[3:    ksoftirqd/3:   34] cpif: LNK-RX(13): f8 eb 0d 00 09 00 e6 c4 05 01 02 80 00
+[ 1176.711677] [3:  phoned-worker: 2978] cpif: LNK-TX(13): f8 eb 0d 00 09 00 c5 00 08 05 02 ff 02
+[ 1176.713574]I[3:      swapper/3:    0] cpif: LNK-RX(180): f8 eb b4 00 b0 00 e7 c5 08 05 02 7b 22 61 63 74 ...
+[ 1176.714874] [3:  phoned-worker: 2978] cpif: LNK-TX(13): f8 eb 0d 00 09 00 c6 00 08 05 02 ff 03
+[ 1176.716699]I[3:      swapper/3:    0] cpif: LNK-RX(180): f8 eb b4 00 b0 00 e8 c6 08 05 02 7b 22 61 63 74 ...
+[ 1176.717904] [1:  phoned-worker: 2978] cpif: LNK-TX(11): f8 eb 0b 00 07 00 c7 00 08 03 02
+[ 1176.719681]I[3:      swapper/3:    0] cpif: LNK-RX(227): f8 eb e3 00 df 00 e9 c7 08 03 02 7b 22 33 67 70 ...
+[ 1176.720895] [3:  phoned-worker: 2978] cpif: LNK-TX(11): f8 eb 0b 00 07 00 c8 00 07 06 02
+[ 1176.722921]I[3:      swapper/3:    0] cpif: LNK-RX(28): f8 eb 1c 00 18 00 ea c8 07 06 02 7b 22 72 73 73 ...
+[ 1178.592614] [7:    kworker/7:2:  222] exynos_tmu_get_curr_temp_all: 39,39,39,38,40,38,38
+[ 1178.592815] [7:    kworker/7:2:  222] PM: Pending Wakeup Sources: dwc3-otg 17140000.exynos_is usb_notify 19eb0000.drmdsim 19f00000.drmdecon 
+[ 1178.598635] [5:    kworker/5:2:  422] pdic_max77705: max77705_muic_print_reg_log USBC1:0x27, USBC2:0xba, BC:0x81, CC0:0x71, CC1:0x9, PD0:0x43, PD1:0x57 attached_dev:1
+[ 1178.598644] [5:    kworker/5:2:  422] pdic_max77705: max77705_muic_print_reg_log UIC_INT_M:0x4, CC_INT_M:0x20, PD_INT_M:0x0, VDM_INT_M:0xf0, PMIC_MASK:0x2, WDT:0, POR:0
+[ 1182.152226] [7:    kworker/7:2:  222] throughput 0(0) MB/sec
+[ 1185.677358] [0:  kworker/u16:3:  404] max77705_fg_read_current: current=2mA
+[ 1185.678108] [0:  kworker/u16:3:  404] max77705_fg_read_avg_current: avg_current=0mA
+[ 1185.678119] [0:  kworker/u16:3:  404] max77705_fg_read_isys_avg: isys_avg_current=369mA
+[ 1185.678387] [0:  kworker/u16:3:  404] max77705_fg_read_vsys: VSYS(4405), data(0x6e25)
+[ 1185.678631] [0:  kworker/u16:3:  404] max77705_fg_read_iin: iin_current=307mA
+[ 1185.678878] [0:  kworker/u16:3:  404] max77705_fg_read_vbyp: VBYP(4919), data(0x2d17)
+[ 1185.679128] [0:  kworker/u16:3:  404] max77705_fg_read_qh : QH(3315000)
+[ 1185.679137] [0:  kworker/u16:3:  404] [FG power] ISYS(333mA),ISYSAVG(369mA),VSYS(4405mV),IIN(307mA),VBYP(4919mV),QH(3315000 uah),WA(0)
+[ 1185.679637] [0:  kworker/u16:3:  404] max77705_fg_read_current: current=2mA
+[ 1185.680133] [0:  kworker/u16:3:  404] max77705_fg_read_vcell: VCELL(4385)mV, data(0xdb48)
+[ 1185.680140] [0:  kworker/u16:3:  404] max77705_fg_read_avg_current: avg_current=0mA
+[ 1185.680861] [0:  kworker/u16:3:  404] max77705_fg_read_avg_current: avg_current=0mA
+[ 1185.681383] [0:  kworker/u16:3:  404] max77705_fg_read_current: current=2mA
+[ 1185.686431] [0:  kworker/u16:3:  404] max77705_fg_write_temp: temperature to (306, 0x1e99)
+[ 1185.687418] [0:  kworker/u16:3:  404] max77705_fg_read_avg_current: avg_current=0mA
+[ 1185.687426] [0:  kworker/u16:3:  404] max77705_get_fg_soc: soc(1000)
+[ 1185.687435] [0:  kworker/u16:3:  404] max77705_fg_get_scaled_capacity : capacity_max (1000) scaled capacity(100.0), raw_soc(100.0)
+[ 1185.687684] [0:  kworker/u16:3:  404] max77705_fg_read_rawsoc: raw capacity (0.01%) (10004)
+[ 1185.688160] [0:  kworker/u16:3:  404] max77705_fg_read_qh : QH(3315000)
+[ 1185.688172] [0:  kworker/u16:3:  404] max77705_fg_get_atomic_capacity : NOW(100), OLD(100)
+[ 1185.688469] [0:  kworker/u16:3:  404] sec_usb_temp_gap_check: NORMAL -> NORMAL
+[ 1185.692765] [0:  kworker/u16:3:  404] max77705 : [0xb1]0x7a, [0xb2]0xdf, [0xb3]0xe0, [0xb4]0x38, [0xb5]0x00, [0xb6]0xff, [0xb7]0x14, [0xb8]0x38, [0xb9]0x75, [0xba]0x98, [0xbb]0x1a, [0xbc]0x60, [0xbd]0xec, [0xbe]0x34, [0xbf]0x00, [0xc0]0xef, [0xc1]0x10, [0xc2]0x00, [0xc3]0x68, 
+[ 1185.693202] [0:  kworker/u16:3:  404] max77705_chg_monitor_work: [CHG] MODE(0x4), B2SOVRC(0x0), otg_on(0)
+[ 1185.693223] [0:  kworker/u16:3:  404] pca9481_chg_get_property: CHARGER_STATUS(NO_CHARGING)
+[ 1185.693237] [0:  kworker/u16:3:  404] [PASS-THROUGH]:sb_pt_monitor: end - step = None
+[ 1185.850630] [1:  kworker/u16:3:  404] [2][FG] 0080h,ff9bh,7f80h,ff01h,1900h,0596h,640ch,631fh,1e99h,db40h,001ah,0001h,000ch,6af8h,6422h,0598h,058ch,ffffh,2a00h,5f00h,0758h,0148h,1ea2h,0039h,053ch,db4eh,2a16h,dc8ch,06efh,0314h,02b0h,058ch,0000h,6200h,1700h,0531h,1403h,1e05h,1f15h,7fc2h,2616h,cea4h,023ch,3850h,e3e1h,290eh,0400h,0001h,6132h,34edh,0d80h,ffffh,1db3h,0596h,0430h,05e0h,0027h,1518h,a7e2h,0021h,1680h,1408h,418dh,e000h,07fch,0000h,0a80h,042eh,db51h,0178h,38c4h,0410h,66a4h,2441h,055eh,049fh,052eh,052eh,8d3bh,0598h,0000h,6e1bh,0014h,2d0ch,7f80h,0005h,0000h,0600h,0000h,006bh,090ch,0055h,0000h,0204h,0008h,0000h,08f7h,0000h,0000h,0000h,0000h,0000h,0000h,0000h,0000h,0000h,0000h,0010h,0000h,ffffh,6422h,0598h,1cb5h,0289h,068ch,0008h,167eh,0000h,7fffh,ffffh,4b56h,fff8h,4650h,0000h,4000h,0000h,7d00h,0520h,ffffh,ffffh,ffffh,ffffh,208dh,0000h,0000h,fecdh,3fe1h,5d28h,0007h,db7bh,0020h,2913h,db40h,66a4h,
+[ 1185.853205] [1:  kworker/u16:3:  404] s2mps26-gpio s2mps26-gpio: [SUB_PMIC] pmic_gpio_get: pin12: DAT(low_0x0)
+[ 1185.853546] [1:    kworker/1:1:   65] max77705_fg_read_current: current=20mA
+[ 1185.853927] [1:    kworker/1:1:   65] max77705_fg_read_avg_current: avg_current=0mA
+[ 1185.854508] [1:    kworker/1:1:   65] max77705_fg_read_current: current=20mA
+[ 1185.855076] [1:    kworker/1:1:   65] max77705_fg_read_avg_current: avg_current=0mA
+[ 1185.857601] [0:          udevd: 8187] max77705_fg_read_current: current=20mA
+[ 1185.859294] [0:          udevd: 8187] max77705_fg_read_avg_current: avg_current=0mA
+[ 1185.860912] [0:          udevd: 8187] max77705_fg_read_current: current=20mA
+[ 1185.861585] [0:          udevd: 8187] max77705_fg_read_avg_current: avg_current=0mA
+[ 1185.862100] [0:          udevd: 8187] max77705_fg_read_current: current=20mA
+[ 1185.862533] [0:          udevd: 8187] max77705_fg_read_avg_current: avg_current=0mA
+[ 1185.863307] [0:          udevd: 8187] max77705_fg_read_current: current=20mA
+[ 1185.863951] [0:          udevd: 8187] max77705_fg_read_avg_current: avg_current=0mA
+[ 1185.863955] [0:          udevd: 8187] max77705_fg_read_isys_avg: isys_avg_current=368mA
+[ 1188.831878] [7:    kworker/7:2:  222] PM: Pending Wakeup Sources: dwc3-otg 17140000.exynos_is usb_notify 19eb0000.drmdsim 19f00000.drmdecon 
+[ 1188.832365] [7:    kworker/7:2:  222] exynos_tmu_get_curr_temp_all: 40,40,38,38,40,38,38
+[ 1199.072065] [7:    kworker/7:2:  222] exynos_tmu_get_curr_temp_all: 39,39,38,38,39,38,38
+[ 1199.072262] [7:    kworker/7:2:  222] PM: Pending Wakeup Sources: dwc3-otg 17140000.exynos_is usb_notify 19eb0000.drmdsim 19f00000.drmdecon 
+[ 1205.215494] [7:    kworker/7:2:  222] stm_ts_spi spi2.0: [sec_input] tc:0 noise:0/0 ext_n:0 wet:0 wc:0(f:0) lp:0 fn:0061/0000 irqd:0 ED:0 PK:0 LS:0// v:ST07180033 C01T0022.LCIA.L Cal_flag:1 fail_cnt:0 chk:0 // tmp:30 // #40 40
+[ 1206.762007] [2:  phoned-worker: 2978] cpif: LNK-TX(11): f8 eb 0b 00 07 00 c9 00 05 01 02
+[ 1206.766798]I[3:      swapper/3:    0] cpif: LNK-RX(13): f8 eb 0d 00 09 00 eb c9 05 01 02 80 00
+[ 1206.778087] [0:  phoned-worker: 2978] cpif: LNK-TX(13): f8 eb 0d 00 09 00 ca 00 08 05 02 ff 02
+[ 1206.779660]I[3:      swapper/3:    0] cpif: LNK-RX(180): f8 eb b4 00 b0 00 ec ca 08 05 02 7b 22 61 63 74 ...
+[ 1206.785639] [0:  phoned-worker: 2978] cpif: LNK-TX(13): f8 eb 0d 00 09 00 cb 00 08 05 02 ff 03
+[ 1206.787966]I[3:      swapper/3:    0] cpif: LNK-RX(180): f8 eb b4 00 b0 00 ed cb 08 05 02 7b 22 61 63 74 ...
+[ 1206.789701] [3:  phoned-worker: 2978] cpif: LNK-TX(11): f8 eb 0b 00 07 00 cc 00 08 03 02
+[ 1206.792182]I[3:      swapper/3:    0] cpif: LNK-RX(227): f8 eb e3 00 df 00 ee cc 08 03 02 7b 22 33 67 70 ...
+[ 1206.793612] [3:  phoned-worker: 2978] cpif: LNK-TX(11): f8 eb 0b 00 07 00 cd 00 07 06 02
+[ 1206.795283]I[3:      swapper/3:    0] cpif: LNK-RX(28): f8 eb 1c 00 18 00 ef cd 07 06 02 7b 22 72 73 73 ...
+[ 1209.311611] [7:    kworker/7:2:  222] PM: Pending Wakeup Sources: dwc3-otg 17140000.exynos_is usb_notify 19eb0000.drmdsim 19f00000.drmdecon 
+[ 1209.312141] [7:    kworker/7:2:  222] exynos_tmu_get_curr_temp_all: 39,39,38,38,39,37,38
+[ 1215.856198] [3:  kworker/u16:3:  404] max77705_fg_read_vcell: VCELL(4387)mV, data(0xdb5a)
+[ 1215.857273] [3:  kworker/u16:3:  404] max77705_fg_read_current: current=7mA
+[ 1215.858031] [3:  kworker/u16:3:  404] max77705_fg_read_avg_current: avg_current=0mA
+[ 1215.859044] [3:  kworker/u16:3:  404] max77705_fg_read_qh : QH(3315000)
+[ 1215.859055] [3:  kworker/u16:3:  404] [FG power] ISYS(366mA),ISYSAVG(364mA),VSYS(4404mV),IIN(343mA),VBYP(4912mV),QH(3315000 uah),WA(0)
+[ 1215.859550] [3:  kworker/u16:3:  404] max77705_fg_read_current: current=7mA
+[ 1215.860206] [3:  kworker/u16:3:  404] max77705_fg_read_avg_current: avg_current=0mA
+[ 1215.860940] [3:  kworker/u16:3:  404] max77705_fg_read_avg_current: avg_current=0mA
+[ 1215.861455] [3:  kworker/u16:3:  404] max77705_fg_read_current: current=7mA
+[ 1215.866400] [3:  kworker/u16:3:  404] max77705_fg_write_temp: temperature to (306, 0x1e99)
+[ 1215.867411] [3:  kworker/u16:3:  404] max77705_fg_read_avg_current: avg_current=0mA
+[ 1215.867419] [3:  kworker/u16:3:  404] max77705_get_fg_soc: soc(1000)
+[ 1215.867428] [3:  kworker/u16:3:  404] max77705_fg_get_scaled_capacity : capacity_max (1000) scaled capacity(100.0), raw_soc(100.0)
+[ 1215.867678] [3:  kworker/u16:3:  404] max77705_fg_read_rawsoc: raw capacity (0.01%) (10004)
+[ 1215.868164] [3:  kworker/u16:3:  404] max77705_fg_read_qh : QH(3315000)
+[ 1215.868178] [3:  kworker/u16:3:  404] max77705_fg_get_atomic_capacity : NOW(100), OLD(100)
+[ 1215.868493] [3:  kworker/u16:3:  404] sec_usb_temp_gap_check: NORMAL -> NORMAL
+[ 1215.872807] [3:  kworker/u16:3:  404] max77705 : [0xb1]0x7a, [0xb2]0xdf, [0xb3]0xe0, [0xb4]0x38, [0xb5]0x00, [0xb6]0xff, [0xb7]0x14, [0xb8]0x38, [0xb9]0x75, [0xba]0x98, [0xbb]0x1a, [0xbc]0x60, [0xbd]0xec, [0xbe]0x34, [0xbf]0x00, [0xc0]0xef, [0xc1]0x10, [0xc2]0x00, [0xc3]0x68, 
+[ 1215.873245] [3:  kworker/u16:3:  404] max77705_chg_monitor_work: [CHG] MODE(0x4), B2SOVRC(0x0), otg_on(0)
+[ 1215.873269] [3:  kworker/u16:3:  404] pca9481_chg_get_property: CHARGER_STATUS(NO_CHARGING)
+[ 1215.873282] [3:  kworker/u16:3:  404] [PASS-THROUGH]:sb_pt_monitor: end - step = None
+[ 1216.022678] [3:  kworker/u16:3:  404] [2][FG] 0080h,ff9bh,7f80h,ff01h,1900h,0596h,640ch,631fh,1e99h,db5ah,000ah,0001h,000ch,6af8h,6422h,0598h,058ch,ffffh,2a00h,5f00h,0758h,0148h,1e9fh,0039h,053ch,db4dh,2a16h,dc8ch,06efh,0314h,02b0h,058ch,0000h,6200h,1700h,0531h,1403h,1e05h,1f15h,7fdah,2616h,cea4h,023ch,3850h,e3e1h,290eh,0400h,0001h,6132h,34edh,0d80h,ffffh,1d99h,0596h,0430h,05e0h,0027h,1518h,a7e2h,0021h,1680h,1408h,4239h,e000h,07fch,0000h,0a80h,04a2h,db51h,0178h,38c4h,0410h,66a4h,2441h,055eh,048eh,052eh,052eh,8d99h,0598h,0000h,6e12h,0014h,2cf8h,7f80h,0005h,0000h,0600h,0000h,006bh,090ch,0055h,0000h,0204h,0008h,0000h,09b9h,0000h,0000h,0000h,0000h,0000h,0000h,0000h,0000h,0000h,0000h,0010h,0000h,ffffh,6422h,0598h,1335h,ffffh,0000h,0005h,0598h,0000h,0000h,0001h,4b56h,fff8h,4650h,0000h,4000h,0000h,b100h,0520h,ffffh,ffffh,ffffh,ffffh,2092h,0000h,0000h,ee83h,3fedh,5d29h,0002h,db79h,0020h,2910h,db42h,66a4h,
+[ 1216.024200] [3:  kworker/u16:3:  404] s2mps26-gpio s2mps26-gpio: [SUB_PMIC] pmic_gpio_get: pin12: DAT(low_0x0)
+[ 1216.024570] [3:    kworker/3:1:   68] max77705_fg_read_current: current=7mA
+[ 1216.024983] [3:    kworker/3:1:   68] max77705_fg_read_avg_current: avg_current=0mA
+[ 1216.025618] [3:    kworker/3:1:   68] max77705_fg_read_current: current=7mA
+[ 1216.026255] [3:    kworker/3:1:   68] max77705_fg_read_avg_current: avg_current=0mA
+[ 1216.030674] [2:          udevd: 8301] max77705_fg_read_current: current=7mA
+[ 1216.032518] [2:          udevd: 8301] max77705_fg_read_avg_current: avg_current=0mA
+[ 1216.033362] [2:          udevd: 8301] max77705_fg_read_current: current=7mA
+[ 1216.034091] [2:          udevd: 8301] max77705_fg_read_avg_current: avg_current=0mA
+[ 1216.034096] [2:          udevd: 8301] max77705_fg_read_isys_avg: isys_avg_current=364mA
+[ 1216.034954] [2:          udevd: 8301] max77705_fg_read_current: current=7mA
+[ 1216.035458] [2:          udevd: 8301] max77705_fg_read_vcell: VCELL(4385)mV, data(0xdb42)
+[ 1216.035466] [2:          udevd: 8301] max77705_fg_read_avg_current: avg_current=0mA
+[ 1216.036208] [2:          udevd: 8301] max77705_fg_read_current: current=7mA
+[ 1216.036957] [2:          udevd: 8301] max77705_fg_read_avg_current: avg_current=0mA
+[ 1219.552130] [7:    kworker/7:2:  222] exynos_tmu_get_curr_temp_all: 40,39,38,38,40,38,38
+[ 1219.552330] [7:    kworker/7:2:  222] PM: Pending Wakeup Sources: dwc3-otg 17140000.exynos_is usb_notify 19eb0000.drmdsim 19f00000.drmdecon 
+[ 1229.791723] [7:    kworker/7:2:  222] PM: Pending Wakeup Sources: dwc3-otg 17140000.exynos_is usb_notify 19eb0000.drmdsim 19f00000.drmdecon 
+[ 1229.792187] [7:    kworker/7:2:  222] exynos_tmu_get_curr_temp_all: 39,39,38,38,39,37,38
+[ 1231.205630]I[3:     tailscaled: 1541] throughput 0(0) MB/sec
+[ 1231.840028] [7:        python3: 8122] [@][OIS_MCU]request_firmware was failed(-110)
+[ 1231.840047] [7:        python3: 8122] [@][OIS_MCU]__is_mcu_load_fw 263 end
+[ 1231.840055] [7:        python3: 8122] [@][OIS_MCU]ois_mcu_core_ctrl E
+[ 1231.840080] [7:        python3: 8122] [@][OIS_MCU]ois_mcu_core_ctrl: 1 X
+[ 1231.840087] [7:        python3: 8122] [@][OIS_MCU]is_vender_mcu_power_on: mcu on.
+[ 1231.840222] [7:        python3: 8122] [@][RSC] rsctype: 0, rsccount: device[1], core[1]
+[ 1231.840232] [7:        python3: 8122] [@][0][SS0:D] is_sensor_open():0
+[ 1231.840781] [7:        python3: 8122] [@][0]set_cis_data[2157]enable cis i2c client. position = 0
+[ 1231.840789] [7:        python3: 8122] [@][0]set_actuator_data[2188] enable actuator i2c client. position = 0
+[ 1231.840794] [7:        python3: 8122] [@][0]set_mcu_data[2294] enable mcu device. position = 0
+[ 1231.840806] [7:        python3: 8122] [@][RSC] is_add_dvfs
+[ 1231.840814] [7:        python3: 8122] [CSIS(1:663)][CAM(1:663)][ISP(1:663)][INT_CAM(1:663)][MIF(1:2730)]
+[ 1231.845939] [1:        python3: 8122] [@]is_sec_run_fw_sel rom id[0] 0
+[ 1231.845952] [1:        python3: 8122] [@]is_sec_rom_power_on: Sensor position = 0.
+[ 1231.845960] [1:        python3: 8122] [@][0][S5KGN3] pin_ctrl(act(0), pin(-1), val(0), nm(delay)
+[ 1231.845966] [1:        python3: 8122] [@][0][S5KGN3] pin_ctrl(act(5), pin(-1), val(1), nm(VDDA_2.2V_CAM)

@@ -1,0 +1,142 @@
+{
+  "artifact": {
+    "internal_name": "fimc_is",
+    "path": "drivers/media/platform/exynos/camera/fimc-is.ko",
+    "bytes": 56384552,
+    "sha256": "d3b6eda506023c1fea5a25e01a400ef9aa24fda6f3447dc4bb40b0780628f38e",
+    "build_id_sha1": "59e54c032c545fff3ba52156f226fb6d69aadf64",
+    "debug_sections_present": true,
+    "signature_fields_present": false,
+    "versions_section_present": true,
+    "import_records": 378,
+    "imports_resolved_against": {
+      "vmlinux": 323,
+      "loadable_modules": 55
+    },
+    "sorted_import_set_sha256": "124a8dcda7bcc4412de8afda57b55676241c3747f26bd8c95d305516a12df6d5",
+    "symbol_version_verdict": {
+      "loader_compatible": true,
+      "missing": 0,
+      "crc_mismatch": 0,
+      "unknown_crc": 0,
+      "ambiguous_crc": 0,
+      "module_layout_crc": "0x0e3c515c"
+    },
+    "vermagic": "5.10.260-g4e5c5ad7d950 SMP preempt mod_unload modversions aarch64",
+    "exports": {
+      "count": 75,
+      "sha256": "e8d93fa5d84b654aa9a417f2af6dd4655d7f8969a9121aaf88749c617eb7e85e",
+      "matches_baseline_fimc_is_exports": true
+    },
+    "loader_alias_set_sha256": "3afe78136be34abb6d1be0cccaaff1a48fa3fabaf8c803bd1eeacafdc4030656",
+    "direct_dependency_set_count": 19,
+    "direct_dependency_set_sha256": "d106216009e69b0145b4cc291bc31e703ec03fce2aaf61db140e39b0d7e91a04",
+    "direct_dependency_set_matches_baseline": true,
+    "compatibility_validator": "tools/hardware/s22-hci-candidate-preflight-20260924.py"
+  },
+  "stripped_candidate": {
+    "purpose": "separate debug-only-stripped copy for potential ramdisk packaging; original unstripped build output retained",
+    "source_artifact_sha256": "d3b6eda506023c1fea5a25e01a400ef9aa24fda6f3447dc4bb40b0780628f38e",
+    "path": "drivers/media/platform/exynos/camera/fimc-is.ko",
+    "bytes": 7164248,
+    "sha256": "256926d8a1499d9fd8fcef22fc9ad677998decb1317b2037045c8dcc44b35ecf",
+    "build_id_sha1": "59e54c032c545fff3ba52156f226fb6d69aadf64",
+    "strip_operation": "llvm-strip --strip-debug",
+    "strip_tool": {
+      "path": "/usr/lib/llvm-18/bin/llvm-strip",
+      "version": "Ubuntu LLVM 18.1.3",
+      "sha256": "f52b9997b3c5019b4b3043e12b1ae2e821df67996ca344921c234c89c4d23e34"
+    },
+    "debug_sections_present": false,
+    "signature_fields_present": false,
+    "versions_section_present": true,
+    "import_records": 378,
+    "sorted_import_set_sha256": "124a8dcda7bcc4412de8afda57b55676241c3747f26bd8c95d305516a12df6d5",
+    "exports_match_unstripped_candidate": true,
+    "aliases_match_baseline": true,
+    "direct_dependencies_match_baseline": true,
+    "packaged_or_deployed": false
+  },
+  "baseline_ramdisk": {
+    "base_image": "builds/audio-extra-v2-20260922/recovery.img",
+    "compressed_ramdisk_sha256": "0dd9dda696c26ccf4c99d77f9d24f334f0c4baece5e19312bcc12f2963841e5d",
+    "cpio_sha256": "69b545e83c1eccdb26e06cb9226d17a6db514f04d7fd5091fd2e7328c3b95599",
+    "target": "lib/modules/fimc-is.ko",
+    "target_bytes": 8239848,
+    "target_sha256": "ba492fccbf1814372f568b230a07f278e22fbee7e7b22f77f97a75eeb1d085d3",
+    "target_mode": "0100644",
+    "target_uid_gid": "0:0",
+    "target_build_id_sha1": "8286071582b5efedff0e0c6169ba1a23018fb814",
+    "target_debug_sections_present": false,
+    "target_symbol_table_present": true,
+    "target_signature_fields_present": false,
+    "modules_dep_bytes": 117749,
+    "modules_alias_bytes": 38975,
+    "modules_alias_sha256": "c4437cdbbb7ed6e4af6b404a9175a5dcad7580b64013d65baf728c522b950ffb",
+    "modules_alias_fimc_is_rows": 28,
+    "modules_softdep_bytes": 1554
+  },
+  "build": {
+    "phone_access": false,
+    "image_rebuilt": false,
+    "deployed": false,
+    "source_base_commit": "f52cbbd7e2783d529e1e5742d94e0fd64889bbdf",
+    "camera_patch_commits": [
+      "104e6b98153f9f00d571ec780687398c7a263057",
+      "3fca50941422439b2019db2e4a3dc1016b2138a1"
+    ],
+    "source_head": "3fca50941422439b2019db2e4a3dc1016b2138a1",
+    "source_tree_clean": true,
+    "kernel_release": "5.10.260-g4e5c5ad7d950",
+    "output_tree": "/tmp/s22-camera-module-final-build-20260927",
+    "config_sha256": "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16",
+    "config_options": {
+      "CONFIG_PM": "y",
+      "CONFIG_LTO_NONE": "y",
+      "CONFIG_MODVERSIONS": "y",
+      "CONFIG_VIDEO_EXYNOS_PABLO_ISP": "m"
+    },
+    "olddefconfig_result": "No change to .config",
+    "baseline_module_symvers_sha256": "15fc69e815cb4da6cb3372f4b5141005ab2e770b0414b67f230f1b185bf03df7",
+    "baseline_vmlinux_symvers_sha256": "555fd150d1753ede989e80b383754bf9392defc6a55f6fba375c63616be7f8c2",
+    "filtered_dependency_symvers": {
+      "input_rows": 17283,
+      "input_sha256": "15fc69e815cb4da6cb3372f4b5141005ab2e770b0414b67f230f1b185bf03df7",
+      "excluded_owner": "drivers/media/platform/exynos/camera/fimc-is",
+      "excluded_rows": 75,
+      "excluded_sha256": "e8d93fa5d84b654aa9a417f2af6dd4655d7f8969a9121aaf88749c617eb7e85e",
+      "dependency_rows": 17208,
+      "dependency_sha256": "4d1766f622a210ba64e04dfc43fe6f8a7ac8830376b79397d7f0783680028b68"
+    },
+    "candidate_modules_only_symvers": {
+      "rows": 75,
+      "sha256": "e8d93fa5d84b654aa9a417f2af6dd4655d7f8969a9121aaf88749c617eb7e85e"
+    },
+    "module_build_command": "nice -n 10 env LOCALVERSION= make -C /home/corpunum/s22-workers/camera-kernel-build-20260927 O=/tmp/s22-camera-module-final-build-20260927 ARCH=arm64 LLVM=1 CROSS_COMPILE=aarch64-linux-gnu- input-symdump=/tmp/s22-camera-module-dependencies-20260927.symvers -j1 V=1 drivers/media/platform/exynos/camera/fimc-is.ko",
+    "actual_modpost_command": "scripts/mod/modpost -m -E -o modules-only.symvers -i /tmp/s22-camera-module-dependencies-20260927.symvers -T -",
+    "toolchain": {
+      "clang": {
+        "version": "Ubuntu clang version 18.1.3 (1ubuntu1)",
+        "sha256": "8ef402d453d1ba4902e4ee0f0f847f6cfa01400c95aa43c24e97818b9c0e3f45"
+      },
+      "ld.lld": {
+        "version": "Ubuntu LLD 18.1.3 (compatible with GNU linkers)",
+        "sha256": "7ad9a0e8fe6d0e79b71172d731e33872c0274e49fceb7b516d774876d5a58ade"
+      },
+      "llvm_ias": "unset; matches the original HCI build invocation and recorded compiler -fintegrated-as commands",
+      "jobs": 1,
+      "nice": 10
+    },
+    "rejected_first_artifact": {
+      "path": "/tmp/s22-camera-module-rejected-empty-versions-20260927.ko",
+      "sha256": "4c4fb9d1c5c6b4aed2c6fadf07466dc6f3c091669b1c16bb8d790d5f56e93660",
+      "reason": "initial modpost lacked complete symbol inputs and emitted an empty __versions section; preserved and never loaded"
+    },
+    "output_Module_symvers_note": "single-target O-tree Module.symvers contains vmlinux plus this module only; do not treat it as the full kernel module export set"
+  },
+  "limitations": [
+    "The unstripped host build output and its separately validated debug-only-stripped copy are not themselves evidence of a packaged or bootable recovery candidate.",
+    "No recovery image was rebuilt and no phone installation, module load, camera open, or runtime behavior was tested.",
+    "The receipt establishes source/build/module metadata compatibility only, not camera hardware behavior or safe live replacement."
+  ]
+}

@@ -1,0 +1,207 @@
+{
+  "schema": "s22-audio-coherent-stripped-package-build/v1",
+  "scope": "one authorized host-only recovery packaging invocation with three pinned debug-stripped audio modules",
+  "selection": {
+    "model": "gpt-6-luna",
+    "reasoning": "max",
+    "basis": "explicitly configured worker selection; not a backend-attestation claim"
+  },
+  "authorization": {
+    "one_host_package_invocation_authorized": true,
+    "invocation_count": 1,
+    "retry_performed": false,
+    "phone_or_deployment_authority_granted": false
+  },
+  "source": {
+    "execution_worktree_head": "43f5996f81e4c78dfed36799e8cfdaa9f159e40b",
+    "execution_worktree_tree": "d650cde5d54af4ae70233e4c05c336dc9ba40311",
+    "clean_before_invocation": true,
+    "builder_sha256": "3b7e031974fb60930629d14dff2df62c01aea27c89383f3240cfb4921fa4e462",
+    "debug_strip_implementation_commit": "7a8ffd3d78179e80006247520080c3f981e1e27e",
+    "independent_debug_strip_review_commit": "e18871d82961d83210ddc57039de53cfbe4ef066"
+  },
+  "execution": {
+    "launch_id": "201c9d90-71a0-48a9-a8d5-46edea60004f",
+    "pid": 2495256,
+    "command": "/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C TMPDIR=/tmp /usr/bin/python3 -I -S -B /home/corpunum/s22-workers/audio-stripped-package-build-20261003/tools/hardware/build-audio-coherent-recovery.py --out-dir /home/corpunum/s22-linux/builds/audio-coherent-recovery-stripped-host-20261003",
+    "output_path_label": "builds/audio-coherent-recovery-stripped-host-20261003 (private host output)",
+    "started_utc": "2026-10-02T23:46:52.815156+00:00",
+    "ended_utc": "2026-10-02T23:47:05.965293+00:00",
+    "monotonic_duration_seconds": 13.281,
+    "returncode": 0,
+    "stdout_bytes": 22166,
+    "stdout_sha256": "8f3a23c34f1c0a37083940879e6d62668f136eee1d5d77d4b2ac08f7220a7051",
+    "stderr_bytes": 0,
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "private_logs_retained": true,
+    "raw_log_contents_published": false
+  },
+  "prelaunch": {
+    "output_absent": true,
+    "available_memory_kib": 31449528,
+    "builds_filesystem_available_bytes": 29933694976,
+    "python_version": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+    "python_executable_sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+    "python_isolated": true,
+    "python_no_site": true,
+    "python_optimization": 0,
+    "environment_allowlist": {
+      "PATH": "/usr/bin:/bin",
+      "LC_ALL": "C",
+      "TMPDIR": "/tmp"
+    }
+  },
+  "inputs": {
+    "base_image_bytes": 100663296,
+    "base_image_sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f",
+    "native_eight_module_symvers_bytes": 1108525,
+    "native_eight_module_symvers_sha256": "15fc69e815cb4da6cb3372f4b5141005ab2e770b0414b67f230f1b185bf03df7",
+    "abox5_modules_only_symvers_bytes": 2585,
+    "abox5_modules_only_symvers_sha256": "e73d89c9637e3cea289c4bc61d999967d9cd20ae33a73bf71bfd13c7439f67ac",
+    "offloader_modules_only_symvers_bytes": 429,
+    "offloader_modules_only_symvers_sha256": "715a469f62a95ab8813c866cb0656f756730475fb80322b1afb4dfcbcfd527ad",
+    "selected_external_wlan_bytes": 15466952,
+    "selected_external_wlan_sha256": "cbf8932d079e97006a5b7aae0e1b5acfe65b3e8b5113ab8fa095daa36796738d",
+    "updated_provider_map_rows": 17283,
+    "updated_provider_map_sha256": "0c8e481225fe3ab071ba9be1d14faae06ce8a556fa7e89b07f3dcefb761bd470",
+    "duplicate_distinct_crc_provider_symbols": 0,
+    "original_unstripped_modules": [
+      {
+        "cpio_path": "lib/modules/snd-soc-samsung-abox.ko",
+        "bytes": 9596112,
+        "sha256": "55bae9f12135a2134337d7d520ddfadc85cdd049cedefd2a3c41f871fdd329bf",
+        "gnu_build_id_sha1": "26347c3373e155fa6badf7883ff162f1d9f6723f"
+      },
+      {
+        "cpio_path": "lib/modules/rainbow_prince.ko",
+        "bytes": 522472,
+        "sha256": "6461073beee9e1fdc4f7c92b250bbb773a18cbd766e0c9331e77ec01e5e45170",
+        "gnu_build_id_sha1": "8a7227b58cb7f4faf73ea92974781d34870bbfac"
+      },
+      {
+        "cpio_path": "lib/modules/exynos-usb-audio-offloading.ko",
+        "bytes": 401656,
+        "sha256": "92116d85c21c9c3969e00746fb0299a5cb7725edfe9c344d5645417686416ec2",
+        "gnu_build_id_sha1": "8c9b0d4787ea32eae7de0086a4d662b0f351675d"
+      }
+    ]
+  },
+  "tools": {
+    "llvm_objcopy_18": {
+      "invocation": "/usr/bin/llvm-objcopy-18",
+      "resolved": "/usr/lib/llvm-18/bin/llvm-objcopy",
+      "sha256": "f52b9997b3c5019b4b3043e12b1ae2e821df67996ca344921c234c89c4d23e34"
+    },
+    "avbtool_sha256": "5698656733ef5077d62ee30395b5ad34295a0f170fb1ba570026c760ead83782",
+    "mkbootimg_sha256": "37d84b3d162e0bc62e36c1f4e1c63c85ea0caa9f29be023eb2f8efe006ad948c",
+    "mkbootimg_gki_helper_sha256": "1bb1feec68a13da18d581aa2c631798f86f6bc10b55d587b2dd31446a0f8a203",
+    "unpack_bootimg_sha256": "a9d260978a63bd06a24b6347e7dee8a28ff96639793caea15dff6aa491316308",
+    "lz4_sha256": "87c0d5d060fd36c685b98a38611b7bd6c4614d40b36d29be84edcd6c173f8160",
+    "kmod_sha256": "5abf732e561c8be9ccd1794940b5d43025b041d4bed1db34782d979e0accc36f",
+    "readelf_sha256": "64c58e15274bbbb5153f31078e455e9e77ee5f51489e709bba5bb788ce9df2b0",
+    "camera_builder_sha256": "5c5a5a530dea7d217c81aa4e96365fda876e1d1d81b45155b74d74ac6f8a83f6",
+    "cpio_parser_sha256": "08e97e336e796108a850847687b7e3dad2b85f349353182ecce570601a7addb0",
+    "boot_image_helper_sha256": "c480336f5ccd7f2631d8fb0a332f8d6c3cbe8390857ed0b0449079f1089b929f",
+    "static_preflight_sha256": "715383e85d4c5b426f8b6fa43961da2481b57a8fc52dcd54c335faf68d5c4155"
+  },
+  "output": {
+    "status": "completed_and_verified_host_artifact",
+    "private_host_artifacts_only": true,
+    "recovery_image_bytes": 100663296,
+    "recovery_image_sha256": "6b788b23f54b9b8e84212187544064949b72af20c167cbb02392cbe53ee5a6ab",
+    "manifest_bytes": 26524,
+    "manifest_sha256": "f78bbaddf94ef6d1ae37b059b7455b24a15cbb7c2fab1ec9bbc4e1df5fd1edf8",
+    "candidate_cpio_bytes": 128426316,
+    "candidate_cpio_sha256": "5dd1303047bd684a212c9838663e45260a527d2a766787a3b90c5b59c9751de4",
+    "compressed_ramdisk_bytes": 63105814,
+    "compressed_ramdisk_sha256": "6049d39ef900f036c6eb07a9dc1a434770cff3fcab9619f49ef5b2502f7fceb5",
+    "stripped_modules": [
+      {
+        "module_name": "snd_soc_samsung_abox",
+        "bytes": 1735880,
+        "sha256": "61d846d2bb13d5ff48261f21efadcd8b378bdc586c28b3e288ddccf145488265",
+        "gnu_build_id_sha1": "26347c3373e155fa6badf7883ff162f1d9f6723f"
+      },
+      {
+        "module_name": "rainbow_prince",
+        "bytes": 70792,
+        "sha256": "b896200b333be6d518b9eb4b218abefe8c115a3162e5fb3b1a7016a6b7175c7a",
+        "gnu_build_id_sha1": "8a7227b58cb7f4faf73ea92974781d34870bbfac"
+      },
+      {
+        "module_name": "exynos_usb_audio_offloading",
+        "bytes": 42704,
+        "sha256": "3b732ada44c0a6812b6aaeb38d7de8757ad54e7f843c6761b97ff4e5d63e8392",
+        "gnu_build_id_sha1": "8c9b0d4787ea32eae7de0086a4d662b0f351675d"
+      }
+    ],
+    "file_hashes_postchecked_against_private_phase_receipt": true,
+    "source_and_packaged_module_identities_distinct": true
+  },
+  "image_verification": {
+    "base_avb_footer_verified": true,
+    "candidate_avb_footer_verified": true,
+    "avb_algorithm": "NONE",
+    "candidate_partition_size_bytes": 100663296,
+    "pinned_avbtool_independent_postcheck_exit": 0,
+    "android_header_version": 2,
+    "only_derived_header_fields_changed": ["ramdisk_size", "recovery_dtbo_offset", "image_id"],
+    "base_ramdisk_size_bytes": 63136931,
+    "candidate_ramdisk_size_bytes": 63105814,
+    "kernel_sha256_preserved": "7738564db77e4a6183ffaa875fc12f8168a58e8135a3bdc86e27b127b47fc05c",
+    "dtb_sha256_preserved": "f5a00d80dd1800c934c6baed4ff4f5b7ac0bdc19acbc52a8e6092f03e5f7b2b8",
+    "recovery_dtbo_sha256_preserved": "dd2acb7f8e02a58bba6b9ee9da09790286ab19c887ef7feabc8a8be10e0e8f98",
+    "independent_unpack_and_payload_check_passed": true
+  },
+  "cpio_validation": {
+    "record_count": 963,
+    "changed_module_paths": [
+      "lib/modules/exynos-usb-audio-offloading.ko",
+      "lib/modules/rainbow_prince.ko",
+      "lib/modules/snd-soc-samsung-abox.ko"
+    ],
+    "non_target_raw_records_identical": true,
+    "record_order_identical": true,
+    "target_owner_and_mode_preserved_except_new_payload_size": true,
+    "modules_dep_alias_softdep_bytes_identical": true,
+    "unpacked_candidate_ramdisk_matches_saved_cpio": true,
+    "candidate_cpio_sha256": "5dd1303047bd684a212c9838663e45260a527d2a766787a3b90c5b59c9751de4"
+  },
+  "static_abi": {
+    "ramdisk_modules_checked": 324,
+    "ramdisk_imports_checked": 16569,
+    "missing_imports": 0,
+    "crc_mismatches": 0,
+    "unknown_crcs": 0,
+    "ambiguous_crcs": 0,
+    "module_layout_crc": "0x0e3c515c",
+    "vermagic_exact_for_all": true,
+    "versions_sections_present_for_all": true,
+    "ramdisk_inventory_sha256": "5b07b6b51b3e2bbe4c1ac4f355377a117b5c559d741f8bdd37af8d200491389f",
+    "selected_external_wlan_imports_checked": 495,
+    "selected_external_wlan_in_ramdisk": false,
+    "independent_post_run_static_scan_passed": true,
+    "loader_execution": false
+  },
+  "previous_failed_attempt": {
+    "receipt_commit_preserved": "1edf236f266433e42a3d2e56500dcbafa25c9d78",
+    "prior_avb_size_failure_record_retained": true,
+    "previous_candidate_image_reused": false
+  },
+  "safety_boundaries": {
+    "phone_access": false,
+    "ssh_or_adb": false,
+    "firmware_or_weights_access": false,
+    "module_install_or_load": false,
+    "publish_or_deploy": false,
+    "flash_or_boot_or_reboot": false,
+    "audio_hardware_accepted": false,
+    "bootup_authorized": false
+  },
+  "limitations": [
+    "AVB algorithm NONE hash-footer verification does not establish Samsung authentication or bootability.",
+    "The 324-module static CPIO inventory is not the separately observed current-phone 325-module runtime inventory.",
+    "Static MODVERSIONS checks do not prove module loading, runtime PM/IPC/DMA/PCM progress, or physical audio.",
+    "No packaging retry occurred; the original oversized failed attempt remains preserved."
+  ]
+}

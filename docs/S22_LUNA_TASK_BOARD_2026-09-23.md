@@ -1,0 +1,674 @@
+# S22 Luna driver mission task board — 2026-09-23
+
+Coordinator checkout: `/tmp/s22-luna-coordinator-20260923`, branch
+`codex/s22-luna-coordinator-20260923`, based on fetched `origin/master`
+`790cb0ab4af121e8ed79346723b845124eb3ece4`.
+
+## Execution constraint
+
+The collaboration interface accepted explicit worker requests for
+`gpt-6-luna` with `max` reasoning, but it returned only canonical task names;
+it does not expose an independently verifiable runtime model ID or opaque
+session ID. Spawned workers report that their runtime label is GPT-6 and that
+they cannot see an exact Luna ID. The primary coordinator runtime is identified
+as Codex/GPT-5, so the required same-family Luna Max coordinator condition is
+also unmet. These attempts are recorded honestly and are **not counted as
+verified Luna implementation/review workers**. No worker was allowed to edit
+or commit after this became clear.
+
+## Wave 1
+
+| Worker ID | Requested model / reasoning | Runtime model verification | Assignment / worktree | Touched files | Tests / result | Commit |
+|---|---|---|---|---|---|---|
+| `/root/recovery_hardening` | `gpt-6-luna` / `max` | Unverified; worker sees GPT-6 only; no session ID exposed | Recovery deploy/build/AVB hardening; `/tmp/s22-luna-deploy-20260923` | None; read-only inventory | No tests run. Identified `assert` safety gates, string-replacement embedder, and missing explicit AVB `verify_image` path/tests. | None |
+| `/root/bluetooth_lifecycle` | `gpt-6-luna` / `max` | Unverified; worker sees GPT-6 only; no session ID exposed | Bluetooth lifecycle/bridge; `/tmp/s22-luna-bt-20260923` | None; read-only inventory | Worker ran 3 PTY tests; coordinator independently reran the bridge suite (3 passed), applied-patch HCI source contract (passed against existing candidate worktree), and `git apply --check` (passed against clean pinned source). No dynamic/device HCI test. | None |
+| `/root/audio_dma_diag` | `gpt-6-luna` / `max` | Unverified; exact ID/session not exposed | Audio DMA diagnostics; `/tmp/s22-luna-audio-20260923` | None; read-only inventory | Coordinator added a fail-closed `hw_ptr` progress assessment; route tests 12 and snapshot planner tests 8 passed. No live stream or control write. | None |
+| `/root/npu_ownership` | `gpt-6-luna` / `max` | Unverified; worker sees GPT-6 only; no session ID exposed | NPU ownership/unwind; `/tmp/s22-luna-npu-20260923` | None; read-only inventory | No worker tests. Fetched worktree lacks pinned NPU source; preserved local kernel checkout is clean at exact `4e5c5ad7d950e4de0688b5663965f2075654b2ad`. Coordinator verified the reported raw-session callback, POWER exclusion from session linking, unbounded wait, and BOOTUP error path directly. Preflight gate changed; 2 host test scripts plus optimized-mode CLI check passed. | None |
+
+All four worker worktrees are separate branches based on the fetched mission
+commit. No phone access, deploy, reboot, flash, or live driver experiment was
+performed by any worker.
+
+## Coordinator work
+
+| Task | Worktree | Status | Tests / commit |
+|---|---|---|---|
+| Reconcile checkout, mission, history, jobs, and live phone state | `/tmp/s22-luna-coordinator-20260923` plus read-only phone SSH from the preserved main checkout | Live baseline reconciled; full matrix/provenance closure pending | Host image hashes and live RECOVERY readback match; no write/device mutation |
+| NPU BOOTUP readiness gate | Coordinator worktree | Implemented and committed locally; independent Luna review unavailable; not pushed | `test-npu-boot-preflight.py`, `test-npu-boot-probe.sh`, optimized CLI gate passed. Commit `5928e980ea32355c43ca5240eb41c8aa862533f3`. CLI cannot authorize BOOTUP; lifecycle/rescue/owner gates remain closed. |
+| Audio DMA evidence classifier | Coordinator worktree | Implemented and committed locally; no hardware experiment | `test-audio-route-assessment.py` (12), `test-audio-progress-snapshot.py` (8) passed. Commit `5928e980ea32355c43ca5240eb41c8aa862533f3`. Classifies ALSA pointer progress separately from physical playback. |
+| Bluetooth patch host validation | Coordinator worktree + existing read-only kernel worktrees | Source/apply host-validated only | H4/IBS bridge suite (3), HCI contract test and `git apply --check` passed; full build is historical evidence, no live HCI claim |
+| Recovery candidate AVB structure/hash verification | Coordinator worktree, read-only | Both local recovery candidates pass footer/hash verification; Samsung authentication and bootability not established | `avbtool.py verify_image` passed for the live audio-extra baseline and unflashed HCI candidate. Both report algorithm `NONE`; this does not prove Samsung signature acceptance or boot success. |
+
+The coordinator commit was local only at the time of this historical entry.
+The original dirty checkout was not merged, reset, stashed, or edited by the
+coordinator changes.
+
+## Live phone reconciliation — read-only, 2026-09-23 18:14 UTC
+
+- Verified USB SSH through the existing strict-host-key helper. Native kernel
+  `5.10.260-g4e5c5ad7d950`, PID 1 `native-guardian`; PID 1 and probe mount
+  namespaces match. The boot ID matches the private checkpoint; uptime was
+  about 18.1 hours (identifier intentionally not copied into this board).
+- A bounded 32 KiB `/proc/boot_reset` read contains BORE 767 at
+  `2026-09-23 00:09:25`, selected RECOVERY; this reconciles the earlier
+  4 KiB probe, which stopped before that record. No reboot was requested.
+- Host rollback image exists and hashes to the recorded Lineage recovery
+  SHA-256 `b5bf01c4...`; staged HCI candidate hashes to
+  `6d7e2a4a...` and remains unflashed. Read-only hash of live `/dev/sda16`
+  is `758fc9d3...` at exactly 100,663,296 bytes, matching the audio-extras
+  RECOVERY baseline.
+- `/proc/modules` currently has 325 entries (sample includes WLAN, ASoC,
+  charger, NFC and touchscreen drivers), contradicting the older report of
+  zero loaded modules. Kernel config reports `CONFIG_MODULES=y`,
+  `CONFIG_MODVERSIONS=y`, and 4 KiB pages. This confirms live loading, not yet
+  the complete boot-time module provenance/closure.
+- `wlan0` is up and a WLAN-bound HTTPS check returned 200. Hyprland is
+  present, the DSI connector is connected, and 11 input event nodes exist;
+  physical touch remains unverified. `tailscaled` runs and `tailscale0` exists,
+  but its `operstate=unknown`, so this probe does not establish tailnet peer
+  reachability. Local model port 8089 returned health HTTP 200; its process
+  command line has `-ngl 0`, so the resident 4B model is CPU-only. Bluetooth
+  class is empty.
+- Battery reports 100%/Full at 27.8 C; sampled thermal zones were 32 C.
+  `MemAvailable` was about 2.74 GiB. CACHE-backed `/` has only about 34 MiB
+  free (94% used); userdata has about 99.98 GiB free. No writes were made.
+- Read-only `sha256sum /dev/block/by-name/RECOVERY` failed because the live
+  device exposes the lowercase link `/dev/block/by-name/recovery`; resolving
+  that verified link identified `/dev/sda16` for the successful hash. This
+  is a path-case correction, not a device change.
+
+## Execution correction follow-up — 2026-09-23
+
+This section supersedes the earlier statements above that no worker had edited
+code, that Luna selection was unmet, that Tailscale reachability was unknown,
+and that publication must wait for review. The earlier entries remain the
+historical 18:14 UTC checkpoint; the execution correction at
+`origin/master:docs/S22_LUNA_EXECUTION_CORRECTION_2026-09-23.md` governs the
+current procedure. The original two local commits remain intact and reachable
+on `s22/luna-driver-completion-20260923`; no reset, stash, discard, or edit to
+the dirty original checkout was performed.
+
+### Model and worker receipts
+
+Installed client: `codex-cli 0.156.1`. Persistent Codex config selects
+`gpt-6-luna` with primary reasoning effort `xhigh`; the installed model catalog
+lists `max` as supported, but this running session does not expose a native
+in-turn model/effort switch or runtime/session metadata. Coordinator evidence
+is therefore `explicitly_configured`, not `runtime_reported`, and the primary
+effort is not claimed to be `max`. Each worker below was launched through the
+native collaboration interface with explicit `gpt-6-luna` and `max`; the tool
+returned task handles but no opaque session IDs or runtime identity
+attestation. No override/fallback is known for those explicit worker calls.
+
+| Actual task handle | Worktree / branch | Assignment and current result |
+|---|---|---|
+| `/root/recovery_deploy_impl` | `/tmp/s22-luna-wave1-deploy-20260923`, `codex/s22-wave1-deploy-20260923` | Hardening chain `03eba0700f65e0ef1576a50a1ab43dd2b325d5bd`, `0187e3c6e07a01b368bb558a95ddec96dfaceded`, `027c6cd49f56e77ecd85b9b61aa3d2f6e98cb28c`, and final `fb479c9f28c294048a02ec19faf68363666400ba` are integrated (final as `dfb9ce3`). AVB verifier and SSH wrapper are content-pinned; execution is from a sealed snapshot; SSH PATH is trusted; staging fsync gates success. Final independent review approved. Coordinator reran 38 tests in normal, `-O`, and `PYTHONOPTIMIZE=1` with the trusted local AVB tool. No device actions. |
+| `/root/bluetooth_impl` | `/tmp/s22-luna-wave1-bt-20260923`, `codex/s22-wave1-bt-20260923` | Initial bridge/test commit `7bade3f376bb0e810baca799e4dc5ec8f17b2443`, hardening `d3f50668ecf19c117a503f6cafaca19cc72df4e0`, and queue-overflow follow-up `f7f0d161e7bd9b82d30cb4d8b75e1ca3ca1a8a39` are integrated. Final attribution/cleanup-label fix `2af4d23f66d9bc857f3de45bc3f550dd1a886491` is integrated as `4163b89`. Tests assert the full 36-byte write and explicit 8-slot overflow; cleanup label is not an N_HCI-detach claim. Coordinator H4 12/12 and exact-pinned HCI source validation passed; independent final review approved. No kernel build/runtime HCI. |
+| `/root/audio_diag_impl` | `/tmp/s22-luna-wave1-audio-20260923`, `codex/s22-wave1-audio-20260923` | Completed synchronized snapshot and cleanup classification; worker commit `2d6d9a40c3d97064ef4a5ccc5ceb90071970b715`, integrated as `2b55003`. Coordinator reran snapshot 13, route 18, wrapper cleanup 4, bind-node 4, PCM prepare 5, and sync-nodes 3 tests; all passed. Firmware-stage suite had 3 passes and 1 error because public worktree lacks `calliope_sram.bin`. No live audio. |
+| `/root/recovery_hardening` | `/tmp/s22-luna-wave1-npu-20260923`, `codex/s22-wave1-npu-20260923`; kernel worktree `/tmp/s22-kernel-npu-lifecycle-20260923` | Readiness fix `d2852765b2b58bba434ba8ae1b28c078615ff13f` is integrated as `4397d61`. Lifecycle patch is kernel commit `f264b971c6917598347fc14823e7d41d1e4a54e0`, based on `4e5c5ad7d950e4de0688b5663965f2075654b2ad`; exported patch, source-check model and test are repo commit `07cc061226b400090e46ec4669d709803cd2255f`, integrated as `d07628f`. The draft now uses NULL session plus an opaque cookie in unused POWER_CTL params, request-ID matching and bounded close/error handling. Coordinator reran lifecycle/preflight normal and optimized tests; independent Luna review is running. Tests do not compile kernel C. No full build, BOOTUP, or device action. |
+| `/root/userspace_close_range_impl` | `/tmp/s22-luna-wave2-userspace-20260923`, `codex/s22-wave2-userspace-20260923` | Commit `6b6432e507e5fa12579d8e0d8531519447d11e17` is integrated as `b3483e4`; only `test_clone3_compat.py` changed. Adds captured-output fallback, concurrent/repeated child cleanup, normal close range, CLOEXEC inheritance, invalid inputs and unshare behavior. Normal, `-O`, and `PYTHONOPTIMIZE=1` each passed 14 tests. Independent review found no behavior bug but requested portability/optimized-assert test improvements; follow-up is running. No device or system change. |
+
+### Independent review lane
+
+| Actual task handle | Worktree / exact patch | Status |
+|---|---|---|
+| `/root/deployment_independent_review` | `/tmp/s22-luna-review-deploy-worker-20260923` (`03eba07`), `/tmp/s22-luna-review-deploy-fix-20260923` (`0187e3c6e07a01b368bb558a95ddec96dfaceded`), and `/tmp/s22-luna-review-deploy-final-20260923` (`027c6cd49f56e77ecd85b9b61aa3d2f6e98cb28c`) | Explicit Luna Max. Independent final review confirmed post-open path pinning and parent fsync, but found a P2: wrapper snapshot is not authenticated against the canonical digest, and inherited PATH can replace bare `ssh`. The exact canonical wrapper digest and tests are assigned to the author; no deployment/device commands. |
+| `/root/bluetooth_independent_review` | `/tmp/s22-luna-review-bt-worker-20260923`, `/tmp/s22-luna-review-bt-followup-20260923`, `/tmp/s22-luna-review-bt-overflow-20260923` (`f7f0d161e7bd9b82d30cb4d8b75e1ca3ca1a8a39`), and `/tmp/s22-luna-review-bt-final-20260923` (`2af4d23f66d9bc857f3de45bc3f550dd1a886491`) | Initial, second and final independent Luna Max reviews completed. Final review approved the byte-count, explicit overflow receipt, and precise cleanup label; H4 passed 12/12 and pinned-source validation passed. HCI patch remains unbuilt; no device/runtime proof. |
+| `/root/npu_lifecycle_independent_review` | `/tmp/s22-luna-review-npu-repo-20260923` (`07cc061226b400090e46ec4669d709803cd2255f`) and `/tmp/s22-luna-review-npu-kernel-20260923` (`f264b971c6917598347fc14823e7d41d1e4a54e0`) | Explicit Luna Max independent review of ownership, timeout, callback/close and boot unwind is running; host model/source tests only, no kernel build or BOOTUP. |
+| `/root/userspace_close_range_review` | `/tmp/s22-luna-review-userspace-20260923` (`6b6432e507e5fa12579d8e0d8531519447d11e17`) | Explicit Luna Max review completed: 14/14 passed in normal, `-O`, and `PYTHONOPTIMIZE=1`; no functional bug. It found three test-quality gaps: syscall availability tied to libc export, invalid-range ENOSYS handling, and child asserts optimized away under `PYTHONOPTIMIZE=1`. Author follow-up is active; host-only, no phone access. |
+
+The branches/worktrees are isolated from one another. The original checkout
+remains dirty and divergent (`master` at `fb60a2c1...`, 44 ahead of
+`origin/master`, no merge base); it was not used as the publication baseline.
+The two preserved commits are `5928e980ea32355c43ca5240eb41c8aa862533f3`
+(NPU gate/audio classifier and tests) and `295b8696b20ef2c342df1ea6031ac41d9bc52fe8`
+(this task board). They are intentionally retained, not recreated. The
+review branch merges fetched `origin/master` correction commit
+`20605dbe623e0909cf219c3cae9ef7bb597b15a6` without rewriting those commits.
+
+### Host receipts at this checkpoint
+
+- `git show --check` on both preserved commits and Bluetooth commit: passed.
+- `python3 tools/hardware/test-npu-boot-preflight.py`: passed synthetic
+  pass/mismatch cases. `sh tools/hardware/test-npu-boot-probe.sh`: passed
+  three ABI assertions and refusal checks.
+- `python3 tools/hardware/test-audio-route-assessment.py`: 12 passed;
+  `python3 tools/hardware/test-audio-progress-snapshot.py`: 8 passed.
+- Bluetooth H4/IBS PTY/unit suite from the worker branch: 12 passed.
+- `python3 tools/hardware/test-bt-hci-socket-restore.py --base-source
+  "$PINNED_KERNEL/net/bluetooth/hci_sock.c" --patch
+  tools/hardware/bt-hci-socket-restore.patch`: passed source application,
+  lifecycle checks, and three mutation negatives using the exact clean kernel
+  pin. Scope is source validation only.
+- The initial optimized-mode NPU CLI exposed a subgate false-green when
+  lifecycle source was missing. The NPU worker fixed it in
+  `d2852765b2b58bba434ba8ae1b28c078615ff13f`; coordinator reran normal and
+  optimized synthetic tests and confirmed the public-worktree CLI reports
+  `power_notify_wait_resolved=false`, `bootup_ready=false`,
+  `bootup_authorized=false`, exit 2. BOOTUP remains unauthorized and disabled;
+  kernel request ownership/unwind is still under implementation.
+- AVB `verify_image` on the two existing recovery artifacts passed footer/hash
+  checks; both use algorithm `NONE`. This does not establish Samsung
+  authentication or bootability. No image was built or flashed here.
+- Deployment hardening commit `03eba0700f65e0ef1576a50a1ab43dd2b325d5bd`
+  adds explicit target/artifact/manifest/rollback checks, embedded fail-closed
+  write handling and builder AVB verification. The coordinator reran
+  `test-recovery-deployment-hardening.py` in normal, `python3 -O`, and
+  `PYTHONOPTIMIZE=1` modes: 28/28 passed in each, including optimization-mode
+  target/hash refusal checks. Syntax and patch checks passed. This
+  is host-only; independent review is ongoing and no deployment command ran.
+- Audio diagnostics commit `2d6d9a40c3d97064ef4a5ccc5ceb90071970b715`
+  adds synchronized read-only source snapshots and child/PCM cleanup
+  classification. The six suites listed above all passed under coordinator
+  rerun. `test_audio_firmware_stage.py` remains 3/4 with one error because the
+  public checkout lacks `calliope_sram.bin`; no private firmware was copied.
+  No snapshot execute mode or live audio trial ran.
+- Bluetooth HCI validator invoked once with a stale temp source path failed
+  due to that path being absent; rerunning with `--base-source` against the
+  exact pinned source above passed. No test artifact or source was modified by
+  that initial path error.
+
+### Refreshed live state — read-only
+
+USB rescue SSH succeeded through the existing strict-host-key helper at
+`2026-09-23 19:19 UTC`; live kernel is `5.10.260-g4e5c5ad7d950`, PID 1 is
+`native-guardian`, and PID 1/SSH mount namespaces match.
+Uptime was `69018.93` seconds. The resident assistant health endpoint returned
+HTTP 200. A host-originated Tailscale ping reached the phone peer over USB in
+5 ms; private peer identifiers and addresses are omitted. This proves current
+peer reachability, not independent rescue if the kernel fails.
+
+PID 1 mounts CACHE at `/cache` and the native overlay at `/newroot`, with
+`/cache/s22-linux/upper` as upperdir. Overlay `/` had 34,844,672 bytes
+available (94% used), 29,780 free inodes (22% used). The upperdir used
+521,476 KiB; `/usr` accounted for 502,788 KiB, including `/usr/lib` at
+411,952 KiB and `/usr/lib/python3.14` at 59,408 KiB. No disposable cache was
+identified or removed. Arch `/srv/s22` is on persistent userdata with
+102,382,280,704 bytes available and 1,652,508 free inodes. Do not install
+packages or stage files into the native overlay without a destination-specific
+space check; no phone files were written.
+
+No device state changed; no hardware test, kernel build, deploy or reboot was
+performed. The current phone remains on the known-running kernel/userspace.
+The next experiment remains gated on completing and independently reviewing
+the relevant host patch, validating exact candidate/artifact provenance, and
+preserving USB rescue plus the existing rollback. In particular, do not retry
+raw HCI on this kernel or submit NPU BOOTUP while ownership/unwind checks are
+incomplete.
+
+## Continuation checkpoint — 2026-09-23 19:59 UTC
+
+The fetched execution correction at `origin/master` is applied. Its model
+evidence policy and WIP-publication rule supersede only the corresponding
+orchestration/publication wording above; hardware authorization, recovery,
+privacy and architecture boundaries remain unchanged.
+
+- Bluetooth test follow-up commit `2af4d23f66d9bc857f3de45bc3f550dd1a886491`
+  is integrated as `4163b89`. It asserts the full 36-byte burst write,
+  reports `bridge_queue_overflow=1 queued=8` only when the ninth frame meets a
+  full queue, and calls cleanup `pty_cleanup_ioctl_result` (the N_TTY ioctl,
+  not proof of production N_HCI detach). Independent Luna review
+  `/root/bt_final_review`, explicitly selected as `gpt-6-luna` / `max`,
+  approved this delta. Model metadata is not exposed by the collaboration
+  runtime; evidence level remains explicit selection, not runtime attestation.
+- Coordinator reran the H4 suite (12/12), exact-pinned HCI source validator,
+  `py_compile`, and `git diff --check`; all passed. These remain host/source
+  checks, not a kernel build or live Bluetooth test.
+- Deployment independent review of `0187e3c6e07a01b368bb558a95ddec96dfaceded`
+  confirms the AVB verifier snapshot and dirfd staging fixes, and the 35-case
+  normal/optimized suites pass. Follow-up commit
+  `027c6cd49f56e77ecd85b9b61aa3d2f6e98cb28c` integrates as `ac52713`: the
+  approved SSH wrapper is copied to a sealed memfd and sourced via its passed
+  descriptor, with a pathname-replacement regression; the stage parent is
+  fsynced after mkdir, with ordering and fsync-failure regressions. Coordinator
+  reran 37/37 tests in normal, `-O`, and `PYTHONOPTIMIZE=1` using the trusted
+  local AVB tool (`S22_AVBTOOL`); independent final review confirmed these two
+  fixes but found a remaining P2: the wrapper bytes are not pinned to the
+  canonical digest, and inherited PATH can replace bare `ssh`. Those are now
+  assigned for a follow-up; no deployment mode has run. Without
+  `S22_AVBTOOL`, three AVB-specific test cases skip in this public worktree.
+  The builder `--help` probe reads its required cpio before parsing help and
+  cannot complete here because that build input is absent; no build was
+  attempted.
+- NPU lifecycle ownership/unwind edits remain in the existing exact-pinned
+  kernel worktree. No BOOTUP, build, or live test has occurred; the next
+  useful deliverable is the actual patch plus executable regressions, followed
+  by independent review. Source review caught that POWER_CTL request state
+  must not retain a session pointer across timeout/close; the worker is
+  updating it to pass NULL (supported by `msgid_issue`) and carry the opaque
+  completion cookie in unused POWER_CTL parameters.
+
+### Refreshed phone and storage evidence — read-only
+
+At `2026-09-23T19:59:58Z`, strict-host-key USB SSH succeeded. Kernel remains
+`5.10.260-g4e5c5ad7d950`, PID 1 remains `native-guardian`, uptime was 71,420 s,
+and PID 1 and the SSH probe have the same mount namespace. The resident
+assistant health endpoint returned HTTP 200. No reboot or phone mutation was
+performed.
+
+The actual `/` overlay reports 610,861,056 bytes total, 563,433,472 used and
+34,844,672 available (94%); 8,620/38,400 inodes are used. Persistent `/srv/s22`
+userdata reports 112,233,304,064 bytes total, 9,834,246,144 used and
+102,382,280,704 available; 1,652,508 inodes remain free. Mount metadata names
+`/cache/s22-linux/upper` as the overlay upperdir, but `/cache` is not visible
+inside this PID 1/SSH root view. Visible-root `du` totals only about 4.7 MiB,
+so it does not explain the overlay's used blocks. The underlying upper-layer
+consumers therefore remain unidentified; no cleanup or package installation
+was attempted.
+
+The strict USB SSH path is currently usable, but it depends on this running
+kernel and is not an independent rescue route if that kernel fails. A
+Tailscale ping observed over the same USB path does not change that. No new
+recovery experiment is queued until a genuinely independent rescue method and
+candidate-specific rollback are verified; this is the exact outstanding
+device gate, not a host-work blocker.
+
+## Follow-on host implementation — 2026-09-23 20:12 UTC
+
+- Independent deployment re-review of `027c6cd49f56e77ecd85b9b61aa3d2f6e98cb28c`
+  closed the post-open pathname race and parent-fsync findings, but found a
+  remaining P2: the opened wrapper snapshot is not authenticated against the
+  canonical helper digest, and inherited `PATH` can redirect its bare `ssh`
+  command. The author is implementing canonical SHA-256 pinning and a trusted
+  `ssh` lookup with negative tests. The current 37-test results do not close
+  this finding; deployment remains blocked.
+- A later-wave Luna worker `/root/userspace_close_range_impl` is implementing
+  the missing host behavior matrix in isolated worktree
+  `/tmp/s22-luna-wave2-userspace-20260923`, limited to the close_range filter
+  and tests. Coordinator baseline: `test_clone3_compat.py` passed 8 tests and
+  the separately compiled close_range filter self-test reported ENOSYS with
+  seccomp/NoNewPrivs; no device or package operation.
+- NPU source-lifetime review now requires POWER_CTL to carry no session pointer
+  across timeout/close: `msgid_issue` supports NULL and the POWER_CTL callback
+  ignores that argument, while the opaque waiter cookie travels in unused
+  `param0/param1`. The implementation worker is correcting and testing this;
+  no patch has yet been accepted or built.
+
+The native phone baseline remains the read-only `5.10.260-g4e5c5ad7d950`
+kernel with `native-guardian` and HTTP 200 assistant health from the 19:59 UTC
+probe. No phone state changed during this follow-on work.
+
+## Implementation results — 2026-09-23 20:18 UTC
+
+- Deployment follow-up `fb479c9f28c294048a02ec19faf68363666400ba` is
+  integrated as `dfb9ce3`. It pins canonical `tools/s22-ssh` SHA-256,
+  rejects regular-file impostors, replaces inherited PATH with the verified
+  root-owned `/usr/bin`, and retains sealed-FD race and staging-parent fsync
+  checks. Independent Luna review approved the exact commit. Coordinator and
+  reviewer each passed 38/38 in normal, `-O`, and `PYTHONOPTIMIZE=1` modes
+  with trusted local AVB tool; no deploy mode ran.
+- NPU lifecycle patch `f264b971c6917598347fc14823e7d41d1e4a54e0` is based on
+  pinned kernel `4e5c5ad7d950e4de0688b5663965f2075654b2ad`. Its sanitized
+  exported patch and host regressions are integrated as `d07628f`. Normal and
+  optimized lifecycle model/source tests plus preflight tests pass. Independent
+  Luna review is running. These tests do not compile/execute kernel C; no full
+  kernel build or BOOTUP occurred. `checkpatch.pl` reported no errors but four
+  warnings (two extern and two CamelCase uses of existing APIs).
+- Close-range userspace reliability suite `6b6432e507e5fa12579d8e0d8531519447d11e17`
+  is integrated as `b3483e4`. Coordinator and independent review each passed
+  14/14 in normal, `-O`, and `PYTHONOPTIMIZE=1`. Review found no functional
+  issue, but follow-up is improving older-libc/ENOSYS portability and replacing
+  child `assert`s removed by optimized Python. These tests establish host
+  syscall behavior only, not the phone kernel.
+- Coordinator reran deployment (38/38 × three modes), NPU four normal/
+  optimized invocations, Bluetooth H4 (12/12) and pinned-source validation,
+  plus audio route/snapshot/cleanup suites (18/13/4/4/5/3). These remain
+  separate from builds and physical driver acceptance.
+- The original dirty checkout and both preserved commits remain untouched.
+  All changes are WIP on the unmerged review branch; none has been merged or
+  deployed. Current phone state is unchanged from the read-only probe; no
+  coordinator device operation occurred.
+
+## Continued implementation and review — 2026-09-23 20:27 UTC
+
+- The userspace close-range author follow-up `59deecd67f502b7c3a81c2bccebea22da9639179`
+  was inspected and integrated as `314085f`. It replaces libc-symbol probing
+  with a temporary `__NR_close_range` syscall wrapper, establishes a suite-wide
+  ENOSYS gate, and makes subprocess output checks survive optimized Python.
+  Independent reviewer `/root/userspace_close_range_review` found no remaining
+  issue in the requested scope. Coordinator reran 14/14 in normal,
+  `python3 -O`, and `PYTHONOPTIMIZE=1`, plus `py_compile` and `git diff --check`.
+  This remains host behavior, not proof of the S22 kernel syscall.
+- Independent reviewer `/root/npu_lifecycle_independent_review` inspected the
+  exact repo snapshot `07cc061226b400090e46ec4669d709803cd2255f` and kernel
+  candidate `f264b971c6917598347fc14823e7d41d1e4a54e0`. The patch matches the
+  pinned base-to-candidate diff and reverse-applies, but review found a P2
+  timeout/publication race: protocol work can validate an active POWER_CTL
+  waiter, pause, then publish after timeout has removed the waiter and reported
+  failure. The candidate is not ready for build/deploy/BOOTUP. A follow-up is
+  assigned to `/root/recovery_hardening` in its existing isolated kernel
+  worktree, with an adversarial cancel-vs-publish test; BOOTUP stays gated.
+  Reviewer noted mailbox `msgid` reuse is not exercised by the Python model.
+- Host implementation worker `/root/input_power_test_impl` used branch
+  `codex/s22-wave2-input-power-20260923`, worktree
+  `/tmp/s22-luna-wave2-input-power-20260923`. Commits `e2163e9` and
+  `77a78c9` add injected sysfs/device roots and five read-only collector tests.
+  The first independent review found an event-drain deadline overrun; the
+  follow-up added a per-read deadline check and deterministic continuously
+  ready test. Independent reviewer `/root/input_power_independent_review`
+  approved commit `77a78c9`; the test fails against the prior implementation
+  as intended. Coordinator reran 5/5 in normal, `-O`, and `PYTHONOPTIMIZE=1`.
+  The requests explicitly selected `gpt-6-luna` / `max`; collaboration exposes
+  no independent runtime/session attestation. No phone access was assigned.
+
+### Refreshed live state and storage — read-only, 2026-09-23 20:27 UTC
+
+- Strict-host-key USB SSH succeeded. Running kernel is
+  `5.10.260-g4e5c5ad7d950`, PID 1 is `/system/bin/native-guardian`, uptime was
+  73,089.83 s, and the assistant health endpoint returned `{"status":"ok"}`.
+  PID 1 and SSH report the same mount namespace ID; their mountinfo paths are
+  rooted differently (`/newroot` for PID 1 and `/` for SSH), so both views were
+  inspected rather than inferred from the namespace ID alone.
+- SSH `/` is the live overlay with `lowerdir=/native-lower`,
+  `upperdir=/cache/s22-linux/upper`, `workdir=/cache/s22-linux/work`. The
+  overlay has 34,844,672 bytes available (94% used) and 29,780 free inodes.
+  Persistent `/srv/s22` has 102,382,280,704 bytes and 1,652,508 inodes free.
+- The upperdir was measured through `/proc/1/root/cache/s22-linux/upper`:
+  521,476 KiB total; `/usr` is 502,788 KiB, of which `/usr/lib` is 411,952
+  KiB. Largest inspected entries include `libLLVM.so.22.1` (171,856 KiB),
+  `python3.14` (59,408 KiB), `libgallium-26.1.6.so` (36,312 KiB), and
+  `libvulkan_radeon.so` (16,948 KiB). These are library/runtime-sized upper
+  objects, but their active-vs-shadowed status is unproven. No files were
+  deleted and no packages were installed. The direct merged `/usr` view is
+  only 4,148 KiB, so upperdir/merged-view accounting still needs explanation
+  before any cleanup.
+- Current USB SSH is usable but runs over the kernel being tested. No
+  independent recovery path was verified; Tailscale must not be counted as
+  independent rescue while routed over this same USB/kernel path. No device
+  write, build, deployment, reboot, or driver trial occurred.
+
+### Next device gate
+
+The next NPU live experiment remains prohibited until the timeout/publication
+race is corrected and independently reviewed, the patch builds against the
+exact pinned kernel, `npu-boot-preflight.py` passes with the required firmware
+and configuration evidence, and the original independent-rescue, rollback,
+and authorization gates are satisfied. BOOTUP remains false/unauthorized in
+the absence of those gates. Before any installation or cleanup, explain the
+4,148 KiB merged `/usr` versus 502,788 KiB upper `/usr` discrepancy and confirm
+destination-specific free space; current 34.8 MB overlay headroom is not
+installation clearance.
+
+## Input, power, and camera inventory — 2026-09-23 20:36 UTC
+
+The documented command `python3 /usr/local/bin/input-power-readiness.py
+--camera` was attempted over strict-host-key USB SSH and failed because that
+script is not installed at the documented path. No copy/staging was attempted.
+A direct read-only sysfs/dev-node fallback found input event7 `sec_touchscreen`,
+event0 `gpio_keys`, and event1 `sec-pmic-key`; battery telemetry reported
+100%, Full, Good at 27.6 C; sampled CPU zones were 31 C, G3D 32 C, and NPU
+31 C. Multiple Exynos ISP, MFC, JPEG, and scaler V4L2 nodes were enumerated.
+No physical touch/button event was observed, and no camera node was opened or
+streamed. One optional `max77705-fuelgauge/online` read returned EINVAL. These
+results establish enumeration/telemetry only, not physical input, camera
+capture, or complete power-driver acceptance.
+
+## NPU publication-race follow-up — 2026-09-23 20:45 UTC
+
+- Worker `/root/recovery_hardening` committed kernel change
+  `4c20670269e800454a5daacb9a01856ad1a792ae` on exact prior candidate
+  `f264b971c6917598347fc14823e7d41d1e4a54e0`, based on pinned kernel
+  `4e5c5ad7d950e4de0688b5663965f2075654b2ad`. The sanitized patch plus
+  deterministic host regressions are commit
+  `1908c624bc4a2066476488d9b196216b2a242820`, integrated here as `0548764`.
+  A waiter publish lease is reserved, authorized under the waiter lock, then
+  finished after the synchronous mailbox post; cancellation before authorize
+  revokes send, and cancellation after authorization drains the post before
+  the stack waiter is removed. Late callbacks after cancellation are ignored.
+- Coordinator reran lifecycle/model-source suites normal and `python3 -O`,
+  NPU preflight suites normal and `python3 -O`, Python syntax checks, exact
+  patch reverse-apply, and pinned kernel diff-check; all passed. No C compile,
+  full kernel build, BOOTUP, or device action. Independent reviewer
+  `/root/npu_lifecycle_independent_review` is inspecting exact repo/kernel
+  snapshots now. Review must resolve the new drain behavior: waiting for an
+  already-authorized synchronous publish may exceed the 12-second caller wait
+  if the mailbox routine stalls. The optional
+  `CONFIG_NPU_USE_BOOT_IOCTL` variant is uncompiled.
+- `checkpatch.pl --no-tree --strict` reported no source-style errors beyond a
+  missing `Signed-off-by` attestation, plus missing commit-description and
+  three `extern`-in-C warnings. No sign-off was invented or added. This is an
+  internal WIP patch, not an upstream submission.
+- Explicit `gpt-6-luna` / `max` was requested for the worker, but this runtime
+  did not expose model/session attestation. It was an implementation task, not
+  research-only. The high-risk patch remains unmerged and undeployed.
+
+## Wi-Fi and resident-service acceptance — 2026-09-23 20:48 UTC
+
+The installed sanitized WLAN acceptance script ran over strict-host-key SSH
+and passed all 13 checks: firmware/driver readiness, WPA2/CCMP association,
+native and Arch DNS, DNS plus TLS-verified HTTP 200 forced through `wlan0`,
+preserved USB carrier/default route, and resident model health. The script
+emits no SSID, MAC, address, gateway, or DNS IP. It explicitly leaves
+reboot/autostart, USB-disconnected rescue, suspend/resume, roaming, and
+sustained-throughput untested. This verifies current WLAN service, but does
+not establish independent rescue or cable-free persistence.
+
+## Execution correction and NPU review — 2026-09-23 21:00 UTC
+
+- Fetched `origin` without pulling or changing the original checkout. Fetched
+  master contains correction commit
+  `20605dbe623e0909cf219c3cae9ef7bb597b15a6`; its complete text and the
+  complete driver mission were read directly from `origin/master`. This
+  checkpoint applies its model-evidence, worker-write, WIP-publication, and
+  immediate-order rules without relaxing any device gate.
+- Original checkout remains `master` at `fb60a2c`, ahead 44 / behind 57, with
+  the user's existing modifications and untracked files untouched. The two
+  local commits remain intact on durable branch
+  `codex/s22-luna-coordinator-20260923` and are ancestors of this review
+  branch. `git cherry -v origin/master codex/s22-luna-coordinator-20260923`
+  marks both as local-only; the exact diffs are the NPU readiness/audio DMA
+  work in `5928e980` (7 files, 277 insertions, 53 deletions) and the task
+  board in `295b869` (one 79-line file). No blind merge or cherry-pick was
+  performed.
+- Installed `codex-cli 0.156.1` reports effective local config
+  `model=gpt-6-luna`, `model_reasoning_effort=xhigh`; its bundled model catalog
+  confirms `gpt-6-luna` supports `max`. The current interactive execution
+  exposes no in-turn model/effort switch or session metadata, so coordinator
+  evidence remains `explicitly_configured`, not `runtime_reported`; the
+  coordinator is not represented as Max. Native worker requests explicitly
+  select Luna/Max and have no known override/fallback, but runtime identity is
+  not exposed by this interface. Task handles, not invented session IDs, are
+  recorded in this board.
+- Independent Luna reviewer `/root/npu_lifecycle_independent_review`
+  approved the exact NPU candidate (`4c206702`) and repo patch (`1908c62`).
+  The review confirmed the timeout/publication race fix and no lock inversion.
+  Qualification: the 12-second firmware-response wait is followed by a
+  synchronous publish-lease drain; this can exceed 12 seconds if the mailbox
+  post stalls. Describe it as a bounded response wait plus publish drain, not
+  a hard 12-second end-to-end cap. Checkpatch's missing author sign-off was
+  not fabricated. No kernel build or device/BOOTUP test was part of this
+  review.
+- Coordinator reran deployment hardening tests with the trusted local AVB
+  tool: 38/38 passed in normal Python, `python3 -O`, and
+  `PYTHONOPTIMIZE=1`. NPU lifecycle source/model tests passed in normal and
+  `-O` modes. The real preflight CLI on this public review tree exits 2;
+  config/AIE artifacts and lifecycle-source inputs are absent, and
+  `bootup_ready=false`, `bootup_authorized=false`. No device access occurred.
+- Existing NPU implementation worker `/root/recovery_hardening` has a bounded
+  follow-up to compile only the changed translation units against kernel
+  base `4e5c5ad7d950e4de0688b5663965f2075654b2ad` and the preserved hardening
+  config, including a safe `CONFIG_NPU_USE_BOOT_IOCTL=n` variant if possible.
+  It owns isolated output dirs; no full link/build or device operation is
+  assigned. Provenance is established. Setup caught a Kconfig normalization
+  trap: a prepare invocation without `LLVM_IAS=1` would have disabled ThinLTO.
+  No target translation unit was compiled with that altered config; untouched
+  config copies are being restored and prepare rerun with `LLVM_IAS=1`.
+- The latest live evidence remains the 20:48 UTC WLAN acceptance: 13/13
+  checks passed over the existing USB SSH session, including TLS-verified
+  HTTPS bound to `wlan0` and healthy resident model. Phone kernel/PID1 remain
+  the last read-only reported `5.10.260-g4e5c5ad7d950` / `native-guardian`.
+  Overlay headroom was 34,844,672 bytes with 29,780 free inodes; persistent
+  `/srv/s22` has ample capacity. Upper `/usr` (502,788 KiB) versus merged
+  `/usr` (4,148 KiB) remains unexplained. USB SSH is not independent rescue;
+  no cleanup, install, firmware activation, deployment, or reboot occurred.
+
+The next device experiment remains blocked until an exact candidate kernel
+build and matching config/AIE preflight are established, independent rescue
+works without relying on the candidate kernel, and the existing rollback and
+owner authorization gates pass. Root-overlay installation/cleanup additionally
+requires resolving the upper-versus-merged `/usr` accounting and checking
+space at the exact destination.
+
+## NPU dual-config object build and independent review — 2026-09-23 21:19 UTC
+
+- NPU worker `/root/recovery_hardening` implemented compile-guard fixes in
+  kernel commit `40b5c72cedfb87facca7391c3efb3871497f5393`, parent
+  `4c20670269e800454a5daacb9a01856ad1a792ae`, based on running-kernel source
+  `4e5c5ad7d950e4de0688b5663965f2075654b2ad`. The corresponding patch and
+  static source regression are repo commit `07ac389c2718e05b2087e3c5b728aba053473bf8`,
+  integrated in this branch as `d237dee91a7d42e2b88def30b54aaa92ceb5e375`.
+  The fix guards POWER_CTL waiter-only calls for BOOT_IOCTL, limits the
+  legacy session-ref helper to mailbox versions below 8, and scopes `hids`
+  to the BOOT_IOCTL path. These address actual `-Werror` failures found only
+  in the optional no-ioctl configuration.
+- Object-only builds used the exact preserved config for `BOOT_IOCTL=y` and
+  a copy differing only in `CONFIG_NPU_USE_BOOT_IOCTL=n`. Config SHA-256 is
+  `a147841a53f5b10c366a759d0e83525996a0ec5d8227a103b020cf2111400f9e` for
+  the reference/y variant and
+  `8d74d53d6a9ceba28521fc814a4da1d684a364dd0d436602bbb9c495c5eb8141` for
+  the n variant. SCS, ThinLTO, CFI, MODVERSIONS, NPU hardware-device and DSP
+  settings remained enabled/unchanged. Both used Android Clang 21.0.0 from
+  r563880c (clang SHA-256
+  `af0f25ca6818aed54c1cab03dc591acd549f385b8447148326a413e3e59c22b7`,
+  ld.lld SHA-256
+  `784146955ed87545385bf5c89b3b920ca7fe3ac83e034c3e6c53783ce544adf1`),
+  `ARCH=arm64 LLVM=1 LLVM_IAS=1 -j1`, with all three target objects listed
+  explicitly. The `LLVM_IAS=1` requirement was discovered after a prepare
+  command normalized ThinLTO off; that altered config was never used to
+  compile candidate objects.
+- All six translation units compiled successfully. Their outputs are LLVM
+  ThinLTO bitcode, not linked machine-code modules or a kernel image:
+
+  | Config | `npu-session.o` SHA-256 | `npu-protodrv.o` SHA-256 | `npu-vertex.o` SHA-256 |
+  |---|---|---|---|
+  | BOOT_IOCTL=y | `7068c5ea8a492ab7426434b2012c70137f765159346442a9808dab83daf29b3c` | `3f369c3675f66646e9429c84073066c331d343383304ed7207d8eca10845154c` | `bd5ffb846176a9ca70a4456d289f27bbd150122add40e1972ad51d9395fef23e` |
+  | BOOT_IOCTL=n | `b6dd5c10a62151cf5521d3f96ec7eb86a320e979d905aa42a8cdb9f41983b82e` | `962420cebe1eee269c57e787a0d82736ad170857ea2048afb185dc21e018ef91` | `6ca683bb5247c9e70052d2b63631501b4bdeb68991ec0088f3184e0bfe7d2f2c` |
+
+- Coordinator reran NPU lifecycle/source tests and preflight synthetic tests
+  in normal and `python3 -O` modes: all four invocations passed. Patch
+  reverse-apply and byte-equivalence to the pinned-base kernel diff passed.
+  Independent Luna re-review of the exact kernel/repo commits found no
+  correctness defect; it confirmed the Kconfig dependencies and guards.
+  Reviewer notes the new source test checks guard placement but not all
+  compile-time combinations; the two successful compiles are author-run and
+  were not independently reproduced. The reviewer could not attest runtime
+  model identity.
+- No complete kernel link/build, recovery image, deployment, or phone action
+  resulted. The public-tree NPU preflight still fails closed because exact
+  config/AIE inputs are intentionally not published; independent rescue and
+  BOOTUP authorization remain false.
+
+## Execution correction continuation — 2026-09-23 21:55 UTC
+
+### Hardware-free CI implementation and independent review
+
+| Actual task handle | Requested model / evidence | Worktree and deliverable | Review / outcome |
+|---|---|---|---|
+| `/root/host_ci_runner_impl` | Explicit `gpt-6-luna` / `max` accepted by the native worker interface; no worker runtime/session attestation is exposed | `/tmp/s22-host-ci-runner-20260924`, branch `codex/host-ci-runner-20260924`; commits `5d029ffcf7a6a946e34666b0123052335b64ccd4`, `583e553a78a223e48857a9ea5ade2e24e9137616`, `0b13812f8fa4a8e4374f4ea75ead20dc8dc16213` | Implemented a fixed seven-script host regression runner, its exact-path allowlist, path/symlink validation, policy tests, README scope and `.github/workflows/host-regressions.yml`. |
+| `/root/host_ci_runner_independent_review` | Explicit `gpt-6-luna` / `max` accepted; runtime identity not exposed | Fresh detached reviews at `/tmp/s22-host-ci-runner-followup-review-20260924` (`583e553`) and `/tmp/s22-host-ci-hardening-review-20260924` (`0b13812`) | Initial review found an internal symlinked-ancestor gap; worker fixed it. Final review approved the exact `0b13812` delta for bounded WIP publication. Remaining limitation: GitHub Actions egress is not blocked, although this suite makes no network requests. |
+
+The coordinator integrated only those three reviewed implementation commits
+onto this unmerged branch as `e1af7f2`, `daeb0b5`, and `38f5f12`. The workflow
+was run on GitHub after the first publication: workflow run
+`35926456431` for branch SHA
+`29bdfa5a13edf7bdd8e871d28af432711cb6d6ad` completed successfully. The
+coordinator reran policy tests **7/7 normally
+and 7/7 with `-O`**, then the complete suite: **7 normal runs, 5 optimized
+runs, 2 documented optimized-mode skips, 0 failures**. `py_compile` for the
+runner, policy test and all seven allowlisted scripts passed; `git diff
+--check` passed. The Bluetooth coverage is PTY-backed synthetic HCI plus a
+local `AF_BLUETOOTH` query; it is not physical controller or phone evidence.
+The workflow uses no secrets and read-only repository permission; tests do
+not connect to a phone, access private firmware/model inputs, or make network
+requests.
+
+### Full linked NPU-candidate kernel build (host only)
+
+The isolated kernel worktree `/tmp/s22-kernel-npu-lifecycle-20260923` was
+clean at source commit `40b5c72cedfb87facca7391c3efb3871497f5393`, parent
+`4c20670269e800454a5daacb9a01856ad1a792ae`, based on running-kernel source
+`4e5c5ad7d950e4de0688b5663965f2075654b2ad`. A fresh output directory used
+the preserved `CONFIG_NPU_USE_BOOT_IOCTL=y` config, SHA-256
+`a147841a53f5b10c366a759d0e83525996a0ec5d8227a103b020cf2111400f9e`;
+`olddefconfig` made no change. The full linked command was `make -C <pinned
+kernel> O=<fresh-output> ARCH=arm64 LLVM=1 LLVM_IAS=1
+CROSS_COMPILE=aarch64-linux-gnu- -j2 Image modules`, with the pinned Android
+Clang 21.0 r563880c toolchain. It exited 0, linked `vmlinux`, the ARM64 Image
+and 329 modules, and produced release `5.10.260-g40b5c72cedfb`. Relevant
+SHA-256 values: `vmlinux`
+`dce21b81d73d8f8e4467c6be50b4a0e9473827f8ec3f985cfae5279a0a1a4045`,
+`arch/arm64/boot/Image`
+`ae089169bfabf8459162ca1df78704f27d04d303e71b08520547e4cf13b8fe52`,
+`drivers/vision/npu.ko`
+`0fbe47b939971be05bb0e3696122d192d12400c21bb75eabe0280230b54343f0`.
+No image packaging, module staging, deployment, or phone operation followed.
+
+The exact-source/config/local-artifact NPU preflight exited 2 by design:
+artifact and source-route checks passed, while `bootup_ready=false`,
+`bootup_authorized=false`, device access and staging were false. Remaining
+gates include runtime firmware boot/shutdown, live probe, independent rescue,
+and explicit owner authorization. This full build is **built**, not device
+tested; it is not permission to submit BOOTUP.
+
+### Read-only phone, storage, and ongoing-job checkpoint
+
+The latest bounded USB SSH snapshot still reports kernel
+`5.10.260-g4e5c5ad7d950`, PID 1 `native-guardian`, 325 loaded modules and a
+healthy resident-assistant endpoint (HTTP 200). USB SSH is dependent on the
+running kernel and is not an independent rescue route. Wi-Fi's last recorded
+acceptance remains 13/13 checks; no new Wi-Fi or driver acceptance was run in
+this checkpoint. Current boot mode is deliberately **not asserted**: the
+filtered cmdline token is `bootmode=2`, while recent `/proc/boot_reset` tail
+markers are ambiguous and were not reconciled into a current BORE mode.
+
+The root overlay reports 610,861,056 bytes total, 563,433,472 used and
+34,844,672 available (94%); 8,620/38,400 inodes are used. Mount metadata names
+`/cache/s22-linux/upper`, but `/cache` and that upper path are not visible in
+the PID 1/SSH namespace. Visible-root `du` accounts for only about 4.7 MiB,
+so backing-layer usage remains unidentified. Persistent `/srv/s22` has
+102,382,280,704 bytes and 1,652,508 inodes free. No cleanup, package install,
+or image staging was attempted. No kernel build, flashing tool, deployment,
+or test runner remained active after the host checks completed; unrelated
+existing processes were left untouched.
+
+The owner checkout remains dirty and untouched at `fb60a2c1...`, 44 commits
+ahead and 57 behind fetched `origin/master`. The two preserved commits
+`5928e980ea32355c43ca5240eb41c8aa862533f3` (NPU gate/audio classifier) and
+`295b8696b20ef2c342df1ea6031ac41d9bc52fe8` (task board) remain unchanged and
+reachable on durable branch `codex/s22-luna-coordinator-20260923`; both are
+also ancestors of this review branch. Patch-equivalence reconciliation was
+used; unrelated local-only history was not copied wholesale.
+
+### Next device gate
+
+Do not deploy or reboot until an independent rescue path is demonstrated from
+the actual recovery host without relying on this running kernel, with the
+candidate-specific rollback/readback method ready and the exact experiment
+authorized. Resolve upper-layer accounting and destination free space before
+any root-overlay installation or staging. For NPU BOOTUP specifically,
+keep the preflight authorization false until the reviewed lifecycle candidate
+has its required runtime firmware/shutdown and live-probe evidence; no timeout
+or successful host build substitutes for those gates.
+
+### Publication audit
+
+The final pre-push fetch confirmed `origin/master=20605dbe623e0909cf219c3cae9ef7bb597b15a6`.
+At the code-audit snapshot `7c6a87e`, the review branch had 43 commits beyond
+that baseline across 29 changed tracked paths; subsequent commits changed
+only these receipt documents. No reachable blob exceeds 20 MiB, and the
+new-path audit found no firmware packages, recovery images, model weights,
+credentials, host keys, or private trace files. The unrelated large local commits
+`1ccf3395303d62e2c31aff8bb88d46155e68dcb6` and
+`a52151f24eb2c3ae4fdd750020cdaeb9c9468c1f` are not ancestors. The two
+preserved implementation commits remain ancestors as recorded above.
+
+The full-branch `git diff --check` reports 416 whitespace diagnostics only
+inside `tools/hardware/npu-session-lifecycle-fix.patch`, which preserves the
+exact formatting of the pinned downstream kernel diff. Excluding that patch
+artifact, the branch diff check is clean. The patch reverse-applies to the
+candidate kernel and is byte-equivalent to the complete diff from running
+kernel source `4e5c5ad7d950e4de0688b5663965f2075654b2ad` to candidate commit
+`40b5c72cedfb87facca7391c3efb3871497f5393`.
+
+The next continuation checkpoint is maintained in
+[`S22_LUNA_TASK_BOARD_2026-09-24.md`](S22_LUNA_TASK_BOARD_2026-09-24.md).

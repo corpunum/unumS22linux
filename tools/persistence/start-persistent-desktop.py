@@ -19,6 +19,7 @@ import signal
 import socket
 import stat
 import subprocess
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -501,6 +502,24 @@ def start_model(log: Path, retries: int = 3, profile: str | None = None) -> subp
     raise Failure("model server did not become healthy after bounded retries")
 
 
+LLVMPIPE_THREADS = Path('/etc/s22-llvmpipe-threads')
+
+
+def llvmpipe_threads(path: Path = LLVMPIPE_THREADS) -> str:
+    """llvmpipe rasterizer threads for Hyprland (default 0 = synchronous).
+
+    With worker threads, glFlush returns before rasterization finishes and the
+    software-rendered buffer reaches the command-mode panel half drawn (owner
+    photo 2026-10-06: stale bottom with an llvmpipe-tile stair edge).  Zero
+    threads rasterize inside the flush, so the committed frame is complete.
+    """
+    try:
+        value = path.read_text().strip()
+    except OSError:
+        return '0'
+    return value if value.isdigit() and int(value) <= 8 else '0'
+
+
 def start_desktop(log: Path) -> tuple[subprocess.Popen[str], subprocess.Popen[str]]:
     # Marker is installed only after physical-panel confirmation. An explicit
     # environment value overrides it, so '=0' retains a no-preload rescue path.
@@ -536,6 +555,7 @@ def start_desktop(log: Path) -> tuple[subprocess.Popen[str], subprocess.Popen[st
            "GALLIUM_DRIVER": "llvmpipe", "HYPRLAND_NO_CRASHREPORTER": "1"}
     if stride_trial:
         env.update({'LD_PRELOAD': stride_library, 'S22_LINEAR_STRIDE': '1'})
+    env['LP_NUM_THREADS'] = llvmpipe_threads()
     try:
         with log.open("ab", buffering=0) as out:
             desktop = subprocess.Popen(chroot_cmd(env, "/usr/bin/dbus-run-session", "--",
@@ -603,6 +623,161 @@ def start_optional_tailscale() -> None:
         say(f'optional Tailscale startup unavailable: {type(error).__name__}')
 
 
+AUDIO_FIRMWARE_SOURCE = MOUNT / 'hardware/firmware/audio-fyi3'
+KERNEL_FIRMWARE_DIR = Path('/proc/1/root/vendor/firmware')
+
+
+def stage_optional_audio_firmware(source: Path = AUDIO_FIRMWARE_SOURCE,
+                                  target: Path = KERNEL_FIRMWARE_DIR) -> int:
+    """Copy missing stock audio firmware where the kernel loader looks.
+
+    firmware_class.path=/vendor/firmware resolves in PID 1's ramdisk root.
+    The ABOX topology (sectiongraph_tplg.bin), amp/haptic DSP images and VTS
+    are requested after handoff (~60 s), so staging them here (~10 s) lets
+    the stock drivers load them.  Existing files are never replaced.
+    """
+    copied = 0
+    try:
+        if not source.is_dir() or source.is_symlink() or not target.is_dir():
+            return 0
+        for item in sorted(source.iterdir()):
+            dest = target / item.name
+            if item.is_symlink() or not item.is_file() or dest.exists():
+                continue
+            tmp = target / ('.' + item.name + '.tmp')
+            tmp.write_bytes(item.read_bytes())
+            os.chmod(tmp, 0o644)
+            os.rename(tmp, dest)
+            copied += 1
+        say(f'optional audio firmware staged: {copied} file(s)')
+    except Exception as error:
+        say(f'optional audio firmware staging unavailable: {type(error).__name__}')
+    return copied
+
+
+FIRMWARE_FALLBACK_DIR = Path('/sys/class/firmware')
+
+
+def answer_audio_firmware_requests(source: Path = AUDIO_FIRMWARE_SOURCE,
+                                   requests: Path = FIRMWARE_FALLBACK_DIR,
+                                   seconds: float = 90.0,
+                                   interval: float = 0.5) -> list[str]:
+    """Serve pending sysfs-fallback requests for files we hold.
+
+    The ABOX topology asks for sectiongraph_tplg.bin at ~3 s, before userdata
+    exists, then waits 60 s in the firmware sysfs fallback.  Answer only
+    requests whose exact name exists in the audio firmware directory; every
+    other request (e.g. charger or Wi-Fi files) is left untouched.
+    """
+    served: list[str] = []
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        try:
+            pending = sorted(requests.iterdir()) if requests.is_dir() else []
+        except OSError:
+            pending = []
+        for req in pending:
+            name = req.name.replace('!', '/')
+            if name in served or '/' in name or name == 'timeout':
+                continue
+            image = source / name
+            if image.is_symlink() or not image.is_file():
+                continue
+            try:
+                data = image.read_bytes()
+                (req / 'loading').write_text('1\n')
+                with open(req / 'data', 'wb') as out:
+                    out.write(data)
+                (req / 'loading').write_text('0\n')
+                served.append(name)
+                say(f'answered firmware request {name} ({len(data)} bytes)')
+            except OSError as error:
+                say(f'firmware request {name} not answered: {type(error).__name__}')
+                served.append(name)
+        time.sleep(interval)
+    return served
+
+
+BUTTONS_ENABLED = MOUNT / 'buttons/enabled'
+BUTTONS_DAEMON = MOUNT / 'hardware/bin/s22-buttons'
+
+
+def start_optional_buttons() -> subprocess.Popen | None:
+    """Physical-key daemon (logs presses, volume keys, agent hooks)."""
+    if not BUTTONS_ENABLED.is_file():
+        return None
+    try:
+        st = BUTTONS_DAEMON.stat()
+        if BUTTONS_DAEMON.is_symlink() or st.st_uid != 0 or st.st_mode & 0o022:
+            raise Failure('button daemon ownership changed')
+        log = open(MOUNT / 'buttons/daemon.log', 'ab')
+        proc = subprocess.Popen(['/usr/bin/python3', str(BUTTONS_DAEMON)],
+                                stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                                start_new_session=True)
+        log.close()
+        say(f'optional button daemon started pid={proc.pid}')
+        return proc
+    except Exception as error:
+        say(f'optional button daemon unavailable: {type(error).__name__}')
+        return None
+
+
+OPENUNUM_AUTOSTART = MOUNT / 'state/openunum/autostart'
+OPENUNUM_CONTROL = MOUNT / 'hardware/bin/s22-openunum'
+
+
+def start_optional_openunum() -> subprocess.Popen | None:
+    """OpenUnum server for the push-to-talk assistant (opt-in marker).
+
+    s22-openunum start is idempotent and detaches the server, so it outlives
+    a desktop restart; the voice assistant also starts it on demand.
+    """
+    if not OPENUNUM_AUTOSTART.is_file():
+        return None
+    try:
+        st = OPENUNUM_CONTROL.stat()
+        if OPENUNUM_CONTROL.is_symlink() or st.st_uid != 0 or st.st_mode & 0o022:
+            raise Failure('openunum control script ownership changed')
+        log = open(OPENUNUM_AUTOSTART.parent / 'autostart.log', 'ab')
+        proc = subprocess.Popen(['/bin/sh', str(OPENUNUM_CONTROL), 'start'],
+                                stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                                start_new_session=True)
+        log.close()
+        say(f'optional OpenUnum start pid={proc.pid}')
+        return proc
+    except Exception as error:
+        say(f'optional OpenUnum unavailable: {type(error).__name__}')
+        return None
+
+
+KEEPALIVE_ENABLED = MOUNT / 'state/keepalive/enabled'
+KEEPALIVE_DAEMON = MOUNT / 'hardware/bin/s22-keepalive'
+
+
+def start_optional_keepalive() -> subprocess.Popen | None:
+    """Service keepalive: restarts OpenUnum/unumsearch, keeps volume 0 (opt-in marker).
+
+    Detached and single-instance (flock), so a desktop restart does not
+    duplicate it.
+    """
+    if not KEEPALIVE_ENABLED.is_file():
+        return None
+    try:
+        st = KEEPALIVE_DAEMON.stat()
+        if KEEPALIVE_DAEMON.is_symlink() or st.st_uid != 0 or st.st_mode & 0o022:
+            raise Failure('keepalive ownership changed')
+        log = open(KEEPALIVE_ENABLED.parent / 'daemon.log', 'ab')
+        proc = subprocess.Popen(['/usr/bin/python3', str(KEEPALIVE_DAEMON)],
+                                stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                                start_new_session=True)
+        log.close()
+        say(f'optional keepalive started pid={proc.pid}')
+        return proc
+    except Exception as error:
+        say(f'optional keepalive unavailable: {type(error).__name__}')
+        return None
+
+
 def optional_agent_web(action: str) -> None:
     """The web terminal is optional; Tailscale/rescue remain independent."""
     base = MOUNT / 'agent-web'
@@ -656,6 +831,8 @@ def main() -> int:
             profile = str(readiness['model_profile'])
             # Remote access must not depend on the model or compositor starting.
             start_optional_tailscale()
+            stage_optional_audio_firmware()
+            threading.Thread(target=answer_audio_firmware_requests, daemon=True).start()
             RUNTIME_READY.unlink(missing_ok=True)
             if command('pidof', 'udevd', check=False).returncode:
                 command('/sbin/udevd', '--daemon')
@@ -714,7 +891,7 @@ def main() -> int:
             bind(MODEL, CHROOT / "mnt/model-bench", readonly=True)
             owned_mounts.append(CHROOT / "mnt/model-bench")
             state = MOUNT / "state"; state.mkdir(exist_ok=True)
-            model = seat = desktop = None
+            model = seat = desktop = buttons = None
             try:
                 model = start_model(state / "model-server.log", profile=profile)
                 seat, desktop = start_desktop(state / "desktop.log")
@@ -746,6 +923,9 @@ def main() -> int:
                 late_audio_deadline = time.monotonic() + 90.0 if audio_control is None else None
                 late_audio_done = audio_control is not None
                 optional_agent_web('--start')
+                buttons = start_optional_buttons()
+                start_optional_openunum()
+                start_optional_keepalive()
                 wifi_startup = start_optional_wifi()
                 model_restarts = 0
                 while desktop.poll() is None:
@@ -785,6 +965,7 @@ def main() -> int:
                 raise Failure(f"desktop exited with status {desktop.returncode}")
             finally:
                 optional_agent_web('--stop')
+                terminate(buttons)
                 RUNTIME_READY.unlink(missing_ok=True)
                 terminate(desktop); terminate(seat); terminate(model)
         finally:

@@ -1,0 +1,123 @@
+{
+  "schema": "s22-npu-source-wave/v1",
+  "scope": "reviewed_host_source_tests_not_kernel_or_hardware_acceptance",
+  "branch": "s22/luna-driver-completion-20260923",
+  "source": {
+    "pinned_lineage_commit": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+    "verified_clean_derived_fixture_commit": "3fca50941422439b2019db2e4a3dc1016b2138a1",
+    "historical_patches_and_receipts_preserved": true
+  },
+  "workers": [
+    {
+      "id": "/root/npu_probe_unwind_20261002",
+      "selection": "accepted_explicit_native_gpt-6-luna_max_reused",
+      "worktree": "npu-stack-reconcile-20261002",
+      "author_commit": "1c36220c47219853d18512723e6c20024a486be5",
+      "integration_commit": "d35b0d88d05457a2fea670c85a2acf98a535989e",
+      "deliverables": ["refcount_lifecycle_profile_patch", "combined_source_executable_c_tests", "research_note"]
+    },
+    {
+      "id": "/root/npu_shutdown_ownership_20261002",
+      "selection": "accepted_explicit_native_gpt-6-luna_max",
+      "worktree": "npu-shutdown-20261002",
+      "author_commits": ["3c6eaff70f720b682cc8d09e598fcaf2269df0bc", "f2d9a09da6aed6fc39013b637fc65ed4ca850d22"],
+      "integration_commits": ["8a14f103bcd77bebda0917dfcbbb24c021d8cc9c", "40d589cd41e557ed3396d6125dd9dcf178ac8294"],
+      "deliverables": ["shutdown_ownership_and_quarantine_patch", "six_actual_c_late_latch_regressions", "research_note"]
+    },
+    {
+      "id": "/root/source_wave_independent_review_20261002",
+      "selection": "accepted_explicit_native_gpt-6-luna_max",
+      "worktree": "source-wave-review-20261002",
+      "author_commits": ["f68f478dd626d61c69118554c21361073e8762ea", "519673266a77f66ed5dfb30699c61d6efd3b4339"],
+      "integration_commits": ["0d1a948108860c0e20f230e0996439c019e8cece", "0cea5c3ab962c8d4e303f8183a985440347e5c4e"],
+      "deliverables": ["independent_profile_review", "explicit_ci_allowlist_review_and_executable_policy_tests"]
+    },
+    {
+      "id": "/root/npu_shutdown_independent_review_20261002",
+      "selection": "accepted_explicit_native_gpt-6-luna_max",
+      "worktree": "npu-shutdown-review-20261002",
+      "author_commits": ["97cf0f769c303546c71f3aede6661a51ddbe45d4", "8adf3f6a08b1de3fd146db7534bebfc5884c0638"],
+      "integration_commits": ["4f951fd2d1ae2d8b7d5b9c9e15a45fbdd112eaea", "21985fa14c3535261220fc4e1954b42b66052108"],
+      "deliverables": ["initial_blocking_lock_wait_race_review", "corrected_six_path_re_review"]
+    }
+  ],
+  "model_evidence": {
+    "level": "accepted_explicit_runtime_selection_no_known_fallback",
+    "backend_identity_independently_attested": false,
+    "coordinator_runtime_changed_by_natural_language": false,
+    "workers_accessed_phone": false
+  },
+  "four_patch_profile": {
+    "ordered_plain_apply_and_whitespace_checks_pass": true,
+    "canonical_refcount_c_h_sections_preserved_verbatim": true,
+    "canonical_vertex_unlock_explicitly_superseded_by_lifecycle_lock_tracking": true,
+    "historical_unprofiled_conflict_still_reproduced": true,
+    "actual_ref_helper_c_scenarios_per_c_mode": 11,
+    "selected_final_lifecycle_caller_c_scenarios_per_c_mode": 5,
+    "c_modes": ["-O0", "-O2"],
+    "python_modes": ["normal", "-O", "PYTHONOPTIMIZE=1"],
+    "full_cleanup_event_order_and_all_non_warm_branches_proven": false,
+    "profile_patch_sha256": "8385e4210a807f96f972757cd6ca74a8077b0127ab112d8b877d012ccdc3cb7b",
+    "test_sha256": "719871aa3db12c4c3c5d61602ab85b1fdb871d2f6e2dc923da828ccbf5b8980a",
+    "host_preflight_exit_code": 2,
+    "artifact_preflight_pass": false,
+    "bootup_ready": false,
+    "bootup_authorized": false,
+    "missing_test_firmware_fixtures_establish_phone_firmware_absence": false,
+    "independent_environment_optimized_log_sha256": "92b21af916463c1a984ff4d9fb46a1f109d13d188a4ce55a0f1f6ed2e08df59d"
+  },
+  "shutdown_candidate": {
+    "reviewed_application_profiles": ["standalone_pinned_source", "refcount_transaction_plus_pm_callback"],
+    "late_latch_pre_fix_c_bypasses_reproduced": 6,
+    "late_latch_post_fix_c_refusals_verified": 6,
+    "under_lock_boot_entrypoints": 4,
+    "under_lock_wait_reacquisition_paths": 2,
+    "balanced_shim_locks_and_no_modeled_follow_on_work": true,
+    "actual_linux_scheduling_memory_order_or_lockdep_validated": false,
+    "patch_sha256": "a8af77122b4049fd38e21adfd01a8577d3e8f9bef1f68d0cfa091a5884a4d9f3",
+    "test_sha256": "e556600c1cf087b82d3bd9a067161d752a82a734bce57ec8304e535dacdba570",
+    "independent_environment_optimized_log_sha256": "c0c72bf02026c11dfbf711ab8cec202063c537e3262dd2daa943c7f338dcc276"
+  },
+  "five_patch_composition": {
+    "evidence_owner": "coordinator_executed_exact_source_check_not_independently_rerun_by_shutdown_reviewer",
+    "four_patch_prefix_pass": true,
+    "shutdown_git_apply_check_exit_code": 1,
+    "blocking_path": "drivers/vision/npu/core/npu-vertex.c",
+    "blocking_line": 313,
+    "force_fuzz_or_hunk_omission_used": false,
+    "build_ready": false,
+    "check_log_sha256": "4a177430eb44ac60ac8480d6870b7a95f6ab517ace0fb49c6295299ff9703238"
+  },
+  "integrated_host_regressions": {
+    "tested_commit": "33315389d2a9c3373cecf23004ae81b8848b6756",
+    "command": "python3 -I -B tools/hardware/run-host-regressions.py --mode both",
+    "exit_code": 0,
+    "normal_scripts_passed": 39,
+    "optimized_scripts_passed": 36,
+    "documented_optimization_exclusions": 3,
+    "new_npu_suites_executed_public_fixtures_without_skip": true,
+    "existing_unrelated_fixture_skips_retained": true,
+    "runner_policy_tests_per_python_mode": 7,
+    "subsequent_review_commit_changes_prose_only": true,
+    "full_suite_log_sha256": "20fff472946c8c63e60ef0c21aad7fd8bd6f78c224c404e2be8fecbb673a2706",
+    "new_publication_hosted_result_not_yet_recorded_in_this_receipt": true
+  },
+  "remaining_source_blockers": [
+    "shutdown_patch_conflict_with_reconciled_lifecycle_close_and_boot_paths",
+    "pinned_device_shutdown_masks_early_close_and_protocol_close_errors",
+    "normal_bootdown_count_ref_ownership_after_hardware_error",
+    "session_close_failure_cleanup",
+    "retained_object_lifetime_across_vfs_session_manager_device_and_module_teardown"
+  ],
+  "acceptance_limits": {
+    "kernel_build_performed": false,
+    "device_driver_acceptance_proven": false,
+    "new_partition_writes": 0,
+    "new_reboot_requests": 0,
+    "new_hci_npu_or_stream_tests": 0,
+    "independent_hardware_rescue_demonstrated": false,
+    "master_changed": false,
+    "original_dirty_work_discarded": false,
+    "published_firmware_images_weights_credentials_or_private_traces": false
+  }
+}

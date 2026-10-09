@@ -1,0 +1,98 @@
+{
+  "schema": "s22-npu14-portable-fixture-independent-review/v1",
+  "review_date": "2026-10-03",
+  "verdict": {
+    "status": "PASS_LIMITED",
+    "scope": "source-only public host regression route and negative-control fixture integrity",
+    "broader_npu_source_review": "BLOCKED; this portability review does not change source patch behavior or clear provider, release, static-buffer, runtime, or hardware risks"
+  },
+  "review_identity": {
+    "worktree": "/home/corpunum/s22-workers/npu14-portable-review-20261003",
+    "branch": "codex/s22-npu14-portable-review-20261003",
+    "base_commit": "d06bb09bcb69fd1418863ae000181afa66fa1938",
+    "portable_author_commit": "7986c0559cf170006eb33e5699f95ff194463796",
+    "portable_author_tree": "3a12f0853e553a5fe07fe15cf861bf031d9668ef",
+    "worktree_clean_after_review_outputs": true
+  },
+  "reviewed_hashes": {
+    "tools/hardware/test-npu-system-resume-error-unwind.py": "78e905be594bffa35ab01f554900651b9a7f77017e0e64ed09972fe5b35ac02c",
+    "tools/hardware/fixtures/npu14-pre-correction.patch": "464a78b43f7ef0cc7e26b5f69075980460211f9c789d0a418b36d44be548968e",
+    "tools/hardware/npu-system-resume-error-unwind.patch": "f1af656f9e1b8ca2bf15e934031e0adf828c442267a17761ba64f7d7c611729a",
+    "tools/hardware/npu-system-resume-error-unwind-harness.c": "bb9f2f631f7598e79a9638d0373a6a781a0a06a7e4c5e584aad3501a2edbd547",
+    "docs/research/NPU_SYSTEM_RESUME_ERROR_UNWIND_2026-10-03.md": "07e2887ae0d97bbc9fbcf4d4fc2c5bcdc3b81196afee872a51dcbb3cbfc1b9ba",
+    "compiler_path": "/usr/bin/cc",
+    "compiler_sha256": "1b99826121ae6682a634e5efe09bd3e3df58ce58e0b28f849114ab5b89139c26"
+  },
+  "historical_fixture": {
+    "path": "tools/hardware/fixtures/npu14-pre-correction.patch",
+    "sha256": "464a78b43f7ef0cc7e26b5f69075980460211f9c789d0a418b36d44be548968e",
+    "size_bytes": 11982,
+    "byte_identical_to_historical_patch": true,
+    "historical_patch_commit": "4a22948184f101f2bd80d2f44eef44b46004b790",
+    "classification": "unsafe test-only pre-correction negative control; not a builder input",
+    "current_npu14_patch_sha256": "f1af656f9e1b8ca2bf15e934031e0adf828c442267a17761ba64f7d7c611729a"
+  },
+  "source_only_checkout": {
+    "path": "/tmp/npu14-portable-source-only-20261003.5C3zEP",
+    "explicit_file_count": 15,
+    "git_metadata_present": false,
+    "git_object_or_alternates_present": false,
+    "private_kernel_source_trees_in_checkout": false,
+    "optional_source_tree_environment_variables_unset": true,
+    "host_default_private_tree_probing": "skipped by explicit option without probing defaults",
+    "selected_composition": "pinned public base, explicit NATIVE_EIGHT_PATCHES, named NPU13 patch, named corrected NPU14 patch; negative fixture is applied only to separate pre-correction temporary copy"
+  },
+  "matrix": {
+    "pinned_source_commit": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+    "raw_pinned_source_route": "public fetch from LineageOS raw source at exact revision",
+    "c_variants_per_python_mode": 12,
+    "c_variants": "baseline, historical pre-correction, corrected source; BOOT_IOCTL and runtime-PM/STM; C -O0 and -O2",
+    "total_c_compile_run_jobs": 36,
+    "commands": [
+      "env -u S22_NPU_PROBE_SOURCE_TREE -u S22_NPU_SYSTEM_COMPOSED_SOURCE_TREE python3 -B tools/hardware/test-npu-system-resume-error-unwind.py --skip-optional-local-fixtures",
+      "env -u S22_NPU_PROBE_SOURCE_TREE -u S22_NPU_SYSTEM_COMPOSED_SOURCE_TREE python3 -O -B tools/hardware/test-npu-system-resume-error-unwind.py --skip-optional-local-fixtures",
+      "env -u S22_NPU_PROBE_SOURCE_TREE -u S22_NPU_SYSTEM_COMPOSED_SOURCE_TREE PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-npu-system-resume-error-unwind.py --skip-optional-local-fixtures"
+    ],
+    "python_modes": [
+      {"sys_flags_optimize": 0, "result": "pass", "actual_c_jobs": 12},
+      {"sys_flags_optimize": 1, "result": "pass", "actual_c_jobs": 12},
+      {"sys_flags_optimize": 1, "result": "pass", "actual_c_jobs": 12}
+    ],
+    "result": "PASS"
+  },
+  "fixture_preflight_controls": {
+    "mode": "source-only copied runner with --skip-optional-local-fixtures",
+    "missing_fixture": {"exit_code": 1, "public_fetch_started": false, "c_compile_started": false, "result": "rejected"},
+    "digest_tampered_fixture": {"exit_code": 1, "public_fetch_started": false, "c_compile_started": false, "result": "rejected"},
+    "symlink_fixture": {"exit_code": 1, "public_fetch_started": false, "c_compile_started": false, "result": "rejected"},
+    "oversized_fixture_524289_bytes": {"exit_code": 1, "public_fetch_started": false, "c_compile_started": false, "result": "rejected"},
+    "explicit_missing_derived_env_path_with_skip": {"exit_code": 1, "public_fetch_started": true, "c_compile_started": false, "result": "rejected; explicit env path remains mandatory"},
+    "explicit_missing_composed_env_path_with_skip": {"exit_code": 1, "public_fetch_started": true, "c_compile_started": false, "result": "rejected; explicit env path remains mandatory"}
+  },
+  "original_loader_control": {
+    "historical_runner_revision": "9553c8b7f1e7a7a0afd5d8d208a53aed2958d3ef",
+    "historical_loader_used_git_show": true,
+    "executed_against_no_history_source_root": true,
+    "observed": "RuntimeError: frozen pre-correction NPU14 patch commit is unavailable",
+    "source_fetch_started": false,
+    "c_compile_started": false,
+    "current_loader_uses_git_history": false
+  },
+  "builder_separation": {
+    "build_npu_six_profile_patch_selection": "explicit NATIVE_EIGHT_PATCHES tuple; no historical fixture reference",
+    "build_npu_twelve_module_only_patch_selection": "explicit PATCHES tuple; no historical fixture reference",
+    "negative_fixture_consumers": ["test-npu-system-resume-error-unwind.py pre-correction negative-control path only"],
+    "source_patch_and_harness_changed_in_portability_commit": false
+  },
+  "preserved_source_and_runtime_limits": [
+    "Corrected extracted-C source-order gate passes before firmware-loader teardown; the historical fixture reproduces the old ordering. This is host-shim evidence.",
+    "Image-loader/provider shutdown returns void; provider completion and FW_LOAD success accounting remain unresolved.",
+    "npu_system_release/device remove remains outside the stage quarantine.",
+    "File-static firmware log buffers and the TODO free helper do not establish cross-device/reprobe lifecycle.",
+    "BOOTUP path is tested only with host shims; no real BOOTUP, firmware/provider call, kernel/module compile, phone access, or device run occurred."
+  ],
+  "review_outputs": [
+    "docs/reviews/NPU14_PORTABLE_FIXTURE_REVIEW_2026-10-03.md",
+    "evidence/s22-npu14-portable-fixture-review-20261003.json"
+  ]
+}

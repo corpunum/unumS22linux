@@ -1,0 +1,70 @@
+{
+  "schema": "s22-npu-provider-arm64-frontend/v1",
+  "config_sha256": "d762d5fc71e369013ee36657d007063ce1f0faca9707d5f9ccfba2597b7fcd16",
+  "patches": {
+    "npu-interface-open-unwind.patch": "95e63b45d60e0a2611c1f2dcab4428e5658a03ff9954b8197d175ac6fec139cb",
+    "npu-system-resume-error-unwind.patch": "f1af656f9e1b8ca2bf15e934031e0adf828c442267a17761ba64f7d7c611729a",
+    "npu-imgloader-shutdown-status.patch": "e7355e8906b22f1decf00de59cd644aac7bfcf6d861d97cdb3ff9bf084428385"
+  },
+  "composed_header_sha256": "b0c41549fd3781a00fca1c4257fe376876093f91e489b24cb16950116abbb76f",
+  "jobs": [
+    {
+      "role": "unchanged-baseline",
+      "relative_source": "drivers/vision/npu/core/npu-system.c",
+      "source_sha256": "96eaa6bf1511f3e6414e3e376d62592229454a2ea1687d760b7bb8e5952b1a05",
+      "saved_command_sha256": "82e408f92f7d867f37585b07cbca94ee17447f16f6fafe029b6d99e9889ec101",
+      "returncode": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "role": "checked-provider-candidate",
+      "relative_source": "drivers/vision/npu/core/npu-system.c",
+      "source_sha256": "c9305d36ce64ffe4f683dcaccdabc6a664a926e79cafba90f43ddddaa6862dd1",
+      "saved_command_sha256": "82e408f92f7d867f37585b07cbca94ee17447f16f6fafe029b6d99e9889ec101",
+      "returncode": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "role": "unchanged-baseline",
+      "relative_source": "drivers/soc/samsung/imgloader.c",
+      "source_sha256": "e9898c3ac9b0c5210603028b7c0b7bc3623869762a99f35438d3d480d33e27f7",
+      "saved_command_sha256": "c548cc39fdefe07f87f08c9a9a7a864aed6e871530f2dd95c3a57e182d1b01dd",
+      "returncode": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "role": "checked-provider-candidate",
+      "relative_source": "drivers/soc/samsung/imgloader.c",
+      "source_sha256": "5904d2ef6a27e9f27d7fe337a7dd47b59d5298cbb864c4e193a9f68fa14ba928",
+      "saved_command_sha256": "c548cc39fdefe07f87f08c9a9a7a864aed6e871530f2dd95c3a57e182d1b01dd",
+      "returncode": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "input_bytes_unchanged": true,
+  "object_module_or_Image_produced": false,
+  "phone_operations": 0,
+  "provider_operation_or_hardware_acceptance": false,
+  "NPU_BOOTUP_authorized": false,
+  "private_capture_sha256": "f7b10e79b9599412eec8dc38a59e10261d8f622fa9633880bb2da3f6b5bc7a04",
+  "preserved_source_commits": {
+    "NPU12": "e9c3016233a72ceccb13e537f0b7ef72426582b9",
+    "provider_native8": "872bffb8ea2ea657f94d10b866dc655b5718d6db"
+  },
+  "compiler_sha256": "8ef402d453d1ba4902e4ee0f0f847f6cfa01400c95aa43c24e97818b9c0e3f45",
+  "loader_crc_or_new_export_compatibility_verified": false,
+  "independent_source_review": "pending",
+  "limits": [
+    "Configured syntax checks only, not object/module/Image, link, modpost, CRC or deployment evidence.",
+    "New exported status symbol requires a future matched provider/NPU build and full import/export checks.",
+    "No actual firmware permission, provider, CPU power, NPU BOOTUP or other hardware operation."
+  ]
+}

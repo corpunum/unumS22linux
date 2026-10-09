@@ -1,0 +1,351 @@
+diff --git a/drivers/vision/npu/core/npu-system.c b/drivers/vision/npu/core/npu-system.c
+--- a/drivers/vision/npu/core/npu-system.c
++++ b/drivers/vision/npu/core/npu-system.c
+@@ -315,6 +315,9 @@ enum npu_system_resume_steps {
+ 	NPU_SYS_RESUME_FW_VERIFY,
+ 	NPU_SYS_RESUME_SOC,
+ 	NPU_SYS_RESUME_OPEN_INTERFACE,
++	NPU_SYS_RESUME_OPEN_INTERFACE_CLOSE_UNCERTAIN,
++	NPU_SYS_RESUME_FWBUF_ALLOC_UNCERTAIN,
++	NPU_SYS_RESUME_FWBUF_FREE_UNCERTAIN,
+ 	NPU_SYS_RESUME_COMPLETED
+ };
+ 
+@@ -329,6 +333,10 @@ enum npu_system_resume_soc_steps {
+ 	NPU_SYS_RESUME_SOC_CPU_ON,
++	NPU_SYS_RESUME_SOC_CPU_ON_UNCERTAIN,
++	NPU_SYS_RESUME_SOC_CPU_OFF_UNCERTAIN,
+ #ifndef CONFIG_NPU_USE_BOOT_IOCTL
+ 	NPU_SYS_RESUME_SOC_STM,
++	NPU_SYS_RESUME_SOC_STM_UNCERTAIN,
++	NPU_SYS_RESUME_SOC_STM_DISABLE_UNCERTAIN,
+ #endif
+ 	NPU_SYS_RESUME_SOC_COMPLETED
+ };
+@@ -1477,6 +1481,11 @@ int npu_system_open(struct npu_system *system)
+ 	BUG_ON(!system);
+ 	BUG_ON(!system->pdev);
+ 	dev = &system->pdev->dev;
+ 	device = container_of(system, struct npu_device, system);
++	if (system->resume_steps || system->resume_soc_steps) {
++		npu_err("cannot open with outstanding resume steps [%lu/%lu]\n",
++			system->resume_steps, system->resume_soc_steps);
++		return -EBUSY;
++	}
+ 
+ 	ret = npu_memory_open(&system->memory);
+@@ -1516,5 +1526,10 @@ int npu_system_close(struct npu_system *system)
+ 	BUG_ON(!system);
+ 	device = container_of(system, struct npu_device, system);
++	if (system->resume_steps || system->resume_soc_steps) {
++		npu_err("cannot close with outstanding resume steps [%lu/%lu]\n",
++			system->resume_steps, system->resume_soc_steps);
++		return -EBUSY;
++	}
+ 
+ 	ret = npu_qos_close(system);
+ 	if (ret)
+@@ -1580,7 +1595,10 @@ static int npu_system_soc_resume(struct npu_system *system, u32 mode)
+ #endif
+ 	BUG_ON(!system);
+ 
+-	/* Clear resume steps */
+-	system->resume_soc_steps = 0;
++	if (system->resume_soc_steps) {
++		npu_err("cannot resume SoC with outstanding steps [%lu]\n",
++			system->resume_soc_steps);
++		return -EBUSY;
++	}
+ 
+ 	print_all_iomem_area(system);
+@@ -1589,17 +1607,21 @@ static int npu_system_soc_resume(struct npu_system *system, u32 mode)
+ 	npu_clk_init(system);
+ 
++	set_bit(NPU_SYS_RESUME_SOC_CPU_ON_UNCERTAIN, &system->resume_soc_steps);
+ 	ret = npu_cpu_on(system);
+ 	if (ret) {
+ 		npu_err("fail(%d) in npu_cpu_on\n", ret);
+ 		goto p_err;
+ 	}
++	clear_bit(NPU_SYS_RESUME_SOC_CPU_ON_UNCERTAIN, &system->resume_soc_steps);
+ 	set_bit(NPU_SYS_RESUME_SOC_CPU_ON, &system->resume_soc_steps);
+ 
+ #ifndef CONFIG_NPU_USE_BOOT_IOCTL
++	set_bit(NPU_SYS_RESUME_SOC_STM_UNCERTAIN, &system->resume_soc_steps);
+ 	ret = npu_stm_enable(system, 0);
+ 	if (ret) {
+ 		npu_err("fail(%d) in npu_stm_enable\n", ret);
+ 		goto p_err;
+ 	}
++	clear_bit(NPU_SYS_RESUME_SOC_STM_UNCERTAIN, &system->resume_soc_steps);
+ 	set_bit(NPU_SYS_RESUME_SOC_STM, &system->resume_soc_steps);
+ #endif
+@@ -1610,24 +1635,55 @@ int npu_system_soc_suspend(struct npu_system *system)
+ #endif
+ 	BUG_ON(!system);
+ 
+-	BIT_CHECK_AND_EXECUTE(NPU_SYS_RESUME_SOC_COMPLETED, &system->resume_soc_steps, "SOC completed", ;);
++	clear_bit(NPU_SYS_RESUME_SOC_COMPLETED, &system->resume_soc_steps);
++	if (test_bit(NPU_SYS_RESUME_SOC_CPU_ON_UNCERTAIN, &system->resume_soc_steps) ||
++	    test_bit(NPU_SYS_RESUME_SOC_CPU_OFF_UNCERTAIN, &system->resume_soc_steps)) {
++		npu_err("CPU power transition is uncertain; preserving SoC ownership\n");
++		return -EUCLEAN;
++	}
+ 
+ #ifndef CONFIG_NPU_USE_BOOT_IOCTL
+-	BIT_CHECK_AND_EXECUTE(NPU_SYS_RESUME_SOC_STM, &system->resume_soc_steps, "STM disabled", {
++	if (test_bit(NPU_SYS_RESUME_SOC_STM_UNCERTAIN, &system->resume_soc_steps)) {
++		npu_err("STM-enable outcome is uncertain; preserving SoC ownership\n");
++		return -EUCLEAN;
++	}
++	if (test_bit(NPU_SYS_RESUME_SOC_STM_DISABLE_UNCERTAIN,
++			&system->resume_soc_steps)) {
++		npu_err("STM-disable outcome is uncertain; preserving SoC ownership\n");
++		return -EUCLEAN;
++	}
++	if (test_bit(NPU_SYS_RESUME_SOC_STM, &system->resume_soc_steps)) {
++		if (test_and_set_bit(NPU_SYS_RESUME_SOC_STM_DISABLE_UNCERTAIN,
++				&system->resume_soc_steps))
++			return -EUCLEAN;
+ 		ret = npu_stm_disable(system, 0);
+-		if (ret)
+-			npu_err("fail(%d) in npu_stm_disable\n", ret);
+-	});
++		if (ret) {
++			npu_err("fail(%d) in npu_stm_disable; preserving ownership\n", ret);
++			return ret;
++		}
++		clear_bit(NPU_SYS_RESUME_SOC_STM_DISABLE_UNCERTAIN,
++			&system->resume_soc_steps);
++		clear_bit(NPU_SYS_RESUME_SOC_STM, &system->resume_soc_steps);
++	}
+ #endif
+-	BIT_CHECK_AND_EXECUTE(NPU_SYS_RESUME_SOC_CPU_ON, &system->resume_soc_steps, "Turn NPU cpu off", {
++	if (test_bit(NPU_SYS_RESUME_SOC_CPU_ON, &system->resume_soc_steps)) {
++		if (test_and_set_bit(NPU_SYS_RESUME_SOC_CPU_OFF_UNCERTAIN,
++				&system->resume_soc_steps))
++			return -EUCLEAN;
+ 		ret = npu_cpu_off(system);
+-		if (ret)
+-			npu_err("fail(%d) in npu_cpu_off\n", ret);
+-	});
++		if (ret) {
++			npu_err("fail(%d) in npu_cpu_off; preserving ownership\n", ret);
++			return ret;
++		}
++		clear_bit(NPU_SYS_RESUME_SOC_CPU_OFF_UNCERTAIN,
++			&system->resume_soc_steps);
++		clear_bit(NPU_SYS_RESUME_SOC_CPU_ON, &system->resume_soc_steps);
++	}
+ 
+-	if (system->resume_soc_steps != 0)
++	if (system->resume_soc_steps) {
+ 		npu_warn("Missing clean-up steps [%lu] found.\n", system->resume_soc_steps);
++		return -EUCLEAN;
++	}
+ 
+-	/* Function itself never be failed, even thought there was some error */
+-	return ret;
++	return 0;
+ }
+@@ -1658,8 +1711,11 @@ int npu_system_resume(struct npu_system *system, u32 mode)
+ 	fwmbox = npu_get_mem_area(system, "fwmem");
+ 	system->mbox_hdr = (volatile struct mailbox_hdr *)(fwmbox->vaddr +
+ 			configs[NPU_MAILBOX_BASE] - sizeof(struct mailbox_hdr));
+ #endif
+-	/* Clear resume steps */
+-	system->resume_steps = 0;
++	if (system->resume_steps || system->resume_soc_steps) {
++		npu_err("cannot resume with outstanding steps [%lu/%lu]\n",
++			system->resume_steps, system->resume_soc_steps);
++		return -EBUSY;
++	}
+ 
+ #ifdef CONFIG_PM_SLEEP
+@@ -1676,7 +1729,12 @@ int npu_system_resume(struct npu_system *system, u32 mode)
+ 	if (system->fw_cold_boot) {
+ 		ret = npu_system_alloc_fw_dram_log_buf(system);
+ 		if (ret) {
++#ifdef CONFIG_EXYNOS_NPU_DRAM_FW_LOG_BUF
++			if (fw_report_buf.v_buf || fw_profile_buf.v_buf)
++				set_bit(NPU_SYS_RESUME_FWBUF_ALLOC_UNCERTAIN,
++					&system->resume_steps);
++#endif
+ 			npu_err("fail(%d) in npu_system_alloc_fw_dram_log_buf\n", ret);
+ 			goto p_err;
+ 		}
+ 	}
+@@ -1753,6 +1822,13 @@ int npu_system_resume(struct npu_system *system, u32 mode)
+ p_err:
+ 	npu_err("Failure detected[%d]. Set emergency recovery flag.\n", ret);
+ 	set_bit(NPU_DEVICE_ERR_STATE_EMERGENCY, &device->err_state);
+-	ret = 0;//emergency case will be cared by suspend func
+-	return ret;
++	{
++		int resume_error = ret;
++		int cleanup_error = npu_system_suspend(system);
++
++		if (cleanup_error)
++			npu_err("resume unwind failed(%d); ownership remains quarantined\n",
++				cleanup_error);
++		return resume_error;
++	}
+ }
+@@ -1780,58 +1855,115 @@ int npu_system_suspend(struct npu_system *system)
+ 	npu_info("fw_cold_boot(%d)\n", system->fw_cold_boot);
+ 
++	if (test_bit(NPU_SYS_RESUME_OPEN_INTERFACE_CLOSE_UNCERTAIN,
++			&system->resume_steps)) {
++		npu_err("interface-close outcome is uncertain; preserving ownership\n");
++		ret = -EUCLEAN;
++		goto p_err;
++	}
++	if (test_bit(NPU_SYS_RESUME_SOC_CPU_ON_UNCERTAIN,
++			&system->resume_soc_steps)) {
++		npu_err("CPU-on outcome is uncertain; preserving firmware and SoC ownership\n");
++		ret = -EUCLEAN;
++		goto p_err;
++	}
++#ifndef CONFIG_NPU_USE_BOOT_IOCTL
++	if (test_bit(NPU_SYS_RESUME_SOC_STM_UNCERTAIN,
++			&system->resume_soc_steps)) {
++		npu_err("STM-enable outcome is uncertain; preserving firmware and SoC ownership\n");
++		ret = -EUCLEAN;
++		goto p_err;
++	}
++#endif
++
+-	BIT_CHECK_AND_EXECUTE(NPU_SYS_RESUME_COMPLETED, &system->resume_steps, NULL, ;);
++	clear_bit(NPU_SYS_RESUME_COMPLETED, &system->resume_steps);
+ 
+-	BIT_CHECK_AND_EXECUTE(NPU_SYS_RESUME_OPEN_INTERFACE, &system->resume_steps, "Close interface", {
++	if (test_bit(NPU_SYS_RESUME_OPEN_INTERFACE, &system->resume_steps)) {
++		if (test_and_set_bit(NPU_SYS_RESUME_OPEN_INTERFACE_CLOSE_UNCERTAIN,
++				&system->resume_steps)) {
++			ret = -EUCLEAN;
++			goto p_err;
++		}
+ 		ret = npu_interface_close(system);
+-		if (ret)
+-			npu_err("fail(%d) in npu_interface_close\n", ret);
+-	});
++		if (ret) {
++			npu_err("fail(%d) in npu_interface_close; preserving ownership\n", ret);
++			goto p_err;
++		}
++		clear_bit(NPU_SYS_RESUME_OPEN_INTERFACE_CLOSE_UNCERTAIN,
++			&system->resume_steps);
++		clear_bit(NPU_SYS_RESUME_OPEN_INTERFACE, &system->resume_steps);
++	}
+ 
+-#ifdef CONFIG_NPU_SECURE_MODE
+-	if (!system->mbox_hdr->warm_boot_enable)
+-#endif
+-		if (system->fw_cold_boot)
+-			BIT_CHECK_AND_EXECUTE(NPU_SYS_RESUME_FW_LOAD, &system->resume_steps, "FW load", {
+-				npu_imgloader_shutdown(system);
+-			});
++	if (test_bit(NPU_SYS_RESUME_FW_LOAD, &system->resume_steps)) {
++#ifdef CONFIG_NPU_SECURE_MODE
++		if (!system->mbox_hdr->warm_boot_enable && system->fw_cold_boot)
++#else
++		if (system->fw_cold_boot)
++#endif
++			npu_imgloader_shutdown(system);
++		clear_bit(NPU_SYS_RESUME_FW_LOAD, &system->resume_steps);
++	}
+ 
+ 	/* Invoke platform specific suspend routine */
+-	BIT_CHECK_AND_EXECUTE(NPU_SYS_RESUME_SOC, &system->resume_steps, "SoC suspend", {
++	if (test_bit(NPU_SYS_RESUME_SOC, &system->resume_steps) ||
++	    system->resume_soc_steps) {
+ 		ret = npu_system_soc_suspend(system);
+-		if (ret)
+-			npu_err("fail(%d) in npu_system_soc_suspend\n", ret);
+-	});
++		if (ret) {
++			npu_err("fail(%d) in npu_system_soc_suspend; preserving ownership\n", ret);
++			goto p_err;
++		}
++		clear_bit(NPU_SYS_RESUME_SOC, &system->resume_steps);
++	}
+ 
+ #ifdef CONFIG_NPU_USE_BOOT_IOCTL
+-	BIT_CHECK_AND_EXECUTE(NPU_SYS_RESUME_CLK_PREPARE, &system->resume_steps, "Unprepare clk", ;);
++	clear_bit(NPU_SYS_RESUME_CLK_PREPARE, &system->resume_steps);
+ #else
+-	BIT_CHECK_AND_EXECUTE(NPU_SYS_RESUME_CLK_PREPARE, &system->resume_steps, "Unprepare clk", {
++	if (test_bit(NPU_SYS_RESUME_CLK_PREPARE, &system->resume_steps)) {
+ 		npu_clk_disable_unprepare(&system->clks);
+-	});
++		clear_bit(NPU_SYS_RESUME_CLK_PREPARE, &system->resume_steps);
++	}
+ #endif
+ 
+-	BIT_CHECK_AND_EXECUTE(NPU_SYS_RESUME_FW_VERIFY, &system->resume_steps, "FW VERIFY suspend", {
+-		/* Do not need anything */
+-	});
++	clear_bit(NPU_SYS_RESUME_FW_VERIFY, &system->resume_steps);
+ 
+-	BIT_CHECK_AND_EXECUTE(NPU_SYS_RESUME_INIT_FWBUF, &system->resume_steps, "Free DRAM fw log buf", {
++	if (test_bit(NPU_SYS_RESUME_FWBUF_FREE_UNCERTAIN, &system->resume_steps)) {
++		ret = -EUCLEAN;
++	} else if (test_bit(NPU_SYS_RESUME_INIT_FWBUF, &system->resume_steps)) {
++		if (test_and_set_bit(NPU_SYS_RESUME_FWBUF_FREE_UNCERTAIN,
++				&system->resume_steps)) {
++			ret = -EUCLEAN;
++		} else {
+-		ret = npu_system_free_fw_dram_log_buf();
++			ret = npu_system_free_fw_dram_log_buf();
+-		if (ret)
++			if (ret) {
++				npu_err("fail(%d) in npu_system_free_fw_dram_log_buf\n", ret);
++			} else {
++				clear_bit(NPU_SYS_RESUME_FWBUF_FREE_UNCERTAIN,
++					&system->resume_steps);
++				clear_bit(NPU_SYS_RESUME_INIT_FWBUF, &system->resume_steps);
++			}
++		}
++	}
+-			npu_err("fail(%d) in npu_cpu_off\n", ret);
+-	});
+ 
+ #ifdef CONFIG_PM_SLEEP
+-	BIT_CHECK_AND_EXECUTE(NPU_SYS_RESUME_SETUP_WAKELOCK, &system->resume_steps, "Unlock wake lock", {
++	if (test_bit(NPU_SYS_RESUME_SETUP_WAKELOCK, &system->resume_steps)) {
+ 		if (npu_wake_lock_active(system->ws)) {
+ 			npu_wake_unlock(system->ws);
+ 			npu_info("wake_unlock, now(%d)\n", npu_wake_lock_active(system->ws));
+ 		}
+-	});
++		clear_bit(NPU_SYS_RESUME_SETUP_WAKELOCK, &system->resume_steps);
++	}
+ #endif
+ 
+-	if (system->resume_steps != 0)
++	if (system->resume_steps) {
+ 		npu_warn("Missing clean-up steps [%lu] found.\n", system->resume_steps);
++		if (!ret)
++			ret = -EUCLEAN;
++		goto p_err;
++	}
++	if (ret)
++		goto p_err;
+ 
+-	/* Function itself never be failed, even thought there was some error */
+ 	return 0;
++p_err:
++	set_bit(NPU_DEVICE_ERR_STATE_EMERGENCY, &device->err_state);
++	return ret;
+ }
+diff --git a/drivers/vision/npu/core/npu-device.c b/drivers/vision/npu/core/npu-device.c
+--- a/drivers/vision/npu/core/npu-device.c
++++ b/drivers/vision/npu/core/npu-device.c
+@@ -315,5 +315,6 @@ static int __npu_device_power_on(struct npu_device *device)
+ 	int ret = 0;
+ 
+-	ret = pm_runtime_get_sync(device->dev);
++	/* Balance the PM usage reference when runtime resume fails. */
++	ret = pm_runtime_resume_and_get(device->dev);
+ 	if (ret)
+ 		npu_err("fail(%d) in runtime resume\n", ret);

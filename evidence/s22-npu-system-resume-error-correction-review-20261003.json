@@ -1,0 +1,76 @@
+{
+  "schema": "s22-npu-system-resume-error-correction-review/v1",
+  "date": "2026-10-03",
+  "review_verdict": "blocked_portable_runner_fixture_dependency_source_ordering_passes_narrow_case",
+  "review_worktree_base": "c92dd13",
+  "reviewed_import_commit": "3e7101e2b5ce646763f7a3fb6c7dcab4e6c4cada",
+  "author_commit": "9553c8b7f1e7a7a0afd5d8d208a53aed2958d3ef",
+  "raw_kernel_base": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+  "reviewed_source_sha256": {
+    "tools/hardware/npu-system-resume-error-unwind.patch": "f1af656f9e1b8ca2bf15e934031e0adf828c442267a17761ba64f7d7c611729a",
+    "tools/hardware/npu-system-resume-error-unwind-harness.c": "bb9f2f631f7598e79a9638d0373a6a781a0a06a7e4c5e584aad3501a2edbd547",
+    "tools/hardware/test-npu-system-resume-error-unwind.py": "e9215fb8abc54e208058df2a9c396726338f2372ea99f88a199b95ecdb2a0293",
+    "docs/research/NPU_SYSTEM_RESUME_ERROR_UNWIND_2026-10-03.md": "77458785927399304ff566c145e3032e366d1c32bb4c86874a899b651d5d0231",
+    "evidence/s22-npu-system-resume-error-correction-host-20261003.json": "b6a5c7eeeffac5753cefd106b7c3269b1a8b16339b5aa45dac08dc6781bc37b1"
+  },
+  "source_ordering_review": {
+    "configured_boot_ioctl_cpu_on_uncertainty_gate_precedes_interface_close_and_firmware_shutdown": true,
+    "alternate_stm_enable_uncertainty_gate_precedes_teardown": true,
+    "retains_fwload_uncertainty_wake_and_dependent_clock_ownership": true,
+    "repeated_suspend_does_not_repeat_loader_or_inverse_calls": true,
+    "known_on_cpu_off_initial_shutdown_order_unchanged": true,
+    "original_resume_errno_preserved": true,
+    "source_shim_scope_only": true
+  },
+  "portable_fixture_finding": {
+    "runner_old_patch_commit": "4a22948184f101f2bd80d2f44eef44b46004b790",
+    "runner_old_patch_commit_reachable_on_reviewed_remote_branch": false,
+    "runner_old_patch_sha256": "464a78b43f7ef0cc7e26b5f69075980460211f9c789d0a418b36d44be548968e",
+    "published_identical_patch_commit": "23e6f6c1ac1cc8e98570cc8eb277290174df5b58",
+    "published_identical_patch_sha256": "464a78b43f7ef0cc7e26b5f69075980460211f9c789d0a418b36d44be548968e",
+    "isolated_fixture_old_commit_cat_file_exit": 128,
+    "isolated_runner_public_fetch_raw_files": 4,
+    "isolated_runner_applied_profile_patches": 8,
+    "isolated_runner_reproduced_npu12_selected_hashes": true,
+    "isolated_runner_c_jobs_before_failure": 0,
+    "isolated_failure": "frozen pre-correction NPU14 patch commit is unavailable",
+    "wrong_supplied_fixture_rejected": true
+  },
+  "independent_test_matrix": {
+    "c_jobs_per_successful_invocation": 12,
+    "c_optimization_levels": ["-O0", "-O2"],
+    "variants": ["pre-NPU14 baseline", "frozen pre-correction NPU14", "corrected NPU14"],
+    "configurations": ["CONFIG_NPU_USE_BOOT_IOCTL", "alternate runtime-PM/STM"],
+    "local_only": [
+      {"python_mode": "normal", "sys_flags_optimize": 0, "c_jobs": 12, "result": "passed"},
+      {"python_mode": "-O", "sys_flags_optimize": 1, "c_jobs": 12, "result": "passed"},
+      {"python_mode": "PYTHONOPTIMIZE=1", "sys_flags_optimize": 1, "c_jobs": 12, "result": "passed"}
+    ],
+    "public_raw_fetch_in_shared_worker_worktree": [
+      {"python_mode": "normal", "sys_flags_optimize": 0, "c_jobs": 12, "result": "passed_with_local_git_object_and_private_fixture_corroboration"},
+      {"python_mode": "-O", "sys_flags_optimize": 1, "c_jobs": 12, "result": "passed_with_local_git_object_and_private_fixture_corroboration"},
+      {"python_mode": "PYTHONOPTIMIZE=1", "sys_flags_optimize": 1, "c_jobs": 12, "result": "passed_with_local_git_object_and_private_fixture_corroboration"}
+    ],
+    "portable_public_only": {
+      "sys_flags_optimize": 0,
+      "c_jobs": 0,
+      "result": "blocked_before_compile_by_missing_author_commit"
+    },
+    "total_successful_c_jobs": 72,
+    "wrong_explicit_composed_fixture": "rejected_closed"
+  },
+  "device_and_build_scope": {
+    "kernel_build": false,
+    "firmware_action": false,
+    "phone_access": false,
+    "ssh_or_adb": false,
+    "npu_bootup": false,
+    "hardware_acceptance": false
+  },
+  "remaining_limitations": [
+    "imgloader_shutdown remains void and provider/S2MPU completion is not observable",
+    "remove/release ownership is not guarded by this correction",
+    "file-static log buffer lifecycle remains unresolved",
+    "extracted C helpers and provider effects are host shims, not hardware evidence"
+  ]
+}

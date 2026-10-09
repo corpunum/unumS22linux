@@ -1,0 +1,124 @@
+{
+  "schema": "s22-audio-coherent-package-build/v1",
+  "host_only": true,
+  "status": "failed_before_publication",
+  "source": {
+    "commit": "e1117db571875e8403e57ea33770707eef2d14bd",
+    "tree": "147e9a2e7aa6d98b920a3458f9dcf2151b257928",
+    "clean_before_run": true,
+    "builder_sha256": "2824a0adc2198262e90d549036d1d72a5aef42b6f833672401d3e79b66d95ee2"
+  },
+  "execution": {
+    "command": "/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C TMPDIR=/tmp /usr/bin/python3 -I -S -B /home/corpunum/s22-workers/audio-coherent-package-build-20261003/tools/hardware/build-audio-coherent-recovery.py --out-dir /home/corpunum/s22-linux/builds/audio-coherent-recovery-host-20261003",
+    "started_utc": "2026-10-02T22:52:51Z",
+    "ended_utc": "2026-10-02T22:53:24Z",
+    "duration_seconds": 33,
+    "exit_code": 2,
+    "stdout_bytes": 0,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "f68a67e44599b73bd3c977b571ed7d9078d229af851747a9581647461d55bc2e",
+    "private_logs_retained": true,
+    "private_log_contents_published": false,
+    "error_class": "avbtool partition image-size rejection",
+    "error_summary": "Image size of 101259264 exceeds maximum image size of 100593664 for partition size 100663296"
+  },
+  "output": {
+    "output_path_label": "builds/audio-coherent-recovery-host-20261003",
+    "absent_before_run": true,
+    "created_after_failure": false,
+    "success_manifest_published": false,
+    "final_image_sha256": null,
+    "manifest_sha256": null,
+    "candidate_pre_footer_bytes_reported_by_avbtool": 101259264,
+    "partition_size_bytes": 100663296,
+    "maximum_pre_footer_bytes": 100593664,
+    "overage_bytes": 665600,
+    "temporary_candidate_persisted": false,
+    "retry_performed": false
+  },
+  "runtime": {
+    "python_version": "3.12.3",
+    "python_executable_sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+    "isolated": true,
+    "no_site": true,
+    "optimization": 0,
+    "path": "/usr/bin:/bin",
+    "locale": "C",
+    "tmpdir": "/tmp",
+    "builder_helpers_loaded": 4
+  },
+  "project_helpers": {
+    "camera_builder_sha256": "5c5a5a530dea7d217c81aa4e96365fda876e1d1d81b45155b74d74ac6f8a83f6",
+    "cpio_parser_sha256": "08e97e336e796108a850847687b7e3dad2b85f349353182ecce570601a7addb0",
+    "boot_image_helper_sha256": "c480336f5ccd7f2631d8fb0a332f8d6c3cbe8390857ed0b0449079f1089b929f",
+    "static_preflight_sha256": "715383e85d4c5b426f8b6fa43961da2481b57a8fc52dcd54c335faf68d5c4155"
+  },
+  "inputs": {
+    "base_image": {
+      "bytes": 100663296,
+      "sha256": "b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f"
+    },
+    "native_eight_module_symvers": {
+      "bytes": 1108525,
+      "sha256": "15fc69e815cb4da6cb3372f4b5141005ab2e770b0414b67f230f1b185bf03df7"
+    },
+    "abox5_modules_only_symvers": {
+      "bytes": 2585,
+      "sha256": "e73d89c9637e3cea289c4bc61d999967d9cd20ae33a73bf71bfd13c7439f67ac"
+    },
+    "offloader_modules_only_symvers": {
+      "bytes": 429,
+      "sha256": "715a469f62a95ab8813c866cb0656f756730475fb80322b1afb4dfcbcfd527ad"
+    },
+    "candidate_modules": {
+      "abox5": {
+        "bytes": 9596112,
+        "sha256": "55bae9f12135a2134337d7d520ddfadc85cdd049cedefd2a3c41f871fdd329bf"
+      },
+      "rainbow_prince": {
+        "bytes": 522472,
+        "sha256": "6461073beee9e1fdc4f7c92b250bbb773a18cbd766e0c9331e77ec01e5e45170"
+      },
+      "usb_audio_offloader": {
+        "bytes": 401656,
+        "sha256": "92116d85c21c9c3969e00746fb0299a5cb7725edfe9c344d5645417686416ec2"
+      }
+    },
+    "selected_external_wlan": {
+      "bytes": 15466952,
+      "sha256": "cbf8932d079e97006a5b7aae0e1b5acfe65b3e8b5113ab8fa095daa36796738d"
+    },
+    "updated_provider_map": {
+      "rows": 17283,
+      "sha256": "0c8e481225fe3ab071ba9be1d14faae06ce8a556fa7e89b07f3dcefb761bd470"
+    }
+  },
+  "tools": {
+    "avbtool_sha256": "5698656733ef5077d62ee30395b5ad34295a0f170fb1ba570026c760ead83782",
+    "mkbootimg_sha256": "37d84b3d162e0bc62e36c1f4e1c63c85ea0caa9f29be023eb2f8efe006ad948c",
+    "mkbootimg_gki_helper_sha256": "1bb1feec68a13da18d581aa2c631798f86f6bc10b55d587b2dd31446a0f8a203",
+    "unpack_bootimg_sha256": "a9d260978a63bd06a24b6347e7dee8a28ff96639793caea15dff6aa491316308",
+    "lz4_sha256": "87c0d5d060fd36c685b98a38611b7bd6c4614d40b36d29be84edcd6c173f8160",
+    "kmod_sha256": "5abf732e561c8be9ccd1794940b5d43025b041d4bed1db34782d979e0accc36f",
+    "readelf_sha256": "64c58e15274bbbb5153f31078e455e9e77ee5f51489e709bba5bb788ce9df2b0"
+  },
+  "completed_before_failure": {
+    "base_header_version": 2,
+    "base_footer_verification": true,
+    "base_payload_hash_checks": true,
+    "exact_three_module_cpio_precheck": true,
+    "pre_mkbootimg_static_abi_gate": "passed; exact pinned 324-module/16569-import and external-WLAN/495-import results independently reviewed",
+    "candidate_mkbootimg_generated": true,
+    "candidate_avb_footer_added": false,
+    "candidate_image_roundtrip_and_final_cpio_recheck": false,
+    "publication": false
+  },
+  "acceptance_limits": [
+    "No final image or success manifest exists.",
+    "No module was loaded and no phone/device/firmware/deployment/boot operation occurred.",
+    "Static host MODVERSIONS evidence is not kernel loader or current-phone module-membership evidence.",
+    "No runtime PM/IPC/DMA/PCM or physical audio acceptance is established.",
+    "No Samsung authentication or bootability claim is made.",
+    "No package retry or sizing change is authorized by this receipt."
+  ]
+}

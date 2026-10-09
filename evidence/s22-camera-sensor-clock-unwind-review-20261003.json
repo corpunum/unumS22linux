@@ -1,0 +1,190 @@
+{
+  "schema": "s22-camera-sensor-clock-unwind-independent-review/v1",
+  "review_date": "2026-10-03",
+  "verdict": {
+    "status": "BLOCKED",
+    "summary": "The synchronous cfg/on propagation and owned-vote unwind are supported by extracted-C host evidence. Off restoration failure leaves IS_SENSOR_ICLK_ON set after this caller's selected vote is absent; a repeated off can consume a shared vote. The runtime suspend wrapper reports success for that error and the next resume skips clock setup.",
+    "scope": "Pinned source review and deterministic extracted-C shims only; no kernel, provider, physical-clock, or device acceptance."
+  },
+  "worktrees": {
+    "review": {
+      "path": "/home/corpunum/s22-workers/camera-sensor-clock-review-20261003",
+      "base_commit": "d18459a5591ec64322263fa1cd56aa36d164d153",
+      "imported_subject_commit": "766b84f436859f6952cf4f196716e9d218f918bc",
+      "imported_subject_tree": "f58b62071f14029adc7b08b26628ffc6282e5df0",
+      "status_before_review_outputs": "clean"
+    },
+    "frozen_author": {
+      "path": "/home/corpunum/s22-workers/camera-sensor-clock-unwind-20261003",
+      "commit": "cfcd4a5d58ab918394ac337492b946126c650b31",
+      "tree": "a9831c7ce10ea1eebe3ac7c1883071bea85a2a4e",
+      "status": "clean"
+    },
+    "pinned_original_source": {
+      "path": "/home/corpunum/s22-linux/lineage/android_kernel_samsung_s5e9925",
+      "commit": "4e5c5ad7d950e4de0688b5663965f2075654b2ad",
+      "tree": "5c46cbe12dadbcdb64eec4344c9e8ff0f8a75dee",
+      "status": "clean"
+    },
+    "preserved_derived_source": {
+      "path": "/home/corpunum/s22-workers/camera-kernel-build-20260927",
+      "commit": "3fca50941422439b2019db2e4a3dc1016b2138a1",
+      "tree": "5aad5cf1dbaa0f430377737141f0547e971b0a2d",
+      "status": "clean"
+    }
+  },
+  "frozen_subject_hashes": {
+    "tools/hardware/camera-sensor-clock-unwind.patch": "51138fbf4398faebf70da721a49c98c17fda4ae619aab7fe153f7f19fc288015",
+    "tools/hardware/camera-sensor-clock-unwind-harness.c": "789b1689a17fc2fa2f5db757cd1ca1ee8b47547a108c525e5a779e8da329fed6",
+    "tools/hardware/test-camera-sensor-clock-unwind.py": "7b04a98b925a0111b85b5d0eb4a7e1345eeac8b2d4c95a251f9c5397c965b469",
+    "docs/research/CAMERA_SENSOR_CLOCK_UNWIND_2026-10-03.md": "b060ed37082b33d65fc8e47b70d3d631a73c2c061833a3da313792afcd4948d1"
+  },
+  "pinned_source_blob_sha256": {
+    "drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is-sensor.c": "be9ea9769e2b1678cea68f1a86514aa0ccd559bfa9316840a1a83268bfef1182",
+    "drivers/media/platform/exynos/camera/is-device-sensor_v2.c": "b88e203fa7ca7fdcf109f969d516601a9cba4702c98a3a0b338b3a6dbcf55265",
+    "drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is.c": "0e3668ca54f6d60abb8a22dc3a18d15b441fcf3c5154b2f0ee61e481d37b88b2"
+  },
+  "host_environment": {
+    "python": "Python 3.12.3",
+    "compiler": "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "extracted_c_compile_flags": [
+      "-std=gnu89",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-Wno-unused-parameter",
+      "-O0",
+      "-O2"
+    ]
+  },
+  "checks": [
+    {
+      "name": "derived-tree patch applicability",
+      "command": "git -C /home/corpunum/s22-workers/camera-kernel-build-20260927 apply --check /home/corpunum/s22-workers/camera-sensor-clock-review-20261003/tools/hardware/camera-sensor-clock-unwind.patch",
+      "exit_code": 0,
+      "result": "PASS"
+    },
+    {
+      "name": "frozen suite normal Python mode",
+      "command": "CAMERA_EXPECT_PYTHONOPTIMIZE=0 python3 -I -B tools/hardware/test-camera-sensor-clock-unwind.py",
+      "exit_code": 0,
+      "python_flags": {
+        "isolated": 1,
+        "no_site": 0,
+        "optimize": 0,
+        "PYTHONOPTIMIZE": "unset"
+      },
+      "tests_passed": 5,
+      "result": "PASS"
+    },
+    {
+      "name": "frozen suite Python -O mode",
+      "command": "CAMERA_EXPECT_PYTHONOPTIMIZE=1 python3 -O -I -B tools/hardware/test-camera-sensor-clock-unwind.py",
+      "exit_code": 0,
+      "python_flags": {
+        "isolated": 1,
+        "no_site": 0,
+        "optimize": 1,
+        "PYTHONOPTIMIZE": "unset"
+      },
+      "tests_passed": 5,
+      "result": "PASS"
+    },
+    {
+      "name": "frozen suite environment optimization mode",
+      "command": "CAMERA_EXPECT_PYTHONOPTIMIZE=1 PYTHONOPTIMIZE=1 python3 -B tools/hardware/test-camera-sensor-clock-unwind.py",
+      "exit_code": 0,
+      "python_flags": {
+        "isolated": 0,
+        "no_site": 0,
+        "optimize": 1,
+        "PYTHONOPTIMIZE": "1"
+      },
+      "tests_passed": 5,
+      "result": "PASS"
+    },
+    {
+      "name": "actual extracted baseline and patched C paths",
+      "runs_within_each_python_suite": 3,
+      "c_optimization_levels": ["-O0", "-O2"],
+      "baseline_result": "BASELINE_REPRODUCED",
+      "patched_result": "PASS: extracted sensor clock callbacks propagate and unwind owned votes",
+      "coverage": [
+        "all eight cfg enable positions: CSIS0-6 and DMA",
+        "all seven selected-gate enables",
+        "all seven setup-gate disable positions",
+        "reverse cfg unwind and first-error preservation",
+        "invalid-channel no-touch behavior",
+        "cleanup and restoration failure diagnostics",
+        "modeled shared-reference preservation",
+        "actual is_sensor_iclk_on/off ON-bit behavior"
+      ],
+      "result": "PASS"
+    },
+    {
+      "name": "temporary extracted-C shared-vote retry negative control",
+      "c_optimization_level": "-O0",
+      "exit_code": 0,
+      "output_marker": "NEGATIVE_CONTROL: retry consumed the remaining shared selected-clock reference",
+      "scenario": "Successful on; DMA disable lookup error after selected-gate release; selected-gate restoration enable error; call actual extracted is_sensor_iclk_off again.",
+      "observed_transition": "The first off leaves ON set and only the modeled shared selected-clock reference. The retry succeeds while decrementing that reference to zero.",
+      "result": "REPRODUCED IN FAKE CLOCK MODEL"
+    }
+  ],
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "blocking",
+      "title": "Off retry can release a selected-clock vote this sensor no longer owns",
+      "locations": [
+        "drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is-sensor.c:211-235 (patched off path)",
+        "drivers/media/platform/exynos/camera/is-device-sensor_v2.c:492-526 (actual off caller)",
+        "drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is.c:194-215 (disable helper)"
+      ],
+      "evidence": "If DMA disable returns lookup error after selected disable succeeds and selected restoration enable then fails, the callback returns error while the caller retains IS_SENSOR_ICLK_ON. A second off retries selected disable with no per-caller selected vote; extracted-C negative control shows the remaining shared reference drops from one to zero.",
+      "limitation": "The fake reference counter proves the source-level retry sequence, not a live device or provider transition."
+    },
+    {
+      "id": "F2",
+      "severity": "high",
+      "title": "Runtime PM masks off failure and resume skips reconciliation",
+      "locations": [
+        "drivers/media/platform/exynos/camera/is-device-sensor_v2.c:3935-4001",
+        "drivers/media/platform/exynos/camera/is-device-sensor_v2.c:443-489"
+      ],
+      "evidence": "Runtime suspend only warns when is_sensor_iclk_off() fails and returns zero. With the ON bit retained, the next resume enters is_sensor_iclk_on(), sees the bit, and returns success without calling cfg/on.",
+      "execution_status": "Source-traced; runtime PM wrapper itself was not extracted or executed in the host harness."
+    },
+    {
+      "id": "F3",
+      "severity": "scope-limitation",
+      "title": "Negative disable injection is not provider-disable evidence",
+      "locations": [
+        "drivers/media/platform/exynos/camera/ischain/is-v10_1_0/setup-is.c:194-215"
+      ],
+      "evidence": "is_disable() returns -EINVAL only when clock lookup is absent before clk_disable_unprepare(); that API is void and the helper otherwise returns zero.",
+      "consequence": "No test result here proves a provider error was reported, a physical gate stayed on/off, or a real hardware partial-off failure occurred."
+    },
+    {
+      "id": "P1",
+      "severity": "positive",
+      "title": "Synchronous cfg/on propagation and reverse cleanup match the pinned caller sequence",
+      "evidence": "Extracted C passes injected cfg acquisition failures for CSIS0-6 and DMA, selected-gate enable failures for channels 0-6, setup-gate disable failures for channels 0-6, invalid channel 7 no-touch checks, and first-error/reverse-order assertions at C -O0 and -O2."
+    }
+  ],
+  "acceptance_limits": {
+    "kernel_compiled": false,
+    "runtime_pm_wrapper_executed": false,
+    "clock_framework_or_provider_executed": false,
+    "phone_or_ssh_accessed": false,
+    "ioctl_or_streaming_performed": false,
+    "firmware_or_inference_performed": false,
+    "module_loaded": false,
+    "repack_performed": false,
+    "prior_camera_trial": "not_accepted; unchanged"
+  },
+  "review_outputs": [
+    "docs/reviews/CAMERA_SENSOR_CLOCK_UNWIND_REVIEW_2026-10-03.md",
+    "evidence/s22-camera-sensor-clock-unwind-review-20261003.json"
+  ]
+}
