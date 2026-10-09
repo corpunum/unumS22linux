@@ -213,6 +213,56 @@ def bayer_frame(w, h, rgb, pattern="GBRG", stride=None, black=64):
     return bytes(out), stride
 
 
+class StackTest(unittest.TestCase):
+    """Review v6: averaging dim frames and the lowered white-point floor."""
+
+    @staticmethod
+    def _frame(w, h, value_fn):
+        return b"".join(struct.pack("<%dH" % w, *[value_fn(x, y) for x in range(w)])
+                        for y in range(h))
+
+    def test_stack_mean_x16(self):
+        a = self._frame(4, 2, lambda x, y: 64)
+        b = self._frame(4, 2, lambda x, y: 65)
+        out = cam.stack_raws([a, b])
+        self.assertEqual(struct.unpack("<8H", out), (1032,) * 8)   # 64.5 * 16
+        with self.assertRaises(ValueError):
+            cam.stack_raws([a, a[:-2]])
+        with self.assertRaises(ValueError):
+            cam.stack_raws([])
+
+    def test_stack_dir_and_develop_dim_scene(self):
+        import tempfile
+        w, h = 16, 8
+        # a 2-code bright square on the pedestal: invisible with the old 16-code floor
+        frame = self._frame(w, h, lambda x, y: 66 if (4 <= x < 12 and 2 <= y < 6) else 64)
+        with tempfile.TemporaryDirectory() as d:
+            for i in range(4):
+                Path(d, "frame_%05d.raw" % i).write_bytes(frame)
+            Path(d, "frames.json").write_text(json.dumps(
+                {"width": w, "height": h, "stride": 2 * w, "pixfmt": "BYR2", "bayer": "GRBG"}))
+            out = str(Path(d, "s.raw"))
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                self.assertEqual(cam.main(["stack", d, "--out", out, "--drop", "1"]), 0)
+            res = json.loads(buf.getvalue())
+            self.assertEqual(res["frames"], 3)
+            side = json.loads(Path(out + ".json").read_text())
+            self.assertEqual((side["width"], side["stack_scale"]), (w, 16))
+            raw = Path(out).read_bytes()
+            for floor, lit in ((16.0, False), (0.5, True)):
+                ow, oh, rows, stats = cam.develop(raw, w, h, 2 * w, "sbggr16", "GRBG", 2,
+                                                  64.0, "none", min_white=floor, bits=14)
+                self.assertEqual(stats["bits"], 14)
+                centre = rows[2][3 * 4 + 1]
+                self.assertEqual(centre > 200, lit, (floor, centre))
+            png = str(Path(d, "s.png"))      # the CLI picks bits from the sidecar
+            with redirect_stdout(io.StringIO()) as buf:
+                self.assertEqual(cam.main(["develop", out, "--out", png, "--scale", "2",
+                                           "--bayer", "GRBG", "--min-white", "0.5"]), 0)
+            self.assertEqual(json.loads(buf.getvalue())["develop"]["bits"], 14)
+
+
 class DevelopTest(unittest.TestCase):
     def test_binned_demosaic_known_colour(self):
         raw, stride = bayer_frame(16, 8, (536, 236, 86))
@@ -1027,8 +1077,7 @@ class SensorPresetTest(CaptureHelpers):
         self.assertIn("exynos-is-ss1", res["error"])
 
     def test_front_refuses_rear_only_sensor_flags(self):
-        for extra in (("--cis-exposure-us", "1000"), ("--cis-again", "2"),
-                      ("--cis-i2c-bus", "3"), ("--cis-i2c-bus", "3", "--cis-test-0be4",
+        for extra in (("--cis-i2c-bus", "3"), ("--cis-i2c-bus", "3", "--cis-test-0be4",
                                                "--allow-sensor-write")):
             fake = FakeSys(names=self.FRONT_NAMES)
             rc, res, _, _ = self._capture(fake, "--sensor", "front", *extra)
@@ -1038,6 +1087,17 @@ class SensorPresetTest(CaptureHelpers):
         fake = FakeSys(names=self.FRONT_NAMES)       # read-only G_CTRL dump stays allowed
         rc, res, _, _ = self._capture(fake, "--sensor", "front", "--cis-dump")
         self.assertEqual(rc, 0, res)
+
+    def test_front_allows_reviewed_exposure_gain(self):
+        # review v6: the S_EXT_CTRLS exposure/gain write is allowed on the IMX374 leader
+        fake = FakeSys(names=self.FRONT_NAMES)
+        rc, res, _, _ = self._capture(fake, "--sensor", "front", "--cis-exposure-us", "30000",
+                                      "--cis-again", "16")
+        self.assertEqual(rc, 0, res)
+        self.assertTrue(res["cis"]["applied"], res["cis"])
+        self.assertEqual(res["cis"]["requested"]["exposure_us"], 30000)
+        self.assertEqual(res["cis"]["requested"]["again_permille"], 16000)
+        self._assert_rolled_back(fake)
 
     def test_front_geometry_lock(self):
         for sensor, geo, ok in (("front", (1824, 1368, 30), True), ("front", (2040, 1532, 30), False),
