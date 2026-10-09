@@ -205,6 +205,12 @@ CAMERA_RAILS = ("VDDA_2.2V_CAM", "VDDD_0.92V_CAM", "VDDPHY_0.92V_CAM", "VDDIO_1.
                 "VDDIO_1.8V_SUB", "S2MPB02_BUCK2", "S2MPB02_BB", "VDDAF_3.2V_CAM",
                 "VDDAF_2.8V_SUB", "VDDD_1.8V_OIS", "VDDD_3.2V_OIS", "VDDOIS_2.8V_SUB")
 REGULATOR_CLASS = "/sys/class/regulator"
+# Review v4: the ONE sensor register write this client may ever do through
+# i2c-dev. Every GN3 retention fast-change table (INDEX0..8) and the Global
+# setfile set CCI 0x0BE4 = 0x0001; the mode-18 setfile does not, and the
+# streaming sensor reads 0x0000. Hard-coded: no CLI address/value. Off unless
+# both --cis-test-0be4 and --allow-sensor-write are given.
+GN3_0BE4_REG, GN3_0BE4_VALUE = 0x0BE4, 0x0001
 EXT_CTRL_FMT = "<IIIq"                      # struct v4l2_ext_control (packed), 20 bytes
 EXT_CTRLS_FMT = "<IIIiI4xQ"                 # which,count,error_idx,request_fd,rsvd,controls
 SENSOR_SCENARIO_VISION = 1
@@ -446,6 +452,14 @@ class RealSys:
     def i2c_open(self, bus: int) -> int:
         return os.open(f"/dev/i2c-{int(bus)}", os.O_RDWR | os.O_CLOEXEC)
 
+    def i2c_write_0be4(self, fd: int, addr: int, reg: int, value: int) -> None:
+        """The single allowed write: [W 0x0B 0xE4 0x00 0x01] to 0x10. Anything else refuses."""
+        if (addr, reg, value) != (GN3_I2C_ADDR, GN3_0BE4_REG, GN3_0BE4_VALUE):
+            raise ValueError("only GN3 0x0BE4 <- 0x0001 is allowed")
+        wbuf = (ctypes.c_uint8 * 4)(reg >> 8, reg & 0xFF, value >> 8, value & 0xFF)
+        msgs = (I2cMsg * 1)(I2cMsg(addr, 0, 4, ctypes.addressof(wbuf)))
+        fcntl.ioctl(fd, I2C_RDWR, bytes(I2cRdwr(ctypes.addressof(msgs), 1)))
+
     def i2c_read(self, fd: int, addr: int, reg: int, length: int) -> bytes:
         """One I2C_RDWR: [W reg_hi reg_lo][Sr R length]. Never a data write."""
         if not (0 <= reg < 0x6000 and length in (1, 2)):
@@ -583,6 +597,9 @@ def gn3_i2c_bus_ok(sysif, bus: int) -> bool:
 def prechecks(sysif, args) -> dict:
     info = {}
     bus = getattr(args, "cis_i2c_bus", None)
+    if getattr(args, "cis_test_0be4", False) and not (bus is not None and
+                                                      getattr(args, "allow_sensor_write", False)):
+        raise CameraError("--cis-test-0be4 needs --cis-i2c-bus and --allow-sensor-write")
     if getattr(args, "cis_i2c_extended", False) and bus is None:
         raise CameraError("--cis-i2c-extended needs --cis-i2c-bus")
     if bus is not None and not gn3_i2c_bus_ok(sysif, bus):
@@ -616,7 +633,8 @@ class Session:
     def __init__(self, sysif, width=2040, height=1532, fps=30, pixfmt=PIX_SBGGR16,
                  leader_bufs=2, vc_bufs=3, leader=LEADER_NODE, vc0=VC0_NODE,
                  exposure_us=0, iso=0, position=0, log=None, cis_exposure_us=0, cis_again=0.0,
-                 cis_dump=False, cis_i2c_bus=None, cis_i2c_extended=False, rails=False):
+                 cis_dump=False, cis_i2c_bus=None, cis_i2c_extended=False, rails=False,
+                 cis_test_0be4=False):
         self.sys = sysif
         self.width, self.height, self.fps, self.pixfmt = width, height, fps, pixfmt
         self.n_leader, self.n_vc = leader_bufs, vc_bufs
@@ -639,6 +657,7 @@ class Session:
                      "readback_again_permille": None} if self.cis_controls else None)
         self.cis_dump_enabled, self.cis_i2c_bus = cis_dump, cis_i2c_bus
         self.cis_i2c_extended, self.rails_enabled = cis_i2c_extended, rails
+        self.test_0be4 = {"done": False} if (cis_test_0be4 and cis_i2c_bus is not None) else None
         self.dump = {} if (cis_dump or cis_i2c_bus is not None or rails) else None
 
     def rails_snapshot(self, tag: str):
@@ -753,6 +772,42 @@ class Session:
                     "S_CTRL IS_S_STREAM on (blocking)")
         self._apply_cis()
         self.dump_state("after_start")
+        self._test_0be4()
+
+    def _test_0be4(self):
+        """Review v4: re-assert GN3 0x0BE4 = 0x0001 once, mid-stream. Never raises
+        for I2C errors; skips unless the page check passes and 0x0BE4 reads 0x0000."""
+        rec = self.test_0be4
+        if rec is None or not self.state["front_start"]:
+            return
+        try:
+            fd = self.sys.i2c_open(self.cis_i2c_bus)
+        except OSError as exc:
+            rec["error"] = f"open: {exc.strerror}; no write"
+            return
+        try:
+            rev = int.from_bytes(self.sys.i2c_read(fd, GN3_I2C_ADDR, GN3_REV_REG, 2), "big")
+            if rev != GN3_REV:
+                rec["error"] = f"revision {rev:#06x}: page check failed; no write"
+                return
+            before = int.from_bytes(self.sys.i2c_read(fd, GN3_I2C_ADDR, GN3_0BE4_REG, 2), "big")
+            rec["before"] = f"{before:#06x}"
+            if before != 0x0000:
+                rec["error"] = "0x0BE4 is not 0x0000; no write"
+                return
+            self.steps.append("I2C WRITE 0x0be4=0x0001")
+            self.log("I2C WRITE 0x0be4=0x0001")
+            self.sys.i2c_write_0be4(fd, GN3_I2C_ADDR, GN3_0BE4_REG, GN3_0BE4_VALUE)
+            rec["done"] = True
+            rec["after"] = "0x%04x" % int.from_bytes(
+                self.sys.i2c_read(fd, GN3_I2C_ADDR, GN3_0BE4_REG, 2), "big")
+        except OSError as exc:
+            rec["error"] = f"i2c: {exc.strerror}"
+        finally:
+            try:
+                self.sys.close(fd)
+            except OSError:
+                pass
 
     def dump_state(self, tag: str):
         """Read-only snapshot. Never raises for an ioctl/I2C error; never writes."""
@@ -989,6 +1044,7 @@ def run_stream(sysif, args, consume, alarm=True, report=None) -> dict:
                       cis_exposure_us=args.cis_exposure_us, cis_again=args.cis_again,
                       cis_dump=args.cis_dump, cis_i2c_bus=args.cis_i2c_bus,
                       cis_i2c_extended=args.cis_i2c_extended, rails=args.rails,
+                      cis_test_0be4=args.cis_test_0be4,
                       log=(lambda m: print("# " + m, file=sys.stderr)) if args.verbose else None)
     started = time.monotonic()
     deadline = started + args.deadline
@@ -1013,6 +1069,10 @@ def run_stream(sysif, args, consume, alarm=True, report=None) -> dict:
                 result["cis"] = session.cis
                 if report is not None:
                     report["cis"] = session.cis
+            if session.test_0be4 is not None:
+                result["test_0be4"] = session.test_0be4
+                if report is not None:
+                    report["test_0be4"] = session.test_0be4
             if session.dump is not None:
                 result["dump"] = session.dump
                 if report is not None:
@@ -1491,6 +1551,11 @@ def _add_stream_args(p):
     p.add_argument("--rails", action="store_true",
                    help="read-only sysfs snapshot of the GN3 S2MPB02 rails (state, microvolts, "
                         "num_users) before open, after start, before stop and after close")
+    p.add_argument("--cis-test-0be4", action="store_true",
+                   help="REVIEW v4, WRITES THE SENSOR: once, mid-stream, set GN3 0x0BE4=0x0001 "
+                        "(needs --cis-i2c-bus and --allow-sensor-write)")
+    p.add_argument("--allow-sensor-write", action="store_true",
+                   help="explicit consent for --cis-test-0be4 (CSIS overflow would panic)")
     p.add_argument("--allow-fw-stall", action="store_true",
                    help="run even if is_mcu_fw.bin is not staged (~60 s stall)")
     p.add_argument("--skip-node-check", action="store_true")
