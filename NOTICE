@@ -1,0 +1,15 @@
+unumS22linux
+Copyright 2026 Antonis Fragkos (corpunum)
+
+Original work in this repository (scripts, tools, daemons, docs, tests and evidence
+written for this project) is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Exceptions - files that modify or are derived from third-party projects keep those
+projects' licences:
+  - Linux kernel patches (*.patch applying to the kernel, e.g. tools/hardware/*.patch)
+    and test harnesses that copy kernel code (e.g. tools/hardware/*-harness.c, the
+    npu/audio/camera "extracted C" fixtures): GPL-2.0-only, like the Linux kernel.
+  - tools/gpu-compat/llama-xclipse-opencl.patch: MIT, like llama.cpp.
+  - Anything under lineage/ or taken from Samsung/LineageOS kernel or device trees:
+    the licence of its upstream source (generally GPL-2.0-only).
+  - Vendor firmware and binary blobs are NOT included or redistributed here.
