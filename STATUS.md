@@ -3,6 +3,22 @@
 Updated 2026-10-06 by the Claude lead session (directly on the device).
 The 2026-10-02 task board and earlier checkpoints below are historical.
 
+## Touch UI, Phase 1 — 2026-10-09
+
+The phone is now usable by finger. `s22-touchd` keeps a separate big-tile Quickshell touch shell running, with:
+- tiles: Agent chat, Phone (read-only), Camera, Files, Terminal, Settings;
+- status cards: model, health, sessions, battery and thermal;
+- edge-swipe gestures from the touchscreen evdev node (home, back, app switcher);
+- the on-screen keyboard showing itself for text fields;
+- a Power-key lock cover with DPMS off/on.
+
+The same actions are OpenUnum tools (`s22-ui` plugin: open app, home, card, confirm, keyboard, screen, state, screenshot). An agent turn showed a card and got the owner's Yes through the touch screen.
+
+The touch shell costs 0–0.6 % CPU and about 60 MB. Hyprland on llvmpipe already used one core before this work and puts only about 3 frames/s on the panel (about 680 ms per frame), so the UI reacts with up to about 1 s visual lag. That is what Phase 2 (pixman) is for.
+
+Physical finger and Power-key tests by the owner are pending. Rollback: `install-touchui.sh --rollback`.
+[Evidence](evidence/touchui-20261009/README.md).
+
 ## Resident agent, phone stack, GPU fallback — 2026-10-08 (lead2)
 
 - **GPU:** the resident 2B runs on the Xclipse 920 (vendor Vulkan, isolated Bionic root) as

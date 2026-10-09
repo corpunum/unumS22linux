@@ -1,0 +1,40 @@
+{"event": "start", "gestures": true, "pid": 31788, "ts": 1791532466.008, "ui": true}
+{"event": "gesture_start", "node": "/dev/input/event7", "ts": 1791532466.014, "x": [0, 4095], "y": [0, 4095]}
+{"event": "ui_start", "pid": 31796, "ts": 1791532466.082}
+{"code": -15, "event": "ui_exit", "ts": 1791532590.112}
+{"event": "ui_start", "pid": 889, "ts": 1791532590.198}
+{"code": -15, "event": "ui_exit", "ts": 1791532928.289}
+{"event": "ui_start", "pid": 3823, "ts": 1791532928.371}
+{"code": -15, "event": "ui_exit", "ts": 1791533124.424}
+{"event": "ui_start", "pid": 5109, "ts": 1791533124.513}
+{"code": -15, "event": "ui_exit", "ts": 1791533444.608}
+{"event": "ui_start", "pid": 7333, "ts": 1791533444.691}
+{"code": -15, "event": "ui_exit", "ts": 1791533782.79}
+{"event": "ui_start", "pid": 9010, "ts": 1791533782.875}
+{"code": -15, "event": "ui_exit", "ts": 1791533836.905}
+{"event": "ui_start", "pid": 9378, "ts": 1791533836.989}
+{"code": -15, "event": "ui_exit", "ts": 1791533893.004}
+{"event": "ui_start", "pid": 9767, "ts": 1791533893.085}
+{"error": null, "event": "gesture", "name": "home", "ok": true, "ts": 1791534737.414}
+{"error": null, "event": "gesture", "name": "back", "ok": true, "ts": 1791534740.963}
+{"error": null, "event": "gesture", "name": "switcher", "ok": true, "ts": 1791534744.54}
+{"error": null, "event": "gesture", "name": "back", "ok": true, "ts": 1791534748.08}
+{"code": -15, "event": "ui_exit", "ts": 1791535347.419}
+{"event": "ui_start", "pid": 20743, "ts": 1791535347.501}
+{"code": -15, "event": "ui_exit", "ts": 1791535495.538}
+{"event": "ui_start", "pid": 21748, "ts": 1791535495.624}
+{"event": "stop", "ts": 1791536040.633}
+{"event": "start", "gestures": true, "pid": 25015, "ts": 1791536042.538, "ui": true}
+{"event": "gesture_start", "node": "/dev/input/event7", "ts": 1791536042.547, "x": [0, 4095], "y": [0, 4095]}
+{"event": "ui_start", "pid": 25019, "ts": 1791536042.626}
+{"event": "stop", "ts": 1791536069.03}
+{"event": "start", "gestures": true, "pid": 27523, "ts": 1791536075.405, "ui": true}
+{"event": "gesture_start", "node": "/dev/input/event7", "ts": 1791536075.411, "x": [0, 4095], "y": [0, 4095]}
+{"event": "ui_start", "pid": 27527, "ts": 1791536075.454}
+{"error": null, "event": "gesture", "name": "back", "ok": true, "ts": 1791537207.229}
+{"error": null, "event": "gesture", "name": "back", "ok": true, "ts": 1791537207.574}
+{"error": null, "event": "gesture", "name": "back", "ok": true, "ts": 1791537207.857}
+{"error": null, "event": "gesture", "name": "back", "ok": true, "ts": 1791537212.144}
+{"error": null, "event": "gesture", "name": "back", "ok": true, "ts": 1791537212.367}
+{"error": null, "event": "gesture", "name": "back", "ok": true, "ts": 1791537212.604}
+{"error": null, "event": "gesture", "name": "back", "ok": true, "ts": 1791537212.871}
