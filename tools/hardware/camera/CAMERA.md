@@ -107,6 +107,44 @@ inside the Arch chroot, but only when the output directory is under
 - `/vendor/firmware` was dropped from the firmware search: the kernel never looks there.
 - Struct offsets were cross-checked against DWARF from `fimc-is.ko`, and all match.
 
+## Manual exposure and gain (review 2026-10-09)
+
+The first captures (`evidence/lead2-20261008/camera`) were black: the raw values sat at
+the black level of 64. Without the DDK, nothing programs the GN3 integration time.
+`is_sensor_setting_mode_change()` logs `invalid exp_gain_count(0)` and returns before any
+exposure write, because only the DDK sets `exp_gain_cnt` and `mode_chg`. The `shot.ctl`
+exposure from `--exposure-us`/`--iso` is also never read: `copy_sensor_ctl()` is a DDK
+callback. The full code-path trace is in the rig-local brief `s22-camera-exposure-review-20261009.md`.
+
+The one path from user space to the CIS that works on this kernel is
+`VIDIOC_S_EXT_CTRLS` on `/dev/video101`. It runs `is_ssx_video_s_ext_ctrls()`, then
+`is_sensor_s_ext_ctrls()`, then `sensor_module_s_ext_ctrls()`, and its `default:` case calls
+`sensor_module_s_ctrl()`:
+- `V4L2_CID_SENSOR_SET_AE_TARGET` (µs) goes to `sensor_gn3_cis_set_exposure_time()`, which writes 0x0202 and 0x0704.
+- `V4L2_CID_SENSOR_SET_ANALOG_GAIN` (permille) goes to `sensor_gn3_cis_set_analog_gain()`, which writes 0x0204.
+
+Plain `VIDIOC_S_CTRL` with `SET_AE_TARGET`, `SHUTTER` or `GAIN` returns success but does
+nothing: `is_ssx_video_s_ctrl()` catches those IDs and calls `CALL_MOPS` on
+`module->ops == NULL`.
+
+`--cis-exposure-us N --cis-again X` sends one `S_EXT_CTRLS` after the blocking
+`IS_S_STREAM` on, and only if `IS_G_STREAM` reads 1. The client clamps the values to
+100–30000 µs and 1–16x, and the CIS driver clamps them again.
+
+The gain goes out as three writes: `(g-1, g, digital 1x)`. This works around a
+fall-through in `sensor_module_s_ctrl()`: when the requested analog gain equals the cached
+value, the driver sets the digital gain instead. That cache survives close and open with
+`CONFIG_CAMERA_VENDER_MCD`. If the call fails, the error is recorded in `result["cis"]`,
+nothing is retried, and the capture continues. The driver stops at the first failing
+control, so an earlier control in the list may already have been written. The result
+also reports the analog gain read back from register 0x0204.
+
+```sh
+python3 -I -B tools/hardware/camera/s22-camera.py capture -v --out /tmp/e1.png \
+    --raw /tmp/e1.raw --frames 1 --skip 6 --deadline 120 \
+    --cis-exposure-us 10000 --cis-again 1
+```
+
 ## Risks and rollback
 
 - **First real DMA write by CSIS VC0 into memory.** The buffer is sized from
@@ -117,7 +155,8 @@ inside the Arch chroot, but only when the output directory is under
   - `capture[n].buf.length` must be at most 17. It stays 0, so no user plane pointers are read.
   - `frame->stream` must be non-NULL. It is set from the VC0 meta plane.
 - If the image is black or noise, try these one at a time:
-  - `--exposure-us 20000 --iso 400` (manual sensor exposure through `shot.ctl`, AE off).
+  - `--cis-exposure-us 10000 --cis-again 2` (see "Manual exposure" above). `--exposure-us`/`--iso` only fill
+    `shot.ctl`, which nothing reads without the DDK. The 2026-10-08 run proved this.
   - `--bayer` with a different order.
   - `--pixfmt raw10p` (packed; the decoder tries MIPI and LSB packing and picks the better fit).
 - Hangs: the frame timeout counts from the last VC0 frame (default 5 s; 20 s
