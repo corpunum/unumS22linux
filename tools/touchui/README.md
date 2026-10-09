@@ -98,3 +98,47 @@ chroot /mnt/omarchy-trial /usr/local/libexec/s22-close-range-compat -- pacman -S
 
   Taps register immediately, but what is drawn lags by up to about 1 s. Fixing this means changing the compositor or renderer: Phase 2 (pixman under phoc/sway) or the GPU work.
 - **First frame never painted:** on this stack, Qt's software scene graph does not paint the first frame of a layer surface that is mapped after start-up. Every touch-shell window therefore changes its colour by one step, a few times after it appears (the repaint "kick" in `shell.qml`).
+
+## Omarchy extras (`omarchy/`)
+
+The phone runs the pinned Omarchy Lua config with all of Omarchy's key bindings turned off.
+
+### What we checked
+
+These facts were checked read-only on the phone on 2026-10-09:
+- Only workspace 1 is in use.
+- `jq`, `uwsm`, systemd, `wl-copy` and `slurp` are missing in the chroot, so almost every `omarchy-*` script fails.
+- `omarchy-shell` reports "not running", because the Omarchy shell instance lives at `/opt/s22-ui/shell`, not `$OMARCHY_PATH/shell`. Calling `quickshell ipc -n -p /opt/s22-ui/shell call …` directly works.
+- `hyprctl dispatch '<Lua>'` is how Omarchy's own scripts dispatch on this Hyprland, 0.56.
+
+### What we built and what we left out
+
+Each piece of an "Omarchy action bridge" was kept only if it is useful and nothing simpler already does the job:
+
+| Piece | Decision | Why |
+|---|---|---|
+| Agent skill `s22-omarchy-actions` (`omarchy/SKILL.md`) | **keep** | The agent already has `shell_run`. What it lacks is knowing which commands work here:<br>• the Lua `hyprctl dispatch` forms;<br>• the direct shell-IPC path;<br>• the list of things that cannot work.<br>Instruction-only, so no new code path. |
+| Curated hardware-keyboard bindings (`omarchy/omarchy-keyboard.lua`, `s22-kbd-bindings`) | **keep, off by default** | Useful when a Bluetooth or USB keyboard is attached. It uses Omarchy's combos and holds 39 binds, all hyprctl dispatchers or shell IPC, with no `omarchy-*` scripts. It is loaded at runtime with `hyprctl eval`, so Hyprland's config is not edited. |
+| OpenUnum `omarchy_actions` / `omarchy_run` tools | drop | They duplicate `shell_run` plus the skill. The existing `s22-ui` tools already cover home, apps, confirm and screen. |
+| Catalog generator and executor over all ~205 bindings | drop | Fewer than a third of the bindings can work on the phone, and the skill lists those. A generator would mostly catalogue broken entries. |
+| Multi-finger gestures (3-finger workspace/close, long-press, pinch) | drop | Only one workspace is used. The edge swipes already cover home, back and the switcher. Closing a window is in the switcher and the agent. Multi-finger input belongs to the apps. |
+| "Commands" tile and palette in the touch shell | drop | The useful targets are already tiles (Terminal, Apps). It would cost an extra llvmpipe-rendered page for little gain. |
+
+### Install and use
+
+Install on the phone, on the native root. The installer is idempotent, backs up existing files first, and binds nothing:
+
+```sh
+sh tools/touchui/omarchy/install-omarchy-extras.sh
+sh tools/touchui/omarchy/install-omarchy-extras.sh --rollback
+```
+
+Inside the chroot, for a hardware keyboard:
+
+```sh
+s22-kbd-bindings status
+s22-kbd-bindings on
+s22-kbd-bindings off
+```
+
+After a Hyprland restart, run `s22-kbd-bindings on` again. The flag file survives the restart, but the runtime binds do not.
