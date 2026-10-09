@@ -367,6 +367,10 @@ class FakeSys:
     def exists(self, path):
         return path in self.files
 
+    def listdir(self, path):
+        prefix = path.rstrip("/") + "/"
+        return sorted({k[len(prefix):].split("/")[0] for k in self.sysfs if k.startswith(prefix)})
+
     def i2c_open(self, bus):
         self.calls.append(("i2c_open", str(bus)))
         if self.i2c_open_errno:
@@ -833,6 +837,80 @@ class CisDumpTest(CaptureHelpers):
         self.assertEqual(fake.i2c_reads, [])
         self.assertNotIn("VIDIOC_G_CTRL", [c[0] for c in fake.calls])
         self._assert_rolled_back(fake)
+
+
+class RailsAndEchoTest(CaptureHelpers):
+    """Review v3 2026-10-09: rail snapshot and setfile echo (both read-only)."""
+
+    COMPAT = CisDumpTest.COMPAT
+
+    def _rails(self, state="enabled"):
+        base = "/sys/class/regulator/regulator.%d/"
+        names = {}
+        for i, (name, uv) in enumerate((("VDDA_2.2V_CAM", "2200000"), ("VDDIO_1.8V_CAM", "1800000"),
+                                        ("BUCK_OTHER", "1000000"))):
+            names.update({base % i + "name": name + "\n", base % i + "state": state + "\n",
+                          base % i + "microvolts": uv + "\n", base % i + "num_users": "1\n"})
+        return names
+
+    def test_rail_snapshots_cover_the_whole_session(self):
+        fake = FakeSys(names=self._rails())
+        rc, res, _, _ = self._capture(fake, "--rails")
+        self.assertEqual(rc, 0, res)
+        self.assertEqual(set(res["dump"]), {"before_open", "after_start", "before_stop",
+                                            "after_close"})
+        rails = res["dump"]["after_start"]["rails"]
+        self.assertEqual(rails["VDDA_2.2V_CAM"], {"state": "enabled", "microvolts": "2200000",
+                                                  "num_users": "1", "node": "regulator.0"})
+        self.assertEqual(rails["S2MPB02_BB"], "not found")
+        self.assertNotIn("BUCK_OTHER", rails)
+        self.assertFalse([c for c in fake.calls if c[0] in ("i2c_open", "VIDIOC_G_CTRL")])
+        self._assert_rolled_back(fake)
+
+    def test_rail_snapshot_errors_never_fail_capture(self):
+        class Broken(FakeSys):
+            def listdir(self, path):
+                raise RuntimeError("sysfs gone")
+        fake = Broken()
+        rc, res, _, _ = self._capture(fake, "--rails")
+        self.assertEqual(rc, 0, res)
+        self.assertIn("sysfs gone", res["dump"]["after_start"]["rails"]["error"])
+        self._assert_rolled_back(fake)
+
+    def test_setfile_echo_reports_mismatches(self):
+        fake = FakeSys(names=self.COMPAT)
+        fake.i2c_regs.update({0x0136: 0x1300, 0x0B04: 0x0001, 0x0008: 0x0040})
+        rc, res, _, _ = self._capture(fake, "--cis-i2c-bus", "7", "--cis-i2c-extended")
+        self.assertEqual(rc, 0, res)
+        i2c = res["dump"]["after_start"]["i2c"]
+        self.assertEqual(i2c["setfile_echo"]["0x0008"], "0x0040")
+        self.assertEqual(i2c["setfile_echo"]["0x0006"], "0x00")
+        bad = " ".join(i2c["setfile_mismatch"])
+        self.assertNotIn("0x0136", bad)
+        self.assertNotIn("0x0b04", bad)
+        self.assertIn("0x011c: 0x0000 (setfile 0x0101)", bad)
+        n = len(cam.GN3_DUMP_REGS) + len(cam.GN3_SETFILE_ECHO)
+        self.assertEqual(len(fake.i2c_reads), 2 * n)
+        self.assertTrue(all(0 <= r < 0x6000 and s for r, _, s in fake.i2c_reads))
+
+    def test_echo_skipped_after_page_check_failure_and_needs_bus(self):
+        fake = FakeSys(names=self.COMPAT)
+        fake.i2c_regs[0x0002] = 0x1234
+        rc, res, _, _ = self._capture(fake, "--cis-i2c-bus", "7", "--cis-i2c-extended")
+        self.assertEqual(rc, 0, res)
+        self.assertNotIn("setfile_echo", res["dump"]["after_start"]["i2c"])
+        self.assertEqual(len(fake.i2c_reads), 4)
+        fake = FakeSys()
+        rc, res, _, _ = self._capture(fake, "--cis-i2c-extended")
+        self.assertEqual(rc, 1)
+        self.assertIn("needs --cis-i2c-bus", res["error"])
+        self.assertFalse([c for c in fake.calls if c[0] == "open"])
+
+    def test_echo_table_is_read_only_safe(self):
+        for reg, length, _ in cam.GN3_SETFILE_ECHO:
+            self.assertTrue(0 <= reg < 0x6000 and length in (1, 2), hex(reg))
+        regs = [r for r, _, _ in cam.GN3_SETFILE_ECHO]
+        self.assertEqual(len(regs), len(set(regs)))
 
 
 class ListTest(unittest.TestCase):
