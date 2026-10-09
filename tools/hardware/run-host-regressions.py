@@ -112,6 +112,7 @@ REVIEWED_HOST_TEST_PATHS = (
     "tools/openunum-phone/test_phone_plugin.py",
     "tools/openunum-phone/test_ui_plugin.py",
     "tools/touchui/test_s22_touchd.py",
+    "tools/touchui/omarchy/test_omarchy_extras.py",
     "tools/hardware/camera/test_s22_camera.py",
 )
 
@@ -207,6 +208,7 @@ HOST_TESTS = (
     HostTest("tools/openunum-phone/test_phone_plugin.py"),
     HostTest("tools/openunum-phone/test_ui_plugin.py"),
     HostTest("tools/touchui/test_s22_touchd.py"),
+    HostTest("tools/touchui/omarchy/test_omarchy_extras.py"),
     HostTest("tools/hardware/camera/test_s22_camera.py"),
 )
 
