@@ -49,6 +49,20 @@ class AbiTest(unittest.TestCase):
         for name, value in KERNEL.items():
             self.assertEqual(getattr(cam, name), value, name)
 
+    def test_i2c_abi_and_read_guard(self):
+        self.assertEqual(ctypes.sizeof(cam.I2cMsg), 16)
+        self.assertEqual(ctypes.sizeof(cam.I2cRdwr), 16)
+        self.assertEqual(cam.I2C_RDWR, 0x0707)
+        self.assertEqual((cam.CID_IS_G_DTPSTATUS, cam.CID_IS_G_MIPI_ERR,
+                          cam.CID_SENSOR_GET_DIGITAL_GAIN), (0x9A1039, 0x9A103E, 0x9A306D))
+        real = cam.RealSys()
+        for reg, length in ((0x6000, 2), (0xFCFC, 2), (0x6F12, 2), (0x0100, 3), (-1, 2)):
+            with self.assertRaises(ValueError):
+                real.i2c_read(-1, 0x10, reg, length)
+        for reg, length, _ in cam.GN3_DUMP_REGS:
+            self.assertTrue(0 <= reg < 0x6000 and length in (1, 2), hex(reg))
+        self.assertEqual(cam.GN3_DUMP_REGS[1][0], cam.GN3_REV_REG)   # page check comes early
+
     def test_ext_ctrl_abi(self):
         for name, value in UAPI_DERIVED.items():
             self.assertEqual(getattr(cam, name), value, name)
@@ -294,6 +308,11 @@ class FakeSys:
         self.g_stream = g_stream          # force IS_G_STREAM's answer
         self.raise_on = raise_on          # ioctl name -> exception instance
         self.ext_writes = []
+        self.i2c_regs = {0x0000: 0x08D3, 0x0002: 0xC000, 0x0005: 0x1700, 0x0100: 0x0103,
+                         0x0112: 0x0A0A, 0x0340: 0x1B50, 0x0342: 0x23C0}
+        self.i2c_reads = []      # (reg, length, front_streaming)
+        self.i2c_fail = None     # (reg, errno)
+        self.i2c_open_errno = None
         self.fail = fail or {}
         self.next_fd = 100
         self.fds = {}            # fd -> path
@@ -347,6 +366,24 @@ class FakeSys:
 
     def exists(self, path):
         return path in self.files
+
+    def i2c_open(self, bus):
+        self.calls.append(("i2c_open", str(bus)))
+        if self.i2c_open_errno:
+            raise OSError(self.i2c_open_errno, os.strerror(self.i2c_open_errno))
+        fd = self._new_fd()
+        self.fds[fd] = f"/dev/i2c-{bus}"
+        return fd
+
+    def i2c_read(self, fd, addr, reg, length):
+        assert addr == 0x10 and 0 <= reg < 0x6000 and length in (1, 2), (addr, reg, length)
+        self.i2c_reads.append((reg, length, self.stream["front"]))
+        if self.i2c_fail and self.i2c_fail[0] == reg:
+            raise OSError(self.i2c_fail[1], os.strerror(self.i2c_fail[1]))
+        value = self.i2c_regs.get(reg, 0)
+        if reg == 0x0204 and self.regs["again"] is not None:
+            value = self.regs["again"]
+        return value.to_bytes(2, "big")[:length] if length == 2 else bytes([value >> 8])
 
     def select(self, rfds, wfds, timeout):
         r = [fd for fd in rfds if self.deliver and self.stream["front"] and self.queued["vc"]]
@@ -723,6 +760,79 @@ class CisExposureTest(CaptureHelpers):
         self.assertEqual(rc, 0, res)
         self.assertTrue(res["cis"]["applied"])
         self.assertEqual(fake.regs["cit_us"], 20000)
+
+
+class CisDumpTest(CaptureHelpers):
+    """Review v2 2026-10-09: read-only GN3 state dump."""
+
+    COMPAT = {"/sys/bus/i2c/devices/7-0010/of_node/compatible": "samsung,exynos-is-cis-gn3\0"}
+
+    def test_control_dump_after_start_and_before_stop(self):
+        fake = FakeSys()
+        rc, res, _, _ = self._capture(fake, "--cis-dump", "--cis-exposure-us", "10000",
+                                      "--cis-again", "4")
+        self.assertEqual(rc, 0, res)
+        for tag in ("after_start", "before_stop"):
+            ctl = res["dump"][tag]["controls"]
+            self.assertEqual(ctl["is_g_stream"], 1)
+            self.assertEqual(ctl["again_permille"], 4000)
+            self.assertIn("csis_error_id", ctl)
+        self.assertNotIn("i2c", res["dump"]["after_start"])
+        self.assertNotIn("i2c_open", [c[0] for c in fake.calls])
+        self._assert_rolled_back(fake)
+
+    def test_i2c_dump_reads_only_while_streaming(self):
+        fake = FakeSys(names=self.COMPAT)
+        rc, res, _, _ = self._capture(fake, "--cis-i2c-bus", "7", "--cis-again", "4")
+        self.assertEqual(rc, 0, res)
+        i2c = res["dump"]["after_start"]["i2c"]
+        self.assertNotIn("error", i2c)
+        self.assertEqual(i2c["0x0002 revision"], "0xc000")
+        self.assertEqual(i2c["0x0100 mode_select|orientation"], "0x0103")
+        self.assertEqual(i2c["0x0204 analog_gain"], "0x0080")
+        self.assertEqual(i2c["0x0005 frame_count"], "0x17")
+        self.assertEqual(len(fake.i2c_reads), 2 * len(cam.GN3_DUMP_REGS))
+        self.assertTrue(all(streaming for _, _, streaming in fake.i2c_reads))
+        self.assertIn("before_stop", res["dump"])
+        self._assert_rolled_back(fake)        # i2c fds closed too
+
+    def test_i2c_bus_must_be_the_gn3(self):
+        for names in (None, {"/sys/bus/i2c/devices/7-0010/of_node/compatible":
+                             "samsung,exynos-is-cis-imx754\0"}):
+            fake = FakeSys(names=names)
+            rc, res, _, _ = self._capture(fake, "--cis-i2c-bus", "7")
+            self.assertEqual(rc, 1)
+            self.assertIn("refusing the register dump", res["error"])
+            self.assertFalse([c for c in fake.calls if c[0] in ("open", "i2c_open")])
+
+    def test_revision_mismatch_stops_dump(self):
+        fake = FakeSys(names=self.COMPAT)
+        fake.i2c_regs[0x0002] = 0x1234
+        rc, res, _, _ = self._capture(fake, "--cis-i2c-bus", "7")
+        self.assertEqual(rc, 0, res)
+        i2c = res["dump"]["after_start"]["i2c"]
+        self.assertIn("page is not 0x4000", i2c["error"])
+        self.assertEqual(len(fake.i2c_reads), 4)        # 0x0000, 0x0002 per snapshot
+
+    def test_i2c_errors_never_fail_the_capture(self):
+        fake = FakeSys(names=self.COMPAT)
+        fake.i2c_fail = (0x0202, 121)
+        rc, res, _, _ = self._capture(fake, "--cis-i2c-bus", "7")
+        self.assertEqual(rc, 0, res)
+        self.assertIn("0x0202", res["dump"]["after_start"]["i2c"]["error"])
+        fake = FakeSys(names=self.COMPAT)
+        fake.i2c_open_errno = 2
+        rc, res, _, _ = self._capture(fake, "--cis-i2c-bus", "7")
+        self.assertEqual(rc, 0, res)
+        self.assertIn("/dev/i2c-7", res["dump"]["after_start"]["i2c"]["error"])
+
+    def test_no_dump_when_start_fails(self):
+        fake = FakeSys(names=self.COMPAT, fail={("VIDIOC_STREAMON", "leader"): 22})
+        rc, res, _, _ = self._capture(fake, "--cis-dump", "--cis-i2c-bus", "7")
+        self.assertEqual(rc, 1)
+        self.assertEqual(fake.i2c_reads, [])
+        self.assertNotIn("VIDIOC_G_CTRL", [c[0] for c in fake.calls])
+        self._assert_rolled_back(fake)
 
 
 class ListTest(unittest.TestCase):

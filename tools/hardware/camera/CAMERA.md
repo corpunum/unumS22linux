@@ -145,6 +145,24 @@ python3 -I -B tools/hardware/camera/s22-camera.py capture -v --out /tmp/e1.png \
     --cis-exposure-us 10000 --cis-again 1
 ```
 
+## Read-only sensor state dump (review v2, 2026-10-09)
+
+Exposure and gain now reach the sensor (`cis.applied`, and register 0x0204 reads back 0x80), but
+the frames still read 62–66. Two opt-in, read-only probes look at what the sensor is
+actually doing. Both take a snapshot after the stream starts (`after_start`) and another
+after the last kept frame (`before_stop`), and record it in `result["dump"]`:
+
+- `--cis-dump` sends `VIDIOC_G_CTRL` for:
+  - `IS_G_STREAM`, `IS_G_DTPSTATUS` and `IS_G_MIPI_ERR` (the CSIS `error_id_last`): kernel state bits only, no I2C.
+  - `GET_ANALOG_GAIN` and `GET_DIGITAL_GAIN`: GN3 I2C reads of 0x0204 and 0x020E.
+- `--cis-i2c-bus N` reads a fixed list of GN3 registers through `/dev/i2c-N`.
+  - Each read is one `I2C_RDWR` containing a 2-byte address write and a 1- or 2-byte read to address 0x10. This is the same framing as `is_sensor_read16()`. No register is written.
+  - The list covers 0x0100 mode, 0x0005 frame count, 0x0202 CIT, 0x0204 and 0x020E gains, 0x0340 and 0x0342 timing, 0x0344–0x034E window, 0x0600 and 0x0620 test pattern, 0x0900 binning, 0x0112 format, and the retention flags.
+  - Every address is a page-0x4000 CCI register below 0x6000. The client never reads 0x6000 and above, because those are the page and indirect-access controls.
+  - The dump stops if 0x0002 does not read the GN3 revision 0xC000.
+  - The client refuses to run unless `/sys/bus/i2c/devices/N-0010/of_node/compatible` is `samsung,exynos-is-cis-gn3`.
+  - It does not load `i2c-dev` itself. Loading that module is a separate step.
+
 ## Risks and rollback
 
 - **First real DMA write by CSIS VC0 into memory.** The buffer is sized from
