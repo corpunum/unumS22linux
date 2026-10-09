@@ -215,3 +215,43 @@ before.
   which powers the sensor down. As a last resort, reboot.
 - The client does not load modules, write sysfs or stage firmware.
   `list --probe NODE` opens a node, which powers the sensor resource.
+
+## Review v6 (2026-10-09): the sensors image light; the scenes were dark
+
+The "black" frames were dim scenes, not a dead pixel path. Both sensors integrate
+light in the VISION scenario without the DDK:
+
+- **Front IMX374.** At 30 ms / 8x (8x is its analog maximum; asking for 16x is clamped)
+  the frame shows soft optical structure. At 1 ms / 8x the same scene is pure noise.
+  Raising the display backlight from 128 to 510 lifted the scene from +0.85 to
+  +5.5 codes above black, so most of what it saw was the screen's own light
+  reflected off something close.
+- **Rear GN3.** The earlier W-0BE4 frame (30 ms / 16x) shows a sharp diagonal edge and
+  a lit gradient once it is block-averaged and stretched.
+- **The environment.** The rear ambient light sensor (`/sys/class/input/input3`, AMS
+  TSL2510) read 1–2 counts at gain 4096x, which is near-total darkness. With the
+  rear torch on, it saturated. The rear lenses are against a surface.
+
+Two tooling gaps hid the signal. Reviewers looked at p50 (which a 1–2 code
+scene does not move), and the develop step floored the auto white point at 16 codes.
+
+- `--cis-exposure-us` / `--cis-again` are now allowed with `--sensor front`. It is the
+  same `S_EXT_CTRLS` → `sensor_module_s_ctrl` path, and
+  `sensor_imx374_cis_set_exposure_time/_analog_gain/_digital_gain` clamp and
+  group-hold the same way as the GN3 functions. The i2c-dev probes and the 0x0BE4
+  write stay GN3-only.
+- `develop --min-white X` lowers the auto white-point floor. The default stays 16.
+- `stack DIR|RAW... --out S.raw [--drop 2]` averages a `record --keep-raw`
+  directory into one raw that stores mean×16, recorded in the sidecar's `stack_scale`.
+  `develop` reads that and treats the raw as 14-bit.
+
+```sh
+s22-camera.py record --sensor front --allow-fw-stall --out /tmp/seq --seconds 2 \
+    --fps-limit 30 --keep-raw --cis-exposure-us 30000 --cis-again 8
+s22-camera.py stack /tmp/seq --out /tmp/seq.raw
+s22-camera.py develop /tmp/seq.raw --out /tmp/seq.png --bayer GRBG --min-white 0.5
+```
+
+The DDK path (`is_lib.bin`/`is_rta.bin`) is kernel-executed and loads only when an
+ischain opens. It is not needed for raw capture and has **not** been run. It is MEDIUM
+risk and needs owner approval.
