@@ -45,15 +45,18 @@ end
 '''
 LUA_CHECK = r'''
 assert(#binds == 0, "bound without the flag file")
+
 local a = s22_kbd_on()
+local n = #s22_kbd.handles
 local b = s22_kbd_on()
-assert(a == b and #s22_kbd.handles == tonumber(a:match("%d+")), "on is not idempotent")
+assert(#s22_kbd.handles == n and n == tonumber(a:match("%d+")) and #binds == n, "on is not idempotent")
 local seen = {}
 for i = #binds - #s22_kbd.handles + 1, #binds do
   assert(not seen[binds[i]], "duplicate combo " .. binds[i]); seen[binds[i]] = true
 end
 s22_kbd_off()
-assert(#s22_kbd.handles == 0, "off left handles")
+assert(#s22_kbd.handles == n, "off must not unbind live (crashes Hyprland 0.56)")
+assert(unbound == 0, "off called unbind")
 print("LUA-OK " .. a)
 '''
 

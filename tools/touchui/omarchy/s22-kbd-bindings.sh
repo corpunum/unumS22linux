@@ -2,7 +2,7 @@
 # s22-kbd-bindings: switch the curated hardware-keyboard bindings on or off (chroot, root).
 #   s22-kbd-bindings status | on | off
 # "on" creates the flag file and loads /opt/s22-touch/omarchy-keyboard.lua into the
-# running Hyprland. "off" removes the flag and unbinds. Default (no flag file) is off.
+# running Hyprland. "off" removes the flag; bindings clear at the next desktop restart. Default (no flag file) is off.
 set -eu
 LUA=/opt/s22-touch/omarchy-keyboard.lua
 FLAG=/root/.config/s22/omarchy-keyboard.enabled
@@ -24,8 +24,9 @@ case "${1:-status}" in
     ;;
   off)
     rm -f "$FLAG"
-    hyprctl eval 'if s22_kbd_off then s22_kbd_off() end' >/dev/null
-    echo "off: $(count) s22 keyboard bindings active"
+    # No live unbind: it crashes Hyprland 0.56 (see omarchy-keyboard.lua). The bindings are
+    # only loaded when the flag exists, so they are gone after the next desktop restart.
+    echo "off: flag removed; $(count) s22 keyboard bindings stay active until the next desktop restart"
     ;;
   status)
     if [ -f "$FLAG" ]; then f=on; else f=off; fi
