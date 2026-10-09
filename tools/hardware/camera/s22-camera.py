@@ -630,8 +630,12 @@ def gn3_i2c_bus_ok(sysif, bus: int) -> bool:
 def prechecks(sysif, args) -> dict:
     info = {}
     if (getattr(args, "sensor", None) or "rear") != "rear":
+        # Review v6: --cis-exposure-us/--cis-again are allowed for the front IMX374.
+        # Same kernel entry (S_EXT_CTRLS -> sensor_module_s_ctrl) and the same
+        # clamping/group-hold structure in sensor_imx374_cis_set_exposure_time /
+        # _set_analog_gain / _set_digital_gain as the reviewed GN3 path. The raw
+        # i2c-dev probes and the 0x0BE4 write stay GN3-only.
         reviewed_rear_only = [flag for flag, attr in (
-            ("--cis-exposure-us", "cis_exposure_us"), ("--cis-again", "cis_again"),
             ("--cis-i2c-bus", "cis_i2c_bus"), ("--cis-i2c-extended", "cis_i2c_extended"),
             ("--cis-test-0be4", "cis_test_0be4")) if getattr(args, attr, None)]
         if reviewed_rear_only:
@@ -1261,7 +1265,8 @@ def bin_bayer(raw: bytes, width: int, height: int, stride: int, fmt: str,
 def develop(raw: bytes, width: int, height: int, stride: int, fmt: str = "sbggr16",
             pattern: str = GN3_BAYER, scale: int = 4, black: float | None = 64.0,
             wb: str = "grayworld", auto_exposure: bool = True, white: float | None = None,
-            gamma: float = 2.2, percentile: float = 99.0):
+            gamma: float = 2.2, percentile: float = 99.0, min_white: float = 16.0,
+            bits: int | None = None):
     """Raw Bayer -> list of RGB888 rows (binned demosaic, WB, exposure, gamma)."""
     if scale < 2 or scale % 2:
         raise ValueError("scale must be an even integer >= 2")
@@ -1270,7 +1275,8 @@ def develop(raw: bytes, width: int, height: int, stride: int, fmt: str = "sbggr1
     ow, oh, rr, rg, rb, n = bin_bayer(raw, width, height, stride, fmt, pattern, scale // 2)
     peak = max(max(max(r) for r in rr) / n, max(max(g) for g in rg) / (2 * n),
                max(max(b) for b in rb) / n, 1)
-    bits = max(10, int(peak).bit_length())
+    if bits is None:          # stacked raws pass bits explicitly (10 + log2(stack_scale))
+        bits = max(10, int(peak).bit_length())
     if black is None:
         black = 0.0
     black = black * (1 << (bits - 10))
@@ -1295,7 +1301,9 @@ def develop(raw: bytes, width: int, height: int, stride: int, fmt: str = "sbggr1
                 i += 1
             samples.sort()
             white = samples[min(len(samples) - 1, int(len(samples) * percentile / 100.0))]
-            white = max(white, 16.0 * (1 << (bits - 10)))
+            # Review v6: the 16-code floor turned dim (1-5 code) scenes black;
+            # --min-white lowers it (10-bit units).
+            white = max(white, min_white * (1 << (bits - 10)))
         else:
             white = full - black
     inv = 1.0 / gamma
@@ -1425,7 +1433,8 @@ def probe_node(sysif, node: str) -> dict:
 
 def _develop_args(args):
     return {"pattern": args.bayer, "scale": args.scale, "black": args.black,
-            "wb": args.wb, "gamma": args.gamma}
+            "wb": args.wb, "gamma": args.gamma,
+            "min_white": getattr(args, "min_white", 16.0)}
 
 
 def cmd_capture(args, sysif=None, alarm=True) -> int:
@@ -1550,6 +1559,57 @@ def make_mjpeg(directory: str, fps: float) -> dict:
             "stderr": proc.stderr.decode("utf-8", "replace")[-400:]}
 
 
+STACK_SCALE = 16   # stacked mean is stored x16 (14-bit) so sub-code signal survives
+
+
+def stack_raws(raws: list[bytes]) -> bytes:
+    """Average same-size U10-in-u16 frames; returns u16 LE frames holding mean*16.
+
+    develop() detects the 14-bit range from the peak and scales the black level
+    to match, so a stacked raw develops like any other raw.
+    """
+    if not raws:
+        raise ValueError("no frames to stack")
+    size = len(raws[0])
+    if size % 2 or any(len(r) != size for r in raws):
+        raise ValueError("frames differ in size")
+    acc = array("H", raws[0]).tolist()
+    for r in raws[1:]:
+        acc = list(map(add, acc, array("H", r)))
+    n = len(raws)
+    out = array("H", ((v * STACK_SCALE + n // 2) // n for v in acc))
+    if sys.byteorder != "little":
+        out.byteswap()
+    return out.tobytes()
+
+
+def cmd_stack(args) -> int:
+    """Average a record --keep-raw directory (or listed raws) into one .raw."""
+    paths = list(args.raws)
+    meta = {}
+    if len(paths) == 1 and os.path.isdir(paths[0]):
+        d = paths[0]
+        with open(os.path.join(d, "frames.json"), encoding="utf-8") as f:
+            meta = json.load(f)
+        paths = sorted(os.path.join(d, n) for n in os.listdir(d)
+                       if n.startswith("frame_") and n.endswith(".raw"))
+    elif paths and os.path.exists(paths[0] + ".json"):
+        with open(paths[0] + ".json", encoding="utf-8") as f:
+            meta = json.load(f)
+    paths = paths[args.drop:]
+    raws = []
+    for path in paths:
+        with open(path, "rb") as f:
+            raws.append(f.read())
+    data = stack_raws(raws)
+    meta = {k: meta[k] for k in ("width", "height", "stride", "pixfmt", "bayer", "sensor")
+            if k in meta}
+    meta.update({"stacked": len(raws), "stack_scale": STACK_SCALE})
+    write_raw(args.out, data, meta)
+    print(json.dumps({"ok": True, "path": args.out, "frames": len(raws), "meta": meta}))
+    return 0
+
+
 def cmd_develop(args) -> int:
     """Re-develop a saved .raw (+ .raw.json sidecar) on any machine."""
     with open(args.raw, "rb") as f:
@@ -1563,7 +1623,10 @@ def cmd_develop(args) -> int:
     fmt = args.pixfmt or ("sbggr16" if meta.get("pixfmt", "BYR2") == "BYR2" else "raw10p")
     stride = args.stride or meta.get("stride") or vc0_stride(
         width, PIX_SBGGR16 if fmt == "sbggr16" else PIX_SBGGR10P)
-    ow, oh, rows, stats = develop(raw, width, height, stride, fmt, **_develop_args(args))
+    extra = {}
+    if meta.get("stack_scale"):
+        extra["bits"] = 10 + int(meta["stack_scale"]).bit_length() - 1
+    ow, oh, rows, stats = develop(raw, width, height, stride, fmt, **_develop_args(args), **extra)
     write_image(args.out, ow, oh, rows)
     print(json.dumps({"ok": True, "path": args.out, "width": ow, "height": oh, "develop": stats}))
     return 0
@@ -1625,6 +1688,8 @@ def _add_develop_args(p, bayer_default=GN3_BAYER):
     p.add_argument("--black", type=float, default=64.0, help="black level in 10-bit units")
     p.add_argument("--wb", choices=("grayworld", "none"), default="grayworld")
     p.add_argument("--gamma", type=float, default=2.2)
+    p.add_argument("--min-white", type=float, default=16.0,
+                   help="lowest auto white point above black, 10-bit units (dim scenes: 0.5-2)")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1645,6 +1710,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--mjpeg", action="store_true", help="also build video.avi via gst-launch-1.0")
     p.add_argument("--keep-raw", action="store_true")
     _add_stream_args(p)
+    p = sub.add_parser("stack", help="average saved raws (record --keep-raw dir) into one .raw")
+    p.add_argument("raws", nargs="+", help="a record directory, or .raw files")
+    p.add_argument("--out", required=True)
+    p.add_argument("--drop", type=int, default=2,
+                   help="leading frames to drop (the gain write lands mid-stream)")
     p = sub.add_parser("develop", help="develop a saved .raw (host or phone)")
     p.add_argument("raw")
     p.add_argument("--out", required=True)
@@ -1664,6 +1734,8 @@ def main(argv=None) -> int:
         return cmd_capture(args)
     if args.cmd == "record":
         return cmd_record(args)
+    if args.cmd == "stack":
+        return cmd_stack(args)
     return cmd_develop(args)
 
 
