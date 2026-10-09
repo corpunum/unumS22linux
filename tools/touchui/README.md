@@ -24,7 +24,7 @@ The design follows the Phase 1 plan in `openunum-briefs/s22-mobile-ui-research-2
   - Wi-Fi status;
   - brightness slider;
   - volume shown as *pinned at 0* (read-only, with the live mute check);
-  - model switch between Luna and the local 2B, as a hold button.
+  - model switch between Luna and the local 0.8B (:8090), as a hold button.
 
   The model switch writes s22-keepalive's pin file, so keepalive pins the new choice instead of fighting it. Choosing Luna removes the file.
 

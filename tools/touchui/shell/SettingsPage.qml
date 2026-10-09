@@ -93,7 +93,7 @@ Flickable {
       spacing: 10; width: parent.width
       Btn { text: "Luna (cloud)"; width: (parent.width - 10) / 2; height: 64; holdToConfirm: true; tint: page.model.indexOf("luna") >= 0 ? "#1f4a7a" : "#25303c"
             onClicked: { modelProc.choice = "luna"; page.modelMsg = "Switching…"; modelProc.running = true } }
-      Btn { text: "Local 2B (GPU)"; width: (parent.width - 10) / 2; height: 64; holdToConfirm: true; tint: page.model.indexOf("llama") >= 0 ? "#1f4a7a" : "#25303c"
+      Btn { text: "Local 0.8B (GPU)"; width: (parent.width - 10) / 2; height: 64; holdToConfirm: true; tint: page.model.indexOf("llama") >= 0 ? "#1f4a7a" : "#25303c"
             onClicked: { modelProc.choice = "local"; page.modelMsg = "Switching…"; modelProc.running = true } }
     }
     Text { text: page.modelMsg; visible: text.length > 0; color: "#d29922"; font.pixelSize: 13; width: parent.width; wrapMode: Text.Wrap }
