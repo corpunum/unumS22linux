@@ -1,0 +1,16 @@
+{
+  "name": "s22-device",
+  "version": "0.2.0",
+  "type": "tool",
+  "entrypoint": "index.mjs",
+  "description": "Mobile-edition S22 hardware tools generated from s22d's /v1/capabilities.",
+  "capabilities": [],
+  "dependencies": [],
+  "config": {
+    "daemon_url": "http://127.0.0.1:8766",
+    "discovery_timeout_ms": 8000,
+    "refresh_interval_s": 60,
+    "mobile_marker": "/srv/s22",
+    "enabled": false
+  }
+}

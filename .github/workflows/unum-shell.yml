@@ -1,0 +1,43 @@
+name: unum-shell
+on:
+  pull_request:
+    paths: ["tools/unum-shell/**", ".github/workflows/unum-shell.yml"]
+  push:
+    branches: [master]
+    paths: ["tools/unum-shell/**", ".github/workflows/unum-shell.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unum-shell:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+          targets: aarch64-unknown-linux-gnu
+      - name: Install cross linker and fonts
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu fonts-dejavu-core
+      - name: Format
+        run: cargo fmt --manifest-path tools/unum-shell/Cargo.toml --check
+      - name: Tests (model, SSE, HTTP mocks, control socket, offscreen render)
+        run: cargo test --manifest-path tools/unum-shell/Cargo.toml --locked
+      - name: Offscreen screenshots
+        run: cargo run --manifest-path tools/unum-shell/Cargo.toml --locked -- --screenshots "$RUNNER_TEMP/shots"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unum-shell-screenshots
+          path: ${{ runner.temp }}/shots
+      - name: aarch64 build
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: cargo build --manifest-path tools/unum-shell/Cargo.toml --locked --release --target aarch64-unknown-linux-gnu
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unum-shell-aarch64-unknown-linux-gnu
+          path: tools/unum-shell/target/aarch64-unknown-linux-gnu/release/unum-shell
+          if-no-files-found: error

@@ -1,0 +1,31 @@
+[package]
+name = "unum-shell"
+version = "0.2.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "A lightweight iced touch shell for OpenUnum on the Galaxy S22"
+
+[dependencies]
+# Default features off: no wgpu. iced then renders with its tiny-skia CPU renderer, which is also what
+# the offscreen screenshot path uses (src/render.rs).
+iced = { version = "=0.12.1", default-features = false, features = ["tokio"] }
+iced_tiny_skia = { version = "=0.12.1", default-features = false }
+iced_runtime = "=0.12.1"
+tiny-skia = "0.11"
+# Loopback HTTP only (OpenUnum and s22d): no TLS stack.
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net", "io-util", "fs"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+futures-util = "0.3"
+libc = "0.2"
+
+[dev-dependencies]
+mockito = "1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
