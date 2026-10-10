@@ -498,6 +498,215 @@ class VoiceLoopTests(unittest.TestCase):
             srv.shutdown(); srv.server_close()
 
 
+class MiniWsServer(threading.Thread):
+    """Stdlib RFC 6455 server for one client: records frames, lets the test push frames back."""
+
+    def __init__(self, token=None):
+        super().__init__(daemon=True)
+        self.srv = socket.socket(); self.srv.bind(('127.0.0.1', 0)); self.srv.listen(1)
+        self.port = self.srv.getsockname()[1]
+        self.got = []                 # (opcode, payload)
+        self.conn = None
+        self.up = threading.Event()
+        self.start()
+
+    def _read(self, n):
+        buf = b''
+        while len(buf) < n:
+            c = self.conn.recv(n - len(buf))
+            if not c:
+                raise ConnectionError
+            buf += c
+        return buf
+
+    def close(self):
+        for sk in (self.conn, self.srv):
+            try:
+                sk.close()
+            except (OSError, AttributeError):
+                pass
+
+    def push(self, op, payload=b''):
+        n = len(payload)
+        head = bytes([0x80 | op]) + (bytes([n]) if n < 126 else bytes([126]) + n.to_bytes(2, 'big'))
+        self.conn.sendall(head + payload)
+
+    def run(self):
+        import base64, hashlib
+        self.conn, _ = self.srv.accept()
+        req = b''
+        while b'\r\n\r\n' not in req:
+            req += self.conn.recv(4096)
+        key = [l.split(b':', 1)[1].strip() for l in req.split(b'\r\n') if l.lower().startswith(b'sec-websocket-key')][0]
+        acc = base64.b64encode(hashlib.sha1(key + b'258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest())
+        self.conn.sendall(b'HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
+                          b'Sec-WebSocket-Accept: ' + acc + b'\r\n\r\n')
+        self.up.set()
+        try:
+            while True:
+                b0, b1 = self._read(2)
+                n = b1 & 0x7F
+                if n == 126:
+                    n = int.from_bytes(self._read(2), 'big')
+                assert b1 & 0x80, 'client frames must be masked'
+                mask = self._read(4)
+                data = bytes(c ^ mask[i % 4] for i, c in enumerate(self._read(n)))
+                if b0 & 0x0F == 0x8:
+                    break
+                self.got.append((b0 & 0x0F, data))
+        except (ConnectionError, OSError):
+            pass
+
+
+class FakeRtp:
+    busy = False
+
+    def __init__(self):
+        self.on_audio, self.on_dtmf, self.played, self.flushed = [], [], [], 0
+
+    def play(self, s):
+        self.played.append(array.array('h', s))
+
+    def flush(self):
+        self.flushed += 1
+
+
+class FastVoiceTests(unittest.TestCase):
+    def test_ws_client_roundtrip_with_masking_and_ping(self):
+        srv = MiniWsServer(); self.addCleanup(srv.close)
+        c = M.WsClient(f'ws://127.0.0.1:{srv.port}/x', timeout=3)
+        c.connect()
+        try:
+            self.assertTrue(srv.up.wait(2))
+            payload = bytes(range(256)) * 3            # > 125 bytes: 16-bit length path
+            c.send_binary(payload); c.send_text('hi')
+            self.assertTrue(wait_for(lambda: len(srv.got) == 2, 3))
+            self.assertEqual(srv.got, [(2, payload), (1, b'hi')])
+            srv.push(0x9, b'p')                        # ping must be answered and skipped
+            srv.push(0x1, b'{"type":"clear"}')
+            self.assertEqual(c.recv(), (1, b'{"type":"clear"}'))
+            self.assertTrue(wait_for(lambda: (0xA, b'p') in srv.got, 3))
+        finally:
+            c.close()
+
+    def test_loop_forwards_audio_plays_reply_and_flushes_on_clear(self):
+        srv = MiniWsServer(); self.addCleanup(srv.close)
+        rtp = FakeRtp()
+        logs = []
+        loop = M.FastVoiceLoop(rtp, f'ws://127.0.0.1:{srv.port}', token='tok', greeting='hello',
+                               snapshot_fn=None, log=lambda m: logs.append(m))
+        loop.attach()
+        try:
+            self.assertTrue(srv.up.wait(2))
+            self.assertTrue(wait_for(lambda: len(srv.got) >= 2, 3))
+            hello = json.loads(srv.got[0][1])
+            self.assertEqual((hello['type'], hello['codec'], hello['rate'], hello['token']), ('hello', 'pcm16', 8000, 'tok'))
+            self.assertEqual(json.loads(srv.got[1][1]), {'type': 'say', 'text': 'hello'})
+            frame = M.tone(400, 0.02, amp=5000)
+            self.assertEqual(len(frame), 160)
+            rtp.on_audio[0](frame)
+            self.assertTrue(wait_for(lambda: any(op == 2 for op, _ in srv.got), 3))
+            sent = [d for op, d in srv.got if op == 2][0]
+            self.assertEqual(array.array('h', sent).tolist(), frame.tolist() if sys.byteorder == 'little' else array.array('h', sent).tolist())
+            reply = M.tone(700, 0.04, amp=6000)
+            srv.push(0x2, reply.tobytes() if sys.byteorder == 'little' else M._le(reply).tobytes())
+            self.assertTrue(wait_for(lambda: rtp.played, 3))
+            self.assertEqual(rtp.played[0].tolist(), reply.tolist())
+            srv.push(0x1, json.dumps({'type': 'clear'}).encode())
+            self.assertTrue(wait_for(lambda: rtp.flushed == 1, 3))
+            srv.push(0x1, json.dumps({'type': 'asr_final', 'text': 'what time is it'}).encode())
+            srv.push(0x1, json.dumps({'type': 'metrics', 'turn': 1, 'spoken': ['It is noon.'],
+                                      'endpoint_to_first_audio_ms': 410, 'asr_final_ms': 65}).encode())
+            self.assertTrue(wait_for(lambda: loop.turns, 3))
+            self.assertEqual((loop.turns[0]['transcript'], loop.turns[0]['reply'], loop.turns[0]['first_audio_ms']),
+                             ('what time is it', 'It is noon.', 410))
+        finally:
+            loop.stop()
+
+    def test_pin_gate_blocks_audio_until_dtmf(self):
+        srv = MiniWsServer(); self.addCleanup(srv.close)
+        rtp = FakeRtp()
+        loop = M.FastVoiceLoop(rtp, f'ws://127.0.0.1:{srv.port}', pin='12', greeting='hi', log=quiet)
+        loop.attach()
+        try:
+            self.assertTrue(srv.up.wait(2))
+            rtp.on_audio[0](M.tone(400, 0.02, amp=5000))
+            time.sleep(0.2)
+            self.assertFalse(any(op == 2 for op, _ in srv.got))      # locked: nothing leaves the phone
+            for d in '912':
+                rtp.on_dtmf[0](d)
+            self.assertTrue(wait_for(lambda: any(op == 1 and b'"say"' in d for op, d in srv.got), 3))
+            rtp.on_audio[0](M.tone(400, 0.02, amp=5000))
+            self.assertTrue(wait_for(lambda: any(op == 2 for op, _ in srv.got), 3))
+        finally:
+            loop.stop()
+
+    def test_falls_back_to_classic_loop_when_service_is_down(self):
+        s = socket.socket(); s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]; s.close()    # nobody listens
+        rtp = FakeRtp()
+        made = []
+
+        class Classic:
+            def attach(self): made.append('attach')
+            def stop(self): made.append('stop')
+        loop = M.FastVoiceLoop(rtp, f'ws://127.0.0.1:{port}', fallback=Classic, connect_timeout=0.5, log=quiet)
+        loop.attach(); loop.stop()
+        self.assertEqual(made, ['attach', 'stop'])
+        self.assertEqual(rtp.on_audio, [])                   # no streaming hook installed
+
+    def test_device_snapshot_from_sysfs_and_daemon(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / 'ps/battery').mkdir(parents=True)
+            for n, v in (('capacity', '98'), ('status', 'Charging'), ('temp', '312')):
+                (d / 'ps/battery' / n).write_text(v + '\n')
+            for i, t in enumerate(('36000', '41500', '-274000')):
+                (d / f'th/thermal_zone{i}').mkdir(parents=True); (d / f'th/thermal_zone{i}/temp').write_text(t)
+            (d / 'route').write_text('Iface Destination Gateway\nwlan0 00000000 0100A8C0\n')
+
+            class H(BaseHTTPRequestHandler):
+                def log_message(self, *a): pass
+                def do_GET(self):
+                    body = json.dumps({'ok': True, 'modem_state': 'online', 'sim': 'ready', 'registration': 'home',
+                                       'operator': 'COSMOTE', 'signal': -80}).encode()
+                    self.send_response(200); self.end_headers(); self.wfile.write(body)
+            srv = HTTPServer(('127.0.0.1', 0), H)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            try:
+                s = M.device_snapshot(str(d / 'ps'), str(d / 'th'), f'http://127.0.0.1:{srv.server_port}', str(d / 'route'))
+            finally:
+                srv.shutdown()
+            self.assertEqual(s['battery'], {'percent': 98, 'status': 'Charging', 'temp_c': 31.2})
+            self.assertEqual(s['thermal'], {'max_c': 41.5})            # bogus -274 C zone ignored
+            self.assertEqual((s['modem']['operator'], s['modem']['state']), ('COSMOTE', 'online'))
+            self.assertEqual(s['network']['iface'], 'wlan0')
+            self.assertRegex(s['time']['local'], r'\d{4}-\d\d-\d\d \d\d:\d\d')
+            # missing everything still yields a dict with the time only
+            self.assertEqual(list(M.device_snapshot(str(d / 'no'), str(d / 'no'), None, str(d / 'no')))[-1], 'time')
+
+    def test_loop_sends_snapshot_at_connect_and_periodically(self):
+        srv = MiniWsServer(); self.addCleanup(srv.close)
+        rtp = FakeRtp()
+        loop = M.FastVoiceLoop(rtp, f'ws://127.0.0.1:{srv.port}', snapshot_fn=lambda: {'battery': {'percent': 50}},
+                               snapshot_s=0.2, log=quiet)
+        loop.attach()
+        try:
+            self.assertTrue(wait_for(lambda: sum(1 for op, d in srv.got if op == 1 and b'"snapshot"' in d) >= 3, 4))
+            first = [json.loads(d) for op, d in srv.got if op == 1 and b'"snapshot"' in d][0]
+            self.assertEqual(first, {'type': 'snapshot', 'data': {'battery': {'percent': 50}}})
+        finally:
+            loop.stop()
+
+    def test_cli_guard_and_flags(self):
+        a = M.build_parser().parse_args(['listen', '--fast-voice', 'ws://100.1.2.3:8130', '--allow-from', '100.64.0.0/10'])
+        self.assertEqual((a.fast_voice, a.fast_voice_token_env), ('ws://100.1.2.3:8130', 'UNUM_VOICE_TOKEN'))
+        with self.assertRaises(SystemExit) as cm:
+            M.run(M.build_parser().parse_args(['listen', '--fast-voice', 'ws://127.0.0.1:1']), log=quiet)
+        self.assertIn('--allow-from', str(cm.exception))
+        with self.assertRaises(ValueError):
+            M.WsClient('wss://example.com/x')
+
+
 class CliTests(unittest.TestCase):
     def test_tone_and_voice_loop_guard(self):
         with tempfile.TemporaryDirectory() as d:
