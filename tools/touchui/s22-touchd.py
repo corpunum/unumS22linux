@@ -47,6 +47,7 @@ SOCK = RUN / 'ctl.sock'
 SHELL_DIR = '/opt/s22-touch'                  # inside the chroot
 LOG = Path('/srv/s22/state/touchui/touchd.log')
 DISPLAY = '/srv/s22/hardware/bin/s22-display'
+BACKLIGHT = Path('/sys/class/backlight/panel')
 DISPLAY_STATE = Path('/run/s22-display-state')
 CAMERA = '/srv/s22/hardware/bin/s22-camera'   # reviewed client (sha256 3f1375f6...) since 2026-10-09
 BUTTONS = Path('/srv/s22/buttons')
@@ -576,6 +577,18 @@ class Daemon:
         log(event='model', choice=choice, current=cur)
         return {'ok': True, 'current': cur, 'pinned': PIN_FILE.exists()}
 
+    def cmd_brightness(self, req: dict) -> dict:
+        """Set or read the panel backlight. The touch shell runs in the chroot, whose /sys is
+        mounted read-only, so it cannot write the backlight itself."""
+        mx = int((BACKLIGHT / 'max_brightness').read_text().strip())
+        arg = req.get('arg')
+        if arg not in (None, 'get'):
+            v = int(arg)
+            if not 0 < v <= mx:   # 0 would blank the panel; Lock + screen off does that properly
+                return {'ok': False, 'error': 'out_of_range', 'max': mx}
+            (BACKLIGHT / 'brightness').write_text(f'{v}\n')
+        return {'ok': True, 'brightness': int((BACKLIGHT / 'brightness').read_text().strip()), 'max': mx}
+
     def cmd_gesture(self, req: dict) -> dict:
         name = req.get('name')
         if name not in ('home', 'back', 'switcher'):
@@ -679,6 +692,7 @@ COMMANDS = {
     'camera_capture': Daemon.cmd_camera,
     'gesture': Daemon.cmd_gesture,
     'model': Daemon.cmd_model,
+    'brightness': Daemon.cmd_brightness,
 }
 UI_FUNCS = {'home', 'hide', 'back', 'switcher', 'open', 'card', 'confirm', 'confirmResult',
             'lock', 'unlock', 'keyboard', 'state', 'perf'}
@@ -716,6 +730,8 @@ def main(argv=None) -> int:
             req['args'] = rest
         elif cmd == 'model':
             req['arg'] = rest[0] if rest else 'current'
+        elif cmd == 'brightness':
+            req['arg'] = rest[0] if rest else 'get'
         elif cmd == 'status':
             req['fresh'] = True
         print(json.dumps(request(req)))
