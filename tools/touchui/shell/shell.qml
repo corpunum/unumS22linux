@@ -460,7 +460,7 @@ ShellRoot {
             Text { text: modelData.body; color: "#c9d1d9"; font.pixelSize: 15; width: parent.width; wrapMode: Text.Wrap; maximumLineCount: 6; elide: Text.ElideRight }
             Text { text: "tap to dismiss"; color: root.dim; font.pixelSize: 11 }
           }
-          TapHandler { onTapped: root.dismissCard(modelData.id) }
+          TapHandler { gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: root.dismissCard(modelData.id) }
         }
       }
     }
