@@ -92,6 +92,23 @@ OPENUNUM_API = 'http://127.0.0.1:18880'
 OPENUNUM_CONFIG = Path('/mnt/omarchy-trial/root/.openunum/openunum.json')
 LOG_MAX = 1 << 20
 HOLD_DIR = Path('/run/s22-hold')
+# Firmware the kernel loads from PID 1's root (the Android ramdisk, tmpfs, lost on
+# every boot). Copies come from the phone's own vendor partition. Without
+# is_mcu_fw.bin every rear-camera open stalls 60 s in the sysfs fallback.
+FIRMWARE_SRC = Path('/srv/s22/state/vendor-firmware-20261010')
+FIRMWARE_DST = Path('/proc/1/root/lib/firmware')
+FIRMWARE_FILES = ('is_mcu_fw.bin',)
+
+
+def stage_firmware(src: Path = FIRMWARE_SRC, dst: Path = FIRMWARE_DST) -> list[str]:
+    staged = []
+    for name in FIRMWARE_FILES:
+        if (src / name).is_file() and not (dst / name).exists() and dst.is_dir():
+            tmp = dst / f'.{name}.tmp'
+            tmp.write_bytes((src / name).read_bytes())
+            os.replace(tmp, dst / name)
+            staged.append(name)
+    return staged
 
 
 def load_config(state: Path = STATE) -> dict:
@@ -559,6 +576,13 @@ class Keepalive:
         if self.cfg.get('pin_model') and fix and ou and ou['healthy']:
             result['model_pin'] = self.pin_via_api(now)
         result['mute'] = self.mute_check('after_restart' if restarted else 'periodic')
+        if fix:
+            try:
+                staged = stage_firmware()
+            except OSError as e:
+                staged = [f'error: {e}']
+            if staged:
+                self.log(event='firmware_staged', files=staged)
         return result
 
     def run(self) -> None:
