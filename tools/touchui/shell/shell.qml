@@ -286,6 +286,7 @@ ShellRoot {
   property int safeTop: 44
   property int safeSide: 30
   property int cameraGap: 70
+  property int safeBottom: 10
   Timer {
     interval: 15000; repeat: true; running: true; triggeredOnStart: true
     onTriggered: root.clock = Qt.formatDateTime(new Date(), "HH:mm")
@@ -400,7 +401,9 @@ ShellRoot {
         Grid {
           id: tiles
           columns: 2; spacing: 10; width: parent.width
-          property real th: Math.max(96, Math.min(220, (parent.height - y - 76) / 3 - 10))
+          // Fill the screen: three tile rows share what is left above the
+          // Apps/Keyboard row (56 + 12 spacing) and the rounded bottom corners.
+          property real th: Math.max(96, (parent.height - y - 56 - 12 - root.safeBottom - 20) / 3)
           Tile { width: (parent.width - 10) / 2; height: tiles.th; glyph: "◆"; label: "Agent chat"; sub: "OpenUnum, typed"; onActivated: root.showHome("chat") }
           Tile { width: (parent.width - 10) / 2; height: tiles.th; glyph: "◍"; label: "Phone"; sub: "Calls & SMS (read-only)"; accent: "#3fb950"; onActivated: root.showHome("phone") }
           Tile { width: (parent.width - 10) / 2; height: tiles.th; glyph: "◉"; label: "Camera"; sub: "Rear still (experimental)"; accent: "#d29922"; onActivated: root.showHome("camera") }
