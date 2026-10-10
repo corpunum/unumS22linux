@@ -1484,6 +1484,23 @@ class SipUA:
             if call and call.state in ('ringing',) and call.direction == 'in':
                 self._respond_invite(call, 487, 'Request Terminated')
                 self._end(call, 'cancelled by caller')
+        elif m == 'REGISTER':
+            # Softphones (Linphone "third-party SIP account") insist on registering
+            # before they show the account as usable. Nothing is routed by this
+            # registration, so accept it -- credentials ignored -- from callers the
+            # allow list admits (e.g. --allow-from 100.64.0.0/10 = Tailscale only).
+            if not self.is_allowed(msg, addr):
+                self.send(self.make_response(msg, 403, 'Forbidden', addr=addr), addr)
+                return
+            r = self.make_response(msg, 200, 'OK', addr=addr)
+            try:
+                expires = max(0, min(int(msg.get('expires') or 3600), 3600))
+            except ValueError:
+                expires = 3600
+            for c in msg.get_all('contact'):
+                r.add('Contact', c if ';expires=' in c else f'{c};expires={expires}')
+            r.add('Expires', str(expires))
+            self.send(r.to_bytes(), addr)
         elif m in ('OPTIONS', 'INFO', 'NOTIFY', 'MESSAGE'):
             if m == 'MESSAGE':
                 self.log(f'sip: MESSAGE from {msg.get("from")}: {msg.body[:200]!r}')

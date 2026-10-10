@@ -292,6 +292,39 @@ class LoopbackCallTests(unittest.TestCase):
             a.close(); b.close(); c.close()
 
 
+class InboundRegisterTests(unittest.TestCase):
+    """Softphones register before calling; accept from allowed sources only."""
+
+    def _register(self, port):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.bind(('127.0.0.1', 0)); s.settimeout(3)
+        me = s.getsockname()[1]
+        s.sendto((f'REGISTER sip:127.0.0.1 SIP/2.0\r\nVia: SIP/2.0/UDP 127.0.0.1:{me};branch=z9hG4bKreg1;rport\r\n'
+                  'Max-Forwards: 70\r\nFrom: <sip:owner@127.0.0.1>;tag=t1\r\nTo: <sip:owner@127.0.0.1>\r\n'
+                  'Call-ID: reg-test\r\nCSeq: 1 REGISTER\r\n'
+                  f'Contact: <sip:owner@127.0.0.1:{me}>\r\nExpires: 7200\r\nContent-Length: 0\r\n\r\n').encode(),
+                 ('127.0.0.1', port))
+        try:
+            return s.recv(4000).decode()
+        finally:
+            s.close()
+
+    def test_register_accepted_from_allowed_and_refused_otherwise(self):
+        a = mk_ua(user='agent', allow_from=['127.0.0.0/8'])
+        try:
+            r = self._register(a.port)
+            self.assertTrue(r.startswith('SIP/2.0 200'), r)
+            self.assertIn(';expires=3600', r)
+            self.assertIn('Expires: 3600', r)
+        finally:
+            a.close()
+        a = mk_ua(user='agent', allow_from=['10.0.0.0/8'])
+        try:
+            self.assertTrue(self._register(a.port).startswith('SIP/2.0 403'))
+        finally:
+            a.close()
+
+
 class FakeRegistrar(threading.Thread):
     """Challenges REGISTER with 401 + MD5 qop=auth, accepts a correct response."""
 
