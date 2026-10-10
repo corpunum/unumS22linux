@@ -46,6 +46,16 @@ STATE = Path('/srv/s22/state/llama-ondemand')
 LOCK = Path('/run/s22-llama-ondemand.lock')
 KEEPALIVE_CONFIG = Path('/srv/s22/state/keepalive/config.json')
 CACHED = ('/health', '/v1/models', '/props', '/slots')
+# Cool profile, measured 2026-10-10 (4 back-to-back fallback turns, Qwen3.5-0.8B on the GPU):
+#   any core, -t 4, full clocks   BIG 80-82 C in seconds, guardian stops it
+#   mid cores 4-6, -t 2, 2.5 GHz  65 C, guardian stops it after 2 turns
+#   mid cores 4-6, -t 2, 1.8 GHz  49 C max / 43 C avg over 97 s, gen ~18 tok/s, pp ~77 tok/s
+# llama.cpp's CPU threads busy-wait on the GPU; on the X2 core (cpu7) that alone heats BIG.
+# So: pin the server to the A710 cores, 2 threads, and cap that cluster only while loaded.
+COOL_CPUS = {4, 5, 6}
+COOL_THREADS = '2'
+MID_MAX_FREQ = Path('/sys/devices/system/cpu/cpu4/cpufreq/scaling_max_freq')
+MID_CAP_KHZ = int(os.environ.get('S22_LLAMA_MID_CAP_KHZ', '1800000'))
 DEFAULT_ARGV = ['/usr/bin/python3', '/srv/s22/hardware/bin/s22-gpu-exec-isolated',
                 '/srv/s22/gpu-compat-20260921/llama-vulkan', '--bridge-v4', '/system/bin/llama-server',
                 '-m', '/models/Qwen3.5-0.8B-Q4_0.gguf', '-ngl', '99', '-t', '4', '-c', '16384', '-np', '1',
@@ -64,7 +74,16 @@ def backend_argv(cfg_path: Path = KEEPALIVE_CONFIG) -> list[str]:
         argv[argv.index('--port') + 1] = str(BACKEND_PORT)
     else:
         argv += ['--port', str(BACKEND_PORT)]
+    if '-t' in argv:
+        argv[argv.index('-t') + 1] = COOL_THREADS
     return argv
+
+
+def pin_cool_cpus() -> None:   # Popen preexec_fn: runs in the child before exec
+    try:
+        os.sched_setaffinity(0, COOL_CPUS)
+    except OSError:
+        pass
 
 
 def http_response(status: str, body: bytes, ctype: str = 'application/json') -> bytes:
@@ -74,7 +93,9 @@ def http_response(status: str, body: bytes, ctype: str = 'application/json') -> 
 
 class OnDemand:
     def __init__(self, idle_s: float = 600, argv: list[str] | None = None, backend_port: int = BACKEND_PORT,
-                 hold: Path = HOLD, state: Path = STATE, start_timeout_s: float = 120, clock=time.monotonic):
+                 hold: Path = HOLD, state: Path = STATE, start_timeout_s: float = 120, clock=time.monotonic,
+                 mid_cap: tuple[Path, int] | None = (MID_MAX_FREQ, MID_CAP_KHZ), preexec=pin_cool_cpus):
+        self.preexec = preexec
         self.idle_s, self.backend_port, self.hold, self.state = idle_s, backend_port, hold, state
         self.argv = argv or backend_argv()
         self.start_timeout_s = start_timeout_s
@@ -86,6 +107,8 @@ class OnDemand:
         self.last_use = clock()
         self.cache: dict[str, bytes] = {}
         self.loads = 0
+        self.mid_cap = mid_cap
+        self.saved_mid_max: str | None = None
         try:
             state.mkdir(parents=True, exist_ok=True)
             self.cache = {k: bytes.fromhex(v) for k, v in json.loads((state / 'cache.json').read_text()).items()}
@@ -107,6 +130,29 @@ class OnDemand:
                 'idle_s': self.idle_s, 'loads': self.loads, 'held': self.hold.exists(),
                 'cached': sorted(self.cache)}
 
+    # -- cool profile: cap the mid cluster while the model is loaded
+    def cap_clock(self) -> None:
+        if not self.mid_cap or self.saved_mid_max is not None:
+            return
+        path, khz = self.mid_cap
+        try:
+            self.saved_mid_max = path.read_text().strip()
+            path.write_text(str(khz))
+            self.log(event='clock_cap', khz=khz, was=self.saved_mid_max)
+        except OSError as e:
+            self.saved_mid_max = None
+            self.log(event='clock_cap_failed', error=str(e))
+
+    def restore_clock(self) -> None:
+        if not self.mid_cap or self.saved_mid_max is None:
+            return
+        try:
+            self.mid_cap[0].write_text(self.saved_mid_max)
+            self.log(event='clock_restore', khz=self.saved_mid_max)
+        except OSError as e:
+            self.log(event='clock_restore_failed', error=str(e))
+        self.saved_mid_max = None
+
     # -- backend
     def running(self) -> bool:
         return self.proc is not None and self.proc.poll() is None
@@ -127,8 +173,9 @@ class OnDemand:
             if not self.running():
                 t0 = self.clock()
                 log = open(self.state / 'llama-server.log', 'ab')
+                self.cap_clock()
                 self.proc = subprocess.Popen(self.argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                                             start_new_session=True)
+                                             start_new_session=True, preexec_fn=self.preexec)
                 log.close()
                 self.loads += 1
                 self.log(event='load', pid=self.proc.pid)
@@ -141,6 +188,7 @@ class OnDemand:
                     return True
                 if not self.running():
                     self.log(event='load_failed', rc=self.proc.returncode)
+                    self.restore_clock()
                     return False
                 time.sleep(0.2)
             self.log(event='load_timeout')
@@ -162,6 +210,7 @@ class OnDemand:
     def unload(self, reason: str) -> None:
         with self.lock:
             if not self.running():
+                self.restore_clock()      # e.g. the guardian stopped the server
                 return
             pid = self.proc.pid
             try:
@@ -177,11 +226,14 @@ class OnDemand:
                     pass
                 self.proc.wait(5)
             self.log(event='unload', pid=pid, reason=reason)
+            self.restore_clock()
 
     def idle_loop(self, stop: threading.Event) -> None:
         while not stop.wait(5):
             if self.running() and self.active == 0 and self.clock() - self.last_use >= self.idle_s:
                 self.unload('idle')
+            elif not self.running() and self.saved_mid_max is not None:
+                self.restore_clock()      # the server exited on its own (guardian, crash)
 
     # -- connections
     def handle(self, conn: socket.socket) -> None:
