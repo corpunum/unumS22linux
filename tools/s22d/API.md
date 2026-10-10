@@ -105,11 +105,11 @@ If the audit file cannot be opened at start, `s22d` does not start.
 | `bt.power` | `bt_power` | POST `/v1/bt/power` | reversible | 15 s |
 | `bt.scan` | `bt_scan` | POST `/v1/bt/scan` | read | 15 s |
 | `modem.status` | `modem_status` | GET `/v1/modem/status` | read | 25 s |
-| `sms.list` | `sms_inbox` | GET `/v1/sms` | read | 25 s |
-| `sms.send` | `sms_send` | POST `/v1/sms/send` | risky | 95 s |
-| `call.list` | `call_list` | GET `/v1/calls` | read | 25 s |
-| `call.dial` | `call_dial` | POST `/v1/call/dial` | risky | 95 s |
-| `call.hangup` | `call_hangup` | POST `/v1/call/hangup` | reversible | 25 s |
+| `sms.list` | `device_sms_inbox` | GET `/v1/sms` | read | 25 s |
+| `sms.send` | `device_sms_send` | POST `/v1/sms/send` | risky | 95 s |
+| `call.list` | `device_call_list` | GET `/v1/calls` | read | 25 s |
+| `call.dial` | `device_call_dial` | POST `/v1/call/dial` | risky | 95 s |
+| `call.hangup` | `device_call_hangup` | POST `/v1/call/hangup` | reversible | 25 s |
 | `camera.status` | `camera_status` | GET `/v1/camera/status` | read | 15 s |
 | `camera.capture` | `camera_capture` | POST `/v1/camera/capture` | reversible | 330 s |
 | `display.status` | `display_status` | GET `/v1/display` | read | 15 s |
