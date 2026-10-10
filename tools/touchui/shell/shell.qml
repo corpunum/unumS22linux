@@ -22,6 +22,9 @@ ShellRoot {
   property var perfReq: null
   property var st: ({ model: "…", healthy: null, sessions: "…", running: 0, battery: "…", batteryState: "", batteryTemp: "", thermal: "…", thermalMax: 0 })
   readonly property string runDir: "/run/s22-touch"
+  // sway (opt-in sway-pixman desktop) does not give an OnDemand layer keyboard
+  // focus on a touch tap, so the chat page takes Exclusive focus there.
+  readonly property bool onSway: (Quickshell.env("SWAYSOCK") || "") !== ""
   readonly property string api: "http://127.0.0.1:18880"
   readonly property string phoned: "http://127.0.0.1:8095"
   readonly property color bg: "#0f1216"
@@ -250,7 +253,8 @@ ShellRoot {
     exclusiveZone: 0
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "s22-touch-home"
-    WlrLayershell.keyboardFocus: root.page === "chat" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: root.page !== "chat" ? WlrKeyboardFocus.None
+                                 : (root.onSway ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand)
     color: root.k(root.bg)
     onVisibleChanged: if (visible) root.kickSoon()
 
