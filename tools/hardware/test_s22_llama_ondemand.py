@@ -50,8 +50,11 @@ class OnDemandTest(unittest.TestCase):
         (d / 'fake.py').write_text(FAKE)
         self.bport, self.fport = free_port(), free_port()
         self.hold = d / 'hold'
+        self.maxfreq = d / 'scaling_max_freq'
+        self.maxfreq.write_text('2515000\n')
         self.od = mod.OnDemand(idle_s=1.0, argv=[sys.executable, str(d / 'fake.py'), '--port', str(self.bport)],
-                               backend_port=self.bport, hold=self.hold, state=d / 'state', start_timeout_s=10)
+                               backend_port=self.bport, hold=self.hold, state=d / 'state', start_timeout_s=10,
+                               mid_cap=(self.maxfreq, 1800000))
         threading.Thread(target=self._serve, daemon=True).start()
         for _ in range(50):
             try:
@@ -128,6 +131,27 @@ class OnDemandTest(unittest.TestCase):
             p.write_text(json.dumps({'service_defs': {'llama_backend': {'argv': ['x', '--port', '8090']}}}))
             self.assertEqual(mod.backend_argv(p), ['x', '--port', str(mod.BACKEND_PORT)])
             self.assertIn('--port', mod.backend_argv(Path(d) / 'missing.json'))
+
+
+    # -- cool profile
+    def test_clock_capped_while_loaded_and_restored_on_unload(self):
+        self.assertTrue(self.od.ensure_backend())
+        self.assertEqual(self.maxfreq.read_text().strip(), '1800000')
+        self.od.unload('test')
+        self.assertEqual(self.maxfreq.read_text().strip(), '2515000')
+
+    def test_clock_restored_when_server_dies_on_its_own(self):
+        self.assertTrue(self.od.ensure_backend())
+        self.od.proc.kill(); self.od.proc.wait(5)
+        for _ in range(40):          # idle loop polls every 5 s; call the restore path directly
+            if self.maxfreq.read_text().strip() == '2515000':
+                break
+            self.od.unload('dead')
+        self.assertEqual(self.maxfreq.read_text().strip(), '2515000')
+
+    def test_backend_argv_forces_two_threads(self):
+        argv = mod.backend_argv(Path('/nonexistent'))      # DEFAULT_ARGV carries -t 4
+        self.assertEqual(argv[argv.index('-t') + 1], '2')
 
 
 if __name__ == '__main__':
