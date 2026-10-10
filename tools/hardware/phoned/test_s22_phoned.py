@@ -396,6 +396,7 @@ class E2ETest(unittest.TestCase):
     def test_flow(self):
         st = wait_for(lambda: self.call("GET", "/status", unix=True)[1]["sim"] == "LOCK_SC(PIN)"
                       and self.call("GET", "/status")[1])
+        st = wait_for(lambda: self.call("GET", "/status")[1]["operator"] and self.call("GET", "/status")[1]) or st
         self.assertTrue(st["simulated"] and st["ipc_open"])
         self.assertEqual(st["modem_state"], "ONLINE")
         self.assertEqual(st["registration"]["reg_status"], "home")
@@ -463,6 +464,182 @@ class E2ETest(unittest.TestCase):
         # errors
         self.assertEqual(self.call("GET", "/nope")[0], 404)
         self.assertEqual(self.call("POST", "/sms/send", {"to": "+306912345678"})[0], 400)
+
+
+REAL_PLMN = bytes.fromhex(
+    "7b2233677070223a7b22616374223a226567707273222c2264617461223a7b22636964223a32363237382c226c6163223a323638322c22"
+    "706369223a36353533352c22726163223a312c22746163223a343638322c2276696c74655f62617272696e675f66223a3235352c227669"
+    "6c74655f62617272696e675f74223a302c22766f6c74655f62617272696e675f66223a3235352c22766f6c74655f62617272696e675f74"
+    "223a307d2c226d6f6465223a226175746f222c22706c6d6e223a223230323031222c227265675f737461747573223a22686f6d655f3367"
+    "7070227d7d")
+REAL_STATUS_REPORT = bytes.fromhex(
+    "0202ff0001210791039617520044060b0c91039647043137620101616500216201016165002100")
+
+
+def nfr(cmd, typ, data):
+    return P.Frame(1, 0, cmd[0], cmd[1], typ, data)
+
+
+class MeasuredHardwareTest(unittest.TestCase):
+    """Frames captured from the S22 on 2026-10-10 (raw hex from ipc.jsonl)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.ph = mkphone(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_operator_decoded_from_nested_plmn_json(self):
+        d = P.dec_plmn(REAL_PLMN)
+        self.assertEqual((d["plmn"], d["operator"]), ("20201", "Cosmote"))
+        self.assertEqual(P.dec_plmn(b'{"plmn":"99999#"}')["operator"], "99999")
+        self.ph.handle_frame(nfr(P.NET_CURRENT_PLMN, P.RESP, REAL_PLMN))
+        self.assertEqual(self.ph.operator, "Cosmote")
+
+    def test_send_ack_is_a_noti_and_records_mr(self):
+        Path(self.tmp.name, "tx_enabled").touch()
+        Path(self.tmp.name, "allowlist").write_text("+306974401373\n")
+        ph = self.ph
+        link = FakeLink({P.SMS_SEND_MSG: lambda d: (
+            ph.handle_frame(nfr(P.SMS_SEND_MSG, P.NOTI, bytes.fromhex("0200000b00"))), gen_pending(True))[1]})
+        ph.attach(link)
+        ph.sim, ph.smsc_raw = "PB_INIT_COMPLETE", P.encode_smsc("+3097100000")
+        code, body = ph.send_sms("+306974401373", "hello")
+        self.assertEqual((code, body["status"]), (200, "sent"))
+        rec = ph.outbox.values()[-1]
+        self.assertEqual(rec["mrs"], [11])
+        ph.handle_frame(nfr(P.SMS_INCOMING_MSG, P.NOTI, REAL_STATUS_REPORT))
+        self.assertIs(ph.outbox.values()[-1]["delivered"], True)
+
+    def test_real_status_report_adopted_when_mr_unknown(self):
+        ph = self.ph
+        ph.outbox.put({"id": "out-1", "to": "+306974401373", "text": "x", "ts": time.time(), "parts": 1,
+                       "status": "queued", "delivered": None, "mrs": [], "error": "no send confirmation yet"})
+        ph.handle_frame(nfr(P.SMS_INCOMING_MSG, P.NOTI, REAL_STATUS_REPORT))
+        rec = ph.outbox.values()[-1]
+        self.assertEqual((rec["delivered"], rec["mrs"], rec["status"]), (True, [11], "sent"))
+        self.assertNotIn("error", rec)
+        run_deferred(ph)
+
+    def test_status_report_for_other_recipient_not_adopted(self):
+        ph = self.ph
+        ph.outbox.put({"id": "out-1", "to": "+306900000009", "text": "x", "ts": time.time(), "parts": 1,
+                       "status": "queued", "delivered": None, "mrs": []})
+        ph.handle_frame(nfr(P.SMS_INCOMING_MSG, P.NOTI, REAL_STATUS_REPORT))
+        self.assertIsNone(ph.outbox.values()[-1]["delivered"])
+
+    def test_mem_status_noti_gets_available_report_once(self):
+        link = FakeLink({P.SMS_MEM_STATUS: lambda d: gen_pending(True)})
+        self.ph.attach(link)
+        for _ in range(3):                              # the CP repeats it after each DEVICE_READY
+            self.ph.handle_frame(nfr(P.SMS_MEM_STATUS, P.NOTI, b"\x02\x01"))
+        run_deferred(self.ph)
+        self.assertEqual(link.sent, [(P.SMS_MEM_STATUS, P.SET, b"\x02\x01")])
+
+
+class SimStoreFake(FakeLink):
+    """Answers the stored-SMS commands like the measured CP (40 slots, 5-byte read header)."""
+
+    def __init__(self, slots=None, fail_del=False):
+        super().__init__()
+        self.slots, self.deleted, self.fail_del = dict(slots or {}), [], fail_del
+
+    def request(self, cmd, typ, data=b"", **kw):
+        self.sent.append((cmd, typ, data))
+        p = P.Pending(cmd, True)
+        if cmd == P.SMS_STORED_MSG_COUNT:
+            p.resp = P.Frame(1, 0, 4, 9, P.RESP, bytes([2, 40]) + bytes(259))
+        elif cmd == P.SMS_READ_MSG:
+            idx = struct.unpack_from("<H", data, 1)[0]
+            st, body = self.slots.get(idx, (0, b""))
+            p.resp = P.Frame(1, 0, 4, 3, P.RESP, struct.pack("<BHBB", 2, idx, st, len(body)) + body)
+        elif cmd == P.SMS_DEL_MSG:
+            idx = struct.unpack_from("<H", data, 1)[0]
+            if self.fail_del:
+                p.gen = {"ok": False, "code": 0x8001}
+            else:
+                self.deleted.append(idx)
+                self.slots.pop(idx, None)
+                p.gen = {"ok": True, "code": 0x8000}
+        return p
+
+
+class SimSweepTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.ph = mkphone(self.tmp.name)
+        self.ph.sim = "PB_INIT_COMPLETE"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_sweep_reads_stores_then_deletes_and_is_idempotent(self):
+        long_parts = [P.build_deliver_pdu("+306900000002", t, "+306971250044", (7, 2, k + 1))
+                      for k, t in enumerate(("first ", "second"))]
+        link = SimStoreFake({
+            0: (1, bytes.fromhex(HELLO)),
+            3: (2, P.build_deliver_pdu("+306974401373", "reply one", "+306971250044")),
+            5: (1, long_parts[0]), 9: (1, long_parts[1]),
+            12: (1, P.build_status_report_pdu("+306974401373", 11, 0, "+306971250044")),
+            20: (1, P.build_deliver_pdu("+306900000003", "half", "+30", (9, 2, 1)))})
+        self.ph.attach(link)
+        r = self.ph.sweep_sim()
+        self.assertEqual((r["ok"], r["slots"], r["found"]), (True, 40, 6))
+        texts = sorted(m["text"] for m in self.ph.inbox.values())
+        self.assertEqual(texts, sorted(["hellohello", "reply one", "first second"]))
+        self.assertEqual(sorted(link.deleted), [0, 3, 5, 9, 12])
+        self.assertEqual(list(link.slots), [20])                 # incomplete concat stays on the SIM
+        self.assertEqual(r["kept"], 1)
+        self.assertEqual(self.ph.sweep_sim()["stored"], 0)       # second run: nothing new
+
+    def test_no_delete_when_inbox_write_fails(self):
+        link = SimStoreFake({4: (1, P.build_deliver_pdu("+306974401373", "precious", "+30"))})
+        self.ph.attach(link)
+        self.ph.inbox.put = lambda rec: (_ for _ in ()).throw(OSError("disk full"))
+        r = self.ph.sweep_sim()
+        self.assertEqual((r["stored"], r["deleted"], r["kept"]), (0, 0, 1))
+        self.assertEqual(link.deleted, [])
+        self.assertIn(4, link.slots)
+
+    def test_duplicate_not_restored_when_delete_failed_earlier(self):
+        pdu = P.build_deliver_pdu("+306974401373", "again", "+30", ts=None)
+        link = SimStoreFake({1: (1, pdu)}, fail_del=True)
+        self.ph.attach(link)
+        self.assertEqual(self.ph.sweep_sim()["stored"], 1)
+        self.assertEqual(self.ph.sweep_sim()["stored"], 0)       # same sender/text/scts: not duplicated
+        self.assertEqual(len(self.ph.inbox.values()), 1)
+
+    def test_stored_index_in_incoming_noti_triggers_sweep(self):
+        link = SimStoreFake({2: (1, P.build_deliver_pdu("+306974401373", "live", "+30"))})
+        self.ph.attach(link)
+        pdu = link.slots[2][1]
+        noti = struct.pack("<BBHBB", 2, 1, 2, 5, len(pdu)) + pdu
+        self.ph.handle_frame(nfr(P.SMS_INCOMING_MSG, P.NOTI, noti))
+        run_deferred(self.ph)
+        self.assertEqual([m["text"] for m in self.ph.inbox.values()], ["live"])
+        self.assertEqual(link.deleted, [2])
+
+
+class E2ESweepTest(unittest.TestCase):
+    def test_boot_reports_memory_and_sweeps_sim(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sock = os.path.join(tmp, "p.sock")
+            d = P.Daemon(state_dir=os.path.join(tmp, "s"), simulate=True, socket_path=sock, port=0,
+                         sim_kwargs={"sim_status": 0}, req_timeout=3).start()
+            try:
+                cp = wait_for(lambda: d.fake.get("cp"))
+                self.assertTrue(wait_for(lambda: d.phone.sms_ready))
+                self.assertTrue(wait_for(lambda: cp.mem_sets))
+                self.assertEqual(cp.mem_sets[0], b"\x02\x01")
+                cp.sim_sms[6] = (1, P.build_deliver_pdu("+306974401373", "from the SIM", cp.smsc))
+                r = d.phone.sweep_sim()
+                self.assertEqual((r["stored"], r["deleted"]), (1, 1))
+                self.assertEqual(cp.deleted, [6])
+                self.assertEqual([m["text"] for m in d.phone.inbox.values()], ["from the SIM"])
+                self.assertEqual(d.phone.status()["sim_sweep"]["deleted"], 1)
+            finally:
+                d.stop()
 
 
 if __name__ == "__main__":
