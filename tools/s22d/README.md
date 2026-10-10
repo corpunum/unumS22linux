@@ -1,43 +1,57 @@
-# s22d — Galaxy S22 device daemon (phase 1)
+# s22d
 
-`s22d` exposes a local JSON API for the S22 Linux phone. This first phase is host-buildable and reports hardware operations unavailable until their reviewed backend adapters are connected. It does not access a phone, initiate a radio/camera operation, or bypass the modem allowlist.
+The Galaxy S22 device daemon: a small static Rust binary (about 1.3 MB, about 2 MB resident) that gives the phone's agent, the touch shell and
+you one local JSON API for status, Wi-Fi, modem/SMS/calls, camera, display, audio policy, service restart and
+recovery reboot.
+
+**The contract is [`API.md`](API.md).** `capabilities.json` is its machine-readable snapshot and the plugin's contract tests use it.
+
+Every backend is a trait (`src/backends.rs`) with a phone implementation in `src/real/` and a fake in the tests.
+Policy that belongs to the daemon (owner confirmation for risky calls, the audio flag, the service allowlist, the camera lock,
+loopback-only access, the audit log) lives in `src/routes.rs` and `src/app.rs`.
+`s22-phoned` keeps its own allowlist and rate limits; `s22d` only forwards.
 
 ## Build and test
 
 ```sh
-cargo test --manifest-path tools/s22d/Cargo.toml
-flock /home/corpunum/.cache/rig-heavy.lock cargo build --manifest-path tools/s22d/Cargo.toml --release --target aarch64-unknown-linux-musl
+export PATH=$HOME/.cargo/bin:$PATH
+cargo test --manifest-path tools/s22d/Cargo.toml              # hardware-free, fixture trees and fakes
+UPDATE_CAPABILITIES=1 cargo test --manifest-path tools/s22d/Cargo.toml   # after changing src/catalog.rs
+flock /home/corpunum/.cache/rig-heavy.lock \
+  cargo build --manifest-path tools/s22d/Cargo.toml --release --target aarch64-unknown-linux-musl
 ```
 
-Output: `tools/s22d/target/aarch64-unknown-linux-musl/release/s22d` (static musl aarch64). `S22D_AUDIT` and `S22D_SOCKET` allow test paths. Defaults: `/srv/s22/state/s22d/audit.jsonl`, `/run/s22d.sock`.
+Output: `tools/s22d/target/aarch64-unknown-linux-musl/release/s22d` (static). CI builds it and uploads it as the
+artifact `s22d-aarch64-unknown-linux-musl`.
 
-## API
+## Deploy (phone owner-agent)
 
-HTTP listens on `127.0.0.1:8766`; the same API is exposed over `/run/s22d.sock`. Non-loopback TCP peers must be rejected. Mutating requests append JSONL audit records.
+Order for the whole mobile stack:
+**s22d, then the `s22-device` plugin, then unum-shell** (see `tools/unum-shell/README.md`).
 
-| Method | Path | Risk | Phase-1 behavior |
-|---|---|---|---|
-| GET | `/v1/capabilities` | read | capability inventory |
-| GET | `/v1/status` | read | system summary; unsupported probe fields null |
-| GET | `/v1/thermal` | read | thermal zones; adapter pending |
-| GET | `/v1/processes/top` | read | top process summary; adapter pending |
-| GET | `/v1/wifi/status` | read | Wi-Fi status; adapter pending |
-| POST | `/v1/wifi/scan` | read | request/audit; adapter pending |
-| POST | `/v1/wifi/connect`, `/v1/wifi/disconnect` | reversible | adapter pending |
-| GET | `/v1/bt/status` | read | Bluetooth status; controls report disabled |
-| GET | `/v1/modem/status`, `/v1/sms` | read | phoned proxy pending |
-| POST | `/v1/sms/send`, `/v1/call/dial` | risky | phoned proxy pending; allowlist remains authoritative |
-| POST | `/v1/camera/capture` | read | `{sensor: rear|front, exposure_us?, gain?}`; reviewed camera adapter pending |
-| GET | `/v1/camera/status` | read | camera availability |
-| GET | `/v1/display` | read | display status; adapter pending |
-| POST | `/v1/display/on`, `/off`, `/brightness` | reversible | adapter pending |
-| POST | `/v1/audio/volume` | reversible | nonzero refused unless `/etc/s22-audio-unmuted` exists |
-| POST | `/v1/services/{name}/restart` | reversible | allowlist: `openunum`, `unumsearch`, `modem`, `phoned`, `llama` |
-| POST | `/v1/system/recovery` | risky | operation adapter pending |
-| GET | `/v1/logs/dmesg?since=` | read | adapter pending |
+```sh
+# on the phone, native root, as root
+sh tools/s22d/install-s22d.sh --binary /path/to/s22d
+curl -s http://127.0.0.1:8766/v1/capabilities | head -c 400
+tail -n 5 /srv/s22/state/s22d/audit.jsonl
+```
 
-Error response: `{ "ok": false, "error": "...", "code": "..." }`. Bluetooth scan/power remain unavailable with reason exactly `HCI raw-socket kernel panic: disabled`.
+The installer backs up `/srv/s22/state/keepalive/config.json`, installs `/srv/s22/hardware/bin/s22d`, registers it as a
+keepalive service (health: TCP 8766) and starts it once. It does not touch any other service.
+Rollback: `sh tools/s22d/install-s22d.sh --rollback`.
 
-## Phone deployment note (phone owner-agent)
+Verify on the phone:
 
-Copy the built binary to `/srv/s22/hardware/bin/s22d` on the native phone root and supervise it with `s22-keepalive`, not systemd. Add its service definition in `/srv/s22/state/keepalive/config.json` with exact process needle, binary `requires`, and a dedicated log. Deploy/verify on the phone: check loopback and socket access, inspect the audit JSONL, and confirm nonzero volume is refused. No phone deployment evidence is included in this source phase.
+| Check | Expect |
+|---|---|
+| `curl -s 127.0.0.1:8766/v1/status` | real battery, thermal, memory; `keepalive: true` |
+| `curl -s 127.0.0.1:8766/v1/capabilities` | `wifi.*`, `modem.*`, `camera.*`, `display.*` available; `bt.power`, `bt.scan` not |
+| `curl -s -XPOST 127.0.0.1:8766/v1/audio/volume -d '{"value":5}' -H 'content-type: application/json'` | 403 `policy_denied` |
+| `curl -s -XPOST 127.0.0.1:8766/v1/services/sshd/restart` | 403 `not_allowed` |
+| `curl -s -H 'Origin: http://x' 127.0.0.1:8766/v1/status` | 403 `browser_origin` |
+| `ps -o rss,args` for s22d | well under 20 MB resident |
+
+Risky calls (`sms.send`, `call.dial`, `system.reboot-recovery`) put a yes/no card on the phone and block until the owner taps.
+Test them only with the owner present.
+
+Status of the phone-side evidence: this source tree was built and tested on the rig only. Nothing here has run on the phone yet.
