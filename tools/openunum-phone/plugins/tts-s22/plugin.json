@@ -1,0 +1,14 @@
+{
+  "name": "tts-s22",
+  "version": "0.1.0",
+  "type": "tts",
+  "entrypoint": "index.mjs",
+  "description": "On-device text-to-speech for the S22: s22-say neural engines (supertonic default, paradee, kitten, piper, kokoro, espeak) rendered to a WAV file through s22-touchd. Never plays audio; the phone stays muted.",
+  "capabilities": ["text_to_speech", "audio_generation"],
+  "dependencies": [],
+  "config": {
+    "ui_cli": "/usr/local/bin/s22-ui",
+    "engine": "supertonic",
+    "timeout_ms": 200000
+  }
+}
