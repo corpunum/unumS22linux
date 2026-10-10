@@ -281,6 +281,11 @@ ShellRoot {
   // touch shell keeps a thin strip on top on both compositors: time, guardian
   // warning, network, agent model, battery. Tap = home / back.
   property string clock: ""
+  // Logical px (scale 2 on the S22's 1080x2340 panel): status strip height,
+  // inset past the rounded corners, and the gap kept clear for the camera hole.
+  property int safeTop: 44
+  property int safeSide: 30
+  property int cameraGap: 70
   Timer {
     interval: 15000; repeat: true; running: true; triggeredOnStart: true
     onTriggered: root.clock = Qt.formatDateTime(new Date(), "HH:mm")
@@ -294,24 +299,32 @@ ShellRoot {
     id: strip
     visible: !root.locked
     anchors { top: true; left: true; right: true }
-    implicitHeight: 28
-    exclusiveZone: 28
+    // S22 panel: rounded top corners and a punch-hole front camera at the top
+    // centre. Keep text out of both: a taller strip, text low in it, left and
+    // right groups inset past the corner curve, nothing in the centre.
+    implicitHeight: root.safeTop
+    exclusiveZone: root.safeTop
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "s22-touch-strip"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     color: root.k("#0b0e12")
     onVisibleChanged: if (visible) root.kickSoon()
-    Text {
-      anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter
-      text: root.clock; color: root.fg; font.pixelSize: 15; font.bold: true
+    Row {
+      anchors.left: parent.left; anchors.leftMargin: root.safeSide
+      anchors.bottom: parent.bottom; anchors.bottomMargin: 7
+      width: parent.width / 2 - root.safeSide - root.cameraGap / 2
+      spacing: 10; clip: true
+      Text { text: root.clock; color: root.fg; font.pixelSize: 15; font.bold: true }
+      Text {
+        text: (root.st.healthy === "healthy" ? "● " : "○ ") + root.st.model; color: root.dim; font.pixelSize: 13
+        y: 2
+      }
     }
     Text {
-      anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: parent.verticalCenter
-      width: parent.width - 220; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
-      text: (root.st.healthy === "healthy" ? "● " : "○ ") + root.st.model; color: root.dim; font.pixelSize: 13
-    }
-    Text {
-      anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
+      anchors.right: parent.right; anchors.rightMargin: root.safeSide
+      anchors.bottom: parent.bottom; anchors.bottomMargin: 8
+      width: parent.width / 2 - root.safeSide - root.cameraGap / 2
+      horizontalAlignment: Text.AlignRight; elide: Text.ElideLeft
       text: (root.st.guard ? root.st.guard + "   " : "") + (root.st.net || "…") + "   " + root.st.battery
             + (root.st.batteryState === "Charging" ? "+" : "")
       color: root.st.guard ? "#ffb04f" : root.fg; font.pixelSize: 13
@@ -434,7 +447,7 @@ ShellRoot {
   PanelWindow {
     visible: root.cards.length > 0 && !root.locked
     anchors { top: true; left: true; right: true }
-    margins { top: 34; left: 10; right: 10 }
+    margins { top: root.safeTop + 6; left: 10; right: 10 }
     implicitHeight: cardCol.implicitHeight
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
