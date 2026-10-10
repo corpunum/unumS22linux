@@ -92,3 +92,25 @@ inside the chroot (`chroot /mnt/omarchy-trial python3 /opt/s22-voip/s22-sip.py .
 
 Running in the outer recovery userland instead of the chroot: use `--preset s22-outer` with
 `--work-dir /mnt/omarchy-trial/tmp/s22-voip`. The ASR/TTS tools then run through `chroot`, with paths mapped automatically.
+
+## Fast voice (rig streaming service, `--fast-voice`)
+
+The command loop above costs 2 to 4 s per reply (energy VAD, phone ASR, cloud LLM, phone TTS, one WAV per turn).
+`--fast-voice ws://<rig tailscale ip>:8130` replaces it with a thin bridge to the rig's `unum-voice` service
+(repo corpunum/unum-voice): the phone sends every 20 ms of decoded far-end audio (raw PCM16, 8 kHz) over one WebSocket
+and plays the PCM16 8 kHz audio the rig sends back. VAD, endpointing, streaming ASR (Greek and English), the LLM, TTS and
+barge-in all run on the rig; a `clear` message from the rig flushes the RTP playout queue. The phone needs no models.
+
+    rig:   UNUM_VOICE_HOST=$RIG UNUM_VOICE_TOKEN=... scripts/run-service.sh      # in unum-voice
+    phone: UNUM_VOICE_TOKEN=... python3 /opt/s22-voip/s22-sip.py listen --bind $S22 --allow-from <owner-phone-ts-ip>/32 \
+             --fast-voice ws://$RIG:8130 --pin <pin> --greeting "Hi, it is your phone agent. Go ahead."
+
+* `--pin` keeps working: no audio leaves the phone until the PIN is entered. The service also needs the shared token.
+* If the service cannot be reached at call start and `--preset` (or `--asr-cmd` and `--tts-cmd`) is also given, the call
+  falls back to the classic voice loop. A connection lost mid-call is re-opened every second.
+* At connect and every 30 s the phone sends a `snapshot` message (battery, thermal, modem/SIM/operator via s22-phoned `:8095/status`,
+  network, local time; all best effort). The rig puts it in the brain's prompt as ground truth, so battery/time questions are answered from it
+  and anything else live is handed to the agent instead of guessed.
+* `ws://` only (no TLS in the stdlib-only client): keep it on Tailscale.
+* Measured on the rig with the real `FastVoiceLoop` and a fake RTP session: 0.9 s median from the end of speech to the first reply
+  audio sample (Greek and English) while the rig GPU was fully loaded by another model.

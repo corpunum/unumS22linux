@@ -24,11 +24,17 @@ Voice loop: far-end speech segment end (energy VAD) -> WAV -> ASR command ->
 OpenUnum POST /api/chat (+ poll /api/chat/pending) or --chat-cmd -> TTS command
 -> WAV -> RTP.  Command templates are argv strings with {wav} {text} {out}
 placeholders (no shell), so fakes are easy:  --asr-cmd "cat /tmp/fixed.txt"
+
+Fast voice: --fast-voice ws://RIG:8130 forwards the far-end audio (8 kHz PCM16) to the rig's unum-voice
+service (VAD, streaming ASR, LLM, TTS and barge-in all run there) and plays back the audio it returns;
+see README.md.  If the service is down at call start the classic voice loop above is used when its
+--asr-cmd/--tts-cmd (or --preset) are also given.
 """
 from __future__ import annotations
 
 import argparse
 import array
+import base64
 import hashlib
 import ipaddress
 import json
@@ -47,6 +53,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import wave
 from collections import deque
@@ -1832,6 +1839,361 @@ class VoiceLoop:
         return box.get('reply', '')
 
 
+# ------------------------------------------------------------------ fast voice (rig streaming bridge)
+
+def _read_text(path) -> str | None:
+    try:
+        return Path(path).read_text().strip()
+    except (OSError, ValueError):
+        return None
+
+
+def device_snapshot(power: str = '/sys/class/power_supply', thermal: str = '/sys/class/thermal',
+                    daemon: str | None = 'http://127.0.0.1:8095', route: str = '/proc/net/route',
+                    timeout: float = 1.0) -> dict:
+    """Compact live phone state for the rig's fast voice brain.  Every field is best effort and omitted when unknown."""
+    out: dict = {}
+    bat = Path(power) / 'battery'
+    if not bat.exists():
+        bat = next((d for d in sorted(Path(power).glob('*')) if (d / 'capacity').exists()), bat)
+    b: dict = {}
+    cap, st, tmp = (_read_text(bat / n) for n in ('capacity', 'status', 'temp'))
+    if cap and cap.lstrip('-').isdigit():
+        b['percent'] = int(cap)
+    if st:
+        b['status'] = st
+    if tmp and tmp.lstrip('-').isdigit():
+        b['temp_c'] = round(int(tmp) / 10, 1)
+    if b:
+        out['battery'] = b
+    temps = []
+    for z in Path(thermal).glob('thermal_zone*'):
+        t = _read_text(z / 'temp')
+        if t and t.lstrip('-').isdigit():
+            v = int(t) / (1000 if abs(int(t)) > 1000 else 1)
+            if 0 < v < 150:
+                temps.append(v)
+    if temps:
+        out['thermal'] = {'max_c': round(max(temps), 1)}
+    if daemon:
+        try:
+            with urllib.request.urlopen(daemon.rstrip('/') + '/status', timeout=timeout) as r:
+                st_ = json.loads(r.read() or b'{}')
+            m = {k: st_[src] for k, src in (('state', 'modem_state'), ('sim', 'sim'), ('registration', 'registration'),
+                                            ('operator', 'operator'), ('signal', 'signal')) if st_.get(src) not in (None, '')}
+            if m:
+                out['modem'] = m
+        except (OSError, ValueError, urllib.error.URLError):
+            pass
+    net: dict = {}
+    rt = _read_text(route)
+    for line in (rt or '').splitlines()[1:]:
+        f = line.split()
+        if len(f) > 2 and f[1] == '00000000':
+            net['iface'] = f[0]
+            break
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sk:
+            sk.connect(('10.255.255.255', 1))       # no packet is sent, only the route is resolved
+            net['ip'] = sk.getsockname()[0]
+    except OSError:
+        pass
+    if net:
+        out['network'] = net
+    now = time.localtime()
+    out['time'] = {'local': time.strftime('%A %Y-%m-%d %H:%M', now), 'tz': time.strftime('%Z', now)}
+    return out
+
+
+_WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
+
+
+class WsClient:
+    """Minimal RFC 6455 client (text/binary, ping/pong, close); stdlib only, thread-safe send."""
+
+    def __init__(self, url: str, timeout: float = 3.0):
+        u = urllib.parse.urlparse(url)
+        if u.scheme != 'ws':
+            raise ValueError('only ws:// is supported (use Tailscale for transport security)')
+        self.host, self.port = u.hostname, u.port or 80
+        self.path = (u.path or '/') + (('?' + u.query) if u.query else '')
+        self.timeout = timeout
+        self.sock: socket.socket | None = None
+        self.lock = threading.Lock()
+        self.closed = False
+        self._buf = b''
+
+    def connect(self) -> None:
+        sock = socket.create_connection((self.host, self.port), timeout=self.timeout)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        key = base64.b64encode(os.urandom(16)).decode()
+        sock.sendall((f'GET {self.path} HTTP/1.1\r\nHost: {self.host}:{self.port}\r\nUpgrade: websocket\r\n'
+                      f'Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n').encode())
+        head = b''
+        while b'\r\n\r\n' not in head:
+            chunk = sock.recv(4096)
+            if not chunk:
+                raise ConnectionError('websocket handshake: connection closed')
+            head += chunk
+            if len(head) > 65536:
+                raise ConnectionError('websocket handshake: header too large')
+        head, _, self._buf = head.partition(b'\r\n\r\n')
+        lines = head.decode('latin-1').split('\r\n')
+        if ' 101 ' not in lines[0] + ' ':
+            raise ConnectionError(f'websocket handshake failed: {lines[0]}')
+        hdr = {k.strip().lower(): v.strip() for k, _, v in (ln.partition(':') for ln in lines[1:])}
+        want = base64.b64encode(hashlib.sha1((key + _WS_GUID).encode()).digest()).decode()
+        if hdr.get('sec-websocket-accept') != want:
+            raise ConnectionError('websocket handshake: bad Sec-WebSocket-Accept')
+        sock.settimeout(None)
+        self.sock = sock
+
+    def _send(self, opcode: int, payload: bytes) -> None:
+        n = len(payload)
+        mask = os.urandom(4)
+        head = bytes([0x80 | opcode])
+        if n < 126:
+            head += bytes([0x80 | n])
+        elif n < 65536:
+            head += bytes([0x80 | 126]) + struct.pack('>H', n)
+        else:
+            head += bytes([0x80 | 127]) + struct.pack('>Q', n)
+        masked = (int.from_bytes(payload, 'big') ^ int.from_bytes((mask * (n // 4 + 1))[:n], 'big')).to_bytes(n, 'big') if n else b''
+        with self.lock:
+            if self.sock is None or self.closed:
+                raise ConnectionError('websocket closed')
+            self.sock.sendall(head + mask + masked)
+
+    def send_text(self, text: str) -> None:
+        self._send(0x1, text.encode())
+
+    def send_binary(self, data: bytes) -> None:
+        self._send(0x2, data)
+
+    def _read(self, n: int) -> bytes:
+        while len(self._buf) < n:
+            chunk = self.sock.recv(65536)
+            if not chunk:
+                raise ConnectionError('websocket closed by peer')
+            self._buf += chunk
+        out, self._buf = self._buf[:n], self._buf[n:]
+        return out
+
+    def recv(self):
+        """Next data message as (opcode, payload); None once closed.  Answers ping, handles fragments."""
+        frag_op, frag = None, b''
+        while True:
+            try:
+                b0, b1 = self._read(2)
+                n = b1 & 0x7F
+                if n == 126:
+                    n = struct.unpack('>H', self._read(2))[0]
+                elif n == 127:
+                    n = struct.unpack('>Q', self._read(8))[0]
+                mask = self._read(4) if b1 & 0x80 else None
+                data = self._read(n) if n else b''
+            except (OSError, ConnectionError):
+                self.closed = True
+                return None
+            if mask:
+                data = (int.from_bytes(data, 'big') ^ int.from_bytes((mask * (n // 4 + 1))[:n], 'big')).to_bytes(n, 'big')
+            op = b0 & 0x0F
+            if op == 0x8:
+                self.closed = True
+                return None
+            if op == 0x9:
+                try:
+                    self._send(0xA, data)
+                except (OSError, ConnectionError):
+                    pass
+                continue
+            if op == 0xA:
+                continue
+            if op in (0x1, 0x2):
+                frag_op, frag = op, data
+            elif op == 0x0:
+                frag += data
+            if b0 & 0x80:
+                return frag_op, frag
+
+    def close(self) -> None:
+        if self.sock is not None and not self.closed:
+            try:
+                self._send(0x8, struct.pack('>H', 1000))
+            except (OSError, ConnectionError):
+                pass
+        self.closed = True
+        if self.sock is not None:
+            try:
+                self.sock.close()
+            except OSError:
+                pass
+
+
+class FastVoiceLoop:
+    """Bridge to the rig's unum-voice service: far-end PCM16 8 kHz out, reply PCM16 8 kHz in.
+
+    VAD, endpointing, streaming ASR, LLM, TTS and barge-in all run on the rig; this class only moves
+    audio.  Same attach/stop/on_dtmf/turns surface as VoiceLoop.  A {"type":"clear"} message from the rig
+    (barge-in) flushes the RTP playout queue.  `fallback()` may return a classic VoiceLoop, used when the
+    service cannot be reached at call start.
+    """
+
+    def __init__(self, rtp, url: str, token: str | None = None, greeting: str | None = None,
+                 pin: str | None = None, barge_in: bool = True, lang: str = 'auto',
+                 fallback: Callable | None = None, connect_timeout: float = 2.0,
+                 reconnect_s: float = 1.0, client_factory=WsClient, snapshot_fn: Callable | None = device_snapshot,
+                 snapshot_s: float = 30.0, log=_log):
+        self.rtp, self.url, self.token, self.greeting = rtp, url, token, greeting
+        self.pin, self.digits, self.locked = pin, '', bool(pin)
+        self.barge_in, self.lang, self.fallback = barge_in, lang, fallback
+        self.connect_timeout, self.reconnect_s, self.client_factory, self.log = \
+            connect_timeout, reconnect_s, client_factory, log
+        self.ws = None
+        self.ready = False
+        self.running = False
+        self.delegate = None
+        self.turns: list[dict] = []
+        self.thread: threading.Thread | None = None
+        self.tx_bytes = self.rx_bytes = 0
+        self.snapshot_fn, self.snapshot_s = snapshot_fn, snapshot_s
+        self.stop_ev = threading.Event()
+
+    def send_snapshot(self) -> None:
+        """Ground truth for the rig's brain (battery, thermal, modem, network, time); it must not guess these."""
+        if not self.snapshot_fn or self.ws is None or self.ws.closed:
+            return
+        try:
+            self.ws.send_text(json.dumps({'type': 'snapshot', 'data': self.snapshot_fn()}))
+        except (OSError, ConnectionError, ValueError) as e:
+            self.log(f'fast-voice: snapshot failed: {e!r}')
+
+    def _snapshot_loop(self) -> None:
+        while not self.stop_ev.wait(self.snapshot_s):
+            self.send_snapshot()
+
+    # -- lifecycle
+    def _open(self) -> bool:
+        try:
+            ws = self.client_factory(self.url, self.connect_timeout)
+            ws.connect()
+            hello = {'type': 'hello', 'codec': 'pcm16', 'rate': RATE, 'out_rate': RATE,
+                     'barge_in': self.barge_in, 'lang': self.lang}
+            if self.token:
+                hello['token'] = self.token
+            ws.send_text(json.dumps(hello))
+            self.ws = ws
+            return True
+        except (OSError, ConnectionError, ValueError) as e:
+            self.log(f'fast-voice: cannot connect to {self.url}: {e!r}')
+            return False
+
+    def attach(self) -> None:
+        self.running = True
+        if not self._open():
+            if self.fallback:
+                self.delegate = self.fallback()
+                self.log('fast-voice: falling back to the classic voice loop')
+                self.delegate.attach()
+            else:
+                self.running = False
+            return
+        self.rtp.on_audio.append(self.feed)
+        self.rtp.on_dtmf.append(self.on_dtmf)
+        self.thread = threading.Thread(target=self._rx_loop, daemon=True)
+        self.thread.start()
+        self.send_snapshot()
+        if self.snapshot_fn:
+            threading.Thread(target=self._snapshot_loop, daemon=True).start()
+        if self.locked:
+            self.log('fast-voice: locked, waiting for DTMF PIN')
+        elif self.greeting:
+            self._say(self.greeting)
+
+    def stop(self) -> None:
+        self.running = False
+        self.stop_ev.set()
+        if self.delegate:
+            self.delegate.stop()
+        if self.ws:
+            try:
+                self.ws.send_text(json.dumps({'type': 'bye'}))
+            except (OSError, ConnectionError):
+                pass
+            self.ws.close()
+        if self.thread:
+            self.thread.join(timeout=3)
+
+    # -- tx
+    def _say(self, text: str) -> None:
+        try:
+            self.ws.send_text(json.dumps({'type': 'say', 'text': text}))
+        except (OSError, ConnectionError, AttributeError):
+            pass
+
+    def on_dtmf(self, d: str) -> None:
+        if self.locked:
+            self.digits = (self.digits + d)[-len(self.pin):]
+            if self.digits == self.pin:
+                self.locked = False
+                self.log('fast-voice: PIN accepted')
+                self._say(self.greeting or 'Hello.')
+
+    def feed(self, samples) -> None:
+        if self.locked or not self.running or self.ws is None or self.ws.closed:
+            return
+        data = _le(array.array('h', samples)).tobytes()
+        try:
+            self.ws.send_binary(data)
+            self.tx_bytes += len(data)
+        except (OSError, ConnectionError):
+            pass                      # the rx loop notices and reconnects
+
+    # -- rx
+    def _rx_loop(self) -> None:
+        cur: dict = {}
+        while self.running:
+            msg = self.ws.recv()
+            if msg is None:
+                if not self.running:
+                    break
+                self.log('fast-voice: connection lost, reconnecting')
+                self.rtp.flush()
+                while self.running and not self._open():
+                    time.sleep(self.reconnect_s)
+                self.send_snapshot()
+                continue
+            op, payload = msg
+            if op == 0x2:
+                self.rx_bytes += len(payload)
+                pcm = array.array('h')
+                pcm.frombytes(payload[:len(payload) // 2 * 2])
+                self.rtp.play(_le(pcm))
+                continue
+            try:
+                ev = json.loads(payload.decode())
+            except ValueError:
+                continue
+            t = ev.get('type')
+            if t == 'clear':
+                self.rtp.flush()
+                self.log('fast-voice: barge-in, playback flushed')
+            elif t == 'asr_final':
+                cur = {'transcript': ev.get('text', '')}
+                self.log(f"fast-voice: heard {ev.get('text', '')!r}")
+            elif t == 'metrics':
+                cur.update({'turn': ev.get('turn'), 'reply': ' '.join(ev.get('spoken') or []),
+                            'first_audio_ms': ev.get('endpoint_to_first_audio_ms'),
+                            'asr_ms': ev.get('asr_final_ms'), 'llm_ttft_ms': ev.get('llm_ttft_ms'),
+                            'tts_ms': ev.get('tts_first_ms'), 'result': 'ok'})
+                self.turns.append(cur)
+                cur = {}
+            elif t == 'error':
+                self.log(f"fast-voice: server error {ev.get('error')!r}")
+                if ev.get('error') == 'unauthorized':
+                    self.running = False
+
+
 # ------------------------------------------------------------------ presets / CLI
 
 _SUPERTONIC = '/opt/s22-tts/sherpa-onnx-supertonic-tts-int8-2026-03-06'
@@ -1923,6 +2285,12 @@ def _common(p: argparse.ArgumentParser) -> None:
     v.add_argument('--barge-in', action='store_true', help='far-end speech interrupts playback')
     v.add_argument('--vad-min-db', type=float, default=-42.0)
     v.add_argument('--vad-hangover-ms', type=int, default=700)
+    v.add_argument('--fast-voice', metavar='WS_URL',
+                   help='stream the call to the rig unum-voice service (ws://100.x.y.z:8130) instead of the '
+                        'ASR/chat/TTS command loop; falls back to it when the service is unreachable')
+    v.add_argument('--fast-voice-token-env', default='UNUM_VOICE_TOKEN',
+                   help='env var holding the shared secret the service expects')
+    v.add_argument('--fast-voice-lang', default='auto')
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1941,7 +2309,19 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _make_voice_loop(args, call: Call, log) -> VoiceLoop:
+def _make_voice_loop(args, call: Call, log):
+    if getattr(args, 'fast_voice', None):
+        can_fall_back = bool((args.asr_cmd or PRESETS.get(args.preset or '', {}).get('asr'))
+                             and (args.tts_cmd or PRESETS.get(args.preset or '', {}).get('tts')))
+        return FastVoiceLoop(call.rtp, args.fast_voice, token=os.environ.get(args.fast_voice_token_env) or None,
+                             greeting=args.greeting or None, pin=args.pin, barge_in=True,
+                             lang=args.fast_voice_lang,
+                             fallback=(lambda: _make_classic_loop(args, call, log)) if can_fall_back else None,
+                             log=log)
+    return _make_classic_loop(args, call, log)
+
+
+def _make_classic_loop(args, call: Call, log) -> VoiceLoop:
     preset = PRESETS.get(args.preset or '', {})
     root = args.cmd_root if args.cmd_root is not None else preset.get('root', '')
     asr_t = args.asr_cmd or preset.get('asr')
@@ -1961,8 +2341,8 @@ def run(args, log=_log) -> int:
     if args.cmd == 'tone':
         write_wav(args.out, args.rate, tone(args.freq, args.seconds, args.rate))
         return 0
-    if args.voice_loop and not args.allow_from and not args.allow_any and args.cmd == 'listen':
-        raise SystemExit('--voice-loop on listen needs --allow-from (or explicit --allow-any): '
+    if (args.voice_loop or args.fast_voice) and not args.allow_from and not args.allow_any and args.cmd == 'listen':
+        raise SystemExit('--voice-loop/--fast-voice on listen needs --allow-from (or explicit --allow-any): '
                          'anyone who can reach this port could talk to the agent')
     password = os.environ.get(args.password_env) if args.password_env else None
     ua = SipUA(user=args.user, domain=args.domain, password=password, auth_user=args.auth_user,
@@ -1992,7 +2372,7 @@ def run(args, log=_log) -> int:
                              daemon=True).start()
         if args.dtmf and rtp.dtmf_pt is not None:
             rtp.send_dtmf(args.dtmf)
-        if args.voice_loop:
+        if args.voice_loop or args.fast_voice:
             loop = _make_voice_loop(args, call, log)
             loop.attach()
             state['loops'].append(loop)
