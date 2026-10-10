@@ -39,6 +39,11 @@ which also saves and re-baselines config_drift); the file itself is only
 patched while OpenUnum is stopped, right before keepalive starts it, because
 the running server rewrites openunum.json from memory after every turn.
 
+Holds: a file /run/s22-hold/<service> makes keepalive leave that service
+alone (no restart while held). s22-guardian uses it to keep the :8090 model or
+other non-essential services stopped while the phone is hot; deleting the
+file hands the service back.
+
 One instance only (flock). Everything is logged as JSON lines to
 /srv/s22/state/keepalive/keepalive.jsonl (rotated at 1 MiB).
 
@@ -86,6 +91,7 @@ DEFAULTS = {
 OPENUNUM_API = 'http://127.0.0.1:18880'
 OPENUNUM_CONFIG = Path('/mnt/omarchy-trial/root/.openunum/openunum.json')
 LOG_MAX = 1 << 20
+HOLD_DIR = Path('/run/s22-hold')
 
 
 def load_config(state: Path = STATE) -> dict:
@@ -421,6 +427,8 @@ class Keepalive:
         self.backoff: dict[str, float] = {n: float(cfg['backoff_start_s']) for n in self.services}
         self.history: dict[str, list[float]] = {n: [] for n in self.services}
         self.limited: set[str] = set()
+        self.held: set[str] = set()
+        self.hold_dir = HOLD_DIR
 
     def log(self, **rec) -> None:
         rec['t'] = round(time.time(), 3)
@@ -526,6 +534,15 @@ class Keepalive:
         result = {}
         restarted = False
         for name, svc in self.services.items():
+            if (self.hold_dir / name).exists():
+                if name not in self.held:
+                    self.held.add(name)
+                    self.log(event='held', service=name)
+                result[name] = {'action': 'held'}
+                continue
+            if name in self.held:
+                self.held.discard(name)
+                self.log(event='released', service=name)
             running = svc.running(lines)
             healthy = running and svc.healthy()
             action = self.decide(name, running, healthy, now)

@@ -59,6 +59,20 @@ class PolicyTest(unittest.TestCase):
         self.assertEqual(self.svc.starts, 1)
         self.assertEqual(self.svc.stops, 0)
 
+    def test_hold_file_pauses_and_release_resumes(self):
+        self.k.hold_dir = Path(self.tmp.name) / 'hold'
+        self.k.hold_dir.mkdir()
+        (self.k.hold_dir / 'openunum').touch()
+        self.svc.is_running = self.svc.is_healthy = False
+        with mock.patch.object(mod, 'ps_lines', return_value=[]):
+            r = self.k.check_once(now=1000)
+            self.assertEqual(r['openunum']['action'], 'held')
+            self.assertEqual(self.svc.starts, 0)
+            (self.k.hold_dir / 'openunum').unlink()
+            r = self.k.check_once(now=1020)
+        self.assertEqual(r['openunum']['action'], 'restart')
+        self.assertEqual(self.svc.starts, 1)
+
     def test_slow_but_running_waits_then_restarts(self):
         self.svc.is_healthy = False
         with mock.patch.object(mod, 'ps_lines', return_value=[]):

@@ -16,12 +16,15 @@ STATE=/run/s22-display-state
 TOUCH=sec_touchscreen-2
 H() { chroot "$CHROOT" /usr/bin/env XDG_RUNTIME_DIR=/run/user/0 /usr/bin/hyprctl -i 0 "$@" >/dev/null; }
 cur=$(cat "$STATE" 2>/dev/null || echo on)
-# Opt-in sway-pixman desktop (/etc/s22-desktop): wlroots 0.20 cannot re-enable
-# this panel after `output power off` (the real modeset commit fails although
-# its TEST_ONLY passes; phase 2 trial 2026-10-10), so under sway "off" is
-# backlight 0 + touch events disabled, NOT a true panel power-off.
+# Opt-in sway-pixman desktop (/etc/s22-desktop): output power + touch events via
+# swaymsg (real DPMS: decon off, panel SLEEP_IN, like Hyprland). Stock wlroots
+# 0.20 cannot re-enable this panel after a power-off (gamma reset on a CRTC
+# without gamma, see tools/touchui/sway/patch-wlroots-gamma.py); sway loads the
+# fixed copy from /opt/s22-wlroots. If it is not loaded, "off" degrades to
+# backlight 0 + touch disabled so the screen always comes back.
 SWAY_SESSION=$CHROOT/run/s22-desktop/session
-on_sway() { ! pidof Hyprland >/dev/null 2>&1 && pidof sway >/dev/null 2>&1 && [ -s "$SWAY_SESSION" ]; }
+on_sway() { [ "${S22_DISPLAY_COMPOSITOR:-}" = sway ] && return 0; [ "${S22_DISPLAY_COMPOSITOR:-}" = hyprland ] && return 1; ! pidof Hyprland >/dev/null 2>&1 && pidof sway >/dev/null 2>&1 && [ -s "$SWAY_SESSION" ]; }
+sway_fixed() { grep -q /opt/s22-wlroots/ "/proc/$(pidof sway | cut -d' ' -f1)/maps" 2>/dev/null; }
 S() { chroot "$CHROOT" /usr/bin/env XDG_RUNTIME_DIR=/run/user/0 SWAYSOCK="$(sed -n 2p "$SWAY_SESSION")" /usr/bin/swaymsg "$@" >/dev/null; }
 
 repaint() {  # force full damage: toggle a no-op screen shader
@@ -45,9 +48,13 @@ FRAG
 off() {
   if on_sway; then
     S input type:touch events disabled
-    b=$(cat /sys/class/backlight/panel/brightness)
-    [ "$b" != 0 ] && echo "$b" > /run/s22-display-brightness
-    echo 0 > /sys/class/backlight/panel/brightness
+    if sway_fixed; then
+      S output DSI-1 power off
+    else
+      b=$(cat /sys/class/backlight/panel/brightness)
+      [ "$b" != 0 ] && echo "$b" > /run/s22-display-brightness
+      echo 0 > /sys/class/backlight/panel/brightness
+    fi
     echo off > "$STATE"; return
   fi
   H eval "hl.device({ name = \"$TOUCH\", enabled = false })"
@@ -57,6 +64,7 @@ off() {
 
 on() {
   if on_sway; then
+    S output DSI-1 power on
     S input type:touch events enabled
     b=$(cat /run/s22-display-brightness 2>/dev/null)
     if [ "$(cat /sys/class/backlight/panel/brightness)" = 0 ]; then echo "${b:-128}" > /sys/class/backlight/panel/brightness; fi

@@ -34,7 +34,7 @@ ShellRoot {
 
   readonly property var apps: ({
     chat: "page", phone: "page", camera: "page", files: "page", settings: "page", switcher: "page",
-    terminal: "app", agent: "app"
+    terminal: "app"
   })
 
   // ------------------------------------------------------------ repaint kick
@@ -88,20 +88,44 @@ ShellRoot {
 
   function hideHome() { homeVisible = false; page = "" }
 
-  function findToplevel(cls) {
+  // Windows: Hyprland IPC under Hyprland; under sway the compositor-neutral
+  // wlr-foreign-toplevel list (Quickshell.Wayland ToplevelManager).
+  function windows() {
+    var out = []
+    if (onSway) {
+      var wl = ToplevelManager.toplevels.values
+      for (var j = 0; j < wl.length; j++)
+        out.push({ t: wl[j], cls: wl[j].appId || "?", title: wl[j].title || "", ws: "" })
+      return out
+    }
     Hyprland.refreshToplevels()
     var tl = Hyprland.toplevels.values
     for (var i = 0; i < tl.length; i++) {
       var o = tl[i].lastIpcObject || {}
-      if (o["class"] === cls || o.initialClass === cls) return tl[i]
+      out.push({ t: tl[i], cls: o["class"] || "?", initialClass: o.initialClass, title: tl[i].title || o.title || "",
+                 ws: o.workspace ? o.workspace.name : "" })
     }
+    return out
+  }
+
+  function findToplevel(cls) {
+    var w = windows()
+    for (var i = 0; i < w.length; i++)
+      if (w[i].cls === cls || w[i].initialClass === cls) return w[i].t
     return null
   }
 
   function focusToplevel(t) {
+    if (onSway) { t.activate(); return }
     var a = String(t.address || "")
     if (a.indexOf("0x") !== 0) a = "0x" + a
     Hyprland.dispatch('hl.dsp.focus({ window = "address:' + a + '" })')
+  }
+
+  function closeToplevel(t) {
+    if (onSway) { t.close(); return }
+    focusToplevel(t)
+    Hyprland.dispatch("hl.dsp.window.close()")
   }
 
   function launchOrFocus(cls, argv) {
@@ -116,7 +140,6 @@ ShellRoot {
     if (apps[app] === "page") { showHome(app); return "ok" }
     hideHome()
     if (app === "terminal") launchOrFocus("s22.terminal", ["foot", "--app-id=s22.terminal"])
-    else if (app === "agent") launchOrFocus("org.omarchy.agent", ["omarchy-agent"])
     kbT.restart()   // terminal focus can hide an immediate reveal: show the keyboard after it settles
     return "ok"
   }
@@ -148,6 +171,13 @@ ShellRoot {
         "sh", runDir + "/confirm", payload, r.id])
   }
 
+  function netLabel(kv) {   // operstate per interface -> "wifi · ts", "usb", "offline"
+    var up = function (n) { var v = kv["net_" + n]; return v === "up" || v === "unknown" }
+    var link = up("wlan0") ? "wifi" : (up("ecm0") ? "usb" : (up("rmnet0") ? "cell" : ""))
+    var ts = kv["net_tailscale0"] && kv["net_tailscale0"] !== "absent" && kv["net_tailscale0"] !== "down"
+    return link ? link + (ts ? " · ts" : "") : (ts ? "ts" : "offline")
+  }
+
   function refreshStatus() {
     http("GET", api + "/api/model/current", null, function (s, j) {
       var m = j && j.model ? String(j.model) : "unreachable"
@@ -173,7 +203,7 @@ ShellRoot {
 
   Process {
     id: sysProc
-    command: ["sh", "-c", "b=/sys/class/power_supply/battery; echo cap=$(cat $b/capacity); echo state=$(cat $b/status); echo temp=$(cat $b/temp); for z in /sys/class/thermal/thermal_zone*; do echo z_$(cat $z/type)=$(cat $z/temp); done"]
+    command: ["sh", "-c", "b=/sys/class/power_supply/battery; echo cap=$(cat $b/capacity); echo state=$(cat $b/status); echo temp=$(cat $b/temp); for z in /sys/class/thermal/thermal_zone*; do echo z_$(cat $z/type)=$(cat $z/temp); done; for n in wlan0 ecm0 rmnet0 tailscale0; do echo net_$n=$(cat /sys/class/net/$n/operstate 2>/dev/null || echo absent); done; cat /run/s22-touch/guardian.env 2>/dev/null"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -184,7 +214,9 @@ ShellRoot {
         zones.forEach(function (z) { var v = Number(kv[z]) / 1000; if (v > 0) { mx = Math.max(mx, v); parts.push(z.slice(2) + " " + v.toFixed(0)) } })
         root.st = Object.assign({}, root.st, {
           battery: (kv.cap || "?") + "%", batteryState: kv.state || "", batteryTemp: kv.temp ? (Number(kv.temp) / 10).toFixed(1) + "°C" : "",
-          thermal: mx ? mx.toFixed(0) + "°C" : "?", thermalMax: mx, thermalDetail: parts.join(" · ")
+          thermal: mx ? mx.toFixed(0) + "°C" : "?", thermalMax: mx, thermalDetail: parts.join(" · "),
+          net: root.netLabel(kv),
+          guard: Number(kv.g_level || 0) >= 1 ? "⚠ " + (kv.g_tmax || "?") + "°C" + (kv.g_msg ? " " + kv.g_msg : "") : ""
         })
       }
     }
@@ -242,6 +274,49 @@ ShellRoot {
       root.perfReq = { until: Date.now() + Math.max(2, Math.min(30, Number(seconds) || 5)) * 1000, frames: [] }
       return "measuring"
     }
+  }
+
+  // ------------------------------------------------------------ status strip
+  // There is no desktop bar any more (Omarchy removed 2026-10-10), so the
+  // touch shell keeps a thin strip on top on both compositors: time, guardian
+  // warning, network, agent model, battery. Tap = home / back.
+  property string clock: ""
+  Timer {
+    interval: 15000; repeat: true; running: true; triggeredOnStart: true
+    onTriggered: root.clock = Qt.formatDateTime(new Date(), "HH:mm")
+  }
+  Timer {
+    interval: 30000; repeat: true; running: !root.homeVisible && !root.locked
+    triggeredOnStart: true
+    onTriggered: root.refreshStatus()
+  }
+  PanelWindow {
+    id: strip
+    visible: !root.locked
+    anchors { top: true; left: true; right: true }
+    implicitHeight: 28
+    exclusiveZone: 28
+    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.namespace: "s22-touch-strip"
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    color: root.k("#0b0e12")
+    onVisibleChanged: if (visible) root.kickSoon()
+    Text {
+      anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter
+      text: root.clock; color: root.fg; font.pixelSize: 15; font.bold: true
+    }
+    Text {
+      anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: parent.verticalCenter
+      width: parent.width - 220; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
+      text: (root.st.healthy === "healthy" ? "● " : "○ ") + root.st.model; color: root.dim; font.pixelSize: 13
+    }
+    Text {
+      anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
+      text: (root.st.guard ? root.st.guard + "   " : "") + (root.st.net || "…") + "   " + root.st.battery
+            + (root.st.batteryState === "Charging" ? "+" : "")
+      color: root.st.guard ? "#ffb04f" : root.fg; font.pixelSize: 13
+    }
+    TapHandler { onTapped: root.homeVisible ? root.hideHome() : root.showHome("") }
   }
 
   // ------------------------------------------------------------ home + pages
@@ -323,9 +398,8 @@ ShellRoot {
 
         Row {
           spacing: 8; width: parent.width
-          Btn { text: "Pi agent"; width: (parent.width - 16) / 3; onClicked: root.openApp("agent") }
-          Btn { text: "Apps"; width: (parent.width - 16) / 3; onClicked: root.showHome("switcher") }
-          Btn { text: "Keyboard"; width: (parent.width - 16) / 3; onClicked: root.keyboard(true) }
+          Btn { text: "Apps"; width: (parent.width - 8) / 2; onClicked: root.showHome("switcher") }
+          Btn { text: "Keyboard"; width: (parent.width - 8) / 2; onClicked: root.keyboard(true) }
         }
       }
     }
