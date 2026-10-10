@@ -23,7 +23,7 @@ Item {
         Text { text: modelData.cls; color: "#e8edf2"; font.pixelSize: 19; font.bold: true; width: parent.width; elide: Text.ElideRight }
         Text { text: modelData.title + (modelData.ws ? "  ·  ws " + modelData.ws : ""); color: "#8b98a7"; font.pixelSize: 14; width: parent.width; elide: Text.ElideRight }
       }
-      TapHandler { id: tapW; onTapped: { page.shell.focusToplevel(modelData.t); page.shell.hideHome() } }
+      TapHandler { id: tapW; gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: { page.shell.focusToplevel(modelData.t); page.shell.hideHome() } }
       Btn {
         anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter
         text: "Close"; width: 120; holdToConfirm: true; tint: "#4a2326"
