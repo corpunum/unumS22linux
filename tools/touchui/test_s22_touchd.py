@@ -224,3 +224,86 @@ class SessionEnvTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class BackendTest(unittest.TestCase):
+    """The unum-shell profile: selection, forwarding to shell.sock, rollback to Quickshell."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.run_dir = Path(self.tmp.name)
+        self.saved = (td.UI_BACKEND_FILE, td.SHELL_SOCK, td.quickshell_call)
+        td.UI_BACKEND_FILE = self.run_dir / 'ui-backend'
+        td.SHELL_SOCK = self.run_dir / 'shell.sock'
+        self.qs = []
+        td.quickshell_call = lambda fn, *a, timeout=8: (self.qs.append((fn,) + a), {'ok': True, 'result': 'qs'})[1]
+        os.environ.pop('S22_UI_BACKEND', None)
+
+    def tearDown(self):
+        td.UI_BACKEND_FILE, td.SHELL_SOCK, td.quickshell_call = self.saved
+        os.environ.pop('S22_UI_BACKEND', None)
+        self.tmp.cleanup()
+
+    def fake_shell(self, reply):
+        srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        srv.bind(str(td.SHELL_SOCK))
+        srv.listen(1)
+        seen = []
+
+        def serve():
+            c, _ = srv.accept()
+            data = b''
+            while not data.endswith(b'\n'):
+                data += c.recv(1024)
+            seen.append(json.loads(data))
+            c.sendall((json.dumps(reply) + '\n').encode())
+            c.close()
+            srv.close()
+        threading.Thread(target=serve, daemon=True).start()
+        return seen
+
+    def test_default_is_quickshell(self):
+        self.assertEqual(td.ui_backend(), 'quickshell')
+        td.ui_call('home')
+        self.assertEqual(self.qs, [('home',)])
+
+    def test_profile_file_and_env_select_unum_shell(self):
+        td.UI_BACKEND_FILE.write_text('unum-shell\n')
+        self.assertEqual(td.ui_backend(), 'unum-shell')
+        td.UI_BACKEND_FILE.write_text('garbage')
+        self.assertEqual(td.ui_backend(), 'quickshell')
+        os.environ['S22_UI_BACKEND'] = 'unum-shell'
+        self.assertEqual(td.ui_backend(), 'unum-shell')
+
+    def test_calls_go_to_shell_sock_and_results_are_parsed(self):
+        td.UI_BACKEND_FILE.write_text('unum-shell')
+        seen = self.fake_shell({'ok': True, 'result': 'card 3'})
+        r = td.ui_call('card', 'Title', 'Body', 8)
+        self.assertEqual(r, {'ok': True, 'result': 'card 3'})
+        self.assertEqual(seen, [{'fn': 'card', 'args': ['Title', 'Body', '8']}])
+        self.assertEqual(self.qs, [])
+
+    def test_state_result_is_json_decoded(self):
+        td.UI_BACKEND_FILE.write_text('unum-shell')
+        self.fake_shell({'ok': True, 'result': '{"page": "chat"}'})
+        self.assertEqual(td.ui_call('state')['result'], {'page': 'chat'})
+
+    def test_unreachable_shell_is_reported_and_rollback_restores_quickshell(self):
+        td.UI_BACKEND_FILE.write_text('unum-shell')
+        self.assertEqual(td.ui_call('home')['error'], 'shell_unreachable')
+        td.UI_BACKEND_FILE.write_text('quickshell')
+        self.assertTrue(td.ui_call('home')['ok'])
+        self.assertEqual(self.qs, [('home',)])
+
+    def test_shell_errors_pass_through(self):
+        td.UI_BACKEND_FILE.write_text('unum-shell')
+        self.fake_shell({'ok': False, 'error': 'bad_request: x'})
+        self.assertEqual(td.ui_call('x'), {'ok': False, 'error': 'bad_request: x'})
+
+    def test_launch_commands(self):
+        env = {'WAYLAND_DISPLAY': 'wayland-1', 'HOME': '/root'}
+        unum = td.shell_command(env, 'unum-shell')
+        self.assertEqual(unum[-1], td.UNUM_SHELL)
+        self.assertIn('S22_TOUCH_RUN=/run/s22-touch', unum)
+        self.assertIn('quickshell', td.shell_command(env, 'quickshell'))
+        self.assertNotIn(td.UNUM_SHELL, td.shell_command(env, 'quickshell'))
