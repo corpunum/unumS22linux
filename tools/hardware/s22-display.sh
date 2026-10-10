@@ -16,6 +16,13 @@ STATE=/run/s22-display-state
 TOUCH=sec_touchscreen-2
 H() { chroot "$CHROOT" /usr/bin/env XDG_RUNTIME_DIR=/run/user/0 /usr/bin/hyprctl -i 0 "$@" >/dev/null; }
 cur=$(cat "$STATE" 2>/dev/null || echo on)
+# Opt-in sway-pixman desktop (/etc/s22-desktop): wlroots 0.20 cannot re-enable
+# this panel after `output power off` (the real modeset commit fails although
+# its TEST_ONLY passes; phase 2 trial 2026-10-10), so under sway "off" is
+# backlight 0 + touch events disabled, NOT a true panel power-off.
+SWAY_SESSION=$CHROOT/run/s22-desktop/session
+on_sway() { ! pidof Hyprland >/dev/null 2>&1 && pidof sway >/dev/null 2>&1 && [ -s "$SWAY_SESSION" ]; }
+S() { chroot "$CHROOT" /usr/bin/env XDG_RUNTIME_DIR=/run/user/0 SWAYSOCK="$(sed -n 2p "$SWAY_SESSION")" /usr/bin/swaymsg "$@" >/dev/null; }
 
 repaint() {  # force full damage: toggle a no-op screen shader
   H eval 'hl.config({ decoration = { screen_shader = "/root/s22-identity.frag" } })'
@@ -36,12 +43,25 @@ FRAG
 }
 
 off() {
+  if on_sway; then
+    S input type:touch events disabled
+    b=$(cat /sys/class/backlight/panel/brightness)
+    [ "$b" != 0 ] && echo "$b" > /run/s22-display-brightness
+    echo 0 > /sys/class/backlight/panel/brightness
+    echo off > "$STATE"; return
+  fi
   H eval "hl.device({ name = \"$TOUCH\", enabled = false })"
   H dispatch 'hl.dsp.dpms({ action = "off" })'
   echo off > "$STATE"
 }
 
 on() {
+  if on_sway; then
+    S input type:touch events enabled
+    b=$(cat /run/s22-display-brightness 2>/dev/null)
+    if [ "$(cat /sys/class/backlight/panel/brightness)" = 0 ]; then echo "${b:-128}" > /sys/class/backlight/panel/brightness; fi
+    echo on > "$STATE"; return
+  fi
   ensure_identity
   H dispatch 'hl.dsp.dpms({ action = "on" })'
   H eval "hl.device({ name = \"$TOUCH\", enabled = true })"

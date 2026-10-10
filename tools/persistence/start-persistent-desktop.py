@@ -530,7 +530,38 @@ def llvmpipe_threads(path: Path = LLVMPIPE_THREADS) -> str:
     return value if value.isdigit() and int(value) <= 8 else '0'
 
 
-def start_desktop(log: Path) -> tuple[subprocess.Popen[str], subprocess.Popen[str]]:
+DESKTOP_SELECTOR = Path('/etc/s22-desktop')
+HYPRLAND_DESKTOP = 'hyprland'
+# sway on the wlroots pixman (CPU) renderer. Phase 2 trial 2026-10-10: 62 panel
+# fps at ~10% CPU on the touch-shell animation vs 1.4 fps at ~98% for
+# Hyprland on llvmpipe. Opt-in only; Hyprland stays the default and fallback.
+SWAY_PIXMAN_DESKTOP = 'sway-pixman'
+DESKTOPS = (HYPRLAND_DESKTOP, SWAY_PIXMAN_DESKTOP)
+SWAY_CONFIG = '/root/s22-sway-pixman.conf'
+# The touch shell (quickshell) is started by s22-touchd under sway, so sway's
+# readiness waits only for the clients its own config starts.
+READY_CLIENTS = {HYPRLAND_DESKTOP: ('foot', 'squeekboard', 'quickshell'),
+                 SWAY_PIXMAN_DESKTOP: ('foot', 'squeekboard')}
+
+
+def selected_desktop(selector: Path = DESKTOP_SELECTOR) -> str:
+    """Compositor profile from /etc/s22-desktop; missing or unknown = Hyprland."""
+    try:
+        value = selector.read_text().strip()
+    except OSError:
+        return HYPRLAND_DESKTOP
+    if value in DESKTOPS:
+        return value
+    say(f'unknown desktop profile {value!r} in {selector}; using {HYPRLAND_DESKTOP}')
+    return HYPRLAND_DESKTOP
+
+
+def start_desktop(log: Path, desktop: str = HYPRLAND_DESKTOP
+                  ) -> tuple[subprocess.Popen[str], subprocess.Popen[str]]:
+    if desktop not in DESKTOPS:
+        raise Failure(f'unsupported desktop profile {desktop!r}')
+    if desktop == SWAY_PIXMAN_DESKTOP and not (CHROOT / 'usr/bin/sway').is_file():
+        raise Failure('sway-pixman desktop selected but /usr/bin/sway is not installed')
     # Marker is installed only after physical-panel confirmation. An explicit
     # environment value overrides it, so '=0' retains a no-preload rescue path.
     stride_setting = os.environ.get('S22_LINEAR_STRIDE_TRIAL')
@@ -563,20 +594,76 @@ def start_desktop(log: Path) -> tuple[subprocess.Popen[str], subprocess.Popen[st
            "LD_LIBRARY_PATH": "/opt/s22-aquamarine:/usr/lib", "AQ_S22_DISPLAY_ONLY": "1",
            "AQ_DRM_DEVICES": "/dev/dri/card1", "LIBGL_ALWAYS_SOFTWARE": "1",
            "GALLIUM_DRIVER": "llvmpipe", "HYPRLAND_NO_CRASHREPORTER": "1"}
-    if stride_trial:
-        env.update({'LD_PRELOAD': stride_library, 'S22_LINEAR_STRIDE': '1'})
-    env['LP_NUM_THREADS'] = llvmpipe_threads()
+    if desktop == SWAY_PIXMAN_DESKTOP:
+        # wlroots: pixman renderer, dumb (linear) buffers on the display-only
+        # card; no GL, so neither llvmpipe nor the aquamarine stride preload.
+        for key in ('AQ_S22_DISPLAY_ONLY', 'AQ_DRM_DEVICES', 'LIBGL_ALWAYS_SOFTWARE',
+                    'GALLIUM_DRIVER', 'HYPRLAND_NO_CRASHREPORTER'):
+            env.pop(key)
+        env.update({'WLR_RENDERER': 'pixman', 'WLR_DRM_DEVICES': '/dev/dri/card1',
+                    'WLR_BACKENDS': 'drm,libinput', 'LD_LIBRARY_PATH': '/usr/lib'})
+        argv = ["/usr/bin/dbus-run-session", "--", "/usr/bin/sway", "-c", SWAY_CONFIG]
+    else:
+        if stride_trial:
+            env.update({'LD_PRELOAD': stride_library, 'S22_LINEAR_STRIDE': '1'})
+        env['LP_NUM_THREADS'] = llvmpipe_threads()
+        argv = ["/usr/bin/dbus-run-session", "--", "/usr/bin/Hyprland", "--i-am-really-stupid",
+                "--config", "/root/hyprland-omarchy-ui.lua"]
     try:
         with log.open("ab", buffering=0) as out:
-            desktop = subprocess.Popen(chroot_cmd(env, "/usr/bin/dbus-run-session", "--",
-                                                   "/usr/bin/Hyprland", "--i-am-really-stupid",
-                                                   "--config", "/root/hyprland-omarchy-ui.lua"),
-                                       stdout=out, stderr=subprocess.STDOUT,
-                                       start_new_session=True)
+            proc = subprocess.Popen(chroot_cmd(env, *argv),
+                                    stdout=out, stderr=subprocess.STDOUT,
+                                    start_new_session=True)
     except BaseException:
         terminate(seat)
         raise
-    return seat, desktop
+    return seat, proc
+
+
+def wait_desktop_ready(desktop_proc: subprocess.Popen[str], desktop: str) -> None:
+    """Wayland socket, then the profile's UI clients; Failure otherwise."""
+    for _ in range(150):
+        if desktop_proc.poll() is not None:
+            raise Failure(f"{desktop} exited before readiness")
+        if list((CHROOT / 'run/user/0').glob('wayland-[0-9]')):
+            break
+        time.sleep(.1)
+    else:
+        raise Failure("Wayland socket did not appear before readiness")
+    for _ in range(100):
+        if all(command('pidof', name, check=False).returncode == 0
+               for name in READY_CLIENTS[desktop]):
+            return
+        if desktop_proc.poll() is not None:
+            raise Failure('desktop exited while waiting for UI clients')
+        time.sleep(.1)
+    raise Failure('terminal, keyboard or shell did not start')
+
+
+def start_desktop_with_fallback(log: Path, desktop: str
+                                ) -> tuple[subprocess.Popen[str], subprocess.Popen[str], str]:
+    """Start the selected desktop; a non-default profile that fails before
+    readiness falls back to Hyprland in the same run (not to rescue Weston)."""
+    seat = proc = None
+    try:
+        seat, proc = start_desktop(log, desktop)
+        wait_desktop_ready(proc, desktop)
+        return seat, proc, desktop
+    except Failure as error:
+        terminate(proc); terminate(seat)
+        if desktop == HYPRLAND_DESKTOP:
+            raise
+        say(f'{desktop} desktop failed ({error}); falling back to {HYPRLAND_DESKTOP}')
+        (CHROOT / 'run/seatd.sock').unlink(missing_ok=True)
+        for sock in (CHROOT / 'run/user/0').glob('wayland-[0-9]*'):
+            sock.unlink(missing_ok=True)
+    seat, proc = start_desktop(log, HYPRLAND_DESKTOP)
+    try:
+        wait_desktop_ready(proc, HYPRLAND_DESKTOP)
+    except Failure:
+        terminate(proc); terminate(seat)
+        raise
+    return seat, proc, HYPRLAND_DESKTOP
 
 
 def rescue_if_requested() -> None:
@@ -831,7 +918,7 @@ def main() -> int:
             if e.errno in (errno.EACCES, errno.EAGAIN):
                 raise AlreadyRunning("another persistent desktop supervisor owns the lock")
             raise
-        if command('pidof', 'weston', 'Hyprland', check=False).returncode == 0:
+        if command('pidof', 'weston', 'Hyprland', 'sway', check=False).returncode == 0:
             raise AlreadyRunning('an existing compositor is active; refusing to take it over')
         if Path("/etc/s22-persistent-disabled").exists() or Path('/run/s22-persistent-disabled').exists():
             raise Failure("persistent desktop explicitly disabled")
@@ -904,29 +991,12 @@ def main() -> int:
             model = seat = desktop = buttons = None
             try:
                 model = start_model(state / "model-server.log", profile=profile)
-                seat, desktop = start_desktop(state / "desktop.log")
-                for _ in range(150):
-                    if desktop.poll() is not None:
-                        raise Failure("Hyprland exited before readiness")
-                    if list((CHROOT / 'run/user/0').glob('wayland-[0-9]')):
-                        break
-                    time.sleep(.1)
-                else:
-                    raise Failure("Wayland socket did not appear before readiness")
-                for _ in range(100):
-                    ready_clients = all(command('pidof', name, check=False).returncode == 0
-                                        for name in ('foot', 'squeekboard', 'quickshell'))
-                    if ready_clients:
-                        break
-                    if desktop.poll() is not None:
-                        raise Failure('desktop exited while waiting for UI clients')
-                    time.sleep(.1)
-                else:
-                    raise Failure('terminal, keyboard or Omarchy shell did not start')
+                seat, desktop, desktop_profile = start_desktop_with_fallback(
+                    state / "desktop.log", selected_desktop())
                 runtime = {"uuid": UUID, "device": DEVICE,
                     "arch": str(ARCH), "model": str(MODEL), "model_port": 8089 if model else None,
                     "model_profile": profile, "model_id": model_id(profile),
-                    "desktop_pid": desktop.pid, "model_pid": model.pid if model else None,
+                    "desktop_profile": desktop_profile, "desktop_pid": desktop.pid, "model_pid": model.pid if model else None,
                     "supervisor_pid": os.getpid(), "started_at": int(time.time())}
                 RUNTIME_READY.write_text(json.dumps(runtime, sort_keys=True) + "\n")
                 say("persistent desktop and model ready")
