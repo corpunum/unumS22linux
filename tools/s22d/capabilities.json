@@ -1,0 +1,657 @@
+{
+  "api_version": 1,
+  "capabilities": [
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Overall phone status: uptime, load, memory, disk, battery, thermal maximum, network interfaces, modem, display, audio.",
+      "id": "status",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "GET",
+      "path": "/v1/status",
+      "reason": null,
+      "risk": "read",
+      "timeout_s": 15,
+      "tool": "device_status"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Battery level, charging state, temperature and voltage.",
+      "id": "battery",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "GET",
+      "path": "/v1/battery",
+      "reason": null,
+      "risk": "read",
+      "timeout_s": 15,
+      "tool": "device_battery"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "All thermal zones in degrees Celsius and the hottest one.",
+      "id": "thermal",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "GET",
+      "path": "/v1/thermal",
+      "reason": null,
+      "risk": "read",
+      "timeout_s": 15,
+      "tool": "device_thermal"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Busiest processes by CPU or resident memory.",
+      "id": "processes.top",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "maximum": 50,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sort": {
+            "enum": [
+              "cpu",
+              "mem"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "method": "GET",
+      "path": "/v1/processes/top",
+      "reason": null,
+      "risk": "read",
+      "timeout_s": 15,
+      "tool": "processes_top"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Kernel log records. Pass the previous last_seq as since to read only new records.",
+      "id": "logs.dmesg",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "since": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "method": "GET",
+      "path": "/v1/logs/dmesg",
+      "reason": null,
+      "risk": "read",
+      "timeout_s": 15,
+      "tool": "dmesg_read"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Wi-Fi connection state, SSID, IP address, signal strength.",
+      "id": "wifi.status",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "GET",
+      "path": "/v1/wifi/status",
+      "reason": null,
+      "risk": "read",
+      "timeout_s": 20,
+      "tool": "wifi_status"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Scan for nearby Wi-Fi networks (takes a few seconds).",
+      "id": "wifi.scan",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/wifi/scan",
+      "reason": null,
+      "risk": "read",
+      "timeout_s": 25,
+      "tool": "wifi_scan"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Join a Wi-Fi network until the supplicant restarts. On failure the previous network is restored. Omit password for an open network.",
+      "id": "wifi.connect",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "maxLength": 63,
+            "minLength": 8,
+            "type": "string"
+          },
+          "ssid": {
+            "maxLength": 32,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "ssid"
+        ],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/wifi/connect",
+      "reason": null,
+      "risk": "reversible",
+      "timeout_s": 60,
+      "tool": "wifi_connect"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Drop the Wi-Fi connection. Remote access over Wi-Fi ends until wifi_reconnect runs on the phone.",
+      "id": "wifi.disconnect",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/wifi/disconnect",
+      "reason": null,
+      "risk": "reversible",
+      "timeout_s": 20,
+      "tool": "wifi_disconnect"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Re-enable saved Wi-Fi profiles and reconnect.",
+      "id": "wifi.reconnect",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/wifi/reconnect",
+      "reason": null,
+      "risk": "reversible",
+      "timeout_s": 20,
+      "tool": "wifi_reconnect"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Bluetooth availability. Currently always unavailable (HCI kernel panic fix pending).",
+      "id": "bt.status",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "GET",
+      "path": "/v1/bt/status",
+      "reason": null,
+      "risk": "read",
+      "timeout_s": 15,
+      "tool": "bt_status"
+    },
+    {
+      "available": false,
+      "confirm": "none",
+      "description": "Bluetooth power. Unavailable: raw HCI sockets panic the kernel.",
+      "id": "bt.power",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on"
+        ],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/bt/power",
+      "reason": "HCI raw-socket kernel panic: disabled",
+      "risk": "reversible",
+      "timeout_s": 15,
+      "tool": "bt_power"
+    },
+    {
+      "available": false,
+      "confirm": "none",
+      "description": "Bluetooth scan. Unavailable: raw HCI sockets panic the kernel.",
+      "id": "bt.scan",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/bt/scan",
+      "reason": "HCI raw-socket kernel panic: disabled",
+      "risk": "read",
+      "timeout_s": 15,
+      "tool": "bt_scan"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Modem, SIM, registration and signal from s22-phoned.",
+      "id": "modem.status",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "GET",
+      "path": "/v1/modem/status",
+      "reason": null,
+      "risk": "read",
+      "timeout_s": 25,
+      "tool": "modem_status"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Received (inbox) or sent (outbox) text messages.",
+      "id": "sms.list",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "enum": [
+              "inbox",
+              "outbox"
+            ],
+            "type": "string"
+          },
+          "limit": {
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "since": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "method": "GET",
+      "path": "/v1/sms",
+      "reason": null,
+      "risk": "read",
+      "timeout_s": 25,
+      "tool": "sms_inbox"
+    },
+    {
+      "available": true,
+      "confirm": "owner",
+      "description": "Send a text message. The owner must confirm on the phone; s22-phoned still enforces its number allowlist and rate limits.",
+      "id": "sms.send",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "number": {
+            "description": "E.164 number such as +306900000000",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "text"
+        ],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/sms/send",
+      "reason": null,
+      "risk": "risky",
+      "timeout_s": 95,
+      "tool": "sms_send"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Current and recent calls.",
+      "id": "call.list",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "GET",
+      "path": "/v1/calls",
+      "reason": null,
+      "risk": "read",
+      "timeout_s": 25,
+      "tool": "call_list"
+    },
+    {
+      "available": true,
+      "confirm": "owner",
+      "description": "Place a call. The owner must confirm on the phone; s22-phoned still enforces its allowlist. Call audio is not available yet.",
+      "id": "call.dial",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "number": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "number"
+        ],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/call/dial",
+      "reason": null,
+      "risk": "risky",
+      "timeout_s": 95,
+      "tool": "call_dial"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "End the current call.",
+      "id": "call.hangup",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/call/hangup",
+      "reason": null,
+      "risk": "reversible",
+      "timeout_s": 25,
+      "tool": "call_hangup"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Camera availability, busy/cooldown state and the last capture.",
+      "id": "camera.status",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "GET",
+      "path": "/v1/camera/status",
+      "reason": null,
+      "risk": "read",
+      "timeout_s": 15,
+      "tool": "camera_status"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Capture one still. One capture at a time; repeated or failed captures are rate limited because camera DMA faults can panic the kernel. Exposure is in microseconds, gain is analog 1-16.",
+      "id": "camera.capture",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "develop": {
+            "type": "boolean"
+          },
+          "exposure_us": {
+            "maximum": 30000,
+            "minimum": 100,
+            "type": "integer"
+          },
+          "gain": {
+            "maximum": 16,
+            "minimum": 1,
+            "type": "number"
+          },
+          "sensor": {
+            "enum": [
+              "rear",
+              "front"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "sensor"
+        ],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/camera/capture",
+      "reason": null,
+      "risk": "reversible",
+      "timeout_s": 330,
+      "tool": "camera_capture"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Screen state (on/off) and brightness.",
+      "id": "display.status",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "GET",
+      "path": "/v1/display",
+      "reason": null,
+      "risk": "read",
+      "timeout_s": 15,
+      "tool": "display_status"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Turn the screen on.",
+      "id": "display.on",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/display/on",
+      "reason": null,
+      "risk": "reversible",
+      "timeout_s": 35,
+      "tool": "display_on"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Turn the screen off (the touch UI locks first).",
+      "id": "display.off",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/display/off",
+      "reason": null,
+      "risk": "reversible",
+      "timeout_s": 35,
+      "tool": "display_off"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Set backlight brightness in percent (1-100).",
+      "id": "display.brightness",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "percent": {
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "percent"
+        ],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/display/brightness",
+      "reason": null,
+      "risk": "reversible",
+      "timeout_s": 15,
+      "tool": "display_brightness"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Saved volume level and whether the owner allows sound.",
+      "id": "audio.volume.get",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "GET",
+      "path": "/v1/audio/volume",
+      "reason": null,
+      "risk": "read",
+      "timeout_s": 15,
+      "tool": "audio_volume"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Set the volume. Only 0 (mute) is accepted unless the owner created /etc/s22-audio-unmuted; a refusal is final.",
+      "id": "audio.volume.set",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "value": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/audio/volume",
+      "reason": null,
+      "risk": "reversible",
+      "timeout_s": 15,
+      "tool": "audio_mute"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Restart an allowlisted service through s22-keepalive: openunum, unumsearch, modem, phoned or llama.",
+      "id": "service.restart",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "enum": [
+              "openunum",
+              "unumsearch",
+              "modem",
+              "phoned",
+              "llama"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/services/{name}/restart",
+      "reason": null,
+      "risk": "reversible",
+      "timeout_s": 40,
+      "tool": "service_restart"
+    },
+    {
+      "available": true,
+      "confirm": "owner",
+      "description": "Reboot the phone with s22-reboot recovery (about 40 s offline). The owner must confirm on the phone.",
+      "id": "system.reboot-recovery",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/system/reboot-recovery",
+      "reason": null,
+      "risk": "risky",
+      "timeout_s": 95,
+      "tool": "recovery_mode"
+    }
+  ],
+  "ok": true
+}

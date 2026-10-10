@@ -1,0 +1,42 @@
+name: s22d Rust
+on:
+  pull_request:
+    paths: ["tools/s22d/**", ".github/workflows/s22d-rust.yml"]
+  push:
+    branches: [master]
+    paths: ["tools/s22d/**", ".github/workflows/s22d-rust.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  s22d-rust:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: aarch64-unknown-linux-musl
+      - name: Format
+        run: cargo fmt --manifest-path tools/s22d/Cargo.toml --check
+      - name: Clippy
+        run: cargo clippy --manifest-path tools/s22d/Cargo.toml --locked --all-targets -- -D warnings
+      - name: Unit and route tests (fakes and fixture trees, no phone)
+        run: cargo test --manifest-path tools/s22d/Cargo.toml --locked
+      - name: Static aarch64 cross-build
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: rust-lld
+        run: cargo build --manifest-path tools/s22d/Cargo.toml --locked --release --target aarch64-unknown-linux-musl
+      - name: Check the binary is static aarch64 and small
+        run: |
+          f=tools/s22d/target/aarch64-unknown-linux-musl/release/s22d
+          file "$f" | tee /dev/stderr | grep -q 'ARM aarch64.*statically linked'
+          test "$(stat -c %s "$f")" -lt 4000000
+      - uses: actions/upload-artifact@v4
+        with:
+          name: s22d-aarch64-unknown-linux-musl
+          path: tools/s22d/target/aarch64-unknown-linux-musl/release/s22d
+          if-no-files-found: error

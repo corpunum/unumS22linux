@@ -56,6 +56,11 @@ BUTTONS = Path('/srv/s22/buttons')
 AUDIO_OPT = '/opt/s22-audio'
 AMP_CONTROLS = ('Left Digital PCM Volume', 'Right Digital PCM Volume')
 LOCK = Path('/run/s22-touchd.lock')
+# UI backend profile: 'quickshell' (default, the shipped shell) or 'unum-shell' (opt-in). Rollback is
+# `echo quickshell > $UI_BACKEND_FILE` (or delete it); the Quickshell files are never touched.
+UI_BACKEND_FILE = Path('/srv/s22/state/touchui/ui-backend')
+UNUM_SHELL = '/usr/local/bin/unum-shell'                # inside the chroot
+SHELL_SOCK = RUN / 'shell.sock'                         # unum-shell's control socket (same dir as ctl.sock)
 OPENUNUM_API = 'http://127.0.0.1:18880'
 PIN_FILE = Path('/srv/s22/state/keepalive/openunum.pinned.json')   # s22-keepalive pin_source
 MODEL_CHOICES = {'luna': ('openai', 'openai/gpt-6-luna'),
@@ -352,7 +357,51 @@ def chroot_run(argv: list[str], env: dict, timeout: float = 10) -> subprocess.Co
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 
+def ui_backend() -> str:
+    """Which touch shell is active: $S22_UI_BACKEND, else the profile file, else quickshell."""
+    want = os.environ.get('S22_UI_BACKEND')
+    if not want:
+        try:
+            want = UI_BACKEND_FILE.read_text().strip()
+        except OSError:
+            want = ''
+    return want if want in ('quickshell', 'unum-shell') else 'quickshell'
+
+
+def shell_call(fn: str, *args: str, timeout: float = 8) -> dict:
+    """Same functions as the Quickshell `touch` IPC, answered by unum-shell on shell.sock."""
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    try:
+        s.connect(str(SHELL_SOCK))
+        s.sendall((json.dumps({'fn': fn, 'args': [str(a) for a in args]}) + '\n').encode())
+        data = b''
+        while not data.endswith(b'\n') and len(data) < 65536:
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            data += chunk
+        r = json.loads(data.decode() or '{}')
+    except (OSError, ValueError) as e:
+        return {'ok': False, 'error': 'shell_unreachable', 'message': str(e)}
+    finally:
+        s.close()
+    if not r.get('ok'):
+        return {'ok': False, 'error': r.get('error', 'shell_error')}
+    out = r.get('result', '')
+    try:
+        return {'ok': True, 'result': json.loads(out)} if isinstance(out, str) and out[:1] in '{[' else {'ok': True, 'result': out}
+    except ValueError:
+        return {'ok': True, 'result': out}
+
+
 def ui_call(fn: str, *args: str, timeout: float = 8) -> dict:
+    if ui_backend() == 'unum-shell':
+        return shell_call(fn, *args, timeout=timeout)
+    return quickshell_call(fn, *args, timeout=timeout)
+
+
+def quickshell_call(fn: str, *args: str, timeout: float = 8) -> dict:
     env = session_env()
     if env is None:
         return {'ok': False, 'error': 'no_session'}
@@ -419,6 +468,7 @@ class Daemon:
         self.stopping = threading.Event()
         self.ui_proc: subprocess.Popen | None = None
         self.ui_starts: list[float] = []
+        self.ui_running_backend = 'quickshell'
         self.status_cache: tuple[float, dict] | None = None
         self.camera_busy = threading.Lock()
         self.last_gesture = 0.0
@@ -460,8 +510,8 @@ class Daemon:
                     continue
                 self.ui_starts.append(now)
                 logf = open(RUN / 'shell.log', 'ab')
-                cmd = ['chroot', str(CHROOT), '/usr/bin/env', '-i'] + [f'{k}={v}' for k, v in env.items()] + \
-                      ['nice', '-n', '5', 'quickshell', '-n', '-p', f'{SHELL_DIR}/shell.qml']
+                self.ui_running_backend = ui_backend()
+                cmd = shell_command(env, self.ui_running_backend)
                 self.ui_proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=logf, stderr=logf,
                                                 start_new_session=True)
                 logf.close()
@@ -469,6 +519,11 @@ class Daemon:
                 self.stopping.wait(backoff)
                 backoff = min(backoff * 2, 60) if self.ui_proc.poll() is not None else 2.0
             else:
+                if ui_backend() != self.ui_running_backend:
+                    log(event='ui_backend_switch', to=ui_backend())
+                    self.stop_ui()
+                    self.ui_starts = []
+                    continue
                 self.stopping.wait(2)
 
     def stop_ui(self) -> None:
@@ -683,6 +738,14 @@ class Daemon:
         self.serve()
 
 
+def shell_command(env: dict, backend: str) -> list[str]:
+    """argv that starts the chosen touch shell inside the chroot."""
+    base = ['chroot', str(CHROOT), '/usr/bin/env', '-i'] + [f'{k}={v}' for k, v in env.items()]
+    if backend == 'unum-shell':
+        return base + [f'S22_TOUCH_RUN={RUN_IN}', 'nice', '-n', '5', UNUM_SHELL]
+    return base + ['nice', '-n', '5', 'quickshell', '-n', '-p', f'{SHELL_DIR}/shell.qml']
+
+
 def stale_shell_pids() -> list[int]:
     """Exact-match PIDs of a touch-shell Quickshell (never pattern-kill anything else)."""
     want = ['quickshell', '-n', '-p', f'{SHELL_DIR}/shell.qml']
@@ -693,6 +756,13 @@ def stale_shell_pids() -> list[int]:
         except OSError:
             continue
         if [a.decode(errors='replace') for a in argv] == want:
+            out.append(pid)
+    for pid in pids_by_comm('unum-shell'):
+        try:
+            argv = Path(f'/proc/{pid}/cmdline').read_bytes().rstrip(b'\0').split(b'\0')
+        except OSError:
+            continue
+        if [a.decode(errors='replace') for a in argv] == [UNUM_SHELL]:
             out.append(pid)
     return out
 
