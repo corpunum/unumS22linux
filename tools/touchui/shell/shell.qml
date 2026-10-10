@@ -34,7 +34,7 @@ ShellRoot {
 
   readonly property var apps: ({
     chat: "page", phone: "page", camera: "page", files: "page", settings: "page", switcher: "page",
-    terminal: "app", agent: "app"
+    terminal: "app"
   })
 
   // ------------------------------------------------------------ repaint kick
@@ -140,7 +140,6 @@ ShellRoot {
     if (apps[app] === "page") { showHome(app); return "ok" }
     hideHome()
     if (app === "terminal") launchOrFocus("s22.terminal", ["foot", "--app-id=s22.terminal"])
-    else if (app === "agent") launchOrFocus("org.omarchy.agent", ["omarchy-agent"])
     kbT.restart()   // terminal focus can hide an immediate reveal: show the keyboard after it settles
     return "ok"
   }
@@ -277,23 +276,23 @@ ShellRoot {
     }
   }
 
-  // ------------------------------------------------------------ status strip (sway)
-  // Under Hyprland the Omarchy bar shows time, battery and network. The
-  // sway-pixman desktop runs no bar, so the touch shell keeps a thin strip on
-  // top: time, network, agent model, battery. Tap = home / back.
+  // ------------------------------------------------------------ status strip
+  // There is no desktop bar any more (Omarchy removed 2026-10-10), so the
+  // touch shell keeps a thin strip on top on both compositors: time, guardian
+  // warning, network, agent model, battery. Tap = home / back.
   property string clock: ""
   Timer {
-    interval: 15000; repeat: true; running: root.onSway; triggeredOnStart: true
+    interval: 15000; repeat: true; running: true; triggeredOnStart: true
     onTriggered: root.clock = Qt.formatDateTime(new Date(), "HH:mm")
   }
   Timer {
-    interval: 30000; repeat: true; running: root.onSway && !root.homeVisible && !root.locked
+    interval: 30000; repeat: true; running: !root.homeVisible && !root.locked
     triggeredOnStart: true
     onTriggered: root.refreshStatus()
   }
   PanelWindow {
     id: strip
-    visible: root.onSway && !root.locked
+    visible: !root.locked
     anchors { top: true; left: true; right: true }
     implicitHeight: 28
     exclusiveZone: 28
@@ -399,9 +398,8 @@ ShellRoot {
 
         Row {
           spacing: 8; width: parent.width
-          Btn { text: "Pi agent"; width: (parent.width - 16) / 3; onClicked: root.openApp("agent") }
-          Btn { text: "Apps"; width: (parent.width - 16) / 3; onClicked: root.showHome("switcher") }
-          Btn { text: "Keyboard"; width: (parent.width - 16) / 3; onClicked: root.keyboard(true) }
+          Btn { text: "Apps"; width: (parent.width - 8) / 2; onClicked: root.showHome("switcher") }
+          Btn { text: "Keyboard"; width: (parent.width - 8) / 2; onClicked: root.keyboard(true) }
         }
       }
     }

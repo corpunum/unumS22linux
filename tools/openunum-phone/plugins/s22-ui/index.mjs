@@ -20,7 +20,7 @@ import { TouchClient } from './lib/touch-client.mjs';
 
 export { pluginBaseSource };
 
-export const APPS = ['chat', 'phone', 'camera', 'files', 'settings', 'switcher', 'terminal', 'agent'];
+export const APPS = ['chat', 'phone', 'camera', 'files', 'settings', 'switcher', 'terminal'];
 const SCREEN_ACTIONS = ['on', 'off', 'lock', 'unlock', 'status'];
 const MUTATING = { actionClass: 'mutating', evidenceRole: 'mutation' };
 const OBSERVING = { actionClass: 'observational', evidenceRole: 'observation' };
@@ -124,7 +124,7 @@ export default class S22UiPlugin extends PluginBase {
     return [
       {
         name: 'ui_open_app',
-        description: `Open an app or page on the S22 phone's screen for the owner: ${APPS.join(', ')}. (chat = typed chat with you; terminal = shell; agent = Pi terminal.)`,
+        description: `Open an app or page on the S22 phone's screen for the owner: ${APPS.join(', ')}. (chat = typed chat with you; terminal = shell.)`,
         parameters: { type: 'object', properties: { app: { type: 'string', enum: APPS } }, required: ['app'] },
         semantics: MUTATING,
         execute: async (input) => {
