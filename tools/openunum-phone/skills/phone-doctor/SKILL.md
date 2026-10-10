@@ -16,7 +16,7 @@ Use these tools to diagnose the S22 mobile edition, then propose the smallest sa
 3. Use only reversible, narrowly scoped actions, such as restarting an allowlisted service (`service_restart`), reconnecting Wi-Fi (`wifi_reconnect`), or adjusting display brightness (`display_brightness`). Remember `wifi_disconnect` cuts remote access that rides on Wi-Fi. Re-read status to verify the effect.
 4. `camera_capture` is a diagnostic capture, not a proven camera repair. The camera pipeline has had dark/black results and DMA/SysMMU failure can panic the kernel. The daemon allows one capture at a time with a pause between captures and a longer one after a failure (`camera_busy`, `camera_cooldown`, `camera_wedged`): respect them, do not run capture loops, and stop on any fault.
 5. Bluetooth status may report unavailable (HCI panic fix pending). Do not try to start Bluetooth or load modules to work around that.
-6. `sms_send` (field `number`), `call_dial` and `recovery_mode` are risky and require a phone yes tap each time. `s22-phoned` additionally refuses numbers outside its allowlist (`refused_by_phoned`). Do not repeat an action after a daemon refusal or timeout.
+6. `device_sms_send` (field `number`), `device_call_dial` and `recovery_mode` are risky and require a phone yes tap each time. `s22-phoned` additionally refuses numbers outside its allowlist (`refused_by_phoned`). Do not repeat an action after a daemon refusal or timeout.
 
 ## Never do
 

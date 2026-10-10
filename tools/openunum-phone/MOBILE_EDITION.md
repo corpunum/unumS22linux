@@ -27,11 +27,11 @@ The plugin refuses to expose a tool when the daemon advertises a lower risk tier
 | `bt_power` | reversible | POST `/v1/bt/power` | no: HCI raw-socket kernel panic: disabled |
 | `bt_scan` | read | POST `/v1/bt/scan` | no: HCI raw-socket kernel panic: disabled |
 | `modem_status` | read | GET `/v1/modem/status` | yes |
-| `sms_inbox` | read | GET `/v1/sms` | yes |
-| `sms_send` | risky | POST `/v1/sms/send` | yes |
-| `call_list` | read | GET `/v1/calls` | yes |
-| `call_dial` | risky | POST `/v1/call/dial` | yes |
-| `call_hangup` | reversible | POST `/v1/call/hangup` | yes |
+| `device_sms_inbox` | read | GET `/v1/sms` | yes |
+| `device_sms_send` | risky | POST `/v1/sms/send` | yes |
+| `device_call_list` | read | GET `/v1/calls` | yes |
+| `device_call_dial` | risky | POST `/v1/call/dial` | yes |
+| `device_call_hangup` | reversible | POST `/v1/call/hangup` | yes |
 | `camera_status` | read | GET `/v1/camera/status` | yes |
 | `camera_capture` | reversible | POST `/v1/camera/capture` | yes |
 | `display_status` | read | GET `/v1/display` | yes |
@@ -44,7 +44,7 @@ The plugin refuses to expose a tool when the daemon advertises a lower risk tier
 | `recovery_mode` | risky | POST `/v1/system/reboot-recovery` | yes |
 
 Tool exposure is S22-only: the `/srv/s22` marker exists, or `enabled: true`. Default is disabled. Tools whose backend is
-missing on the phone (for example `sms_send` while `s22-phoned` is not running) do not appear until the daemon reports them
+missing on the phone (for example `device_sms_send` while `s22-phoned` is not running) do not appear until the daemon reports them
 available.
 
 ## Tiers and confirmation
@@ -83,7 +83,7 @@ node --test tools/openunum-phone/plugins/s22-device/test/plugin.test.mjs
 
 The tests run against a fake `s22d` built from `capabilities.json` (no phone, no daemon needed). They check that every tool
 calls its method and path with exactly the parameters its schema names, that the three historical mismatches stay fixed
-(`sms_send` uses `number`, display is on/off/brightness, audio read is GET and set is POST), and that refusals come back unchanged.
+(`device_sms_send` uses `number`, display is on/off/brightness, audio read is GET and set is POST), and that refusals come back unchanged.
 
 Rollback: remove `$C/root/.openunum/plugins/s22-device` and restart OpenUnum. s22d and phone state are untouched.
 No phone hardware was available during development; installation and behaviour on the device are unverified.
