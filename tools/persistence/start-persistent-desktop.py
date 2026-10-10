@@ -541,8 +541,14 @@ SWAY_CONFIG = '/root/s22-sway-pixman.conf'
 SWAY_WLROOTS_FIX = '/opt/s22-wlroots/libwlroots-0.20.so'
 # The touch shell (quickshell) is started by s22-touchd under sway, so sway's
 # readiness waits only for the clients its own config starts.
-READY_CLIENTS = {HYPRLAND_DESKTOP: ('foot', 'squeekboard', 'quickshell'),
-                 SWAY_PIXMAN_DESKTOP: ('foot', 'squeekboard')}
+# 2026-10-10: the Omarchy layer and the Pi terminal are gone; both desktops
+# start only squeekboard themselves (s22-touchd starts the touch shell).
+READY_CLIENTS = {HYPRLAND_DESKTOP: ('squeekboard',),
+                 SWAY_PIXMAN_DESKTOP: ('squeekboard',)}
+# Hyprland fallback: plain config without Omarchy (tools/touchui/sway/
+# hyprland-s22.lua); the old Omarchy one is used only if it is missing.
+HYPRLAND_CONFIG = '/root/hyprland-s22.lua'
+HYPRLAND_OMARCHY_CONFIG = '/root/hyprland-omarchy-ui.lua'
 
 
 def selected_desktop(selector: Path = DESKTOP_SELECTOR) -> str:
@@ -614,8 +620,10 @@ def start_desktop(log: Path, desktop: str = HYPRLAND_DESKTOP
         if stride_trial:
             env.update({'LD_PRELOAD': stride_library, 'S22_LINEAR_STRIDE': '1'})
         env['LP_NUM_THREADS'] = llvmpipe_threads()
+        hypr_conf = (HYPRLAND_CONFIG if (CHROOT / HYPRLAND_CONFIG.lstrip('/')).is_file()
+                     else HYPRLAND_OMARCHY_CONFIG)
         argv = ["/usr/bin/dbus-run-session", "--", "/usr/bin/Hyprland", "--i-am-really-stupid",
-                "--config", "/root/hyprland-omarchy-ui.lua"]
+                "--config", hypr_conf]
     try:
         with log.open("ab", buffering=0) as out:
             proc = subprocess.Popen(chroot_cmd(env, *argv),
