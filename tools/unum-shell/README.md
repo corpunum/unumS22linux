@@ -1,58 +1,74 @@
 # unum-shell
 
-A native Rust/iced phone-shell MVP for the Galaxy S22 Linux userland. It uses iced 0.12.1 with the CPU TinySkia renderer (no wgpu), a dark touch-sized layout, Home/Chat/Settings, quick-access placeholders, and OpenUnum's local chat API. Device status is read-only and degrades to placeholders when `s22d` is unavailable.
+The S22's touch shell in Rust: iced 0.12 with the tiny-skia CPU renderer (no GPU, no wgpu), about 14 MB resident, 0.02 % CPU idle.
+It is an opt-in profile next to the Quickshell touch shell, which stays installed and is the rollback.
+
+| Feature | How |
+|---|---|
+| Streaming chat | `GET /api/chat/stream?sessionId=touch` (typed SSE events: `content_delta`, tool calls, snapshots) opened first, then `POST /api/chat`. The answer appears as it is written; the POST carries the final reply. Stop button: `POST /api/chat/cancel`. A missing stream degrades to plain request/response. |
+| Agent questions | The `user_prompt_requested` event (`ask_user`) becomes buttons in Chat, answered with `POST /api/chat/answer`. A card tells you when you are on another page. |
+| Cards and owner confirmation | Driven by `s22-touchd`, the same `ui card` / `ui confirm` commands that drive Quickshell (and `s22-ui`, the `s22-ui` plugin, and `s22d`'s risky endpoints). The answer is written to `/run/s22-touch/confirm/<id>.json` as `{"id","answer","ts"}`, atomically. Unanswered questions answer `timeout`. |
+| Gestures | touchd's edge-swipe daemon calls `home` / `back` / `switcher` on the shell; unum-shell answers them (`switcher` reports "unsupported", as the app switcher is not ported). |
+| Status strip | `s22d` `GET /v1/status` (battery, hottest zone, Wi-Fi) plus OpenUnum's model and health, every 15 s; skipped while the screen is off. |
+| Pages | Home, Chat, Settings (device rows, brightness slider via `s22d`), Phone (read-only modem and SMS from `s22d`), Lock cover. Camera and Files are text-only pages. |
+| Keyboard | Entering Chat calls squeekboard's `SetVisible` over `gdbus`, like the Quickshell shell (iced 0.12 has no text-input-v3). |
+
+## How touchd reaches it
+
+`s22-touchd` has a UI backend setting: `/srv/s22/state/touchui/ui-backend` containing `quickshell` (default) or `unum-shell`
+(or `S22_UI_BACKEND`). With `unum-shell` it starts `/usr/local/bin/unum-shell` in the chroot instead of Quickshell, and forwards every
+`ui` function to `shell.sock` in its run directory (one JSON line `{"fn","args"}` in, `{"ok","result"}` out). Changing the file switches
+shells within a few seconds. Config (env): `S22_SHELL_API` (default `http://127.0.0.1:18880`), `S22_SHELL_S22D` (`http://127.0.0.1:8766`),
+`S22_TOUCH_RUN` (`/run/s22-touch`).
 
 ## Build and test
 
-On the rig, with Rust installed:
-
 ```sh
-export PATH="$HOME/.cargo/bin:$PATH"
-cargo test --locked
-cargo build --locked --release
+export PATH=$HOME/.cargo/bin:$PATH
+cargo test --locked --manifest-path tools/unum-shell/Cargo.toml        # 52 tests, no window system needed
+flock /home/corpunum/.cache/rig-heavy.lock \
+  env CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
+  cargo build --locked --release --target aarch64-unknown-linux-gnu --manifest-path tools/unum-shell/Cargo.toml
+cargo run --release -- --screenshots tools/unum-shell/screenshots      # offscreen PNGs of every screen
 ```
 
-For the phone's Arch Linux ARM userland (aarch64, glibc):
+The aarch64 glibc binary (4.2 MB) is built by CI and uploaded as the artifact `unum-shell-aarch64-unknown-linux-gnu`; it runs in the phone's
+Arch chroot. Tests: model rules (cards, confirm protocol, touchd calls, chat streaming), SSE parsing (split chunks, CRLF, multi-byte text),
+HTTP clients against mock servers (a whole streamed turn, queued 202, failures), the `shell.sock` server, and the offscreen renderer.
+
+## Screenshots
+
+`screenshots/*.png` are rendered by the real `view` code through iced's tiny-skia renderer, offscreen, at the panel's 1080x2340 (scale 2.5), from
+states built with the same touchd calls and stream events the live shell handles: `home`, `home-cards`, `chat-tool`, `chat-streaming`,
+`chat-agent-question`, `chat-offline`, `confirm`, `lock`, `settings`, `phone`. `live-window-xvfb-confirm.png` is a capture of the running
+binary in a real window (Xvfb), after driving it through `shell.sock`. They show the layout; they were not taken on the phone.
+
+## Measured on the rig (x86_64 release, X11 under Xvfb, not the phone)
+
+| | |
+|---|---|
+| Idle CPU, 60 s, all polling on | 0.02 % of one core |
+| RSS after start / after 60 s idle | 13.7 MB / 13.8 MB (peak 14.0 MB, with cards and a question shown) |
+| Threads | 34 (tokio and iced workers, all idle) |
+
+The phone uses Wayland (sway-pixman) and an ARM CPU; expect the same order of magnitude, but measure it after deploying (`ps -o rss,pcpu`).
+
+## Deploy (phone owner-agent; order: s22d, s22-device plugin, then this)
 
 ```sh
-export PATH="$HOME/.cargo/bin:$PATH"
-export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
-cargo build --locked --release --target aarch64-unknown-linux-gnu
+# native root, as root; the aarch64 binary comes from the CI artifact
+sh tools/unum-shell/install-unum-shell.sh --binary /path/to/unum-shell   # copy only, stays on Quickshell
+sh tools/unum-shell/install-unum-shell.sh --activate                     # touchd switches shells
+sh tools/unum-shell/install-unum-shell.sh --rollback                     # back to Quickshell
 ```
 
-The binary is `target/aarch64-unknown-linux-gnu/release/unum-shell`. Keep this build under the rig's heavy-build lock when sharing the rig. `iced` is pinned to `=0.12.1` with default features disabled; iced 0.12 selects its TinySkia CPU compositor in that configuration.
+Install the updated `s22-touchd` first (`tools/touchui/install-touchui.sh`): the old one does not know the profile and keeps Quickshell.
+Verify after `--activate`: the home screen appears; `s22-ui card Hi hello` shows a card; `s22-ui confirm "Test?"` shows Yes/No and returns the
+tapped answer; an edge swipe goes home; the status strip shows battery from s22d; Chat streams a reply. Under sway, `app_id` is `unum-shell`
+(fullscreen it with `for_window [app_id="unum-shell"] fullscreen enable` if needed). Rollback leaves nothing behind but the binary.
 
-## Try under sway (rig/headless)
+## Known gaps
 
-The phone display is 1080x2340 at scale 2. The window is sized 430x932 logical pixels. With sway and grim installed, launch from the phone chroot inside the existing sway session:
-
-```sh
-cargo run --release
-# in another terminal, capture the visible output:
-grim screenshots/home.png
-```
-
-A headless compositor can be used for a smoke launch/capture on a rig that has sway, grim, and the pixman backend:
-
-```sh
-WLR_BACKENDS=headless WLR_RENDERER=pixman sway
-# in the sway session:
-unum-shell
-grim screenshots/home.png
-```
-
-Use the app navigation buttons to capture Chat and Settings as well. Screenshots should be captured from the actual app under sway; do not substitute mockups. The rig used for this change did not have sway/grim installed, so no rendered PNGs are included in this PR. Headless screenshot verification remains outstanding.
-
-## Phone deployment (not performed; no phone access)
-
-From the repository checkout on the phone, build natively or copy the aarch64 binary above into the Arch chroot, then launch it from the active sway session in place of Quickshell. OpenUnum is expected at `127.0.0.1:18880`; the device daemon is expected at `127.0.0.1:8766` and is optional for startup. The current chat UI posts to `POST /api/chat` with `sessionId: "touch"` and `message`; this MVP waits for the request response rather than rendering streamed SSE events. Agent notifications/confirm cards and the s22 touch control-socket integration are not wired yet.
-
-Before trying the replacement, record the existing Quickshell launch command/service and ensure the current touch shell files/config remain intact. To roll back, stop `unum-shell` and start the existing Quickshell supervisor/service using the recorded command; do not remove or overwrite the existing shell. Verify the old home screen and touch navigation return. Deployment and rollback must be tested on the phone before treating the replacement as production-ready.
-
-## Scope and known limits
-
-- Home, chat composition/request/reply, read-only device status, and Settings are implemented.
-- Phone, Camera, and Files are quick-access placeholders only.
-- Voice is a stub; chat is request/response (not streaming).
-- UI notifications/agent cards, `ui_confirm` / `ui_show_card` protocol, socket gestures, actual clock, OpenUnum agent model/guardian status, and live phone-input focus are not integrated yet.
-- No phone deployment, idle CPU/RSS measurement, per-screen screenshots, or rollback test was possible on the rig; these are explicit follow-up gates.
+- Not run on the phone: Wayland behaviour, touch focus for the text field under sway (the Quickshell shell needed an Exclusive-focus workaround), and the keyboard reveal.
+- No app switcher (`switcher` is reported unsupported), no terminal/agent launchers, no camera preview, no voice.
+- Font coverage on the phone decides how glyphs look; the shell uses plain letters instead of symbols to stay safe.
