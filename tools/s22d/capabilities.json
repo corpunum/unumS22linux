@@ -327,7 +327,7 @@
       "reason": null,
       "risk": "read",
       "timeout_s": 25,
-      "tool": "sms_inbox"
+      "tool": "device_sms_inbox"
     },
     {
       "available": true,
@@ -358,7 +358,7 @@
       "reason": null,
       "risk": "risky",
       "timeout_s": 95,
-      "tool": "sms_send"
+      "tool": "device_sms_send"
     },
     {
       "available": true,
@@ -376,7 +376,7 @@
       "reason": null,
       "risk": "read",
       "timeout_s": 25,
-      "tool": "call_list"
+      "tool": "device_call_list"
     },
     {
       "available": true,
@@ -400,7 +400,7 @@
       "reason": null,
       "risk": "risky",
       "timeout_s": 95,
-      "tool": "call_dial"
+      "tool": "device_call_dial"
     },
     {
       "available": true,
@@ -418,7 +418,7 @@
       "reason": null,
       "risk": "reversible",
       "timeout_s": 25,
-      "tool": "call_hangup"
+      "tool": "device_call_hangup"
     },
     {
       "available": true,
