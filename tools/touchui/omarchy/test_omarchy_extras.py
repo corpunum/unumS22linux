@@ -138,6 +138,32 @@ class ScriptsTest(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertIn('active s22 keyboard bindings: 1', r.stdout)
 
+    def test_helper_sway_mode_binds_and_unbinds(self):
+        with tempfile.TemporaryDirectory() as d:
+            log = Path(d) / 'swaymsg.log'
+            fake = Path(d) / 'swaymsg'
+            fake.write_text(f'#!/bin/sh\nshift\necho "$*" >> {log}\n')
+            fake.chmod(0o755)
+            env = {'PATH': f'{d}:/usr/bin:/bin', 'XDG_RUNTIME_DIR': d, 'HOME': d, 'SWAYSOCK': f'{d}/sway.sock',
+                   'S22_SWAY_KBD_CONF': str(HERE / 'sway-keyboard.conf'), 'S22_SWAY_KBD_COUNT': f'{d}/count'}
+            src = HELPER.read_text().replace('/root/.config/s22/omarchy-keyboard.enabled', f'{d}/flag')
+            helper = Path(d) / 'helper.sh'
+            helper.write_text(src)
+            r = subprocess.run(['sh', str(helper), 'on'], env=env, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            n = sum(1 for l in (HERE / 'sway-keyboard.conf').read_text().splitlines() if l.startswith('bindsym '))
+            self.assertIn(f'on: {n} s22 keyboard bindings active (sway)', r.stdout)
+            self.assertTrue((Path(d) / 'flag').exists())
+            r = subprocess.run(['sh', str(helper), 'status'], env=env, capture_output=True, text=True)
+            self.assertIn(f'flag: on   active s22 keyboard bindings: {n} (sway)', r.stdout)
+            r = subprocess.run(['sh', str(helper), 'off'], env=env, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            lines = log.read_text().splitlines()
+            self.assertEqual(sum(l.startswith('unbindsym ') for l in lines), n)
+            self.assertFalse((Path(d) / 'flag').exists())
+            for l in lines:
+                self.assertNotIn('omarchy.menu', l)
+
     def test_install_and_rollback_in_fake_chroot(self):
         with tempfile.TemporaryDirectory() as d:
             c, state = Path(d) / 'chroot', Path(d) / 'state'

@@ -41,7 +41,7 @@ if [ "${1:-}" = "--rollback" ]; then
   exit 0
 fi
 
-for f in SKILL.md omarchy-keyboard.lua s22-kbd-bindings.sh; do
+for f in SKILL.md omarchy-keyboard.lua sway-keyboard.conf s22-kbd-bindings.sh; do
   [ -f "$HERE/$f" ] || { echo "missing $HERE/$f" >&2; exit 1; }
 done
 [ -d "$C/root" ] || { echo "chroot not found at $C" >&2; exit 1; }
@@ -59,6 +59,7 @@ echo "backup: $BK"
 mkdir -p "$SKILL"
 install -m 644 "$HERE/SKILL.md" "$SKILL/SKILL.md"
 install -m 644 "$HERE/omarchy-keyboard.lua" "$LUA"
+install -m 644 "$HERE/sway-keyboard.conf" "$(dirname "$LUA")/sway-keyboard.conf"
 install -m 755 "$HERE/s22-kbd-bindings.sh" "$HELPER"
 echo "installed: $SKILL/SKILL.md, $LUA, $HELPER"
 echo "keyboard bindings: $(in_chroot s22-kbd-bindings status 2>/dev/null || echo 'status unavailable (no Hyprland session)')"

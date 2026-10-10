@@ -538,6 +538,7 @@ HYPRLAND_DESKTOP = 'hyprland'
 SWAY_PIXMAN_DESKTOP = 'sway-pixman'
 DESKTOPS = (HYPRLAND_DESKTOP, SWAY_PIXMAN_DESKTOP)
 SWAY_CONFIG = '/root/s22-sway-pixman.conf'
+SWAY_WLROOTS_FIX = '/opt/s22-wlroots/libwlroots-0.20.so'
 # The touch shell (quickshell) is started by s22-touchd under sway, so sway's
 # readiness waits only for the clients its own config starts.
 READY_CLIENTS = {HYPRLAND_DESKTOP: ('foot', 'squeekboard', 'quickshell'),
@@ -600,8 +601,14 @@ def start_desktop(log: Path, desktop: str = HYPRLAND_DESKTOP
         for key in ('AQ_S22_DISPLAY_ONLY', 'AQ_DRM_DEVICES', 'LIBGL_ALWAYS_SOFTWARE',
                     'GALLIUM_DRIVER', 'HYPRLAND_NO_CRASHREPORTER'):
             env.pop(key)
+        # /opt/s22-wlroots holds the gamma-reset fix (tools/touchui/sway/
+        # patch-wlroots-gamma.py) that lets the panel come back after an
+        # output power-off; without it sway still runs, the Power key then
+        # falls back to backlight-only in s22-display.
+        libpath = ('/opt/s22-wlroots:/usr/lib' if (CHROOT / SWAY_WLROOTS_FIX.lstrip('/')).is_file()
+                   else '/usr/lib')
         env.update({'WLR_RENDERER': 'pixman', 'WLR_DRM_DEVICES': '/dev/dri/card1',
-                    'WLR_BACKENDS': 'drm,libinput', 'LD_LIBRARY_PATH': '/usr/lib'})
+                    'WLR_BACKENDS': 'drm,libinput', 'LD_LIBRARY_PATH': libpath})
         argv = ["/usr/bin/dbus-run-session", "--", "/usr/bin/sway", "-c", SWAY_CONFIG]
     else:
         if stride_trial:
