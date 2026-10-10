@@ -36,10 +36,15 @@ Flickable {
   }
   Process {
     id: brProc
-    command: ["sh", "-c", "cat /sys/class/backlight/panel/brightness /sys/class/backlight/panel/max_brightness"]
-    stdout: StdioCollector { waitForEnd: true; onStreamFinished: { var v = text.trim().split("\n"); page.brightMax = Number(v[1]) || 510; page.bright = Number(v[0]) || 0 } }
+    command: ["s22-ui", "brightness"]
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: { var j = {}; try { j = JSON.parse(text) } catch (e) { }
+      if (j.ok) { page.brightMax = j.max; if (!slider.pressed) page.bright = j.brightness } } }
   }
-  Process { id: brSet; property int v: 128; command: ["sh", "-c", "echo $1 > /sys/class/backlight/panel/brightness", "sh", String(v)] }
+  // /sys is read-only inside the chroot, so the host daemon writes the backlight.
+  // Coalesce drags: send the latest value when the previous write has finished.
+  property int brPending: -1
+  Process { id: brSet; property int v: 128; command: ["s22-ui", "brightness", String(v)]
+    onRunningChanged: if (!running && page.brPending > 0) { v = page.brPending; page.brPending = -1; running = true } }
   Process {
     id: modelProc; property string choice: "luna"
     command: ["s22-ui", "model", choice]
@@ -65,7 +70,7 @@ Flickable {
       width: parent.width; height: 56
       from: 8; to: page.brightMax; stepSize: 1
       value: page.bright
-      onMoved: { brSet.v = Math.round(value); brSet.running = true; page.bright = Math.round(value) }
+      onMoved: { page.bright = Math.round(value); if (brSet.running) page.brPending = page.bright; else { brSet.v = page.bright; brSet.running = true } }
     }
 
     Text { text: "Volume"; color: "#8b98a7"; font.pixelSize: 15; font.bold: true }
