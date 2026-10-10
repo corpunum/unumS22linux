@@ -93,3 +93,7 @@ A curated set of these bindings can be switched on when a Bluetooth or USB keybo
 - The file is `/opt/s22-touch/omarchy-keyboard.lua`.
 
 Run `status` first. Turn the set on only if the owner asks.
+
+## Under the sway-pixman desktop
+
+If `/etc/s22-desktop` is `sway-pixman` (`pidof sway`, no Hyprland), `hyprctl` does nothing. Use `swaymsg` with the SWAYSOCK from line 2 of `/run/s22-desktop/session` instead. The equivalents of the window and workspace actions are listed in `/opt/s22-touch/sway-keyboard.conf`, for example `swaymsg kill` and `swaymsg workspace number 2`. The Omarchy-shell actions (menu, emojis, clipboard, notifications) do not exist under sway.
