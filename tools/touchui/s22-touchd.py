@@ -48,6 +48,8 @@ SHELL_DIR = '/opt/s22-touch'                  # inside the chroot
 LOG = Path('/srv/s22/state/touchui/touchd.log')
 DISPLAY = '/srv/s22/hardware/bin/s22-display'
 BACKLIGHT = Path('/sys/class/backlight/panel')
+SAY = '/srv/s22/hardware/bin/s22-say'
+TTS_ENGINES = {'supertonic', 'paradee', 'kitten', 'piper', 'kokoro', 'espeak'}
 DISPLAY_STATE = Path('/run/s22-display-state')
 CAMERA = '/srv/s22/hardware/bin/s22-camera'   # reviewed client (sha256 3f1375f6...) since 2026-10-09
 BUTTONS = Path('/srv/s22/buttons')
@@ -589,6 +591,32 @@ class Daemon:
             (BACKLIGHT / 'brightness').write_text(f'{v}\n')
         return {'ok': True, 'brightness': int((BACKLIGHT / 'brightness').read_text().strip()), 'max': mx}
 
+    def cmd_tts(self, req: dict) -> dict:
+        """Render speech to a WAV with s22-say in render-only mode (S22_SAY_OUT set): no mixer,
+        no route, no amp, no playback, so the phone stays muted. Returns the chroot path."""
+        text = str(req.get('text') or '').strip()
+        if not text:
+            return {'ok': False, 'error': 'empty_text'}
+        if len(text) > 4000:
+            return {'ok': False, 'error': 'text_too_long', 'max': 4000}
+        engine = str(req.get('engine') or 'supertonic')
+        if engine not in TTS_ENGINES:
+            return {'ok': False, 'error': 'bad_engine', 'engines': sorted(TTS_ENGINES)}
+        out_dir = RUN / 'tts'
+        out_dir.mkdir(exist_ok=True)
+        old = sorted(out_dir.glob('*.wav'), key=lambda f: f.stat().st_mtime)
+        for f in old[:-20]:                       # keep the newest 20 renders
+            f.unlink(missing_ok=True)
+        name = f'{int(time.time() * 1000)}-{os.getpid()}.wav'
+        env = {**os.environ, 'S22_SAY_OUT': str(out_dir / name)}
+        t0 = time.monotonic()
+        r = subprocess.run([SAY, '--engine', engine, text], env=env, capture_output=True, text=True, timeout=180)
+        ok = r.returncode == 0 and (out_dir / name).exists()
+        log(event='tts', engine=engine, chars=len(text), ok=ok)
+        return {'ok': ok, 'path': f'{RUN_IN}/tts/{name}' if ok else None, 'engine': engine,
+                'ms': round((time.monotonic() - t0) * 1000), 'played': False,
+                **({} if ok else {'error': 'render_failed', 'tail': (r.stdout + r.stderr)[-400:]})}
+
     def cmd_gesture(self, req: dict) -> dict:
         name = req.get('name')
         if name not in ('home', 'back', 'switcher'):
@@ -693,6 +721,7 @@ COMMANDS = {
     'gesture': Daemon.cmd_gesture,
     'model': Daemon.cmd_model,
     'brightness': Daemon.cmd_brightness,
+    'tts': Daemon.cmd_tts,
 }
 UI_FUNCS = {'home', 'hide', 'back', 'switcher', 'open', 'card', 'confirm', 'confirmResult',
             'lock', 'unlock', 'keyboard', 'state', 'perf'}
