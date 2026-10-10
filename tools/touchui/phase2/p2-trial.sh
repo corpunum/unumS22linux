@@ -94,10 +94,12 @@ if [ "${S22_P2_NO_SWAY:-0}" = 1 ]; then
 fi
 
 # 3. sway on the panel, pixman renderer, devices opened directly (noop seat)
+# Same wlroots choice as start-persistent-desktop (gamma-reset fix if staged).
+WLRLIB=/usr/lib; [ -f $C/opt/s22-wlroots/libwlroots-0.20.so ] && WLRLIB=/opt/s22-wlroots:/usr/lib
 T0=$(uptime_s)
 setsid chroot $C /usr/bin/env -i $ENVBASE XDG_SESSION_TYPE=wayland LIBSEAT_BACKEND=noop \
   WLR_RENDERER=pixman WLR_DRM_DEVICES=/dev/dri/card1 WLR_BACKENDS=drm,libinput \
-  ${S22_P2_EXTRA_ENV:-} \
+  LD_LIBRARY_PATH=$WLRLIB ${S22_P2_EXTRA_ENV:-} \
   /usr/bin/dbus-run-session -- /usr/bin/sway ${S22_P2_SWAY_ARGS:-} -c /root/s22-sway-pixman.conf \
   </dev/null >>"$D/sway.log" 2>&1 &
 SWAY=$!
