@@ -39,8 +39,6 @@ enum Message {
     Input(String),
     Send,
     Sent(Result<String, String>),
-    Focus,
-    Noop,
 }
 #[derive(Debug, Clone)]
 struct ChatLine {
@@ -136,7 +134,6 @@ impl Application for Shell {
                 });
                 self.busy = false;
             }
-            Message::Focus | Message::Noop => {}
         }
         Command::none()
     }
@@ -334,8 +331,8 @@ async fn fetch_status() -> Result<DeviceStatus, String> {
 async fn send_chat(prompt: String) -> Result<String, String> {
     let client = reqwest::Client::new();
     let v: serde_json::Value = client
-        .post(format!("{API}/api/sessions/touch/messages"))
-        .json(&serde_json::json!({"message":prompt}))
+        .post(format!("{API}/api/chat"))
+        .json(&serde_json::json!({"sessionId":"touch","message":prompt}))
         .send()
         .await
         .map_err(|e| e.to_string())?
@@ -344,7 +341,7 @@ async fn send_chat(prompt: String) -> Result<String, String> {
         .json()
         .await
         .map_err(|e| e.to_string())?;
-    Ok(v.get("response")
+    Ok(v.get("reply")
         .or_else(|| v.get("message"))
         .or_else(|| v.get("content"))
         .and_then(|x| x.as_str())
