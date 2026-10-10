@@ -128,10 +128,10 @@ test('contract: every tool calls exactly its method and path with the parameters
 
 // ---------------------------------------------------------------- the three old mismatches
 
-test('sms_send takes number and text (the daemon field is "number", not "to")', async () => {
+test('device_sms_send takes number and text (the daemon field is "number", not "to")', async () => {
   const daemon = await startDaemon();
   const plugin = await makePlugin(daemon);
-  const tool = toolByName(plugin, 'sms_send');
+  const tool = toolByName(plugin, 'device_sms_send');
   assert.deepEqual(tool.parameters.required, ['number', 'text']);
   assert.equal(tool.parameters.properties.to, undefined);
   const out = await tool.execute({ number: '+306900000000', text: 'hi' });
@@ -210,7 +210,7 @@ test('risky tools wait for the daemon (which asks the owner) and pass its answer
   let next = 'yes';
   const daemon = await startDaemon(SPEC, { answer: () => answers[next] });
   const plugin = await makePlugin(daemon);
-  const tool = toolByName(plugin, 'sms_send');
+  const tool = toolByName(plugin, 'device_sms_send');
   const input = { number: '+306900000000', text: 'hello' };
   assert.equal((await tool.execute(input)).status, 'sent');
   next = 'no';
@@ -320,12 +320,12 @@ test('refresh follows the daemon: tools appear when a backend becomes available'
   sms.reason = 's22-phoned socket missing';
   const daemon = await startDaemon(spec);
   const plugin = await makePlugin(daemon);
-  assert.equal(toolByName(plugin, 'sms_send'), undefined);
+  assert.equal(toolByName(plugin, 'device_sms_send'), undefined);
   sms.available = true;
   sms.reason = null;
   const health = await plugin.onHealth();
   assert.equal(health.daemon_reachable, true);
-  assert.ok(toolByName(plugin, 'sms_send'));
+  assert.ok(toolByName(plugin, 'device_sms_send'));
   await daemon.close();
 });
 
@@ -398,4 +398,13 @@ test('schema checker covers the keywords s22d uses', () => {
   assert.equal(validate(s, { a: 'ab', e: NaN }).length, 1);
   assert.equal(validate(s, { a: 'ab', f: 1 }).length, 1);
   assert.equal(validate(s, null).length, 1);
+});
+
+test('no tool name collides with another phone plugin (OpenUnum runs the first match, so a clash shadows its policy)', () => {
+  const plugins = path.join(here, '../../');
+  const others = ['s22-phone', 's22-ui']
+    .flatMap((p) => JSON.parse(fs.readFileSync(path.join(plugins, p, 'plugin.json'), 'utf8')).capabilities);
+  assert.ok(others.includes('sms_send'), 'fixture sanity: s22-phone exposes sms_send');
+  const mine = SPEC.capabilities.map((c) => c.tool);
+  assert.deepEqual(mine.filter((t) => others.includes(t)), []);
 });
