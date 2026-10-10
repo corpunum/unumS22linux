@@ -142,3 +142,7 @@ s22-kbd-bindings off
 ```
 
 After a Hyprland restart, run `s22-kbd-bindings on` again. The flag file survives the restart, but the runtime binds do not.
+
+## Phase 2: renderer trial (2026-10-10)
+
+sway with the wlroots pixman renderer reached 62.6 panel fps at about 10% CPU on the touch-shell animation. Hyprland on llvmpipe reached 1.4 fps at 98% CPU on the same animation. The opt-in `/etc/s22-desktop = sway-pixman` profile is prepared but **not enabled**; Hyprland stays the default. Numbers, tools, known gaps and the switch/rollback steps are in [phase2/README.md](phase2/README.md).

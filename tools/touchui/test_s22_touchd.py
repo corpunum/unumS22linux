@@ -166,5 +166,61 @@ class SocketTest(unittest.TestCase):
         self.assertEqual(ui.main(['home'])['error'], 'touchd_unreachable')
 
 
+class SessionEnvTest(unittest.TestCase):
+    """Hyprland is preferred; the opt-in sway-pixman desktop is found via its session file."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        (self.root / 'run/user/0').mkdir(parents=True)
+        self.saved = (td.CHROOT, td.SWAY_SESSION, td.pids_by_comm, td.session_bus)
+        td.CHROOT = self.root
+        td.SWAY_SESSION = self.root / 'run/s22-desktop/session'
+        self.running = set()
+        td.pids_by_comm = lambda comm: [1] if comm in self.running else []
+        td.session_bus = lambda comp='Hyprland': f'unix:path=/tmp/{comp}'
+
+    def tearDown(self):
+        td.CHROOT, td.SWAY_SESSION, td.pids_by_comm, td.session_bus = self.saved
+        self.tmp.cleanup()
+
+    def sway(self, display='wayland-1', sock='/run/user/0/sway-ipc.0.9.sock'):
+        self.running.add('sway')
+        td.SWAY_SESSION.parent.mkdir(parents=True, exist_ok=True)
+        td.SWAY_SESSION.write_text(f'{display}\n{sock}\n')
+        (self.root / 'run/user/0' / display).touch()
+
+    def test_no_session(self):
+        self.assertIsNone(td.session_env())
+
+    def test_sway_session(self):
+        self.sway()
+        env = td.session_env()
+        self.assertEqual(env['WAYLAND_DISPLAY'], 'wayland-1')
+        self.assertEqual(env['SWAYSOCK'], '/run/user/0/sway-ipc.0.9.sock')
+        self.assertNotIn('HYPRLAND_INSTANCE_SIGNATURE', env)
+        self.assertEqual(env['DBUS_SESSION_BUS_ADDRESS'], 'unix:path=/tmp/sway')
+
+    def test_stale_sway_file_without_process_is_ignored(self):
+        self.sway()
+        self.running.clear()
+        self.assertIsNone(td.session_env())
+
+    def test_sway_display_must_be_a_plain_socket_name(self):
+        self.sway()
+        td.SWAY_SESSION.write_text('../../etc/passwd\n\n')
+        self.assertIsNone(td.session_env())
+
+    def test_hyprland_preferred_when_both_run(self):
+        self.sway(display='wayland-2')
+        sig = self.root / 'run/user/0/hypr/abc'
+        sig.mkdir(parents=True)
+        (sig / '.socket.sock').touch()
+        (self.root / 'run/user/0/wayland-1').touch()
+        env = td.session_env()
+        self.assertEqual(env['HYPRLAND_INSTANCE_SIGNATURE'], 'abc')
+        self.assertEqual(env['WAYLAND_DISPLAY'], 'wayland-1')
+
+
 if __name__ == '__main__':
     unittest.main()

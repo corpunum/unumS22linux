@@ -6,7 +6,7 @@ It does three things:
 
 1. UI supervisor: keeps the touch shell (Quickshell, /opt/s22-touch/shell.qml in
    the Arch chroot, Qt software rendering) running while a Hyprland session
-   exists. Restarts it with backoff if it dies. Never touches Hyprland itself.
+   (or the opt-in sway-pixman desktop, /etc/s22-desktop) exists. Restarts it with backoff if it dies. Never touches Hyprland itself.
 2. Gestures: reads the touchscreen evdev node WITHOUT grabbing it (Hyprland keeps
    getting every event) and maps single-finger edge swipes to UI actions:
        bottom edge, swipe up      -> home
@@ -274,29 +274,55 @@ def hypr_signature() -> str | None:
     return None
 
 
-def session_env() -> dict | None:
-    """Environment of the running Hyprland session, or None when there is none."""
-    sig = hypr_signature()
-    if not sig or not (CHROOT / 'run/user/0/wayland-1').exists():
+SWAY_SESSION = CHROOT / 'run/s22-desktop/session'   # written by s22-sway-pixman.conf
+
+
+def sway_session() -> tuple[str, str] | None:
+    """(WAYLAND_DISPLAY, SWAYSOCK) of a running sway-pixman desktop, else None."""
+    if not pids_by_comm('sway'):
         return None
+    try:
+        lines = SWAY_SESSION.read_text().split('\n')
+    except OSError:
+        return None
+    display = lines[0].strip() if lines else ''
+    swaysock = lines[1].strip() if len(lines) > 1 else ''
+    if not display or '/' in display or not (CHROOT / 'run/user/0' / display).exists():
+        return None
+    return display, swaysock
+
+
+def session_env() -> dict | None:
+    """Environment of the running desktop session (Hyprland, else the opt-in
+    sway-pixman profile), or None when there is none."""
+    sig = hypr_signature()
+    if sig and (CHROOT / 'run/user/0/wayland-1').exists():
+        extra, comp = {'WAYLAND_DISPLAY': 'wayland-1', 'HYPRLAND_INSTANCE_SIGNATURE': sig}, 'Hyprland'
+    else:
+        sway = sway_session()
+        if sway is None:
+            return None
+        extra, comp = {'WAYLAND_DISPLAY': sway[0]}, 'sway'
+        if sway[1]:
+            extra['SWAYSOCK'] = sway[1]
     env = {
         'HOME': '/root', 'PATH': '/usr/local/bin:/opt/omarchy-source/bin:/usr/bin:/bin',
-        'XDG_RUNTIME_DIR': '/run/user/0', 'WAYLAND_DISPLAY': 'wayland-1',
-        'HYPRLAND_INSTANCE_SIGNATURE': sig, 'LANG': 'C.UTF-8', 'TZ': os.environ.get('TZ', 'Europe/Athens'),
+        'XDG_RUNTIME_DIR': '/run/user/0', **extra,
+        'LANG': 'C.UTF-8', 'TZ': os.environ.get('TZ', 'Europe/Athens'),
         'QT_QUICK_BACKEND': 'software', 'QSG_RHI_BACKEND': 'software', 'QT_QPA_PLATFORM': 'wayland',
         'QT_QPA_PLATFORMTHEME': 'generic', 'NO_AT_BRIDGE': '1', 'QT_ACCESSIBILITY': '0',
         'QS_DISABLE_FILE_WATCHER': '1', 'QS_NO_RELOAD_POPUP': '1',
         'QT_QUICK_CONTROLS_STYLE': 'Basic',
     }
-    bus = session_bus()
+    bus = session_bus(comp)
     if bus:
         env['DBUS_SESSION_BUS_ADDRESS'] = bus
     return env
 
 
-def session_bus() -> str | None:
-    """DBus session address of the Hyprland session (for squeekboard)."""
-    for pid in pids_by_comm('Hyprland'):
+def session_bus(comp: str = 'Hyprland') -> str | None:
+    """DBus session address of the compositor's session (for squeekboard)."""
+    for pid in pids_by_comm(comp):
         try:
             for item in Path(f'/proc/{pid}/environ').read_bytes().split(b'\0'):
                 if item.startswith(b'DBUS_SESSION_BUS_ADDRESS='):
