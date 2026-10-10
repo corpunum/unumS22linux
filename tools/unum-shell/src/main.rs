@@ -50,7 +50,7 @@ fn run() {
     settings.antialiasing = false;
     settings.window = window::Settings {
         size: Size::new(render::LOGICAL.0, render::LOGICAL.1),
-        resizable: false,
+        resizable: true,
         decorations: false,
         platform_specific: window::settings::PlatformSpecific {
             application_id: "unum-shell".into(),
