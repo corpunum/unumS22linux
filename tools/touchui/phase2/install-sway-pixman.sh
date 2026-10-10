@@ -53,5 +53,4 @@ mv "$SPD.new" "$SPD"
 install -m 755 "$HERE/s22-desktop-profile.sh" /srv/s22/hardware/bin/s22-desktop-profile
 /srv/s22/hardware/bin/s22-desktop-profile status
 echo "next: sh $TOOLS/touchui/install-touchui.sh   (touchd/shell sway support)"
-echo "      sh $TOOLS/touchui/omarchy/install-omarchy-extras.sh   (keyboard bindings incl. sway)"
 echo "      /srv/s22/hardware/bin/s22-desktop-profile sway-pixman   then a desktop restart"

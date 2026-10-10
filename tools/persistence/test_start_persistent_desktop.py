@@ -245,6 +245,21 @@ class SupervisorUnitTests(unittest.TestCase):
                 MOD.start_desktop_with_fallback(Path(td) / 'd.log', 'hyprland')
         self.assertEqual(start.call_count, 1)
 
+    def test_hyprland_fallback_uses_plain_config_when_present(self):
+        for present, expected in ((True, '/root/hyprland-s22.lua'), (False, '/root/hyprland-omarchy-ui.lua')):
+            with self.subTest(present=present), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                (root / 'run').mkdir()
+                (root / 'run/seatd.sock').touch()
+                (root / 'root').mkdir()
+                if present:
+                    (root / 'root/hyprland-s22.lua').touch()
+                with mock.patch.object(MOD, 'CHROOT', root), \
+                     mock.patch.dict(os.environ, {}, clear=True), \
+                     mock.patch.object(MOD.subprocess, 'Popen') as popen:
+                    MOD.start_desktop(root / 'desktop.log', 'hyprland')
+                self.assertIn(expected, popen.call_args_list[1].args[0])
+
     def test_bind_file_creates_regular_placeholder_and_mounts(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

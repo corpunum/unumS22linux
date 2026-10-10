@@ -5,7 +5,7 @@ Runs INSIDE the Arch chroot (as /usr/local/bin/s22-ui). Talks to s22-touchd on
 /run/s22-touch/ctl.sock; prints one JSON object.
 
   s22-ui home | hide | back | switcher | lock | unlock | state
-  s22-ui open chat|phone|camera|files|settings|switcher|terminal|agent
+  s22-ui open chat|phone|camera|files|settings|switcher|terminal
   s22-ui card TITLE BODY [--ttl SECONDS]
   s22-ui confirm QUESTION [--timeout SECONDS]     -> {"answer": "yes"|"no"|"timeout"}
   s22-ui keyboard on|off
