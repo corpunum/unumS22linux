@@ -52,6 +52,11 @@ CALL_OUTGOING, CALL_INCOMING, CALL_RELEASE, CALL_ANSWER = (2, 1), (2, 2), (2, 3)
 CALL_STATUS, CALL_LIST, CALL_BURST_DTMF, CALL_CONT_DTMF = (2, 5), (2, 6), (2, 7), (2, 8)
 SMS_SEND_MSG, SMS_INCOMING_MSG, SMS_DELIVER_REPORT = (4, 1), (4, 2), (4, 6)
 SMS_DEVICE_READY, SMS_SVC_CENTER_ADDR = (4, 7), (4, 0x0A)
+SMS_READ_MSG, SMS_DEL_MSG, SMS_SEL_MEM = (4, 3), (4, 5), (4, 8)
+SMS_STORED_MSG_COUNT, SMS_MEM_STATUS = (4, 9), (4, 0x0C)
+MEM_SIM = 0x02                          # memory id the CP uses for SIM SMS storage (measured on the S22)
+MEM_AVAILABLE = bytes([MEM_SIM, 0x01])  # SMS_MEM_STATUS SET payload; CP accepts it and signals the network
+SIM_SLOT_MAX = 255
 SEC_PIN_STATUS = (5, 1)                 # a.k.a. SEC_SIM_STATUS
 DISP_ICON_INFO, DISP_RSSI_INFO = (7, 1), (7, 6)
 NET_CURRENT_PLMN, NET_REGIST, NET_SERVING_NETWORK = (8, 3), (8, 5), (8, 8)
@@ -65,7 +70,10 @@ NAMES = {
     CALL_LIST: "CALL_LIST", CALL_BURST_DTMF: "CALL_BURST_DTMF", CALL_CONT_DTMF: "CALL_CONT_DTMF",
     SMS_SEND_MSG: "SMS_SEND_MSG", SMS_INCOMING_MSG: "SMS_INCOMING_MSG",
     SMS_DELIVER_REPORT: "SMS_DELIVER_REPORT", SMS_DEVICE_READY: "SMS_DEVICE_READY",
-    SMS_SVC_CENTER_ADDR: "SMS_SVC_CENTER_ADDR", SEC_PIN_STATUS: "SEC_SIM_STATUS",
+    SMS_SVC_CENTER_ADDR: "SMS_SVC_CENTER_ADDR", SMS_READ_MSG: "SMS_READ_MSG",
+    SMS_DEL_MSG: "SMS_DEL_MSG", SMS_SEL_MEM: "SMS_SEL_MEM",
+    SMS_STORED_MSG_COUNT: "SMS_STORED_MSG_COUNT", SMS_MEM_STATUS: "SMS_MEM_STATUS",
+    SEC_PIN_STATUS: "SEC_SIM_STATUS",
     (5, 2): "SEC_PHONE_LOCK", DISP_ICON_INFO: "DISP_ICON_INFO", DISP_RSSI_INFO: "DISP_RSSI_INFO",
     NET_CURRENT_PLMN: "NET_CURRENT_PLMN", NET_REGIST: "NET_REGIST",
     NET_SERVING_NETWORK: "NET_SERVING_NETWORK", (0x0A, 1): "MISC_ME_VERSION",
@@ -469,16 +477,34 @@ def dec_regist(d):
             "rej_cause": d[10] if len(d) > 10 else None}
 
 
+PLMN_NAMES = {"20201": "Cosmote", "20205": "Vodafone GR", "20209": "Nova (Wind)", "20210": "Nova (Wind)"}
+
+
+def _find_key(obj, keys):
+    """First non-empty value for any of keys, searching nested dicts breadth-first."""
+    queue_ = [obj]
+    while queue_:
+        o = queue_.pop(0)
+        if isinstance(o, dict):
+            for k in keys:
+                if o.get(k) not in (None, "", 0):
+                    return o[k]
+            queue_.extend(o.values())
+    return None
+
+
 def dec_plmn(d):
     j = _json(d)
     if j is not None:
-        name = next((j[k] for k in ("long_name", "short_name", "operator", "name", "spn")
-                     if isinstance(j.get(k), str) and j[k]), None)
-        plmn = next((str(j[k]) for k in ("plmn", "mcc_mnc", "mccmnc") if j.get(k)), None)
-        return {"operator": name or plmn, "plmn": plmn, "json": j}
+        name = _find_key(j, ("long_name", "short_name", "operator", "name", "spn"))
+        name = name if isinstance(name, str) else None
+        plmn = _find_key(j, ("plmn", "mcc_mnc", "mccmnc"))
+        plmn = re.sub(r"[^0-9]", "", str(plmn)) if plmn is not None else None
+        plmn = plmn or None
+        return {"operator": name or PLMN_NAMES.get(plmn) or plmn, "plmn": plmn, "json": j}
     m = re.search(rb"[0-9]{5,6}", d)
     plmn = m.group().decode() if m else None
-    return {"operator": plmn, "plmn": plmn}
+    return {"operator": PLMN_NAMES.get(plmn) or plmn, "plmn": plmn}
 
 
 def dec_rssi(d):
@@ -550,6 +576,25 @@ def dec_sms_send(d):
     return {"type": typ, "ack": ack, "id": mid, "ok": ack == 0}
 
 
+def dec_sms_stored_count(d):
+    """RESP to GET SMS_STORED_MSG_COUNT [mem]: mem id, slot capacity, then a (zero when empty) list."""
+    return {"mem": d[0], "slots": d[1] if len(d) > 1 else 0, "tail_nonzero": any(d[2:])}
+
+
+def dec_sms_read(d):
+    """RESP to GET SMS_READ_MSG [mem, idx u16]: mem, idx u16, status, length, then SMSC-len+SMSC+PDU."""
+    mem, idx, status, length = struct.unpack_from("<BHBB", d)
+    out = {"mem": mem, "index": idx, "status": status, "length": length, "empty": not (status and length)}
+    if not out["empty"]:
+        pdu = d[5: 5 + length]
+        out["pdu"] = pdu.hex()
+        try:
+            out["sms"] = decode_pdu(pdu, True)
+        except (ValueError, IndexError) as e:
+            out["pdu_error"] = str(e) or "short pdu"
+    return out
+
+
 def dec_svc_center(d):
     n = d[0]
     return {"smsc_raw": d[1:1 + n].hex()} if n else {"smsc_raw": ""}
@@ -560,7 +605,8 @@ DECODERS = {GEN_PHONE_RES: dec_gen, SEC_PIN_STATUS: dec_sim, NET_REGIST: dec_reg
             DISP_RSSI_INFO: dec_rssi, DISP_ICON_INFO: dec_icon,
             CALL_INCOMING: dec_call_incoming, CALL_STATUS: dec_call_status,
             CALL_LIST: dec_call_list, SMS_INCOMING_MSG: dec_sms_incoming,
-            SMS_SEND_MSG: dec_sms_send, SMS_SVC_CENTER_ADDR: dec_svc_center}
+            SMS_SEND_MSG: dec_sms_send, SMS_SVC_CENTER_ADDR: dec_svc_center,
+            SMS_STORED_MSG_COUNT: dec_sms_stored_count, SMS_READ_MSG: dec_sms_read}
 
 
 def describe(frame):
@@ -927,7 +973,8 @@ def device_opener(nv_root=None, serve_rfs=True):
 class Phone:
     def __init__(self, state_dir, simulate=False, max_sms_per_hour=10, max_dials_per_hour=5,
                  reassembly_timeout=600.0, modem_state_path=MODEM_STATE_PATH, radio_normal=False,
-                 smsc=None, req_timeout=8.0):
+                 smsc=None, req_timeout=8.0, send_ack_timeout=20.0):
+        self.send_ack_timeout = send_ack_timeout
         self.dir = Path(state_dir)
         self.dir.mkdir(parents=True, exist_ok=True)
         try:
@@ -951,6 +998,10 @@ class Phone:
         self.registration, self.reg_by_domain = None, {}
         self.operator, self.signal = None, None
         self.sms_ready = False
+        self.send_acks = queue.Queue()
+        self.mem_reported = 0.0
+        self.sweep_lock = threading.Lock()
+        self.sweep_result = None
         self.smsc_raw = encode_smsc(smsc) if smsc else None
         self.calls = collections.OrderedDict()
         self.pending_dial = None
@@ -1034,6 +1085,7 @@ class Phone:
         else:
             with self.lock:
                 self.sms_ready = False
+                self.mem_reported = 0.0
 
     def startup(self):
         if self.radio_normal:
@@ -1060,10 +1112,18 @@ class Phone:
         p = self._req(SMS_DEVICE_READY, SET)
         if p is not None and p.ok:
             with self.lock:
+                first = not self.sms_ready
                 self.sms_ready = True
+            self.report_memory_available()
+            if first:
+                self.sweep_sim()
 
     # -- frame handling (reader thread: never block here)
     def handle_frame(self, fr):
+        if fr.cmd == SMS_MEM_STATUS and fr.type in (NOTI, INDI):
+            self.defer(self.report_memory_available, True)   # the CP asks after every DEVICE_READY
+        elif fr.cmd == SMS_SEND_MSG and fr.type in (NOTI, RESP) and len(fr.data) >= 4:
+            self.send_acks.put(dec_sms_send(fr.data))
         info = describe(fr)
         dec = info.get("decoded")
         if dec is None:
@@ -1249,17 +1309,27 @@ class Phone:
                 return "failed", str(e)
         smsc = self.smsc_raw or b""
         for k, pdu in enumerate(pdus):
+            while not self.send_acks.empty():        # drop stale acks (e.g. RESP seen twice)
+                self.send_acks.get_nowait()
             body = bytes([len(smsc)]) + smsc + pdu
             hdr = bytes([0x02, 0x01 if k < len(pdus) - 1 else 0x02, 0x00, len(body)])
             try:
-                p = self._req(SMS_SEND_MSG, EXEC, hdr + body, want_resp=True, timeout=60)
+                p = self._req(SMS_SEND_MSG, EXEC, hdr + body, want_resp=False, timeout=30)
             except LinkDown as e:
                 return ("queued" if k else "failed"), str(e)
-            if p is None or (p.resp is None and p.gen is not None and p.gen["ok"]):
+            if p is None:
                 return "queued", "no send confirmation yet"
-            if p.resp is None:
+            if p.gen is not None and not p.gen["ok"]:
                 return "failed", f"modem error 0x{p.gen['code']:04x}"
-            r = dec_sms_send(p.resp.data) if len(p.resp.data) >= 4 else {"ok": True, "id": None}
+            # The S22 CP acks the send asynchronously as a NOTI carrying the TP-MR (measured:
+            # GEN ok, then 02 0000 0b 00 ~3 s later); simulators/older CPs answer with a RESP.
+            if p.resp is not None:
+                r = dec_sms_send(p.resp.data) if len(p.resp.data) >= 4 else {"ok": True, "id": None}
+            else:
+                try:
+                    r = self.send_acks.get(timeout=self.send_ack_timeout)
+                except queue.Empty:
+                    return "queued", "no send confirmation yet"
             if not r["ok"]:
                 return "failed", f"network ack 0x{r['ack']:04x}"
             rec["mrs"].append(r["id"])
@@ -1278,6 +1348,8 @@ class Phone:
             self._on_status_report(sms)
         elif sms["kind"] == "deliver":
             self._on_deliver(sms)
+            if d.get("sim_index") not in (0x00FF, 0xFFFF):
+                self.defer(self.sweep_sim)           # CP also keeps a SIM copy: sweep dedupes + deletes it
 
     def _ack_sms(self, data):
         self._req(SMS_DELIVER_REPORT, EXEC, data, want_resp=False)
@@ -1308,6 +1380,10 @@ class Phone:
             text = "".join(v["parts"].get(i, f"[missing part {i}]") for i in range(1, total + 1))
             self._store_inbox(sender, text, total, v["sms"], incomplete=True)
 
+    def _inbox_has(self, sender, text, scts):
+        return any(m.get("from") == sender and m.get("text") == text and m.get("scts") == scts
+                   for m in self.inbox.values())
+
     def _store_inbox(self, sender, text, parts, sms, incomplete=False):
         rec = {"id": self.new_id("in"), "from": sender, "text": text, "ts": now(), "parts": parts,
                "smsc": sms.get("smsc"), "scts": sms.get("scts")}
@@ -1332,7 +1408,127 @@ class Phone:
                 if rec["delivered"] is not None:
                     self.events.emit("sms_delivered", id=rec["id"], to=rec["to"], delivered=rec["delivered"])
                 return
+        # No TP-MR on file (send ack arrived late or was not seen): adopt the newest open outbox entry
+        # to the same recipient, but only if it has no MR recorded yet.
+        for rec in reversed(self.outbox.values()):
+            if (rec.get("status") in ("sent", "queued") and not rec.get("mrs") and rec.get("parts") == 1
+                    and rec.get("delivered") is None and rec.get("to") == sr.get("recipient")
+                    and time.time() - rec.get("ts", 0) < 86400):
+                rec = dict(rec, mrs=[sr["mr"]], reports={str(sr["mr"]): sr["delivered"]},
+                           delivered=sr["delivered"], status="sent")
+                rec.pop("error", None)
+                self.outbox.put(rec)
+                self.events.emit("sms_delivered", id=rec["id"], to=rec["to"], delivered=rec["delivered"])
+                return
         self.log.write({"event": "status_report_unmatched", "mr": sr["mr"]})
+
+    # -- SMS memory / SIM storage
+    def report_memory_available(self, force=False):
+        """Tell the CP the AP-side SMS memory has room (SMS_MEM_STATUS SET [sim, 1]).
+
+        Without this the CP never clears the 'memory capacity exceeded' state toward the SMSC, so
+        mobile-terminated SMS stop arriving. Accepted by the CP with GEN ok; it then does a short
+        signalling burst (RP-SMMA)."""
+        with self.lock:
+            if time.monotonic() - self.mem_reported < (5.0 if force else 600.0):
+                return None
+            self.mem_reported = time.monotonic()
+        # The CP's GEN ok for this SET carries aseq 0 (measured), so it never matches our mseq:
+        # do not block on it; the GEN_PHONE_RES frame is in the ipc log. None = sent, unconfirmed.
+        p = self._req(SMS_MEM_STATUS, SET, MEM_AVAILABLE, timeout=1.5)
+        ok = None if p is None or p.gen is None else p.gen["ok"]
+        self.log.write({"event": "sms_mem_available", "ok": ok})
+        return ok
+
+    def _read_slot(self, idx):
+        p = self._req(SMS_READ_MSG, GET, bytes([MEM_SIM]) + struct.pack("<H", idx), want_resp=True)
+        if p is None or p.resp is None or len(p.resp.data) < 5:
+            return None
+        return dec_sms_read(p.resp.data)
+
+    def _delete_slot(self, idx):
+        p = self._req(SMS_DEL_MSG, EXEC, bytes([MEM_SIM]) + struct.pack("<H", idx), want_resp=True)
+        if p is None or not p.ok:
+            return False
+        if p.resp is not None and len(p.resp.data) >= 3 and struct.unpack_from("<H", p.resp.data, 1)[0]:
+            return False
+        return True
+
+    def sweep_sim(self):
+        """Read every SMS stored on the SIM into the inbox; delete from SIM only after the inbox write."""
+        if not self.sweep_lock.acquire(blocking=False):
+            return None
+        try:
+            p = self._req(SMS_STORED_MSG_COUNT, GET, bytes([MEM_SIM]), want_resp=True)
+            if p is None or p.resp is None or len(p.resp.data) < 2:
+                self.sweep_result = {"ok": False, "error": "no stored-count response", "ts": now()}
+                self.log.write({"event": "sim_sweep", **self.sweep_result})
+                return self.sweep_result
+            slots = min(dec_sms_stored_count(p.resp.data)["slots"], SIM_SLOT_MAX)
+            found, groups = [], {}
+            for idx in range(slots):
+                r = self._read_slot(idx)
+                if r is None or r["empty"]:
+                    continue
+                if "sms" not in r:
+                    self.log.write({"event": "sim_slot_undecodable", "index": idx, "pdu": r.get("pdu")})
+                    continue
+                found.append((idx, r["sms"]))
+            stored = deleted = kept = 0
+            for idx, sms in found:
+                c = sms.get("concat")
+                if sms["kind"] == "deliver" and c and c["total"] > 1:
+                    groups.setdefault((sms["sender"], c["ref"], c["total"]), []).append((idx, sms))
+            done = set()
+            for key, parts in groups.items():
+                seqs = {s["concat"]["seq"]: s["text"] for _, s in parts}
+                if len(seqs) < key[2]:
+                    kept += len(parts)                  # incomplete: leave on the SIM until the rest arrive
+                    done.update(i for i, _ in parts)
+                    continue
+                first = min(parts, key=lambda x: x[1]["concat"]["seq"])[1]
+                text = "".join(seqs[k] for k in sorted(seqs))
+                ok, new = self._sweep_store(key[0], text, key[2], first)
+                if ok:
+                    stored += new
+                    for i, _ in parts:
+                        deleted += self._delete_slot(i)
+                else:
+                    kept += len(parts)
+                done.update(i for i, _ in parts)
+            for idx, sms in found:
+                if idx in done:
+                    continue
+                if sms["kind"] == "status_report":
+                    self._on_status_report(sms)
+                    ok = True
+                elif sms["kind"] == "deliver":
+                    ok, new = self._sweep_store(sms["sender"], sms["text"], 1, sms)
+                    stored += new
+                else:
+                    kept += 1
+                    continue
+                if ok and self._delete_slot(idx):
+                    deleted += 1
+                else:
+                    kept += 1
+            self.sweep_result = {"ok": True, "slots": slots, "found": len(found), "stored": stored,
+                                 "deleted": deleted, "kept": kept, "ts": now()}
+            self.log.write({"event": "sim_sweep", **self.sweep_result})
+            return self.sweep_result
+        finally:
+            self.sweep_lock.release()
+
+    def _sweep_store(self, sender, text, parts, sms):
+        """(ok, new): ok once the message is durably in the inbox (already there counts)."""
+        try:
+            if self._inbox_has(sender, text, sms.get("scts")):
+                return True, 0
+            self._store_inbox(sender, text, parts, sms)
+            return True, 1
+        except OSError as e:
+            self.log.write({"event": "inbox_write_failed", "error": str(e)})
+            return False, 0
 
     # -- calls
     def _call(self, cid, **kw):
@@ -1475,6 +1671,7 @@ class Phone:
                     "pin_attempted": self.pin_attempted, "registration": self.registration,
                     "operator": self.operator, "signal": self.signal, "sms_ready": self.sms_ready,
                     "tx_enabled": self.tx_enabled(), "calls": self.current_calls(),
+                    "sim_sweep": self.sweep_result,
                     "simulated": self.simulate}
 
 
@@ -1488,6 +1685,7 @@ class FakeCP:
         self.mseq, self.mr, self.next_call = 0, 0, 1
         self.calls = {}
         self.sent, self.acks, self.rx = [], [], []
+        self.sim_sms, self.sim_slots, self.mem_sets, self.deleted = {}, 40, [], []
         self.lock = threading.Lock()
         self.thread = threading.Thread(target=self._run, name="fake-cp", daemon=True)
         self.thread.start()
@@ -1550,12 +1748,34 @@ class FakeCP:
             pdu = fr.data[5 + n:]
             self.sent.append(pdu)
             self.mr = (self.mr + 1) % 256
-            self.out(c, RESP, struct.pack("<BHBB", 2, 0, self.mr, 0), fr.mseq)
+            mr = self.mr
+            self.gen(fr)                                  # hardware: GEN ok, then the MR ack as a NOTI
+            threading.Timer(0.03, lambda: self.out(c, NOTI, struct.pack("<BHBB", 2, 0, mr, 0))).start()
             sub = decode_pdu(pdu, False)
             if sub.get("srr"):
-                mr = self.mr
-                threading.Timer(0.05, lambda: self.out(SMS_INCOMING_MSG, NOTI, self._incoming(
+                threading.Timer(0.1, lambda: self.out(SMS_INCOMING_MSG, NOTI, self._incoming(
                     build_status_report_pdu(sub["to"], mr, 0, self.smsc), 2))).start()
+        elif c == SMS_MEM_STATUS and t == SET:
+            self.mem_sets.append(fr.data)
+            self.gen(fr)
+        elif c == SMS_STORED_MSG_COUNT and t == GET:
+            self.out(c, RESP, bytes([fr.data[0], self.sim_slots]) + bytes(259 - 1), fr.mseq)
+        elif c == SMS_READ_MSG and t == GET:
+            idx = struct.unpack_from("<H", fr.data, 1)[0]
+            if idx >= self.sim_slots:
+                self.gen(fr, 13)
+            else:
+                st, body = self.sim_sms.get(idx, (0, b""))
+                self.out(c, RESP, struct.pack("<BHBB", 2, idx, st, len(body)) + body, fr.mseq)
+        elif c == SMS_DEL_MSG and t == EXEC:
+            idx = struct.unpack_from("<H", fr.data, 1)[0]
+            self.deleted.append(idx)
+            self.sim_sms.pop(idx, None)
+            self.gen(fr)
+            self.out(c, RESP, struct.pack("<BHH", 2, 0, idx), fr.mseq)
+        elif c == SMS_DEVICE_READY and t == SET:
+            self.gen(fr)
+            self.out(SMS_MEM_STATUS, NOTI, b"\x02\x01")
         elif c == SMS_DELIVER_REPORT:
             self.acks.append(fr.data)
             self.gen(fr)
