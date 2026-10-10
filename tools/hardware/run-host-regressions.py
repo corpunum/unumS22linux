@@ -103,6 +103,8 @@ REVIEWED_HOST_TEST_PATHS = (
     "tools/hardware/test_s22_assistant.py",
     "tools/hardware/test_s22_modem.py",
     "tools/hardware/test_s22_keepalive.py",
+    "tools/hardware/test_s22_guardian.py",
+    "tools/hardware/test_s22_llama_ondemand.py",
     "tools/persistence/test_start_persistent_desktop.py",
     "tools/persistence/test_model_profile.py",
     "tools/hardware/phoned/test_s22_phoned.py",
@@ -112,7 +114,6 @@ REVIEWED_HOST_TEST_PATHS = (
     "tools/openunum-phone/test_phone_plugin.py",
     "tools/openunum-phone/test_ui_plugin.py",
     "tools/touchui/test_s22_touchd.py",
-    "tools/touchui/omarchy/test_omarchy_extras.py",
     "tools/hardware/camera/test_s22_camera.py",
 )
 
@@ -199,6 +200,8 @@ HOST_TESTS = (
     HostTest("tools/hardware/test_s22_assistant.py"),
     HostTest("tools/hardware/test_s22_modem.py"),
     HostTest("tools/hardware/test_s22_keepalive.py"),
+    HostTest("tools/hardware/test_s22_guardian.py"),
+    HostTest("tools/hardware/test_s22_llama_ondemand.py"),
     HostTest("tools/persistence/test_start_persistent_desktop.py"),
     HostTest("tools/persistence/test_model_profile.py"),
     HostTest("tools/hardware/phoned/test_s22_phoned.py"),
@@ -208,7 +211,6 @@ HOST_TESTS = (
     HostTest("tools/openunum-phone/test_phone_plugin.py"),
     HostTest("tools/openunum-phone/test_ui_plugin.py"),
     HostTest("tools/touchui/test_s22_touchd.py"),
-    HostTest("tools/touchui/omarchy/test_omarchy_extras.py"),
     HostTest("tools/hardware/camera/test_s22_camera.py"),
 )
 
