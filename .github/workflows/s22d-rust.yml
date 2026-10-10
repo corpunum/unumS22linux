@@ -18,5 +18,7 @@ jobs:
           targets: aarch64-unknown-linux-musl
       - name: Unit tests
         run: cargo test --manifest-path tools/s22d/Cargo.toml --locked
+      - name: Install LLD
+        run: sudo apt-get update && sudo apt-get install -y lld
       - name: Static aarch64 cross-build
         run: cargo build --manifest-path tools/s22d/Cargo.toml --locked --release --target aarch64-unknown-linux-musl
