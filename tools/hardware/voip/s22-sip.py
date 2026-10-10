@@ -1841,6 +1841,70 @@ class VoiceLoop:
 
 # ------------------------------------------------------------------ fast voice (rig streaming bridge)
 
+def _read_text(path) -> str | None:
+    try:
+        return Path(path).read_text().strip()
+    except (OSError, ValueError):
+        return None
+
+
+def device_snapshot(power: str = '/sys/class/power_supply', thermal: str = '/sys/class/thermal',
+                    daemon: str | None = 'http://127.0.0.1:8095', route: str = '/proc/net/route',
+                    timeout: float = 1.0) -> dict:
+    """Compact live phone state for the rig's fast voice brain.  Every field is best effort and omitted when unknown."""
+    out: dict = {}
+    bat = Path(power) / 'battery'
+    if not bat.exists():
+        bat = next((d for d in sorted(Path(power).glob('*')) if (d / 'capacity').exists()), bat)
+    b: dict = {}
+    cap, st, tmp = (_read_text(bat / n) for n in ('capacity', 'status', 'temp'))
+    if cap and cap.lstrip('-').isdigit():
+        b['percent'] = int(cap)
+    if st:
+        b['status'] = st
+    if tmp and tmp.lstrip('-').isdigit():
+        b['temp_c'] = round(int(tmp) / 10, 1)
+    if b:
+        out['battery'] = b
+    temps = []
+    for z in Path(thermal).glob('thermal_zone*'):
+        t = _read_text(z / 'temp')
+        if t and t.lstrip('-').isdigit():
+            v = int(t) / (1000 if abs(int(t)) > 1000 else 1)
+            if 0 < v < 150:
+                temps.append(v)
+    if temps:
+        out['thermal'] = {'max_c': round(max(temps), 1)}
+    if daemon:
+        try:
+            with urllib.request.urlopen(daemon.rstrip('/') + '/status', timeout=timeout) as r:
+                st_ = json.loads(r.read() or b'{}')
+            m = {k: st_[src] for k, src in (('state', 'modem_state'), ('sim', 'sim'), ('registration', 'registration'),
+                                            ('operator', 'operator'), ('signal', 'signal')) if st_.get(src) not in (None, '')}
+            if m:
+                out['modem'] = m
+        except (OSError, ValueError, urllib.error.URLError):
+            pass
+    net: dict = {}
+    rt = _read_text(route)
+    for line in (rt or '').splitlines()[1:]:
+        f = line.split()
+        if len(f) > 2 and f[1] == '00000000':
+            net['iface'] = f[0]
+            break
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sk:
+            sk.connect(('10.255.255.255', 1))       # no packet is sent, only the route is resolved
+            net['ip'] = sk.getsockname()[0]
+    except OSError:
+        pass
+    if net:
+        out['network'] = net
+    now = time.localtime()
+    out['time'] = {'local': time.strftime('%A %Y-%m-%d %H:%M', now), 'tz': time.strftime('%Z', now)}
+    return out
+
+
 _WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 
 
@@ -1978,7 +2042,8 @@ class FastVoiceLoop:
     def __init__(self, rtp, url: str, token: str | None = None, greeting: str | None = None,
                  pin: str | None = None, barge_in: bool = True, lang: str = 'auto',
                  fallback: Callable | None = None, connect_timeout: float = 2.0,
-                 reconnect_s: float = 1.0, client_factory=WsClient, log=_log):
+                 reconnect_s: float = 1.0, client_factory=WsClient, snapshot_fn: Callable | None = device_snapshot,
+                 snapshot_s: float = 30.0, log=_log):
         self.rtp, self.url, self.token, self.greeting = rtp, url, token, greeting
         self.pin, self.digits, self.locked = pin, '', bool(pin)
         self.barge_in, self.lang, self.fallback = barge_in, lang, fallback
@@ -1991,6 +2056,21 @@ class FastVoiceLoop:
         self.turns: list[dict] = []
         self.thread: threading.Thread | None = None
         self.tx_bytes = self.rx_bytes = 0
+        self.snapshot_fn, self.snapshot_s = snapshot_fn, snapshot_s
+        self.stop_ev = threading.Event()
+
+    def send_snapshot(self) -> None:
+        """Ground truth for the rig's brain (battery, thermal, modem, network, time); it must not guess these."""
+        if not self.snapshot_fn or self.ws is None or self.ws.closed:
+            return
+        try:
+            self.ws.send_text(json.dumps({'type': 'snapshot', 'data': self.snapshot_fn()}))
+        except (OSError, ConnectionError, ValueError) as e:
+            self.log(f'fast-voice: snapshot failed: {e!r}')
+
+    def _snapshot_loop(self) -> None:
+        while not self.stop_ev.wait(self.snapshot_s):
+            self.send_snapshot()
 
     # -- lifecycle
     def _open(self) -> bool:
@@ -2022,6 +2102,9 @@ class FastVoiceLoop:
         self.rtp.on_dtmf.append(self.on_dtmf)
         self.thread = threading.Thread(target=self._rx_loop, daemon=True)
         self.thread.start()
+        self.send_snapshot()
+        if self.snapshot_fn:
+            threading.Thread(target=self._snapshot_loop, daemon=True).start()
         if self.locked:
             self.log('fast-voice: locked, waiting for DTMF PIN')
         elif self.greeting:
@@ -2029,6 +2112,7 @@ class FastVoiceLoop:
 
     def stop(self) -> None:
         self.running = False
+        self.stop_ev.set()
         if self.delegate:
             self.delegate.stop()
         if self.ws:
@@ -2077,6 +2161,7 @@ class FastVoiceLoop:
                 self.rtp.flush()
                 while self.running and not self._open():
                     time.sleep(self.reconnect_s)
+                self.send_snapshot()
                 continue
             op, payload = msg
             if op == 0x2:
