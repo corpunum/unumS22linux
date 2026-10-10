@@ -1,23 +1,143 @@
+// s22-device: the phone's hardware as OpenUnum tools, backed by s22d.
+//
+// There is no tool list in this file. The tools are generated from s22d's /v1/capabilities, so the
+// daemon's API contract (tools/s22d/API.md) is the only place that names an endpoint, a parameter
+// or a risk tier. Risky actions (SMS, calls, recovery reboot) are confirmed by s22d itself, on the
+// phone's screen, before it acts; this plugin never answers that question on the owner's behalf.
+//
+// Enabled only on the phone: the /srv/s22 marker exists, or config {"enabled": true}.
+// Config: plugin.json "config", overridden by $OPENUNUM_HOME/plugins.json {"s22-device": {...}}.
 import fs from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
-import net from 'node:net';
-import { setTimeout as sleep } from 'node:timers/promises';
 import { PluginBase, pluginBaseSource } from './lib/plugin-base.mjs';
-const RECOVERY='/v1/system/'+'re'+'covery';
-const DEFS=[
-['device_status','Read overall phone hardware status.','read','GET','/v1/status',{}],['device_thermal','Read thermal sensors.','read','GET','/v1/thermal',{}],['processes_top','Read top processes.','read','GET','/v1/processes/top',{}],['wifi_status','Read Wi-Fi status.','read','GET','/v1/wifi/status',{}],['wifi_scan','Scan nearby Wi-Fi networks.','read','POST','/v1/wifi/scan',{}],['wifi_connect','Connect to Wi-Fi; reversible.','reversible','POST','/v1/wifi/connect',{ssid:'string',password:'string'},['ssid']],['wifi_disconnect','Disconnect Wi-Fi; reversible.','reversible','POST','/v1/wifi/disconnect',{}],['bt_status','Read Bluetooth status; may be unavailable.','read','GET','/v1/bt/status',{}],['modem_status','Read modem status.','read','GET','/v1/modem/status',{}],['sms_inbox','Read SMS inbox.','read','GET','/v1/sms',{}],['sms_send','Send SMS; owner confirmation required.','risky','POST','/v1/sms/send',{to:'string',text:'string'},['to','text']],['call_dial','Place a call; owner confirmation required.','risky','POST','/v1/call/dial',{number:'string'},['number']],['camera_status','Read camera status.','read','GET','/v1/camera/status',{}],['camera_capture','Capture a still; reversible, creates image files.','reversible','POST','/v1/camera/capture',{sensor:'string',exposure_us:'integer',gain:'number'}],['display_status','Read display status.','read','GET','/v1/display',{}],['display_set','Set display state or brightness; reversible.','reversible','POST','/v1/display',{state:'string',brightness:'integer'}],['audio_volume','Read audio volume. Daemon refuses nonzero requests; never bypass.','read','GET','/v1/audio/volume',{}],['service_restart','Restart an allowlisted service; reversible.','reversible','POST','/v1/services/{name}/restart',{name:'string'},['name']],['dmesg_read','Read kernel diagnostics.','read','GET','/v1/logs/dmesg',{}],['recovery_mode','Enter recovery mode; owner confirmation required.','risky','POST',RECOVERY,{}]
-];
-const schema=(p,r=[])=>({type:'object',properties:Object.fromEntries(Object.entries(p).map(([k,v])=>[k,{type:v}])),required:r,additionalProperties:false});
-export function isMobileHost({marker='/srv/s22',enabled=false,exists=fs.existsSync}={}){return enabled===true||/^(1|true|yes|on)$/i.test(String(enabled))||exists(marker)}
-export function toolDefinitions(caps){if(!Array.isArray(caps))return[];return DEFS.filter(([n,,risk,method,p])=>{const c=caps.find(x=>x&&x.available!==false&&String(x.method).toUpperCase()===method&&x.path===p);return c&&c.risk===risk}).map(([name,description,risk,method,p,props,required])=>({name,description:`${description} Risk tier: ${risk}.`,parameters:schema(props,required),semantics:risk==='read'?{actionClass:'observational',evidenceRole:'observation'}:{actionClass:'mutating',evidenceRole:'mutation'},_risk:risk,_method:method,_path:p}))}
-export class S22DevicePlugin extends PluginBase{
-constructor(manifest,ctx={}){super(manifest,ctx);this.settings={};this.tools=[];this.enabled=false}
-async onInit(config={}){const c={...this.config,...config};this.settings={daemonUrl:String(c.daemon_url||'http://127.0.0.1:8766').replace(/\/$/,''),timeoutMs:Math.min(60000,Math.max(500,Number(c.request_timeout_ms)||15000)),confirmTimeoutS:Math.min(600,Math.max(5,Number(c.confirm_timeout_s)||60)),touchSocket:c.touch_socket||'/run/s22-touch/ctl.sock',confirmDir:c.confirm_dir||'/run/s22-touch/confirm'};this.enabled=isMobileHost({marker:c.mobile_marker||'/srv/s22',enabled:c.enabled});if(!this.enabled)return;const r=await this._request('GET','/v1/capabilities');this.tools=toolDefinitions(Array.isArray(r)?r:r?.capabilities).map(t=>({...t,execute:i=>this._execute(t,i)}))}
-async onHealth(){return{ok:true,mobile_host:this.enabled,generated_tools:this.tools.length}}
-getTools(){return this.enabled?this.tools:[]}
-async _request(method,endpoint,body){const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),this.settings.timeoutMs);try{const r=await fetch(this.settings.daemonUrl+endpoint,{method,signal:ctl.signal,headers:body===undefined?{}:{'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});const text=await r.text();let data;try{data=text?JSON.parse(text):{}}catch{data={raw:text.slice(0,1000)}}return r.ok?data:{ok:false,error:'daemon_http_error',status:r.status,response:data}}catch(e){return{ok:false,error:e.name==='AbortError'?'daemon_timeout':'daemon_unreachable',message:e.message}}finally{clearTimeout(timer)}}
-async _confirm(question){const id='d'+crypto.randomBytes(6).toString('hex'),s=this.settings.confirmTimeoutS;const result=await new Promise(resolve=>{let buf='',done=false;const c=net.createConnection(this.settings.touchSocket),finish=v=>{if(!done){done=true;c.destroy();resolve(v)}};c.setTimeout(5000,()=>finish(null));c.on('connect',()=>c.write(JSON.stringify({cmd:'ui',args:['confirm',id,question.slice(0,500),s],timeout:8})+'\n'));c.on('data',x=>{buf+=x.toString();const n=buf.indexOf('\n');if(n>=0){try{finish(JSON.parse(buf.slice(0,n)))}catch{finish(null)}}});c.on('error',()=>finish(null))});if(result?.ok!==true||result.result!=="asking")return"no";const until=Date.now()+(s+5)*1000,file=path.join(this.settings.confirmDir,`${id}.json`);while(Date.now()<until){try{const a=JSON.parse(fs.readFileSync(file,'utf8')).answer;try{fs.unlinkSync(file)}catch{}return a==='yes'?'yes':'no'}catch{}await sleep(250)}return'timeout'}
-async _execute(tool,input={}){const a=input?.args&&typeof input.args==='object'?input.args:input;let endpoint=tool._path,body={...a};if(endpoint.includes('{name}')){const name=String(a.name||'');if(!/^[a-zA-Z0-9_.@-]{1,64}$/.test(name))return{ok:false,error:'invalid_service_name'};endpoint=endpoint.replace('{name}',encodeURIComponent(name));delete body.name}if(tool._risk==='risky'){const answer=await this._confirm(`Allow ${tool.name} on this phone? ${JSON.stringify(a).slice(0,250)}`);if(answer!=='yes')return{ok:false,error:'owner_confirmation_denied',answer}}const out=await this._request(tool._method,endpoint,tool._method==='GET'?undefined:body);if(tool._risk!=='read')try{this.ctx?.log?.info?.('s22-device action',{tool:tool.name,risk:tool._risk,endpoint,ok:out?.ok!==false})}catch{}return out}
+import { buildRequest, toolsFromCapabilities } from './lib/capabilities.mjs';
+import { validate } from './lib/schema.mjs';
+
+export { pluginBaseSource };
+
+const TRUTHY = /^(1|true|yes|on)$/i;
+
+export function isMobileHost({ marker = '/srv/s22', enabled = false, exists = fs.existsSync } = {}) {
+  return enabled === true || TRUTHY.test(String(enabled)) || exists(marker);
 }
-export{pluginBaseSource};export default S22DevicePlugin;
+
+export function resolveConfig(raw = {}) {
+  return {
+    daemonUrl: String(raw.daemon_url || 'http://127.0.0.1:8766').replace(/\/$/, ''),
+    discoveryTimeoutMs: Math.min(60000, Math.max(500, Number(raw.discovery_timeout_ms) || 8000)),
+    refreshIntervalMs: Math.max(0, Number(raw.refresh_interval_s ?? 60) * 1000),
+    marker: raw.mobile_marker || '/srv/s22',
+    enabled: raw.enabled
+  };
+}
+
+export class S22DevicePlugin extends PluginBase {
+  constructor(manifest, ctx = {}) {
+    super(manifest, ctx);
+    this.settings = resolveConfig({});
+    this.tools = [];
+    this.skipped = [];
+    this.enabled = false;
+    this.reachable = null;
+    this.timer = null;
+  }
+
+  async onInit(config = {}) {
+    this.settings = resolveConfig({ ...this.config, ...config });
+    this.enabled = isMobileHost({ marker: this.settings.marker, enabled: this.settings.enabled });
+    if (this.enabled) await this.refresh();
+  }
+
+  async onStart() {
+    if (!this.enabled || this.settings.refreshIntervalMs === 0) return;
+    // Backends come and go (phoned starts late, the camera client is installed later): re-read
+    // the capability list so tools appear and disappear with the daemon's own view.
+    this.timer = setInterval(() => this.refresh(), this.settings.refreshIntervalMs);
+    this.timer.unref?.();
+  }
+
+  async onStop() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  }
+
+  async onHealth() {
+    if (this.enabled) await this.refresh();
+    return {
+      ok: true,
+      mobile_host: this.enabled,
+      daemon_reachable: this.reachable === true,
+      generated_tools: this.tools.length,
+      skipped_capabilities: this.skipped.length
+    };
+  }
+
+  getTools() {
+    return this.enabled ? this.tools : [];
+  }
+
+  /** Re-read /v1/capabilities. A daemon that cannot be reached leaves the current tools alone. */
+  async refresh() {
+    const doc = await this._request('GET', '/v1/capabilities', undefined, this.settings.discoveryTimeoutMs);
+    this.reachable = doc?.ok !== false;
+    if (!this.reachable) return;
+    const { tools, skipped } = toolsFromCapabilities(doc);
+    this.skipped = skipped;
+    this.tools = tools.map((tool) => ({ ...tool, execute: (input) => this._execute(tool, input) }));
+  }
+
+  async _request(method, path, body, timeoutMs) {
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), timeoutMs);
+    try {
+      const res = await fetch(this.settings.daemonUrl + path, {
+        method,
+        signal: abort.signal,
+        headers: body === undefined ? {} : { 'content-type': 'application/json' },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) })
+      });
+      const text = await res.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = { raw: text.slice(0, 1000) };
+      }
+      // Keep the daemon's own {ok:false, error, code}: the code (policy_denied, owner_denied, ...) is the answer.
+      return res.ok ? data : { ok: false, status: res.status, ...data };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err.name === 'AbortError' ? 'daemon_timeout' : 'daemon_unreachable',
+        message: err.message
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async _execute(tool, input = {}) {
+    // OpenUnum passes either the bare arguments or {args, context}.
+    const args = input?.args && typeof input.args === 'object' ? input.args : input;
+    const problems = validate(tool.parameters, args);
+    if (problems.length) return { ok: false, error: 'invalid_input', details: problems };
+
+    const request = buildRequest(tool, args);
+    if (request.error) return { ok: false, error: request.error };
+
+    const out = await this._request(tool.method, request.path, request.body, tool.timeoutMs);
+    if (tool.risk !== 'read') {
+      try {
+        this.ctx?.log?.info?.('s22-device action', {
+          tool: tool.name,
+          risk: tool.risk,
+          path: tool.path,
+          ok: out?.ok !== false,
+          code: out?.code
+        });
+      } catch { /* logging must never fail the action */ }
+    }
+    return out;
+  }
+}
+
+export default S22DevicePlugin;

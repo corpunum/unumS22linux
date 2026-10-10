@@ -1,39 +1,89 @@
 # S22 OpenUnum mobile edition
 
-`plugins/s22-device/` adds s22d-backed hardware tools. It discovers `/v1/capabilities` at plugin startup and exposes only entries whose method, route, availability and risk match the reviewed local definitions. Unknown or mismatched daemon capabilities are intentionally omitted; restart OpenUnum after changing daemon capabilities.
+`plugins/s22-device/` gives the phone's agent its hardware as tools. **It has no tool list of its own.** At startup (and every
+60 s, and on each health check) it reads `GET /v1/capabilities` from `s22d` and generates one tool per usable capability, using the
+daemon's tool name, description and input schema. The only source of truth for endpoints, parameters and risk tiers is
+[`tools/s22d/API.md`](../s22d/API.md); `tools/s22d/capabilities.json` is its checked-in snapshot and the plugin's contract tests
+run against it.
 
-## Tool inventory and tiers
+The plugin refuses to expose a tool when the daemon advertises a lower risk tier than the plugin's floor for `sms.send`,
+`call.dial` or `system.reboot-recovery`, and it validates every input against the daemon's schema before making a request.
 
-| Tool names | Tier |
+## Tools (from the snapshot)
+
+| Tool | Tier | Route | Available in the snapshot |
+|---|---|---|---|
+| `device_status` | read | GET `/v1/status` | yes |
+| `device_battery` | read | GET `/v1/battery` | yes |
+| `device_thermal` | read | GET `/v1/thermal` | yes |
+| `processes_top` | read | GET `/v1/processes/top` | yes |
+| `dmesg_read` | read | GET `/v1/logs/dmesg` | yes |
+| `wifi_status` | read | GET `/v1/wifi/status` | yes |
+| `wifi_scan` | read | POST `/v1/wifi/scan` | yes |
+| `wifi_connect` | reversible | POST `/v1/wifi/connect` | yes |
+| `wifi_disconnect` | reversible | POST `/v1/wifi/disconnect` | yes |
+| `wifi_reconnect` | reversible | POST `/v1/wifi/reconnect` | yes |
+| `bt_status` | read | GET `/v1/bt/status` | yes |
+| `bt_power` | reversible | POST `/v1/bt/power` | no: HCI raw-socket kernel panic: disabled |
+| `bt_scan` | read | POST `/v1/bt/scan` | no: HCI raw-socket kernel panic: disabled |
+| `modem_status` | read | GET `/v1/modem/status` | yes |
+| `sms_inbox` | read | GET `/v1/sms` | yes |
+| `sms_send` | risky | POST `/v1/sms/send` | yes |
+| `call_list` | read | GET `/v1/calls` | yes |
+| `call_dial` | risky | POST `/v1/call/dial` | yes |
+| `call_hangup` | reversible | POST `/v1/call/hangup` | yes |
+| `camera_status` | read | GET `/v1/camera/status` | yes |
+| `camera_capture` | reversible | POST `/v1/camera/capture` | yes |
+| `display_status` | read | GET `/v1/display` | yes |
+| `display_on` | reversible | POST `/v1/display/on` | yes |
+| `display_off` | reversible | POST `/v1/display/off` | yes |
+| `display_brightness` | reversible | POST `/v1/display/brightness` | yes |
+| `audio_volume` | read | GET `/v1/audio/volume` | yes |
+| `audio_mute` | reversible | POST `/v1/audio/volume` | yes |
+| `service_restart` | reversible | POST `/v1/services/{name}/restart` | yes |
+| `recovery_mode` | risky | POST `/v1/system/reboot-recovery` | yes |
+
+Tool exposure is S22-only: the `/srv/s22` marker exists, or `enabled: true`. Default is disabled. Tools whose backend is
+missing on the phone (for example `sms_send` while `s22-phoned` is not running) do not appear until the daemon reports them
+available.
+
+## Tiers and confirmation
+
+| Tier | What happens |
 |---|---|
-| `device_status`, `device_thermal`, `processes_top`, `wifi_status`, `wifi_scan`, `bt_status`, `modem_status`, `sms_inbox`, `camera_status`, `display_status`, `audio_volume`, `dmesg_read` | Read, free |
-| `wifi_connect`, `wifi_disconnect`, `camera_capture`, `display_set`, `service_restart` | Reversible, free and work-log logged |
-| `sms_send`, `call_dial`, `recovery_mode` | Risky, phone owner must tap **yes** on the existing touch confirmation card. Missing UI, no, or timeout denies. |
+| read | Free. |
+| reversible | Free; `s22d` writes an audit record and the plugin logs the action. |
+| risky | `s22d` puts a yes/no card on the phone and **blocks until the owner taps**. The plugin only forwards the request; it cannot answer the card, and any answer other than yes (no, timeout, touch UI not reachable) is a refusal that must not be retried. |
 
-Tool exposure is S22-only: `/srv/s22` marker or explicit `enabled: true`; default is disabled. The daemon remains the second enforcement boundary. In particular audio unmute/nonzero volume is not provided. This feature does not grant shell/partition/module access.
+The confirmation lives in the daemon, so every client (this plugin, `unum-shell`, curl) is gated the same way.
+`s22-phoned` still enforces its own allowlist, `tx_enabled` gate and rate limits behind that.
+Audio unmute is not provided: `audio_mute` accepts only 0 unless the owner created `/etc/s22-audio-unmuted`.
 
-## Install and enable (on the phone)
-
-Copy this repo's tools tree to the phone and run as native host root:
+## Install and enable (on the phone, after s22d is running)
 
 ```sh
 sh tools/openunum-phone/install-device-plugin.sh
 ```
 
-This copies only the plugin into `$C/root/.openunum/plugins/s22-device` (`C=/mnt/omarchy-trial` by default). Add the following to the chroot OpenUnum plugin config `$C/root/.openunum/plugins.json`:
+This copies the plugin (`plugin.json`, `index.mjs`, `lib/`) into `$C/root/.openunum/plugins/s22-device` (`C=/mnt/omarchy-trial` by default).
+Add to `$C/root/.openunum/plugins.json`:
 
 ```json
 {"s22-device":{"enabled":true}}
 ```
 
-Ensure s22d is listening on `127.0.0.1:8766`, `/srv/s22` exists, and the existing S22 touch UI confirmation service is running. Then restart OpenUnum (`s22-openunum stop && s22-openunum start`). Confirm discovery by checking plugin health/logs for generated tool count. Do not expose s22d on a non-loopback interface.
+Then restart OpenUnum (`s22-openunum stop`; keepalive starts it again). Check that tools were generated:
+`curl -s 127.0.0.1:18880/api/health` and the plugin health line `generated_tools`. Do not expose s22d on a non-loopback interface.
 
 ## Tests and rollback
-
-Hardware-free fake-daemon tests:
 
 ```sh
 node --test tools/openunum-phone/plugins/s22-device/test/plugin.test.mjs
 ```
 
-Rollback: remove `$C/root/.openunum/plugins/s22-device` and restart OpenUnum. This leaves s22d, daemon config, and phone state untouched. No phone hardware was available during development; installation and behavior on device remain unverified.
+The tests run against a fake `s22d` built from `capabilities.json` (no phone, no daemon needed). They check that every tool
+calls its method and path with exactly the parameters its schema names, that the three historical mismatches stay fixed
+(`sms_send` uses `number`, display is on/off/brightness, audio read is GET and set is POST), and that refusals come back unchanged.
+
+Rollback: remove `$C/root/.openunum/plugins/s22-device` and restart OpenUnum. s22d and phone state are untouched.
+No phone hardware was available during development; installation and behaviour on the device are unverified.
