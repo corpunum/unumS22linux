@@ -30,7 +30,11 @@ Rectangle {
 
   TapHandler {
     id: tap
-    longPressThreshold: 0.7
+    // Real fingertips drift and linger: a tap that moved a few px or was held
+    // past the long-press threshold used to be dropped (synthetic taps never
+    // were). Count any release inside the control; long-press only when needed.
+    gesturePolicy: TapHandler.ReleaseWithinBounds
+    longPressThreshold: tile.holdToConfirm ? 0.7 : 0
     onTapped: if (!tile.holdToConfirm) tile.activated()
     onLongPressed: if (tile.holdToConfirm) tile.activated()
   }
