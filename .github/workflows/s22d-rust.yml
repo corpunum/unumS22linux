@@ -1,0 +1,22 @@
+name: s22d Rust
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  s22d-rust:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-musl
+      - name: Unit tests
+        run: cargo test --manifest-path tools/s22d/Cargo.toml --locked
+      - name: Static aarch64 cross-build
+        run: cargo build --manifest-path tools/s22d/Cargo.toml --locked --release --target aarch64-unknown-linux-musl
