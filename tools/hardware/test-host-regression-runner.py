@@ -91,6 +91,7 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/test_s22_modem.py",
     "tools/hardware/test_s22_keepalive.py",
     "tools/hardware/test_s22_guardian.py",
+    "tools/hardware/test_s22_llama_ondemand.py",
     "tools/persistence/test_start_persistent_desktop.py",
     "tools/persistence/test_model_profile.py",
     "tools/hardware/phoned/test_s22_phoned.py",
