@@ -156,6 +156,79 @@ class SupervisorUnitTests(unittest.TestCase):
                 self.assertEqual(preload in desktop_args, enabled)
                 self.assertEqual('S22_LINEAR_STRIDE=1' in desktop_args, enabled)
 
+    def test_desktop_profile_default_valid_and_unknown(self):
+        with tempfile.TemporaryDirectory() as td:
+            sel = Path(td) / 's22-desktop'
+            self.assertEqual(MOD.selected_desktop(sel), 'hyprland')
+            sel.write_text('sway-pixman\n')
+            self.assertEqual(MOD.selected_desktop(sel), 'sway-pixman')
+            sel.write_text('phosh\n')
+            with mock.patch.object(MOD, 'say'):
+                self.assertEqual(MOD.selected_desktop(sel), 'hyprland')
+
+    def test_sway_pixman_env_has_no_gl_or_stride_preload(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / 'run').mkdir()
+            (root / 'run/seatd.sock').touch()
+            (root / 'usr/bin').mkdir(parents=True)
+            (root / 'usr/bin/sway').touch()
+            library = root / 'opt/s22-aquamarine/libs22-linear-stride.so'
+            library.parent.mkdir(parents=True)
+            library.touch()
+            with mock.patch.object(MOD, 'CHROOT', root), \
+                 mock.patch.dict(os.environ, {'S22_LINEAR_STRIDE_TRIAL': '1'}, clear=True), \
+                 mock.patch.object(MOD.subprocess, 'Popen') as popen:
+                MOD.start_desktop(root / 'desktop.log', 'sway-pixman')
+            args = popen.call_args_list[1].args[0]
+            self.assertIn('WLR_RENDERER=pixman', args)
+            self.assertIn('WLR_DRM_DEVICES=/dev/dri/card1', args)
+            self.assertIn('LIBSEAT_BACKEND=seatd', args)
+            self.assertIn('/usr/bin/sway', args)
+            self.assertNotIn('/usr/bin/Hyprland', args)
+            for banned in ('LD_PRELOAD', 'GALLIUM_DRIVER', 'LP_NUM_THREADS', 'AQ_DRM_DEVICES'):
+                self.assertFalse(any(a.startswith(banned + '=') for a in args), banned)
+
+    def test_sway_pixman_missing_binary_fails_before_process_start(self):
+        with tempfile.TemporaryDirectory() as td, \
+             mock.patch.object(MOD, 'CHROOT', Path(td)), \
+             mock.patch.object(MOD.subprocess, 'Popen') as popen:
+            with self.assertRaises(MOD.Failure):
+                MOD.start_desktop(Path(td) / 'desktop.log', 'sway-pixman')
+            popen.assert_not_called()
+
+    def test_sway_failure_falls_back_to_hyprland(self):
+        calls = []
+
+        def fake_start(log, desktop='hyprland'):
+            calls.append(desktop)
+            return mock.Mock(name='seat'), mock.Mock(name=desktop)
+
+        def fake_ready(proc, desktop):
+            if desktop == 'sway-pixman':
+                raise MOD.Failure('sway exited before readiness')
+
+        with tempfile.TemporaryDirectory() as td, \
+             mock.patch.object(MOD, 'CHROOT', Path(td)), \
+             mock.patch.object(MOD, 'start_desktop', side_effect=fake_start), \
+             mock.patch.object(MOD, 'wait_desktop_ready', side_effect=fake_ready), \
+             mock.patch.object(MOD, 'terminate') as term, \
+             mock.patch.object(MOD, 'say'):
+            (Path(td) / 'run/user/0').mkdir(parents=True)
+            seat, proc, used = MOD.start_desktop_with_fallback(Path(td) / 'd.log', 'sway-pixman')
+        self.assertEqual(calls, ['sway-pixman', 'hyprland'])
+        self.assertEqual(used, 'hyprland')
+        self.assertEqual(term.call_count, 2)
+
+    def test_hyprland_failure_is_not_retried(self):
+        with tempfile.TemporaryDirectory() as td, \
+             mock.patch.object(MOD, 'start_desktop', return_value=(mock.Mock(), mock.Mock())) as start, \
+             mock.patch.object(MOD, 'wait_desktop_ready', side_effect=MOD.Failure('x')), \
+             mock.patch.object(MOD, 'terminate'):
+            with self.assertRaises(MOD.Failure):
+                MOD.start_desktop_with_fallback(Path(td) / 'd.log', 'hyprland')
+        self.assertEqual(start.call_count, 1)
+
     def test_bind_file_creates_regular_placeholder_and_mounts(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
