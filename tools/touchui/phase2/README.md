@@ -33,9 +33,9 @@ Panel fps counts scanout framebuffer changes on plane-0 of exynos-drmdpu (DRM de
 | Typing into the chat page | Works after one change: sway does not give an OnDemand layer keyboard focus on a touch tap, so `shell.qml` takes Exclusive focus on the chat page when `SWAYSOCK` is set ([screenshot](shots/sway-chat-typing.png)). Under Hyprland it stays OnDemand. |
 | Edge gestures | s22-touchd detects them, because it reads evdev and is compositor-independent. |
 | UI routing to the sway session | s22-touchd now finds a sway session through `/run/s22-desktop/session`, so routing works in the profile. During a trial, Hyprland is still preferred. |
-| App switcher | **Not yet:** it uses `Quickshell.Hyprland`. Port it to `ToplevelManager` (wlr-foreign-toplevel) before relying on it. |
-| Omarchy bar (`/opt/s22-ui`) | Not started under sway; it is Hyprland-specific. The touch shell's status strip covers it. |
-| Screen off (Power key) | **Gap:** after `swaymsg output DSI-1 power off` (or `disable`), wlroots 0.20 cannot bring the panel back. Its TEST_ONLY modeset passes but the real commit fails ("Backend commit failed", no atomic errno). `WLR_DRM_NO_ATOMIC=1` re-enables the CRTC, but later commits fail. Under sway, `s22-display` therefore uses backlight 0 with touch disabled, which is not a true OLED power-off. A real fix needs a wlroots modeset-from-off investigation (blocking vs non-blocking commit on exynos-drmdpu). |
+| App switcher | Fixed in [sway/](../sway/README.md): it lists windows from wlr-foreign-toplevel under sway. |
+| Omarchy bar (`/opt/s22-ui`) | Not started under sway; it is Hyprland-specific. The touch shell's sway status strip replaces it ([sway/](../sway/README.md)). |
+| Screen off (Power key) | Fixed in [sway/](../sway/README.md): wlroots failed to re-enable the panel because of a gamma reset on a CRTC that has no gamma table. A one-instruction fixed copy of wlroots is now used, so this is a real DPMS power-off. |
 
 ## How the trial works (`p2-trial.sh`)
 

@@ -1,21 +1,12 @@
 import QtQuick
-import Quickshell.Hyprland
 
-// App switcher: every Hyprland window as a big row. Tap = focus, hold "Close" = close.
+// App switcher: every open window (Hyprland IPC, or wlr-foreign-toplevel under sway) as a big row. Tap = focus, hold "Close" = close.
 Item {
   id: page
   property var shell: null
   property var wins: []
 
-  function load() {
-    Hyprland.refreshToplevels()
-    var tl = Hyprland.toplevels.values, out = []
-    for (var i = 0; i < tl.length; i++) {
-      var o = tl[i].lastIpcObject || {}
-      out.push({ t: tl[i], cls: o["class"] || "?", title: tl[i].title || o.title || "", ws: o.workspace ? o.workspace.name : "" })
-    }
-    wins = out
-  }
+  function load() { wins = shell ? shell.windows() : [] }
   onShellChanged: load()
   Timer { interval: 600; running: true; onTriggered: page.load() }   // lastIpcObject fills in after refresh
 
@@ -37,8 +28,7 @@ Item {
         anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter
         text: "Close"; width: 120; holdToConfirm: true; tint: "#4a2326"
         onClicked: {
-          page.shell.focusToplevel(modelData.t)
-          Hyprland.dispatch("hl.dsp.window.close()")
+          page.shell.closeToplevel(modelData.t)
           page.load()
         }
       }

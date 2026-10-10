@@ -185,9 +185,25 @@ class SupervisorUnitTests(unittest.TestCase):
             self.assertIn('WLR_DRM_DEVICES=/dev/dri/card1', args)
             self.assertIn('LIBSEAT_BACKEND=seatd', args)
             self.assertIn('/usr/bin/sway', args)
+            self.assertIn('LD_LIBRARY_PATH=/usr/lib', args)
             self.assertNotIn('/usr/bin/Hyprland', args)
             for banned in ('LD_PRELOAD', 'GALLIUM_DRIVER', 'LP_NUM_THREADS', 'AQ_DRM_DEVICES'):
                 self.assertFalse(any(a.startswith(banned + '=') for a in args), banned)
+
+    def test_sway_pixman_uses_wlroots_fix_when_installed(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / 'run').mkdir()
+            (root / 'run/seatd.sock').touch()
+            (root / 'usr/bin').mkdir(parents=True)
+            (root / 'usr/bin/sway').touch()
+            (root / 'opt/s22-wlroots').mkdir(parents=True)
+            (root / 'opt/s22-wlroots/libwlroots-0.20.so').touch()
+            with mock.patch.object(MOD, 'CHROOT', root), \
+                 mock.patch.dict(os.environ, {}, clear=True), \
+                 mock.patch.object(MOD.subprocess, 'Popen') as popen:
+                MOD.start_desktop(root / 'desktop.log', 'sway-pixman')
+            self.assertIn('LD_LIBRARY_PATH=/opt/s22-wlroots:/usr/lib', popen.call_args_list[1].args[0])
 
     def test_sway_pixman_missing_binary_fails_before_process_start(self):
         with tempfile.TemporaryDirectory() as td, \
@@ -228,6 +244,21 @@ class SupervisorUnitTests(unittest.TestCase):
             with self.assertRaises(MOD.Failure):
                 MOD.start_desktop_with_fallback(Path(td) / 'd.log', 'hyprland')
         self.assertEqual(start.call_count, 1)
+
+    def test_hyprland_fallback_uses_plain_config_when_present(self):
+        for present, expected in ((True, '/root/hyprland-s22.lua'), (False, '/root/hyprland-omarchy-ui.lua')):
+            with self.subTest(present=present), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                (root / 'run').mkdir()
+                (root / 'run/seatd.sock').touch()
+                (root / 'root').mkdir()
+                if present:
+                    (root / 'root/hyprland-s22.lua').touch()
+                with mock.patch.object(MOD, 'CHROOT', root), \
+                     mock.patch.dict(os.environ, {}, clear=True), \
+                     mock.patch.object(MOD.subprocess, 'Popen') as popen:
+                    MOD.start_desktop(root / 'desktop.log', 'hyprland')
+                self.assertIn(expected, popen.call_args_list[1].args[0])
 
     def test_bind_file_creates_regular_placeholder_and_mounts(self):
         with tempfile.TemporaryDirectory() as td:
