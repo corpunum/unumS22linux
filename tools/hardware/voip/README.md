@@ -108,6 +108,9 @@ barge-in all run on the rig; a `clear` message from the rig flushes the RTP play
 * `--pin` keeps working: no audio leaves the phone until the PIN is entered. The service also needs the shared token.
 * If the service cannot be reached at call start and `--preset` (or `--asr-cmd` and `--tts-cmd`) is also given, the call
   falls back to the classic voice loop. A connection lost mid-call is re-opened every second.
+* At connect and every 30 s the phone sends a `snapshot` message (battery, thermal, modem/SIM/operator via s22-phoned `:8095/status`,
+  network, local time; all best effort). The rig puts it in the brain's prompt as ground truth, so battery/time questions are answered from it
+  and anything else live is handed to the agent instead of guessed.
 * `ws://` only (no TLS in the stdlib-only client): keep it on Tailscale.
 * Measured on the rig with the real `FastVoiceLoop` and a fake RTP session: 0.9 s median from the end of speech to the first reply
   audio sample (Greek and English) while the rig GPU was fully loaded by another model.

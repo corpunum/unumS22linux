@@ -594,7 +594,7 @@ class FastVoiceTests(unittest.TestCase):
         rtp = FakeRtp()
         logs = []
         loop = M.FastVoiceLoop(rtp, f'ws://127.0.0.1:{srv.port}', token='tok', greeting='hello',
-                               log=lambda m: logs.append(m))
+                               snapshot_fn=None, log=lambda m: logs.append(m))
         loop.attach()
         try:
             self.assertTrue(srv.up.wait(2))
@@ -653,6 +653,49 @@ class FastVoiceTests(unittest.TestCase):
         loop.attach(); loop.stop()
         self.assertEqual(made, ['attach', 'stop'])
         self.assertEqual(rtp.on_audio, [])                   # no streaming hook installed
+
+    def test_device_snapshot_from_sysfs_and_daemon(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / 'ps/battery').mkdir(parents=True)
+            for n, v in (('capacity', '98'), ('status', 'Charging'), ('temp', '312')):
+                (d / 'ps/battery' / n).write_text(v + '\n')
+            for i, t in enumerate(('36000', '41500', '-274000')):
+                (d / f'th/thermal_zone{i}').mkdir(parents=True); (d / f'th/thermal_zone{i}/temp').write_text(t)
+            (d / 'route').write_text('Iface Destination Gateway\nwlan0 00000000 0100A8C0\n')
+
+            class H(BaseHTTPRequestHandler):
+                def log_message(self, *a): pass
+                def do_GET(self):
+                    body = json.dumps({'ok': True, 'modem_state': 'online', 'sim': 'ready', 'registration': 'home',
+                                       'operator': 'COSMOTE', 'signal': -80}).encode()
+                    self.send_response(200); self.end_headers(); self.wfile.write(body)
+            srv = HTTPServer(('127.0.0.1', 0), H)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            try:
+                s = M.device_snapshot(str(d / 'ps'), str(d / 'th'), f'http://127.0.0.1:{srv.server_port}', str(d / 'route'))
+            finally:
+                srv.shutdown()
+            self.assertEqual(s['battery'], {'percent': 98, 'status': 'Charging', 'temp_c': 31.2})
+            self.assertEqual(s['thermal'], {'max_c': 41.5})            # bogus -274 C zone ignored
+            self.assertEqual((s['modem']['operator'], s['modem']['state']), ('COSMOTE', 'online'))
+            self.assertEqual(s['network']['iface'], 'wlan0')
+            self.assertRegex(s['time']['local'], r'\d{4}-\d\d-\d\d \d\d:\d\d')
+            # missing everything still yields a dict with the time only
+            self.assertEqual(list(M.device_snapshot(str(d / 'no'), str(d / 'no'), None, str(d / 'no')))[-1], 'time')
+
+    def test_loop_sends_snapshot_at_connect_and_periodically(self):
+        srv = MiniWsServer(); self.addCleanup(srv.close)
+        rtp = FakeRtp()
+        loop = M.FastVoiceLoop(rtp, f'ws://127.0.0.1:{srv.port}', snapshot_fn=lambda: {'battery': {'percent': 50}},
+                               snapshot_s=0.2, log=quiet)
+        loop.attach()
+        try:
+            self.assertTrue(wait_for(lambda: sum(1 for op, d in srv.got if op == 1 and b'"snapshot"' in d) >= 3, 4))
+            first = [json.loads(d) for op, d in srv.got if op == 1 and b'"snapshot"' in d][0]
+            self.assertEqual(first, {'type': 'snapshot', 'data': {'battery': {'percent': 50}}})
+        finally:
+            loop.stop()
 
     def test_cli_guard_and_flags(self):
         a = M.build_parser().parse_args(['listen', '--fast-voice', 'ws://100.1.2.3:8130', '--allow-from', '100.64.0.0/10'])
