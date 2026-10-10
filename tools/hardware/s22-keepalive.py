@@ -85,6 +85,10 @@ DEFAULTS = {
     'service_defs': {},
     'pin_model': False,
     'pin': {'provider': 'openai', 'model': 'openai/gpt-6-luna'},
+    # Models the owner may pick on purpose (web UI / touch UI model switch). The pin
+    # still undoes drift to anything else (e.g. the rig's Halogen after a fallback
+    # write-back), but leaves these alone instead of reverting them every 20 s.
+    'pin_allow': [{'provider': 'llama-cpp-local', 'model': 'llama-cpp-local//models/Qwen3.5-0.8B-Q4_0.gguf'}],
     'pin_source': '/srv/s22/state/keepalive/openunum.pinned.json',
     'pin_retry_s': 600,
 }
@@ -378,6 +382,11 @@ def pin_matches(model: dict, pin: dict) -> bool:
     return model.get('provider') == pin['provider'] and model.get('model') == pin['model']
 
 
+def allowed_choice(model: dict, allow) -> bool:
+    return any(isinstance(a, dict) and 'provider' in a and 'model' in a and pin_matches(model, a)
+               for a in (allow or []))
+
+
 def apply_pin(doc: dict, pin: dict) -> dict:
     """openunum.json content with the pinned default model (everything else kept)."""
     doc = dict(doc)
@@ -393,7 +402,7 @@ def apply_pin(doc: dict, pin: dict) -> dict:
     return doc
 
 
-def pin_config_file(path: Path, pin: dict) -> str:
+def pin_config_file(path: Path, pin: dict, allow=()) -> str:
     """'ok' | 'restored' | 'error: ...'. Only call while OpenUnum is stopped."""
     try:
         doc = json.loads(path.read_text())
@@ -401,7 +410,7 @@ def pin_config_file(path: Path, pin: dict) -> str:
         return f'error: {type(e).__name__}: {e}'
     model = doc.get('model') or {}
     routing_ok = all((model.get('routing') or {}).get(k) == v for k, v in (pin.get('routing') or {}).items())
-    if pin_matches(model, pin) and routing_ok:
+    if (pin_matches(model, pin) or allowed_choice(model, allow)) and routing_ok:
         return 'ok'
     new = apply_pin(doc, pin)
     tmp = path.with_name(path.name + '.keepalive-tmp')
@@ -518,7 +527,7 @@ class Keepalive:
         else:
             self.log(event='model_pin_skipped', reason='openunum still running')
             return 'skipped'
-        result = pin_config_file(self.config_path, load_pin(self.cfg))
+        result = pin_config_file(self.config_path, load_pin(self.cfg), self.cfg.get('pin_allow'))
         if result != 'ok':
             self.log(event='model_pin', via='file', result=result)
         return result
@@ -534,6 +543,8 @@ class Keepalive:
             return f'error: {type(e).__name__}'
         if pin_matches(cur, pin):
             return 'ok'
+        if allowed_choice(cur, self.cfg.get('pin_allow')):
+            return 'owner_choice'
         try:
             out = self.api('POST', '/api/model/switch', {'provider': pin['provider'], 'model': pin['model']})
             ok = out.get('ok', True) is not False and pin_matches(out, pin)

@@ -287,6 +287,22 @@ class ModelPinTest(unittest.TestCase):
         log = (self.dir / 'keepalive.jsonl').read_text()
         self.assertIn('"via": "api"', log)
 
+    def test_owner_choice_of_local_model_is_kept(self):
+        calls = []
+        current = {'provider': 'llama-cpp-local', 'model': 'llama-cpp-local//models/Qwen3.5-0.8B-Q4_0.gguf'}
+
+        def api(method, path, body=None):
+            calls.append((method, path, body))
+            return dict(current)
+        k, _ = self.keepalive(api)
+        with mock.patch.object(mod, 'ps_lines', return_value=[]):
+            self.assertEqual(k.check_once(now=1000)['model_pin'], 'owner_choice')
+        self.assertFalse([c for c in calls if c[0] == 'POST'])      # no switch back to Luna
+        allow = mod.DEFAULTS['pin_allow']
+        self.conf.write_text(json.dumps({'model': dict(current)}))
+        self.assertEqual(mod.pin_config_file(self.conf, self.PIN, allow), 'ok')
+        self.assertEqual(json.loads(self.conf.read_text())['model']['provider'], 'llama-cpp-local')
+
     def test_failed_switch_backs_off(self):
         k, _ = self.keepalive(lambda m, p, b=None: {'ok': False, 'reason': 'provider_disabled'}
                               if m == 'POST' else {'provider': 'x', 'model': 'y'})
