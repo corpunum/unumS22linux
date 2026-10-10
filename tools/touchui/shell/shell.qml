@@ -204,7 +204,7 @@ ShellRoot {
 
   Process {
     id: sysProc
-    command: ["sh", "-c", "b=/sys/class/power_supply/battery; echo cap=$(cat $b/capacity); echo state=$(cat $b/status); echo temp=$(cat $b/temp); for z in /sys/class/thermal/thermal_zone*; do echo z_$(cat $z/type)=$(cat $z/temp); done; for n in wlan0 ecm0 rmnet0 tailscale0; do echo net_$n=$(cat /sys/class/net/$n/operstate 2>/dev/null || echo absent); done"]
+    command: ["sh", "-c", "b=/sys/class/power_supply/battery; echo cap=$(cat $b/capacity); echo state=$(cat $b/status); echo temp=$(cat $b/temp); for z in /sys/class/thermal/thermal_zone*; do echo z_$(cat $z/type)=$(cat $z/temp); done; for n in wlan0 ecm0 rmnet0 tailscale0; do echo net_$n=$(cat /sys/class/net/$n/operstate 2>/dev/null || echo absent); done; cat /run/s22-touch/guardian.env 2>/dev/null"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -216,7 +216,8 @@ ShellRoot {
         root.st = Object.assign({}, root.st, {
           battery: (kv.cap || "?") + "%", batteryState: kv.state || "", batteryTemp: kv.temp ? (Number(kv.temp) / 10).toFixed(1) + "°C" : "",
           thermal: mx ? mx.toFixed(0) + "°C" : "?", thermalMax: mx, thermalDetail: parts.join(" · "),
-          net: root.netLabel(kv)
+          net: root.netLabel(kv),
+          guard: Number(kv.g_level || 0) >= 1 ? "⚠ " + (kv.g_tmax || "?") + "°C" + (kv.g_msg ? " " + kv.g_msg : "") : ""
         })
       }
     }
@@ -312,8 +313,9 @@ ShellRoot {
     }
     Text {
       anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
-      text: (root.st.net || "…") + "   " + root.st.battery + (root.st.batteryState === "Charging" ? "+" : "")
-      color: root.fg; font.pixelSize: 13
+      text: (root.st.guard ? root.st.guard + "   " : "") + (root.st.net || "…") + "   " + root.st.battery
+            + (root.st.batteryState === "Charging" ? "+" : "")
+      color: root.st.guard ? "#ffb04f" : root.fg; font.pixelSize: 13
     }
     TapHandler { onTapped: root.homeVisible ? root.hideHome() : root.showHome("") }
   }
