@@ -7,8 +7,6 @@ permissions:
   contents: read
 jobs:
   s22d-rust:
-    env:
-      RUSTFLAGS: -C linker=rust-lld
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -21,4 +19,6 @@ jobs:
       - name: Unit tests
         run: cargo test --manifest-path tools/s22d/Cargo.toml --locked
       - name: Static aarch64 cross-build
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: rust-lld
         run: cargo build --manifest-path tools/s22d/Cargo.toml --locked --release --target aarch64-unknown-linux-musl
