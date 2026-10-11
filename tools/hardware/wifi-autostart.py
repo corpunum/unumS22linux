@@ -92,14 +92,36 @@ def require_process(name, expected):
         raise RuntimeError('service PID unavailable: ' + name) from error
 
 
+MAX_FAILED_BOOTS = 3
+
+
+def previous_failures():
+    """Consecutive earlier boots whose startup ended in a clean 'failed' record."""
+    try:
+        old = json.loads(ATTEMPT.read_text())
+    except (OSError, ValueError):
+        return 0
+    return int(old.get('failed_boots', 1)) if old.get('state') == 'failed' else 0
+
+
 def check_attempt():
     if not ATTEMPT.exists():
         return
     old = json.loads(ATTEMPT.read_text())
-    if old.get('state') != 'complete':
-        raise RuntimeError('previous incomplete/failed Wi-Fi startup; no automatic retry')
     if old.get('boot_id') == boot_id():
         raise RuntimeError('Wi-Fi startup already attempted in this boot')
+    state = old.get('state')
+    if state == 'complete':
+        return
+    # 'starting' surviving into a new boot means the phone went down mid-startup:
+    # never retry that automatically. A clean 'failed' (an exception, e.g. a
+    # preflight check) is retried once per new boot, up to MAX_FAILED_BOOTS in a row,
+    # so one transient failure no longer disables Wi-Fi forever (2026-09-20 to 10-11).
+    if state != 'failed':
+        raise RuntimeError('previous Wi-Fi startup did not finish; no automatic retry')
+    failures = int(old.get('failed_boots', 1))
+    if failures >= MAX_FAILED_BOOTS:
+        raise RuntimeError('Wi-Fi startup failed on %d consecutive boots; no automatic retry' % failures)
 
 
 def check_base():
@@ -200,7 +222,8 @@ def wait_for_association(wpa_command):
 
 def start():
     check_base()
-    atomic_attempt('starting')
+    failures = previous_failures()
+    atomic_attempt('starting', failed_boots=failures)
     try:
         harness = harness_module()
         ensure_debugfs()
@@ -237,7 +260,7 @@ def start():
     except Exception as error:
         # Keep firmware, responder and any already-started radio userspace.
         # A kernel request can outlive this observer. Never retry or unload.
-        atomic_attempt('failed', reason_type=type(error).__name__)
+        atomic_attempt('failed', reason_type=type(error).__name__, failed_boots=failures + 1)
         raise
 
 

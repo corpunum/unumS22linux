@@ -89,3 +89,11 @@ The standalone traffic probe's `not_tested` field describes what that single
 invocation cannot establish. Reboot persistence is established by the separate
 BORE transition, automatic startup events, same-boot attempt receipt, and
 post-reboot traffic checks together.
+
+## Update 2026-10-11: autonomous Wi-Fi
+
+- **The problem:** a single clean preflight failure on 2026-09-20 disabled Wi-Fi permanently. The resident model's health check on `:8089` was refused, because that service had been replaced by the on-demand proxy on `:8090`, and the durable `failed` record blocked every later boot.
+- **Retry policy:** a clean `failed` record is now retried once per new boot, for up to `MAX_FAILED_BOOTS` (3) consecutive boots. A `starting` record that survives into a new boot (the phone died mid-startup) still blocks automatic retry.
+- **Model check:** preflight now records the model's health (`:8090`) as `model_ok` and never fails the radio on it.
+- **Supervision:** on the phone, `s22-keepalive` supervises `wpa_supplicant` and `udhcpc` for wlan0 as the services `wifi_wpa` and `wifi_dhcp`, gated on `requires: /sys/module/wlan`. A dead supplicant is restarted within one keepalive interval; this was verified live by killing its PID.
+- **Live check:** wlan0 was associated to the home AP and got its address by DHCP; `ping -I wlan0` succeeded. The USB-ECM default route still takes priority when connected, and `ignore_routes_with_linkdown` lets the WLAN route take over on unplug.

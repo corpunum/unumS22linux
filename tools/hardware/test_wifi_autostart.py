@@ -16,9 +16,16 @@ class AutoTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'attempt'; old=w.ATTEMPT; w.ATTEMPT=p
             try:
-                for state in ('starting','failed'):
-                    p.write_text(json.dumps({'state':state,'boot_id':'old'}))
-                    with self.assertRaises(RuntimeError): w.check_attempt()
+                p.write_text(json.dumps({'state':'starting','boot_id':'old'}))
+                with self.assertRaises(RuntimeError): w.check_attempt()
+                # a clean failure on an earlier boot is retried, up to MAX_FAILED_BOOTS in a row
+                p.write_text(json.dumps({'state':'failed','boot_id':'old'}))
+                with mock.patch.object(w,'boot_id',return_value='new'): w.check_attempt()
+                p.write_text(json.dumps({'state':'failed','boot_id':'old','failed_boots':w.MAX_FAILED_BOOTS}))
+                with mock.patch.object(w,'boot_id',return_value='new'), self.assertRaises(RuntimeError): w.check_attempt()
+                p.write_text(json.dumps({'state':'failed','boot_id':'same'}))
+                with mock.patch.object(w,'boot_id',return_value='same'), self.assertRaises(RuntimeError): w.check_attempt()
+                self.assertEqual(w.previous_failures(), 1)
                 p.write_text(json.dumps({'state':'complete','boot_id':'same'}))
                 with mock.patch.object(w,'boot_id',return_value='same'), self.assertRaises(RuntimeError): w.check_attempt()
                 with mock.patch.object(w,'boot_id',return_value='new'): w.check_attempt()
