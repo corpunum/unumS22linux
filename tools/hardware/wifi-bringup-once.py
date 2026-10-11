@@ -152,11 +152,16 @@ def preflight(allow_no_usb=False, require_usb=None):
             Path('/sys/class/net/ecm0/carrier').read_text().strip() != '1'):
         raise RuntimeError('USB ECM carrier absent')
     responder_ready()
+    # The resident model on :8089 was replaced by the on-demand proxy on :8090
+    # (2026-10-08). Wi-Fi does not depend on the model: record its health, never
+    # fail the radio startup on it (a refused :8089 disabled Wi-Fi for 3 weeks).
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    with opener.open('http://127.0.0.1:8089/health', timeout=5) as response:
-        if json.load(response).get('status') != 'ok':
-            raise RuntimeError('resident model unhealthy')
-    event('preflight_ok', firmware_files=count, state=state(), optional_responder=True,
+    try:
+        with opener.open('http://127.0.0.1:8090/health', timeout=5) as response:
+            model_ok = json.load(response).get('status') == 'ok'
+    except (OSError, ValueError):
+        model_ok = False
+    event('preflight_ok', firmware_files=count, state=state(), optional_responder=True, model_ok=model_ok,
           usb_rescue_required=not allow_no_usb)
 
 
