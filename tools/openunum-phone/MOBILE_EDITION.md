@@ -92,8 +92,9 @@ No phone hardware was available during development; installation and behaviour o
 
 `lightpanda-ondemand.mjs` provides a loopback CDP proxy on `127.0.0.1:9222`. It starts
 `/opt/lightpanda/lightpanda serve` on backend port 19222 on the first HTTP/WebSocket CDP
-request and terminates the exact PID recorded in `$OPENUNUM_HOME/lightpanda/lightpanda.pid`
-after 600 seconds without requests. `LIGHTPANDA_BIN`, `LIGHTPANDA_PORT`,
+request, waits for the backend to accept connections before forwarding that request, and
+terminates the exact PID recorded in `$OPENUNUM_HOME/lightpanda/lightpanda.pid` after
+600 seconds without requests. `LIGHTPANDA_BIN`, `LIGHTPANDA_PORT`,
 `LIGHTPANDA_BACKEND_PORT`, and `LIGHTPANDA_IDLE_MS` can override paths/ports/timer. It
 runs inside the Arch chroot, so `/opt/lightpanda/lightpanda` is the chroot path.
 

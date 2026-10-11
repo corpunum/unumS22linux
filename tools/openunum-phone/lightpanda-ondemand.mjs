@@ -69,15 +69,42 @@ export function createController({ binary = process.env.LIGHTPANDA_BIN || '/opt/
   return { start, stop, touch, readPid, get lastUse() { return lastUse }, port, backendPort, idleMs }
 }
 
+async function waitForBackend(port, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      await new Promise((resolve, reject) => {
+        const socket = net.connect(port, '127.0.0.1')
+        socket.once('connect', () => { socket.destroy(); resolve() })
+        socket.once('error', reject)
+      })
+      return
+    } catch (error) {
+      if (!['ECONNREFUSED', 'ECONNRESET'].includes(error.code)) throw error
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+  }
+  throw new Error('Lightpanda backend did not become ready')
+}
+
 export function createProxy(controller) {
-  const server = http.createServer((req, res) => {
-    controller.touch(); controller.start()
-    const upstream = http.request({ host: '127.0.0.1', port: controller.backendPort, method: req.method, path: req.url, headers: { ...req.headers, host: `127.0.0.1:${controller.backendPort}` } }, response => { res.writeHead(response.statusCode || 502, response.headers); response.pipe(res) })
-    upstream.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end('Lightpanda starting') })
-    req.pipe(upstream)
+  const server = http.createServer(async (req, res) => {
+    controller.touch()
+    controller.start()
+    try {
+      await waitForBackend(controller.backendPort)
+      const upstream = http.request({ host: '127.0.0.1', port: controller.backendPort, method: req.method, path: req.url, headers: { ...req.headers, host: `127.0.0.1:${controller.backendPort}` } }, response => { res.writeHead(response.statusCode || 502, response.headers); response.pipe(res) })
+      upstream.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end('Lightpanda request failed') })
+      req.pipe(upstream)
+    } catch {
+      if (!res.headersSent) res.writeHead(502)
+      res.end('Lightpanda failed to start')
+    }
   })
-  server.on('upgrade', (req, socket, head) => {
-    controller.touch(); controller.start()
+  server.on('upgrade', async (req, socket, head) => {
+    controller.touch()
+    controller.start()
+    try { await waitForBackend(controller.backendPort) } catch { socket.destroy(); return }
     const upstream = net.connect(controller.backendPort, '127.0.0.1', () => {
       const headers = Object.entries(req.headers).map(([key, value]) => `${key}: ${value}`).join('\r\n')
       upstream.write(`${req.method} ${req.url} HTTP/${req.httpVersion}\r\n${headers}\r\n\r\n`)
