@@ -254,9 +254,20 @@ class PrecacheTest(unittest.TestCase):
         self.request(self.body('second question'))
         self.assertEqual([c.split()[0] for c in self.calls()][:2], ['restore', 'chat'])          # restored BEFORE the request
         self.assertFalse(any(c.startswith('save') for c in self.calls()))                       # same prefix: no re-warm
-        n = len([c for c in self.calls() if c.startswith('restore')])
-        # quiet period over: the bare-prefix state is put back for the next turn
-        self.assertTrue(self.wait(lambda: len([c for c in self.calls() if c.startswith('restore')]) > n))
+
+    def test_new_turn_restores_prefix_but_tool_continuation_does_not(self):
+        self.request(self.body('first'))
+        self.assertTrue(self.wait(lambda: self.od.active == 0 and self.od.has_slot(self.od.index['current'])))
+        restores = lambda: len([c for c in self.calls() if c.startswith('restore')])
+        n = restores()
+        self.request(self.body('second turn'))                    # slot was used since: prefix put back first
+        self.assertEqual(restores(), n + 1)
+        cont = self.body('second turn')
+        cont['messages'] += [{'role': 'assistant', 'content': 'x'}, {'role': 'tool', 'content': 'y'}]
+        self.request(cont)                                         # tool-result continuation: keep the live cache
+        self.assertEqual(restores(), n + 1)
+        self.request(self.body('third turn'))
+        self.assertEqual(restores(), n + 2)
 
     def test_changed_prefix_rewarms_and_keeps_last_three(self):
         for i in range(5):

@@ -81,7 +81,6 @@ CHAT_PATHS = ('/v1/chat/completions', '/chat/completions')
 CONTENT_RE = re.compile(rb'"(?:content|reasoning_content|tool_calls)"\s*:\s*(?:"[^"]|\[)')
 WARM_QUIET_S = float(os.environ.get('S22_LLAMA_WARM_QUIET_S', '60'))   # warm only after the conversation went quiet
 MAX_PREFIX_FRAC = 0.6
-TOOL_RE = re.compile(rb'"tool_calls"\s*:\s*\[|"finish_reason"\s*:\s*"tool_calls"')
 MAX_BODY = 8 * 1024 * 1024
 DEFAULT_ARGV = ['/usr/bin/python3', '/srv/s22/hardware/bin/s22-gpu-exec-isolated',
                 '/srv/s22/gpu-compat-20260921/llama-vulkan', '--bridge-v4', '/system/bin/llama-server',
@@ -216,7 +215,7 @@ class OnDemand:
         self.warm_n_predict = int(os.environ.get('S22_LLAMA_WARM_NPREDICT', '1'))
         self.index: dict = {'current': None, 'keys': {}}
         self.armer_for: str | None = None
-        self.last_was_tool_call = True
+        self.dirty = False
         self.last_user = ''     # log aid only (racy under concurrency, fine)
         try:
             state.mkdir(parents=True, exist_ok=True)
@@ -410,6 +409,7 @@ class OnDemand:
         t0 = time.monotonic()
         try:
             r = self.backend_post('/slots/0?action=restore', {'filename': self.slot_name(key)}, timeout=60)
+            self.dirty = False
             self.log(event='slot_restore', key=key[:12], ms=round((time.monotonic() - t0) * 1000),
                      n_restored=r.get('n_restored'))
         except Exception as e:  # noqa: BLE001
@@ -484,18 +484,19 @@ class OnDemand:
             self.last_use = self.clock()
             self.warm_lock.release()
 
-    def rearm(self, key: str) -> None:
+    def rearm(self, key: str, force: bool = False) -> None:
         """Quiet period after a turn, slot already saved: put the bare-prefix state back (0.1 s).
 
         Measured 2026-10-12 on the phone: after a turn the live slot holds the whole conversation and the
         context checkpoint that sat at the prefix boundary has been consumed, so the NEXT turn (whose user
         wrapper differs from the start) cannot roll back to the prefix and re-prefills ALL ~5.4k tokens (300 s).
         Restoring the saved slot puts the prefix state and its checkpoints back, so that next turn costs ~85 s."""
-        if self.active or not self.running() or self.hold.exists():
+        if (self.active and not force) or not self.running() or self.hold.exists():
             return
         t0 = time.monotonic()
         try:
             self.backend_post('/slots/0?action=restore', {'filename': self.slot_name(key)}, timeout=60)
+            self.dirty = False
             self.log(event='slot_rearm', key=key[:12], ms=round((time.monotonic() - t0) * 1000))
         except Exception as e:  # noqa: BLE001
             self.log(event='slot_rearm_failed', key=key[:12], error=str(e)[:200])
@@ -503,7 +504,7 @@ class OnDemand:
     def warm_later(self, key: str) -> None:
         """Warming rolls the slot back to the bare prefix, which would throw away the conversation tail the
         NEXT request of the same turn (tool result follow-up) wants to reuse. So wait until things went quiet."""
-        if not (self.precache and time.time() - self.warm_failed.get(key, 0) > 600):
+        if not (self.precache and not self.has_slot(key) and time.time() - self.warm_failed.get(key, 0) > 600):
             return
         with self.index_lock:
             if self.armer_for == key:      # a quiet-period thread for this key is already waiting
@@ -525,9 +526,7 @@ class OnDemand:
             self.armer_for = None
             if self.index.get('current') != key:
                 return
-            if self.has_slot(key):
-                self.rearm(key)
-            else:
+            if not self.has_slot(key):
                 self.warm(key)
 
         def run():
@@ -569,9 +568,10 @@ class OnDemand:
                 self.relay(conn, head, count=False)
                 return
             spec = key = None
+            last_role = ''
             self.last_user = ''
             if self.precache and method == 'POST' and path in CHAT_PATHS:
-                head, spec = self.read_body(conn, head)
+                head, spec, last_role = self.read_body(conn, head)
                 if spec is not None and not self.cacheable(spec):
                     self.log(event='prefix_too_big', chars=len(json.dumps(spec)))
                     spec = None
@@ -588,6 +588,15 @@ class OnDemand:
                         else b'{"error":"local model failed to load"}'
                     conn.sendall(http_response('503 Service Unavailable', msg))
                     return
+                if key and last_role == 'user' and self.dirty and self.has_slot(key):
+                    # New turn (not a tool-result continuation) and the slot was used by something else since the
+                    # prefix state was last put in place: put it back (0.1 s). Measured: OpenUnum fires small side
+                    # requests after every turn that wipe the cache; without this the next turn re-prefills 5.4k tokens.
+                    self.rearm(key, force=True)
+                if self.precache and method == 'POST':
+                    self.dirty = True         # any generation request (chat or not) replaces the slot's cache
+                    if not key:
+                        self.log(event='other_post', path=path, bytes=len(head))
                 first = self.relay(conn, head)
                 if key:
                     self.log(event='request', key=key[:12], slot=self.has_slot(key), n_tools=len(spec['tools']),
@@ -600,10 +609,6 @@ class OnDemand:
                 self.last_use = self.clock()
             if key:
                 self.observe(spec, key)
-                if self.has_slot(key) and not self.last_was_tool_call and self.precache:
-                    # a final answer (no tool call) ends the turn: put the bare-prefix state back now, the next
-                    # turn starts with a different user wrapper and could not roll back to it any more
-                    threading.Timer(1.0, self.rearm, args=(key,)).start()
                 self.warm_later(key)
         except OSError:
             pass
@@ -628,7 +633,7 @@ class OnDemand:
         except OSError:
             pass
 
-    def read_body(self, conn: socket.socket, head: bytes) -> tuple[bytes, dict | None]:
+    def read_body(self, conn: socket.socket, head: bytes) -> tuple[bytes, dict | None, str]:
         """Complete the request (Content-Length body) so its prefix can be learned; returns (bytes to relay, spec)."""
         try:
             hdr, _, rest = head.partition(b'\r\n\r\n')
@@ -638,9 +643,9 @@ class OnDemand:
                 if k.strip().lower() == b'content-length':
                     n = int(v.strip())
                 elif k.strip().lower() == b'transfer-encoding':
-                    return head, None
+                    return head, None, ''
             if n is None or n > MAX_BODY:
-                return head, None
+                return head, None, ''
             body = rest
             while len(body) < n:
                 chunk = conn.recv(min(65536, n - len(body)))
@@ -649,16 +654,18 @@ class OnDemand:
                 body += chunk
             head = hdr + b'\r\n\r\n' + body
             if len(body) != n:
-                return head, None
+                return head, None, ''
             j = json.loads(body)
             self.dump_user(j)
             for m in reversed(j.get('messages') or []):
                 if isinstance(m, dict) and m.get('role') == 'user':
                     self.last_user = str(m.get('content'))[:60]
                     break
-            return head, extract_prefix(j)
+            msgs = j.get('messages')
+            role = str(msgs[-1].get('role')) if isinstance(msgs, list) and msgs and isinstance(msgs[-1], dict) else ''
+            return head, extract_prefix(j), role
         except (ValueError, OSError, AttributeError, TypeError):
-            return head, None
+            return head, None, ''
 
     def relay(self, client: socket.socket, head: bytes, count: bool = True) -> float | None:
         up = socket.create_connection(('127.0.0.1', self.backend_port), timeout=10)
@@ -668,7 +675,6 @@ class OnDemand:
 
         first: list[float] = []
         content_first: list[float] = []
-        tool_seen: list[int] = []
 
         def pump(src, dst):
             try:
@@ -681,8 +687,7 @@ class OnDemand:
                             first.append(self.clock())
                         if len(content_first) < 1 and CONTENT_RE.search(data):
                             content_first.append(self.clock())
-                        if not tool_seen and TOOL_RE.search(data):
-                            tool_seen.append(1)
+
                     dst.sendall(data)
                     if count:
                         self.last_use = self.clock()
@@ -699,7 +704,6 @@ class OnDemand:
         pump(up, client)
         t.join(5)
         up.close()
-        self.last_was_tool_call = bool(tool_seen)
         return (content_first[0] if content_first else (first[0] if first else None))
 
     def warm_on_start(self) -> None:
