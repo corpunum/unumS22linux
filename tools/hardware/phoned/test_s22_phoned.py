@@ -77,6 +77,49 @@ class FramingTest(unittest.TestCase):
         self.assertEqual(json.loads(buf.getvalue())["decoded"]["status"], 0x80)
 
 
+class IpcGetTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.state = Path(self.tmp.name, "modem-state")
+        self.state.write_text("ONLINE")
+        self.ph = P.Phone(self.tmp.name, modem_state_path=str(self.state))
+        self.link = FakeLink({
+            (0x08, 0x0A): lambda _data: self._response((0x08, 0x0A), bytes.fromhex("07")),
+            (0x0D, 0x04): lambda _data: self._response((0x0D, 0x04), bytes.fromhex("020001010300")),
+        })
+        self.ph.attach(self.link)
+
+    @staticmethod
+    def _response(cmd, data):
+        p = P.Pending(cmd, True)
+        p.resp = P.Frame(9, 1, *cmd, P.RESP, data)
+        return p
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_only_allowlisted_gets_use_empty_body_and_decode_response(self):
+        for group, index, expected in (
+            (0x08, 0x0A, {"type": P.RESP, "payload_hex": "07", "preferred_net_type_byte": 7}),
+            (0x0D, 0x04, {"type": P.RESP, "payload_hex": "020001010300", "count": 2, "reserved": 0,
+                           "contexts": [{"cid": 1, "active": 1}, {"cid": 3, "active": 0}]}),
+        ):
+            code, body = self.ph.ipc_get(group, index)
+            self.assertEqual(code, 200)
+            self.assertTrue(body["ok"])
+            self.assertEqual(self.link.sent[-1], ((group, index), P.GET, b""))
+            self.assertEqual(body["request_hex"], P.Frame(0, 0, group, index, P.GET).encode().hex())
+            self.assertEqual(body["response_hex"], P.Frame(9, 1, group, index, P.RESP,
+                                                            bytes.fromhex(expected["payload_hex"])).encode().hex())
+            self.assertEqual(body["response"], expected)
+
+    def test_nonallowlisted_and_offline_do_not_send(self):
+        self.assertEqual(self.ph.ipc_get(0x08, 0x09)[0], 400)
+        self.state.write_text("OFFLINE")
+        self.assertEqual(self.ph.ipc_get(0x08, 0x0A)[0], 409)
+        self.assertEqual(self.link.sent, [])
+
+
 class RfsReuseTest(unittest.TestCase):
     def test_serves_nv_read_with_s22_modem_code(self):
         mod = P.load_s22_modem()

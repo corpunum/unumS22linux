@@ -62,6 +62,7 @@ DISP_ICON_INFO, DISP_RSSI_INFO = (7, 1), (7, 6)
 NET_CURRENT_PLMN, NET_REGIST, NET_SERVING_NETWORK = (8, 3), (8, 5), (8, 8)
 GEN_PHONE_RES = (0x80, 1)
 GEN_OK = 0x8000
+IPC_GET_ALLOWLIST = {(0x08, 0x0A), (0x0D, 0x04)}
 
 NAMES = {
     PWR_PHONE_STATE: "PWR_PHONE_STATE", (1, 1): "PWR_PHONE_PWR_UP",
@@ -1663,6 +1664,38 @@ class Phone:
         data = bytes([len(digits)]) + b"".join(bytes([1, ord(ch)]) for ch in digits)
         return self._simple(CALL_BURST_DTMF, EXEC, data)
 
+    def ipc_get(self, group, index):
+        cmd = (int(group), int(index))
+        if cmd not in IPC_GET_ALLOWLIST:
+            return 400, {"ok": False, "error": "GET command not allow-listed"}
+        with self.lock:
+            state = self.modem_state()
+            if state != "ONLINE":
+                return 409, {"ok": False, "error": "modem is not ONLINE", "modem_state": state}
+            link = self.link
+            if not link or not link.is_open:
+                return 503, {"ok": False, "error": "IPC link is down"}
+            try:
+                pending = link.request(cmd, GET, b"", timeout=8.0)
+            except LinkDown as e:
+                return 503, {"ok": False, "error": str(e)}
+        resp = pending.resp if pending else None
+        data = resp.data if resp else b""
+        decoded = {"type": resp.type if resp else None, "payload_hex": data.hex()}
+        if cmd == (0x08, 0x0A):
+            decoded["preferred_net_type_byte"] = data[0] if data else None
+        else:
+            count = data[0] if data else None
+            decoded.update({"count": count, "reserved": data[1] if len(data) > 1 else None,
+                            "contexts": [{"cid": data[i], "active": data[i + 1]}
+                                         for i in range(2, min(len(data), 2 + (count or 0) * 2), 2)]})
+        return 200, {"ok": bool(resp or (pending and pending.gen)),
+                     "request_hex": Frame(0, 0, *cmd, GET).encode().hex(),
+                     "response_hex": resp.encode().hex() if resp else None,
+                     "response": decoded if resp else None,
+                     "gen_phone_res": pending.gen if pending else None,
+                     "timed_out": pending is None}
+
     # -- status
     def status(self):
         with self.lock:
@@ -1888,6 +1921,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             route = (method, u.path.rstrip("/") or "/")
             if route == ("GET", "/status"):
                 return self._send(200, ph.status())
+            if route == ("POST", "/ipc/get"):
+                return self._send(*ph.ipc_get(body.get("group", -1), body.get("index", -1)))
             if route == ("GET", "/calls"):
                 return self._send(200, {"ok": True, "calls": ph.current_calls(include_recent=True)})
             if route == ("GET", "/sms/inbox"):
@@ -2043,6 +2078,11 @@ def main(argv=None):
     st = sub.add_parser("status")
     st.add_argument("--socket", default="/run/s22-phoned.sock")
     st.add_argument("--port", type=int, default=8095)
+    ig = sub.add_parser("ipc-get", help="safe read-only GET for the two documented IPC commands")
+    ig.add_argument("group", type=lambda x: int(x, 0), choices=(0x08, 0x0D))
+    ig.add_argument("index", type=lambda x: int(x, 0))
+    ig.add_argument("--socket", default="/run/s22-phoned.sock")
+    ig.add_argument("--port", type=int, default=8095)
     dc = sub.add_parser("send-test-frame-decode")
     dc.add_argument("hex")
     a = ap.parse_args(argv)
@@ -2058,6 +2098,13 @@ def main(argv=None):
     if a.cmd == "status":
         print(json.dumps(cli_get("/status", a.socket, a.port), indent=2, ensure_ascii=False))
         return 0
+    if a.cmd == "ipc-get":
+        conn = UnixHTTPConnection(a.socket) if a.socket and os.path.exists(a.socket) else http.client.HTTPConnection("127.0.0.1", a.port, timeout=10)
+        conn.request("POST", "/ipc/get", json.dumps({"group": a.group, "index": a.index}),
+                     {"Content-Type": "application/json"})
+        res = conn.getresponse()
+        print(json.dumps(json.loads(res.read()), indent=2, ensure_ascii=False))
+        return 0 if res.status == 200 else 1
     os.umask(0o077)                     # inbox/outbox/ipc logs are private
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     opener = None if a.simulate else device_opener(serve_rfs=not a.no_rfs)
