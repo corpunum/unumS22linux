@@ -210,6 +210,33 @@ impl CameraClient {
         }
     }
 
+    /// Copy a finished capture into the OpenUnum gallery. The gallery keeps it after `prune`
+    /// drops the working copy. Never fails the capture: errors come back as text.
+    fn save_to_gallery(
+        &self,
+        png: &Path,
+        stamp: u64,
+        sensor: &str,
+    ) -> Result<Option<PathBuf>, String> {
+        let Some(dir) = &self.cfg.gallery_dir else {
+            return Ok(None);
+        };
+        // Only when the OpenUnum home (<home>/assets/generated -> <home>) is there.
+        if !dir
+            .parent()
+            .and_then(Path::parent)
+            .is_some_and(Path::is_dir)
+            || !png.is_file()
+        {
+            return Ok(None);
+        }
+        let dst = dir.join(format!("cam-{stamp}-{sensor}.png"));
+        std::fs::create_dir_all(dir)
+            .and_then(|_| std::fs::copy(png, &dst))
+            .map(|_| Some(dst))
+            .map_err(|e| format!("gallery copy failed: {e}"))
+    }
+
     /// Keep the newest `camera_keep` captures; delete the rest (raw frames are 6 MB each).
     fn prune(&self) {
         let Ok(rd) = std::fs::read_dir(&self.cfg.camera_dir) else {
@@ -305,9 +332,12 @@ impl Camera for CameraClient {
         } else {
             None
         };
+        let gallery = self.save_to_gallery(&png, stamp, &req.sensor);
         let out = json!({
             "ok": true,
             "sensor": req.sensor,
+            "gallery_path": gallery.as_ref().ok().and_then(|p| p.as_ref()).map(|p| p.display().to_string()),
+            "gallery_error": gallery.as_ref().err(),
             "path": png.display().to_string(),
             "raw": raw.exists().then(|| raw.display().to_string()),
             "developed": developed,
@@ -408,6 +438,29 @@ echo "{\"ok\": true, \"path\": \"$o\", \"width\": 510, \"height\": 383}"
             assert!(args.contains(want), "{want} missing from {args}");
         }
         assert_eq!(cam.status().unwrap()["last"]["sensor"], "front");
+    }
+
+    #[test]
+    fn capture_is_copied_to_the_openunum_gallery() {
+        let (t, cam) = setup(OK_SCRIPT);
+        t.write("mnt/omarchy-trial/root/.openunum/openunum.json", "{}");
+        let v = cam.capture(&req("rear")).unwrap();
+        let g = v["gallery_path"].as_str().expect("gallery_path");
+        assert!(
+            g.contains(".openunum/assets/generated/cam-") && g.ends_with("-rear.png"),
+            "{g}"
+        );
+        assert_eq!(std::fs::read_to_string(g).unwrap(), "x\n");
+        assert!(v["gallery_error"].is_null());
+    }
+
+    #[test]
+    fn no_gallery_copy_without_an_openunum_home() {
+        let (t, cam) = setup(OK_SCRIPT);
+        let v = cam.capture(&req("rear")).unwrap();
+        assert_eq!(v["ok"], true);
+        assert!(v["gallery_path"].is_null());
+        assert!(!t.path().join("mnt/omarchy-trial/root/.openunum").exists());
     }
 
     #[test]
