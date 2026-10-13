@@ -468,8 +468,8 @@ impl Camera for CameraClient {
         let chroot = Path::new("/mnt/omarchy-trial");
         let outdir = if chroot.join("usr/bin/gst-launch-1.0").is_file() {
             chroot
-                .join("tmp")
-                .join(format!("s22d-record-{stamp}-{}", req.sensor))
+                .join("root/.openunum/assets/generated")
+                .join(format!(".s22d-record-{stamp}-{}", req.sensor))
         } else {
             recording_dir.clone()
         };
