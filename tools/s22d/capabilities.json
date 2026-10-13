@@ -482,6 +482,55 @@
     {
       "available": true,
       "confirm": "none",
+      "description": "Record a short MJPEG AVI video. One camera operation at a time; failures trigger the camera cooldown because DMA faults can panic the kernel.",
+      "id": "camera.record",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "exposure_us": {
+            "maximum": 30000,
+            "minimum": 100,
+            "type": "integer"
+          },
+          "fps": {
+            "maximum": 120,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "gain": {
+            "maximum": 16,
+            "minimum": 1,
+            "type": "number"
+          },
+          "seconds": {
+            "default": 5,
+            "maximum": 30,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sensor": {
+            "enum": [
+              "rear",
+              "front"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "sensor"
+        ],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/camera/record",
+      "reason": null,
+      "risk": "reversible",
+      "timeout_s": 330,
+      "tool": "camera_record"
+    },
+    {
+      "available": true,
+      "confirm": "none",
       "description": "Screen state (on/off) and brightness.",
       "id": "display.status",
       "input_schema": {
