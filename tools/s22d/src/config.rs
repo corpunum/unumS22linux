@@ -25,6 +25,9 @@ pub struct Config {
     pub camera_client: PathBuf,
     pub develop_tool: PathBuf,
     pub camera_dir: PathBuf,
+    /// OpenUnum gallery (`<home>/assets/generated`); each successful capture is copied there.
+    /// Skipped unless the OpenUnum home exists; `S22D_GALLERY_DIR=""` turns it off.
+    pub gallery_dir: Option<PathBuf>,
     pub camera_keep: usize,
     pub camera_min_interval: Duration,
     pub camera_failure_cooldown: Duration,
@@ -63,6 +66,7 @@ impl Config {
             camera_client: p("srv/s22/hardware/bin/s22-camera"),
             develop_tool: p("srv/s22/hardware/bin/s22-develop"),
             camera_dir: p("srv/s22/state/s22d/camera"),
+            gallery_dir: Some(p("mnt/omarchy-trial/root/.openunum/assets/generated")),
             camera_keep: 8,
             camera_min_interval: Duration::from_secs(10),
             camera_failure_cooldown: Duration::from_secs(60),
@@ -93,6 +97,9 @@ impl Config {
         path("S22D_CAMERA_CLIENT", &mut c.camera_client);
         path("S22D_DEVELOP", &mut c.develop_tool);
         path("S22D_CAMERA_DIR", &mut c.camera_dir);
+        if let Ok(v) = std::env::var("S22D_GALLERY_DIR") {
+            c.gallery_dir = (!v.is_empty()).then(|| PathBuf::from(v));
+        }
         if let Ok(v) = std::env::var("S22D_ADDR") {
             c.tcp_addr = v;
         }
