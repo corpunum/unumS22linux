@@ -459,11 +459,22 @@ impl Camera for CameraClient {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        let outdir = self
+        let recording_dir = self
             .cfg
             .camera_dir
             .join(format!("record-{stamp}-{}", req.sensor));
+        // The phone's optional GStreamer binary lives in the omarchy chroot. Put only
+        // its intermediate frame sequence there so make_mjpeg can find the encoder.
+        let chroot = Path::new("/mnt/omarchy-trial");
+        let outdir = if chroot.join("usr/bin/gst-launch-1.0").is_file() {
+            chroot
+                .join("tmp")
+                .join(format!("s22d-record-{stamp}-{}", req.sensor))
+        } else {
+            recording_dir.clone()
+        };
         std::fs::create_dir_all(&outdir)?;
+        std::fs::create_dir_all(&recording_dir)?;
         let deadline = Duration::from_secs(u64::from(req.seconds) + 60);
         let stdout = self.run_client(&self.record_args(req, &outdir), deadline)?;
         let client = last_json(&stdout)
@@ -495,8 +506,15 @@ impl Camera for CameraClient {
                 "camera record completed without video.avi",
             ));
         }
-        let gallery = self.save_video(&video, stamp, &req.sensor);
-        let result = json!({"ok": true, "path": video.display().to_string(), "gallery_path": gallery.as_ref().ok().and_then(|p| p.as_ref()).map(|p| p.display().to_string()), "gallery_error": gallery.as_ref().err(), "frames": client["frames"], "fps": req.fps.unwrap_or(30), "seconds": req.seconds});
+        let saved_video = recording_dir.join("video.avi");
+        if video != saved_video {
+            std::fs::copy(&video, &saved_video)?;
+        }
+        if outdir != recording_dir {
+            let _ = std::fs::remove_dir_all(&outdir);
+        }
+        let gallery = self.save_video(&saved_video, stamp, &req.sensor);
+        let result = json!({"ok": true, "path": saved_video.display().to_string(), "gallery_path": gallery.as_ref().ok().and_then(|p| p.as_ref()).map(|p| p.display().to_string()), "gallery_error": gallery.as_ref().err(), "frames": client["frames"], "fps": req.fps.unwrap_or(30), "seconds": req.seconds});
         self.prune_recordings();
         Ok(result)
     }
