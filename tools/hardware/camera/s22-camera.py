@@ -1491,7 +1491,8 @@ def cmd_record(args, sysif=None, alarm=True) -> int:
     state = {"start": None, "last": None, "kept": 0, "seen": 0, "frames": []}
     min_dt = 1.0 / args.fps_limit if args.fps_limit > 0 else 0.0
     target_frames = max(1, int(round(args.seconds * (args.fps_limit or args.fps))))
-    result = {"ok": False, "dir": args.out, "node": args.vc0}
+    result = {"ok": False, "dir": args.out, "node": args.vc0,
+              "target_frames": target_frames, "fps": args.fps_limit or args.fps}
 
     def consume(raw, frame):
         now = time.monotonic()
