@@ -174,15 +174,18 @@ The owner is never asked about a request that cannot succeed.
 |---|---|---|
 | `camera.status` | `GET /v1/camera/status` | `{client_present, develop_available, sensors, dir, last, busy, cooldown_s}` |
 | `camera.capture` | `POST /v1/camera/capture {sensor, exposure_us?, gain?, develop?}` | `{sensor, path, raw, developed, width, height, exposure_us, gain, ms, client}` |
+| `camera.record` (`camera_record`) | `POST /v1/camera/record {sensor, seconds?, fps?, exposure_us?, gain?}` | `{ok, path, gallery_path, frames, fps, seconds}` |
 
 `sensor` is `rear` (S5KGN3) or `front` (IMX374). `exposure_us` is 100-30000 and `gain` is analog 1-16, sent as
 `--cis-exposure-us` / `--cis-again`, the only exposure path that reaches the sensor. `develop` (default true) runs the
 raw to DNG to LibRaw step (draft PR #32) when `/srv/s22/hardware/bin/s22-develop` is installed; otherwise
 `developed` is `{ok:false, reason}` and `path` is the client's own PNG.
 
+Video recordings default to 5 seconds (1-30), optionally accept an fps (1-120), and use MJPEG AVI. The client applies the same CIS exposure/gain controls as still capture and is always called with `--allow-fw-stall` and a deadline of seconds+60. Finished AVI files are copied to the OpenUnum gallery as `vid-<timestamp>-<sensor>.avi`; only the latest three working recordings are retained.
+
 Safety, because a camera DMA fault can panic the kernel:
-- one capture at a time (`camera_busy`);
-- at least 10 s between captures and 60 s after any failure (`camera_cooldown`);
+- one camera operation at a time (`camera_busy`);
+- at least 10 s between camera operations and 60 s after any failure (`camera_cooldown`);
 - the client always runs with its own `--deadline`; on a hang it gets SIGTERM and 20 s of grace, never SIGKILL, and
   the answer is `camera_wedged`;
 - `system.reboot-recovery` is refused while a capture runs;

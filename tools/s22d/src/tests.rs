@@ -136,6 +136,12 @@ impl Camera for Fake {
             r.sensor, r.exposure_us, r.gain, r.develop
         ))
     }
+    fn record(&self, r: &RecordReq) -> ApiResult {
+        self.rec(&format!(
+            "record {} {} {:?} {:?} {:?}",
+            r.sensor, r.seconds, r.fps, r.exposure_us, r.gain
+        ))
+    }
 }
 impl Display for Fake {
     fn availability(&self) -> Option<String> {
@@ -991,6 +997,36 @@ async fn keepalive_disabled_is_reported() {
 }
 
 // ------------------------------------------------------------ camera
+
+#[tokio::test]
+async fn record_defaults_and_shares_camera_policy() {
+    let h = H::new();
+    let (status, value) = h
+        .send("POST", "/v1/camera/record", Some(json!({"sensor":"rear"})))
+        .await;
+    assert_eq!(status, StatusCode::OK, "{value}");
+    assert_eq!(h.fake.called("record rear 5 None None None"), 1);
+    assert_eq!(h.audit_lines()[0]["action"], "camera.record");
+}
+
+#[tokio::test]
+async fn record_rejects_bad_seconds_before_lock() {
+    let h = H::new();
+    for seconds in [0, 31] {
+        let (status, value) = h
+            .send(
+                "POST",
+                "/v1/camera/record",
+                Some(json!({"sensor":"rear", "seconds":seconds})),
+            )
+            .await;
+        assert_eq!(
+            (status, code(&value)),
+            (StatusCode::BAD_REQUEST, "bad_request")
+        );
+    }
+    assert_eq!(h.fake.called("record"), 0);
+}
 
 #[tokio::test]
 async fn capture_validates_before_taking_the_lock() {
