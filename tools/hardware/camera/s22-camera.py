@@ -1485,8 +1485,12 @@ def cmd_record(args, sysif=None, alarm=True) -> int:
     preset = apply_sensor_preset(args)
     os.makedirs(args.out, exist_ok=True)
     t0 = time.monotonic()
-    state = {"start": None, "last": None, "kept": 0, "seen": 0}
+    # Keep frame payloads in memory while streaming. Filesystem writes (and
+    # image development/encoding) happen only after run_stream has stopped the
+    # leader/VC0 stream and released the DMA buffers.
+    state = {"start": None, "last": None, "kept": 0, "seen": 0, "frames": []}
     min_dt = 1.0 / args.fps_limit if args.fps_limit > 0 else 0.0
+    target_frames = max(1, int(round(args.seconds * (args.fps_limit or args.fps))))
     result = {"ok": False, "dir": args.out, "node": args.vc0}
 
     def consume(raw, frame):
@@ -1495,19 +1499,23 @@ def cmd_record(args, sysif=None, alarm=True) -> int:
         if state["start"] is None:
             state["start"] = now
         if state["last"] is None or now - state["last"] >= min_dt:
-            path = os.path.join(args.out, "frame_%05d.raw" % state["kept"])
-            with open(path, "wb") as f:
-                f.write(raw)
+            state["frames"].append(raw)
             state["kept"] += 1
             state["last"] = now
-        return now - state["start"] >= args.seconds
+        return state["kept"] >= target_frames
 
     args.deadline = max(args.deadline, args.seconds + args.first_timeout + 30)
     try:
         stream = run_stream(sysif, args, consume, alarm=alarm, report=result)
         result.update(stream)
         meta = {"width": args.width, "height": args.height, "stride": stream["stride"],
-                "pixfmt": stream["pixfmt"], "bayer": args.bayer, "frames": state["kept"]}
+                "pixfmt": stream["pixfmt"], "bayer": args.bayer, "frames": state["kept"],
+                "fps": args.fps_limit or args.fps, "seconds": args.seconds}
+        for i, raw in enumerate(state["frames"]):
+            path = os.path.join(args.out, "frame_%05d.raw" % i)
+            with open(path, "wb") as f:
+                f.write(raw)
+        state["frames"].clear()
         with open(os.path.join(args.out, "frames.json"), "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=1)
         # Develop after the sensor is stopped, keeping the stream window short.
@@ -1520,7 +1528,8 @@ def cmd_record(args, sysif=None, alarm=True) -> int:
             write_image(os.path.join(args.out, "frame_%05d.png" % i), ow, oh, rows)
             if not args.keep_raw:
                 os.unlink(path)
-        result.update({"ok": state["kept"] > 0, "frames": state["kept"], "seen": state["seen"]})
+        result.update({"ok": state["kept"] == target_frames, "frames": state["kept"],
+                       "seen": state["seen"], "duration_seconds": args.seconds})
         if args.mjpeg and state["kept"]:
             result["mjpeg"] = make_mjpeg(args.out, args.fps_limit or args.fps)
     except (CameraError, OSError) as exc:
