@@ -84,7 +84,7 @@ class IpcGetTest(unittest.TestCase):
         self.state.write_text("ONLINE")
         self.ph = P.Phone(self.tmp.name, modem_state_path=str(self.state))
         self.link = FakeLink({
-            (0x08, 0x0A): lambda _data: self._response((0x08, 0x0A), bytes.fromhex("07")),
+            (0x08, 0x0A): lambda _data: self._response((0x08, 0x0A), b'{"mode_select":75}'),
             (0x0D, 0x04): lambda _data: self._response((0x0D, 0x04), bytes.fromhex("020001010300")),
         })
         self.ph.attach(self.link)
@@ -100,7 +100,8 @@ class IpcGetTest(unittest.TestCase):
 
     def test_only_allowlisted_gets_use_empty_body_and_decode_response(self):
         for group, index, expected in (
-            (0x08, 0x0A, {"type": P.RESP, "payload_hex": "07", "preferred_net_type_byte": 7}),
+            (0x08, 0x0A, {"type": P.RESP, "payload_hex": "7b226d6f64655f73656c656374223a37357d",
+                            "fields": {"mode_select": 75}}),
             (0x0D, 0x04, {"type": P.RESP, "payload_hex": "020001010300", "count": 2, "reserved": 0,
                            "contexts": [{"cid": 1, "active": 1}, {"cid": 3, "active": 0}]}),
         ):
