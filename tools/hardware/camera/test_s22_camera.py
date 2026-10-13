@@ -699,6 +699,38 @@ class FakeCaptureTest(CaptureHelpers):
         self.assertFalse(os.path.exists(os.path.join(args.out, "frame_00000.raw")))
         self._assert_rolled_back_record(fake)
 
+    def test_record_writes_frame_files_only_after_streamoff(self):
+        fake = FakeSys()
+        args = make_args("record", "--seconds", "0", "--fps-limit", "0", "--scale", "2",
+                         "--first-timeout", "0.01", "--timeout", "0.01")
+        args.out = os.path.join(self.tmp.name, "deferred")
+        import builtins
+        streamoff_complete = {"value": False}
+
+        def checked_open(path, *a, **kw):
+            if os.path.basename(path).startswith("frame_"):
+                self.assertTrue(streamoff_complete["value"], "raw frame write while camera is streaming")
+            return builtins.open(path, *a, **kw)
+
+        original_ioctl = fake.ioctl
+        def checked_ioctl(fd, request, buf):
+            result = original_ioctl(fd, request, buf)
+            if request == cam.VIDIOC_STREAMOFF:
+                streamoff_complete["value"] = True
+            return result
+
+        fake.ioctl = checked_ioctl
+        cam.open = checked_open
+        try:
+            rc, text = run_quiet(cam.cmd_record, args, fake, alarm=False)
+        finally:
+            del cam.open
+        result = json.loads(text.strip().splitlines()[-1])
+        self.assertEqual(rc, 0, result)
+        self.assertTrue(streamoff_complete["value"])
+        self.assertTrue(os.path.exists(os.path.join(args.out, "frame_00000.png")))
+        self._assert_rolled_back_record(fake)
+
     def _assert_rolled_back_record(self, fake):
         self.assertFalse(any(fake.stream.values()))
         for fd in fake.fds:
