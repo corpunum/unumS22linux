@@ -731,6 +731,33 @@ class FakeCaptureTest(CaptureHelpers):
         self.assertTrue(os.path.exists(os.path.join(args.out, "frame_00000.png")))
         self._assert_rolled_back_record(fake)
 
+    def test_record_stops_after_exact_frame_count_before_encoding(self):
+        fake = FakeSys()
+        args = make_args("record", "--seconds", "0.1", "--fps", "10",
+                         "--fps-limit", "0", "--scale", "2",
+                         "--first-timeout", "0.01", "--timeout", "0.01", "--mjpeg")
+        args.out = os.path.join(self.tmp.name, "exact-seq")
+        original = cam.make_mjpeg
+        observed = {}
+
+        def check_stopped(directory, fps):
+            observed["stream"] = dict(fake.stream)
+            observed["fps"] = fps
+            return {"ok": True, "path": os.path.join(directory, "video.avi")}
+
+        cam.make_mjpeg = check_stopped
+        try:
+            rc, text = run_quiet(cam.cmd_record, args, fake, alarm=False)
+        finally:
+            cam.make_mjpeg = original
+        result = json.loads(text.strip().splitlines()[-1])
+        self.assertEqual(rc, 0, result)
+        self.assertEqual(result["frames"], 1)
+        self.assertEqual(result["target_frames"], 1)
+        self.assertFalse(any(observed["stream"].values()))
+        self.assertEqual(observed["fps"], 10)
+        self._assert_rolled_back_record(fake)
+
     def _assert_rolled_back_record(self, fake):
         self.assertFalse(any(fake.stream.values()))
         for fd in fake.fds:
