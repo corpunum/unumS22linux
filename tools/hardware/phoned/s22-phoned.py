@@ -1682,7 +1682,10 @@ class Phone:
         resp = pending.resp if pending else None
         data = resp.data if resp else b""
         decoded = {"type": resp.type if resp else None, "payload_hex": data.hex()}
-        if cmd == (0x08, 0x0A):
+        payload_json = _json(data) if data else None
+        if isinstance(payload_json, dict):
+            decoded["fields"] = payload_json
+        elif cmd == (0x08, 0x0A):
             decoded["preferred_net_type_byte"] = data[0] if data else None
         else:
             count = data[0] if data else None
