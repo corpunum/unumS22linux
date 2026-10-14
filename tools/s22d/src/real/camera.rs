@@ -298,7 +298,12 @@ pub fn validate_record(req: &RecordReq) -> Result<(), ApiError> {
 
 impl CameraClient {
     fn record_args(&self, req: &RecordReq, out: &Path) -> Vec<String> {
-        let record_safe = self.cfg.camera_client.parent().unwrap().join("record-safe.py");
+        let record_safe = self
+            .cfg
+            .camera_client
+            .parent()
+            .unwrap()
+            .join("record-safe.py");
         let mut a = self.cfg.python_args.clone();
         a.extend([
             record_safe.display().to_string(),
@@ -320,7 +325,10 @@ impl CameraClient {
         if let Some(g) = req.gain {
             a.extend(["--gain".into(), g.to_string()]);
         }
-        a.extend(["--deadline".into(), (u64::from(req.seconds) + 60).to_string()]);
+        a.extend([
+            "--deadline".into(),
+            (u64::from(req.seconds) + 60).to_string(),
+        ]);
         // record-safe.py always passes --allow-fw-stall to its own capture
         // sessions (parity with the old `record` command, which passed it
         // unconditionally); it is not a record-safe.py CLI flag.
