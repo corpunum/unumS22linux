@@ -181,65 +181,85 @@ class FakeDeviceTest(unittest.TestCase):
         enc = SpyEncoder(getattr(fake, "_events", None))
         if encode is not None:
             enc = encode
-        args = rs.build_parser().parse_args([
+        argv = [
             "--sensor", kw.get("sensor", "rear"),
             "--seconds", str(kw.get("seconds", 1.0)),
             "--fps", str(kw.get("fps", 10)),
             "--max-frames-per-session", str(kw.get("max_frames_per_session", 3)),
             "--out", self.out
-        ])
+        ]
+        if kw.get("exposure_us"):
+            argv += ["--exposure-us", str(kw["exposure_us"])]
+        if kw.get("gain"):
+            argv += ["--gain", str(kw["gain"])]
+        args = rs.build_parser().parse_args(argv)
         result = rs.record(cam, args, sysif=fake, encode=enc)
         return result, enc
 
     def test_real_session_chain_tears_down_every_session(self):
-        fake = self._make_fake()
-        fake._events = []
-        orig_ioctl = fake.ioctl
+        original_presets = cam.SENSOR_PRESETS
+        cam.SENSOR_PRESETS = {
+            "rear": {"position": 0, "device": 0, "geometry": (16, 8, 30), "bayer": "GBRG", "sensor": "TEST"},
+            "front": {"position": 1, "device": 1, "geometry": (16, 8, 30), "bayer": "GRBG", "sensor": "TEST2"},
+        }
+        try:
+            fake = FakeSys()
+            fake._events = []
+            orig_ioctl = fake.ioctl
 
-        def logged_ioctl(fd, req, buf):
-            if IOCTL_NAMES.get(req) == "VIDIOC_STREAMOFF":
-                fake._events.append("streamoff")
-            return orig_ioctl(fd, req, buf)
+            def logged_ioctl(fd, req, buf):
+                if IOCTL_NAMES.get(req) == "VIDIOC_STREAMOFF":
+                    fake._events.append("streamoff")
+                return orig_ioctl(fd, req, buf)
 
-        fake.ioctl = logged_ioctl
-        result, enc = self._run(fake, seconds=1.0, fps=10, max_frames_per_session=3)
-        self.assertEqual(result["frames"], 10)
-        self.assertEqual(result["sessions"], 4)
-        self.assertEqual(enc.calls, 1)
-        # one full teardown per session: STREAMOFF leader + VC0, both nodes closed
-        self.assertEqual([c for c in fake.calls if c[0] == "VIDIOC_STREAMOFF"],
-                         [("VIDIOC_STREAMOFF", "leader"), ("VIDIOC_STREAMOFF", "vc")] * 4)
-        self.assertEqual(fake.calls.count(("close", "/dev/video101")), 4)
-        self.assertEqual(fake.calls.count(("close", "/dev/video210")), 4)
-        self.assertFalse(any(fake.stream.values()))
-        for fd in fake.fds:
-            self.assertIn(fd, fake.closed)
-        # the encoder ran after the last STREAMOFF of the last session
-        last_streamoff = max(i for i, e in enumerate(fake._events) if e == "streamoff")
-        self.assertLess(last_streamoff, len(fake._events) - 1 + 1)
-        self.assertEqual(fake._events[-1], "encode")
+            fake.ioctl = logged_ioctl
+            result, enc = self._run(fake, seconds=1.0, fps=10, max_frames_per_session=3)
+            self.assertEqual(result["frames"], 10)
+            self.assertEqual(result["sessions"], 4)
+            self.assertEqual(enc.calls, 1)
+            # one full teardown per session: STREAMOFF leader + VC0, both nodes closed
+            self.assertEqual([c for c in fake.calls if c[0] == "VIDIOC_STREAMOFF"],
+                             [("VIDIOC_STREAMOFF", "leader"), ("VIDIOC_STREAMOFF", "vc")] * 4)
+            self.assertEqual(fake.calls.count(("close", "/dev/video101")), 4)
+            self.assertEqual(fake.calls.count(("close", "/dev/video210")), 4)
+            self.assertFalse(any(fake.stream.values()))
+            for fd in fake.fds:
+                self.assertIn(fd, fake.closed)
+            # the encoder ran after the last STREAMOFF of the last session
+            last_streamoff = max(i for i, e in enumerate(fake._events) if e == "streamoff")
+            self.assertLess(last_streamoff, len(fake._events) - 1 + 1)
+            self.assertEqual(fake._events[-1], "encode")
+        finally:
+            cam.SENSOR_PRESETS = original_presets
 
     def test_encoder_sees_no_open_stream(self):
-        fake = self._make_fake()
-        state = {}
+        original_presets = cam.SENSOR_PRESETS
+        cam.SENSOR_PRESETS = {
+            "rear": {"position": 0, "device": 0, "geometry": (16, 8, 30), "bayer": "GBRG", "sensor": "TEST"},
+            "front": {"position": 1, "device": 1, "geometry": (16, 8, 30), "bayer": "GRBG", "sensor": "TEST2"},
+        }
+        try:
+            fake = FakeSys()
+            state = {}
 
-        def spy(cam, out_dir, fps, scale, mode, keep_raw):
-            state["stream"] = dict(fake.stream)
-            state["open_fds"] = [fd for fd in fake.fds if fd not in fake.closed]
-            os.makedirs(out_dir, exist_ok=True)
-            with open(os.path.join(out_dir, "video.avi"), "wb") as f:
-                f.write(b"stub")
-            return {"ok": True, "path": os.path.join(out_dir, "video.avi")}
+            def spy(cam, out_dir, fps, scale, mode, keep_raw):
+                state["stream"] = dict(fake.stream)
+                state["open_fds"] = [fd for fd in fake.fds if fd not in fake.closed]
+                os.makedirs(out_dir, exist_ok=True)
+                with open(os.path.join(out_dir, "video.avi"), "wb") as f:
+                    f.write(b"stub")
+                return {"ok": True, "path": os.path.join(out_dir, "video.avi")}
 
-        result, _ = self._run(fake, seconds=0.5, fps=10, max_frames_per_session=7,
-                              encode=spy)
-        self.assertEqual(result["frames"], 5)
-        self.assertEqual(result["sessions"], 1)
-        self.assertFalse(any(state["stream"].values()), state)
-        self.assertEqual(state["open_fds"], [], state)
+            result, _ = self._run(fake, seconds=0.5, fps=10, max_frames_per_session=7,
+                                  encode=spy)
+            self.assertEqual(result["frames"], 5)
+            self.assertEqual(result["sessions"], 1)
+            self.assertFalse(any(state["stream"].values()), state)
+            self.assertEqual(state["open_fds"], [], state)
+        finally:
+            cam.SENSOR_PRESETS = original_presets
 
     def test_exposure_and_gain_reach_the_sensor_each_session(self):
-        # Use a sensor preset that matches FakeSys's default 16x8 dimensions
         original_presets = cam.SENSOR_PRESETS
         cam.SENSOR_PRESETS = {
             "rear": {"position": 0, "device": 0, "geometry": (16, 8, 30), "bayer": "GBRG", "sensor": "TEST"},
@@ -257,23 +277,39 @@ class FakeDeviceTest(unittest.TestCase):
             self.assertEqual(values, [20000, 20000])
             self.assertEqual(gains, [3999, 4000, 1000, 3999, 4000, 1000])
             self.assertTrue(all(streaming for _, _, streaming in fake.ext_writes))
-            self.assertEqual(fake.regs, {"cit_us": 20000, "again": 4000, "dgain": 1000})
+            # regs stores register values: again=128 (0x80) for 4000 permille
+            self.assertEqual(fake.regs, {"cit_us": 20000, "again": 128, "dgain": 1000})
         finally:
             cam.SENSOR_PRESETS = original_presets
 
     def test_front_sensor_uses_ss1_nodes(self):
-        fake = self._make_fake(sensor="front",
-                               names={"/sys/class/video4linux/video102/name": "exynos-is-ss1\n",
-                                      "/sys/class/video4linux/video214/name": "exynos-is-ss1vc0\n"})
-        result, _ = self._run(fake, seconds=0.2, fps=10, sensor="front")
-        self.assertEqual(result["frames"], 2)
-        self.assertIn(("open", "/dev/video102"), fake.calls)
-        self.assertIn(("open", "/dev/video214"), fake.calls)
+        original_presets = cam.SENSOR_PRESETS
+        cam.SENSOR_PRESETS = {
+            "rear": {"position": 0, "device": 0, "geometry": (16, 8, 30), "bayer": "GBRG", "sensor": "TEST"},
+            "front": {"position": 1, "device": 1, "geometry": (16, 8, 30), "bayer": "GRBG", "sensor": "TEST2"},
+        }
+        try:
+            fake = FakeSys(names={"/sys/class/video4linux/video102/name": "exynos-is-ss1\n",
+                                   "/sys/class/video4linux/video214/name": "exynos-is-ss1vc0\n"})
+            result, _ = self._run(fake, seconds=0.2, fps=10, sensor="front")
+            self.assertEqual(result["frames"], 2)
+            self.assertIn(("open", "/dev/video102"), fake.calls)
+            self.assertIn(("open", "/dev/video214"), fake.calls)
+        finally:
+            cam.SENSOR_PRESETS = original_presets
 
     def test_frame_writes_happen_only_after_streamoff(self):
-        fake = self._make_fake()
-        result, _ = self._run(fake, seconds=0.1, fps=10, max_frames_per_session=2)
-        self.assertEqual(result["frames"], 1)
+        original_presets = cam.SENSOR_PRESETS
+        cam.SENSOR_PRESETS = {
+            "rear": {"position": 0, "device": 0, "geometry": (16, 8, 30), "bayer": "GBRG", "sensor": "TEST"},
+            "front": {"position": 1, "device": 1, "geometry": (16, 8, 30), "bayer": "GRBG", "sensor": "TEST2"},
+        }
+        try:
+            fake = FakeSys()
+            result, _ = self._run(fake, seconds=0.1, fps=10, max_frames_per_session=2)
+            self.assertEqual(result["frames"], 1)
+        finally:
+            cam.SENSOR_PRESETS = original_presets
 
 
 class AviTest(unittest.TestCase):
@@ -341,6 +377,8 @@ class CliTest(unittest.TestCase):
         def failing_load_client(path):
             class FailingCam:
                 RealSys = cam.RealSys
+                PIX_SBGGR16 = cam.PIX_SBGGR16
+                SENSOR_PRESETS = cam.SENSOR_PRESETS
                 def build_parser(self):
                     return cam.build_parser()
                 def apply_sensor_preset(self, args):
@@ -349,7 +387,6 @@ class CliTest(unittest.TestCase):
                     return 200
                 def run_stream(self, sysif, args, consume, alarm=True):
                     raise RuntimeError("capture failed")
-                SENSOR_PRESETS = cam.SENSOR_PRESETS
             return FailingCam()
 
         import io

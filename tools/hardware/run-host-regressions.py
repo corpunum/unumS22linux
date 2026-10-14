@@ -115,6 +115,7 @@ REVIEWED_HOST_TEST_PATHS = (
     "tools/openunum-phone/test_ui_plugin.py",
     "tools/touchui/test_s22_touchd.py",
     "tools/hardware/camera/test_s22_camera.py",
+    "tools/hardware/camera/test_record_safe.py",
 )
 
 HOST_TESTS = (
@@ -212,6 +213,7 @@ HOST_TESTS = (
     HostTest("tools/openunum-phone/test_ui_plugin.py"),
     HostTest("tools/touchui/test_s22_touchd.py"),
     HostTest("tools/hardware/camera/test_s22_camera.py"),
+    HostTest("tools/hardware/camera/test_record_safe.py"),
 )
 
 
