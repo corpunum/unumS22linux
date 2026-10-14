@@ -321,9 +321,9 @@ impl CameraClient {
             a.extend(["--gain".into(), g.to_string()]);
         }
         a.extend(["--deadline".into(), (u64::from(req.seconds) + 60).to_string()]);
-        if self.cfg.camera_allow_fw_stall {
-            a.push("--allow-fw-stall".into());
-        }
+        // record-safe.py always passes --allow-fw-stall to its own capture
+        // sessions (parity with the old `record` command, which passed it
+        // unconditionally); it is not a record-safe.py CLI flag.
         a
     }
 
