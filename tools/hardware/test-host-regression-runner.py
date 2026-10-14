@@ -95,6 +95,7 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/persistence/test_start_persistent_desktop.py",
     "tools/persistence/test_model_profile.py",
     "tools/hardware/phoned/test_s22_phoned.py",
+    "tools/hardware/phoned/test_ipc_experiments.py",
     "tools/hardware/voip/test_s22_sip.py",
     "tools/hardware/test_s22_converse.py",
     "tools/openunum-phone/test_check_model_pin.py",

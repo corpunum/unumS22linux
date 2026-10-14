@@ -111,6 +111,48 @@ class ExperimentalIpcTest(unittest.TestCase):
         self.assertEqual(pending.tx, os.read(self.r, 8192))
         self.assertEqual(self.link.pending, {})
         self.assertEqual(len(self.log.rows), 1)
+    def test_gen_wrong_wire_type_and_sequence_exhaustion(self):
+        pending = P.Pending((13, 20), False, strict=True, typ=3)
+        self.link.pending[5] = pending
+        self.link._dispatch(P.Frame(3, 5, 128, 1, P.INDI, b'\x0d\x14\x03\x00\x80'))
+        self.assertFalse(pending.event.is_set())
+        self.link.pending = {n: pending for n in range(1, 256)}
+        with self.assertRaises(P.LinkDown):
+            self.link.send((13, 20), 3, b'{}')
+        self.assertEqual(len(self.link.pending), 255)
+        self.assertFalse(any(row.get('dir') == 'tx' for row in self.log.rows))
+
+    def test_get_success_ack_does_not_finish_before_response(self):
+        pending = P.Pending((13, 4), True, strict=True, typ=2)
+        self.link.pending[5] = pending
+        self.link._dispatch(P.Frame(3, 5, 128, 1, 2, b'\x0d\x04\x02\x00\x80'))
+        self.assertFalse(pending.event.is_set())
+        self.link._dispatch(P.Frame(4, 5, 13, 4, 2, b'{"num_act":0,"records":[]}'))
+        self.assertTrue(pending.event.is_set())
+        self.assertIsNotNone(pending.resp)
+
+    def test_http_and_cli_on_off_use_the_same_guarded_sender(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            daemon = P.Daemon(state_dir=tmp, simulate=True, socket_path=str(Path(tmp, 'p.sock')), port=0).start()
+            try:
+                deadline = time.monotonic() + 3
+                while not daemon.phone.sms_ready and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertTrue(daemon.phone.sms_ready)
+                run = subprocess.run([os.sys.executable, P.__file__, 'data-call', 'on', '--socket', daemon.socket_path],
+                                     capture_output=True, text=True, timeout=12)
+                self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                result = json.loads(run.stdout)
+                self.assertTrue(result['ok'])
+                self.assertEqual(bytes.fromhex(result['request_hex'])[4:], b'\x02\x03\x03\x01')
+                run = subprocess.run([os.sys.executable, P.__file__, 'data-call', 'off', '--socket', daemon.socket_path],
+                                     capture_output=True, text=True, timeout=12)
+                self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                self.assertEqual(bytes.fromhex(json.loads(run.stdout)['request_hex'])[4:], b'\x02\x03\x03\x02')
+            finally:
+                daemon.stop()
+
     def test_data_notifications_preserve_json_binary_and_bound_history(self):
         for n in range(70):
             data = json.dumps({'cid': n, 'ipv4': '10.1.2.3'}).encode()

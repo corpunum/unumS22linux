@@ -893,7 +893,8 @@ class Link:
         with self.plock:
             p = self.pending.get(fr.aseq) if fr.aseq else None
             if (fr.cmd == GEN_PHONE_RES and p is not None and len(fr.data) >= 5
-                    and (not p.strict or (tuple(fr.data[:2]) == p.cmd and fr.data[2] == p.typ))):
+                    and (not p.strict or (fr.type in (RESP, NOTI)
+                                         and tuple(fr.data[:2]) == p.cmd and fr.data[2] == p.typ))):
                 p.gen = dec_gen(fr.data)
                 p.gen_frame = fr
                 if not (p.want_resp and p.gen["ok"]):
@@ -918,6 +919,8 @@ class Link:
                 self.mseq = self.mseq % 0xFF + 1
                 if self.mseq not in self.pending:
                     break
+            else:
+                raise LinkDown("all IPC sequences are in use")
             mseq = self.mseq
             if pending is not None:
                 self.pending[mseq] = pending
@@ -948,7 +951,7 @@ class Link:
             self.pending.pop(mseq, None)
 
     def request(self, cmd, typ, data=b"", timeout=8.0, want_resp=None, redact=False, strict=False):
-        """Send and wait. Returns Pending (check .ok/.gen/.resp) or None on timeout."""
+        """Send once; strict mode retains actual TX even on timeout/link loss."""
         if want_resp is None:
             want_resp = typ == GET
         p = Pending(cmd, want_resp, strict=strict, typ=typ)
@@ -1763,7 +1766,7 @@ class Phone:
             self.last_ipc_send = time.monotonic()
             try:
                 # send has a 3s write deadline; 6s reply wait keeps total below 10s.
-                pending = link.request(cmd, typ, data, timeout=6.0, want_resp=False, strict=True)
+                pending = link.request(cmd, typ, data, timeout=6.0, want_resp=(typ == GET), strict=True)
             except LinkDown as e:
                 return 503, {"ok": False, "error": str(e)}
             resp = pending.resp if pending else None
@@ -2198,7 +2201,7 @@ def main(argv=None):
         body = ({"group": 2, "index": 3, "type": SET, "payload": "01" if a.state == "on" else "02"}
                 if a.cmd == "data-call" else
                 {"group": a.group, "index": a.index, "type": a.type, "payload": a.payload})
-        conn = UnixHTTPConnection(a.socket) if a.socket and os.path.exists(a.socket) else http.client.HTTPConnection("127.0.0.1", a.port, timeout=12)
+        conn = UnixHTTPConnection(a.socket, timeout=12) if a.socket and os.path.exists(a.socket) else http.client.HTTPConnection("127.0.0.1", a.port, timeout=12)
         conn.request("POST", "/ipc/send", json.dumps(body), {"Content-Type": "application/json"})
         res = conn.getresponse()
         result = json.loads(res.read())
