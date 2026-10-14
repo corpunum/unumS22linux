@@ -31,3 +31,16 @@ Gate: deploy + any SET frame happen ONLY after Claude reviews this file.
 1. Backup /srv/s22/state/phoned + binary; one-line rollback = restore backup + exact-PID kill of node on :18880 (keepalive restarts in ~20 s).
 2. ONE command at a time, >=30 s between: set-attach-apn -> watch registration (moves to lte and stays 5 min?) -> define-pdp -> data-call on.
 3. Rails: the instant modem leaves ONLINE or SMS stops -> data-call off. Re-boot = last resort only (max 2, 0 spent).
+
+## Restart-resume disassembly follow-up (2026-10-14)
+
+Stock exported-builder evidence (same firmware blob, addresses from `aarch64-linux-gnu-objdump -T`; disassembled around builder addresses):
+
+- `IpcTxSetLteAttachProfile` `0x3bee18`, size `0x2c4`; legacy `0x3bebac`, size `0x26c`. JSON support check `(0d,14)`; legacy frame `(0d,14)` SET type 3. API takes APN and profile fields; no complete JSON key schema recovered.
+- `IpcTxSetDataProfile` `0x3be8bc`, size `0x2f0`. JSON support check `(0d,1b)`; legacy `(0d,1b)` SET type 3. Full legacy payload and field semantics not recovered.
+- `IpcTxSetMobileDataSetting` `0x3c03bc`, size `0x148`, JSON alternative `0x4299d8`. JSON support `(0d,1d)`; legacy frame is 9 bytes, SET type 3, bool args at offsets 7 and 8.
+- `IpcTxPsAttach` `0x3be108`, size `0x18c`, JSON alternative `0x4248f0`. JSON support check `(0d,03)`; API parameters include byte, two bools, detach-reason enum. Full legacy layout not established.
+- `IpcTxSetDataCallEstablish` `0x3bf728`, size `0x78`: exact 8-byte frame `(02,03)` SET type 3, selector offset 7 `01` true / `02` false.
+- RX `IpcRxIpConfiguration` `0x3c0b90`, size `0x364`, JSON alternative `0x4266a4`; type 3 is checked at header offset 6; legacy payload starts flags at offset 8 and conditional address parser. No full DNS/interface-to-offset mapping established.
+
+No SET was transmitted. The live phone was checked: CP ONLINE, rmnet0-7 DOWN; ecm0, wlan0, tailscale0 UP; observed defaults ecm0 and wlan0 metric 600. This check also reaffirms safety boundary: do not guess unknown serializers and put experimental frames on a live modem. `s22-ipc-formats.md` was appended in `/home/corpunum/openunum-briefs` but that location is outside this worktree's git repository and therefore could not be committed from here. No deploy, reboot, route change, or commit/push of that external file occurred. Deployment/command sequence remains blocked pending exact wire layouts and validated implementation; no PR updated.
