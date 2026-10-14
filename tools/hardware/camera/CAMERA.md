@@ -92,8 +92,8 @@ The run also writes `/tmp/cam0.raw` (6,275,072 bytes = 4096 x 1532) and
 On failure, `"ok": false` and `"error"` names the ioctl that failed. The
 `-v` ioctl log goes to stderr.
 
-Record a short sequence (frames are developed after the stream stops):
-`s22-camera.py record --seconds 3 --fps-limit 5 --out /tmp/seq [--mjpeg]`.
+Record a short sequence (frames are developed after the stream stops). Each record now defaults to 60 captured frames per camera stream, fully tearing down and reopening the camera between chunks; override with `--chunk-frames N` only after validating a larger safe limit. This avoids the long-stream `kthread_stop` wedge observed during record, at the cost of a gap at each chunk boundary:
+`s22-camera.py record --seconds 3 --fps-limit 5 --chunk-frames 60 --out /tmp/seq [--mjpeg]`.
 `--mjpeg` uses `gst-launch-1.0` from PATH. If that is missing, it runs it
 inside the Arch chroot, but only when the output directory is under
 `/mnt/omarchy-trial`.
