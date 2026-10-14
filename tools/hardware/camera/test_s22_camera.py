@@ -731,6 +731,21 @@ class FakeCaptureTest(CaptureHelpers):
         self.assertTrue(os.path.exists(os.path.join(args.out, "frame_00000.png")))
         self._assert_rolled_back_record(fake)
 
+    def test_record_tears_down_each_bounded_chunk(self):
+        fake = FakeSys()
+        args = make_args("record", "--seconds", "0.3", "--fps", "10",
+                         "--fps-limit", "0", "--chunk-frames", "2", "--scale", "2",
+                         "--first-timeout", "0.01", "--timeout", "0.01")
+        args.out = os.path.join(self.tmp.name, "chunked-seq")
+        rc, text = run_quiet(cam.cmd_record, args, fake, alarm=False)
+        result = json.loads(text.strip().splitlines()[-1])
+        self.assertEqual(rc, 0, result)
+        self.assertEqual(result["frames"], 3)
+        self.assertEqual(result["target_frames"], 3)
+        streamoffs = [c for c in fake.calls if c[0] == "VIDIOC_STREAMOFF"]
+        self.assertEqual(len(streamoffs), 4)  # leader + VC0 teardown for two chunks
+        self._assert_rolled_back_record(fake)
+
     def test_record_stops_after_exact_frame_count_before_encoding(self):
         fake = FakeSys()
         args = make_args("record", "--seconds", "0.1", "--fps", "10",
