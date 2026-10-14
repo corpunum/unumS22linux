@@ -298,29 +298,31 @@ pub fn validate_record(req: &RecordReq) -> Result<(), ApiError> {
 
 impl CameraClient {
     fn record_args(&self, req: &RecordReq, out: &Path) -> Vec<String> {
+        let record_safe = self.cfg.camera_client.parent().unwrap().join("record-safe.py");
         let mut a = self.cfg.python_args.clone();
         a.extend([
-            self.cfg.camera_client.display().to_string(),
-            "record".into(),
-            "--out".into(),
-            out.display().to_string(),
+            record_safe.display().to_string(),
             "--sensor".into(),
             req.sensor.clone(),
             "--seconds".into(),
             req.seconds.to_string(),
-            "--mjpeg".into(),
-            "--allow-fw-stall".into(),
-            "--deadline".into(),
-            (u64::from(req.seconds) + 60).to_string(),
+            "--out".into(),
+            out.display().to_string(),
+            "--max-frames-per-session".into(),
+            "7".to_string(),
         ]);
         if let Some(fps) = req.fps {
             a.extend(["--fps".into(), fps.to_string()]);
         }
         if let Some(e) = req.exposure_us {
-            a.extend(["--cis-exposure-us".into(), e.to_string()]);
+            a.extend(["--exposure-us".into(), e.to_string()]);
         }
         if let Some(g) = req.gain {
-            a.extend(["--cis-again".into(), g.to_string()]);
+            a.extend(["--gain".into(), g.to_string()]);
+        }
+        a.extend(["--deadline".into(), (u64::from(req.seconds) + 60).to_string()]);
+        if self.cfg.camera_allow_fw_stall {
+            a.push("--allow-fw-stall".into());
         }
         a
     }
@@ -463,20 +465,9 @@ impl Camera for CameraClient {
             .cfg
             .camera_dir
             .join(format!("record-{stamp}-{}", req.sensor));
-        // The phone's optional GStreamer binary lives in the omarchy chroot. Put only
-        // its intermediate frame sequence there so make_mjpeg can find the encoder.
-        let chroot = Path::new("/mnt/omarchy-trial");
-        let outdir = if chroot.join("usr/bin/gst-launch-1.0").is_file() {
-            chroot
-                .join("root/.openunum/assets/generated")
-                .join(format!(".s22d-record-{stamp}-{}", req.sensor))
-        } else {
-            recording_dir.clone()
-        };
-        std::fs::create_dir_all(&outdir)?;
         std::fs::create_dir_all(&recording_dir)?;
         let deadline = Duration::from_secs(u64::from(req.seconds) + 60);
-        let stdout = self.run_client(&self.record_args(req, &outdir), deadline)?;
+        let stdout = self.run_client(&self.record_args(req, &recording_dir), deadline)?;
         let client = last_json(&stdout)
             .ok_or_else(|| ApiError::upstream("camera client printed no JSON result"))?;
         if client["ok"] != true {
@@ -489,32 +480,24 @@ impl Camera for CameraClient {
                     .to_string(),
             ));
         }
-        if client["mjpeg"]["ok"] != true {
-            return Err(ApiError::new(
-                StatusCode::BAD_GATEWAY,
-                "camera_failed",
-                client["mjpeg"]["error"]
-                    .as_str()
-                    .or(client["mjpeg"]["skipped"].as_str())
-                    .unwrap_or("MJPEG video mux failed")
-                    .to_string(),
-            ));
-        }
-        let video = outdir.join("video.avi");
+        let video = recording_dir.join("video.avi");
         if !video.is_file() {
             return Err(ApiError::upstream(
                 "camera record completed without video.avi",
             ));
         }
-        let saved_video = recording_dir.join("video.avi");
-        if video != saved_video {
-            std::fs::copy(&video, &saved_video)?;
-        }
-        if outdir != recording_dir {
-            let _ = std::fs::remove_dir_all(&outdir);
-        }
-        let gallery = self.save_video(&saved_video, stamp, &req.sensor);
-        let result = json!({"ok": true, "path": saved_video.display().to_string(), "gallery_path": gallery.as_ref().ok().and_then(|p| p.as_ref()).map(|p| p.display().to_string()), "gallery_error": gallery.as_ref().err(), "frames": client["frames"], "fps": req.fps.unwrap_or(30), "seconds": req.seconds});
+        let gallery = self.save_video(&video, stamp, &req.sensor);
+        let result = json!({
+            "ok": true,
+            "path": video.display().to_string(),
+            "gallery_path": gallery.as_ref().ok().and_then(|p| p.as_ref()).map(|p| p.display().to_string()),
+            "gallery_error": gallery.as_ref().err(),
+            "frames": client["frames"],
+            "sessions": client["sessions"],
+            "seconds": req.seconds,
+            "effective_fps": client["effective_fps"],
+            "fps": req.fps.unwrap_or(30),
+        });
         self.prune_recordings();
         Ok(result)
     }
@@ -538,6 +521,7 @@ echo "{\"ok\": true, \"path\": \"$o\", \"width\": 510, \"height\": 383}"
     fn setup(script: &str) -> (Tmp, CameraClient) {
         let t = Tmp::new();
         t.script("srv/s22/hardware/bin/s22-camera", script);
+        t.script("srv/s22/hardware/bin/record-safe.py", script);
         let mut c = Config::rooted(t.path());
         c.python = "sh".into();
         c.python_args = vec![];
@@ -572,7 +556,7 @@ echo "{\"ok\": true, \"path\": \"$o\", \"width\": 510, \"height\": 383}"
             r#"
 while [ $# -gt 0 ]; do case "$1" in --out) o=$2;; esac; shift; done
 mkdir -p "$o"; echo avi > "$o/video.avi"
-echo "{\"ok\":true,\"frames\":25,\"mjpeg\":{\"ok\":true}}"
+echo "{\"ok\":true,\"frames\":25,\"sessions\":4,\"seconds\":5,\"effective_fps\":5.0,\"path\":\"$o/video.avi\"}"
 "#,
         );
         t.write("mnt/omarchy-trial/root/.openunum/openunum.json", "{}");
@@ -581,6 +565,7 @@ echo "{\"ok\":true,\"frames\":25,\"mjpeg\":{\"ok\":true}}"
         r.gain = Some(8.0);
         let value = cam.record(&r).unwrap();
         assert_eq!(value["frames"], 25);
+        assert_eq!(value["sessions"], 4);
         assert!(value["gallery_path"].as_str().unwrap().ends_with(".avi"));
         assert_eq!(
             std::fs::read_to_string(value["gallery_path"].as_str().unwrap()).unwrap(),
