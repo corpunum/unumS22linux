@@ -44,3 +44,21 @@ Stock exported-builder evidence (same firmware blob, addresses from `aarch64-lin
 - RX `IpcRxIpConfiguration` `0x3c0b90`, size `0x364`, JSON alternative `0x4266a4`; type 3 is checked at header offset 6; legacy payload starts flags at offset 8 and conditional address parser. No full DNS/interface-to-offset mapping established.
 
 No SET was transmitted. The live phone was checked: CP ONLINE, rmnet0-7 DOWN; ecm0, wlan0, tailscale0 UP; observed defaults ecm0 and wlan0 metric 600. This check also reaffirms safety boundary: do not guess unknown serializers and put experimental frames on a live modem. `s22-ipc-formats.md` was appended in `/home/corpunum/openunum-briefs` but that location is outside this worktree's git repository and therefore could not be committed from here. No deploy, reboot, route change, or commit/push of that external file occurred. Deployment/command sequence remains blocked pending exact wire layouts and validated implementation; no PR updated.
+
+## Sender completion checkpoint (2026-10-14 UTC)
+
+Owner now explicitly authorizes bounded experimental data SETs; earlier
+read-only-only constraints above are historical, not current authorization.
+Reviewed WIP f8ff242. Retained command allowlist so ipc-send cannot bypass call,
+SMS, SIM or radio-mode gates; exact data-call selectors are enforced. Added
+strict GEN wire-type validation, sequence-exhaustion protection and GET ACK vs
+RESP handling; aligned Unix HTTP timeout with sender bound. Tests now cover CLI
+and HTTP on/off, unrelated sequence/inner-command/type refusal, timeout retention
+without retry, cooldown/offline/busy gates and bounded decoded notifications.
+Experimental tests added to the explicit hardware-free host regression allowlist.
+
+Pre-deploy live state: phoned PID 2210 from netstat :8095 (not node :18880), modem
+ONLINE, IPC open, SMS ready, SIM PB_INIT_COMPLETE, EGPRS Vodafone GR; rmnet0–7
+DOWN. ecm0 and wlan0 UP; tailscale0 has UP flag; defaults ecm0 and wlan0 metric
+600. Mute check: level=0 and both Digital PCM Volume controls=0. No modem frame
+from this checkpoint. Host focused suite: 43 tests passed (Python unittest).
