@@ -62,3 +62,28 @@ ONLINE, IPC open, SMS ready, SIM PB_INIT_COMPLETE, EGPRS Vodafone GR; rmnet0–7
 DOWN. ecm0 and wlan0 UP; tailscale0 has UP flag; defaults ecm0 and wlan0 metric
 600. Mute check: level=0 and both Digital PCM Volume controls=0. No modem frame
 from this checkpoint. Host focused suite: 43 tests passed (Python unittest).
+
+## Wrap-up / no replay checkpoint (2026-10-14 14:55 UTC)
+
+Owner requested wrap-up instead of further mutations. Durable continuation is
+`MOBILE-DATA-HANDOFF.md`. Assigned checkout remains clean at saved `49da8ea`
+before this documentation addition; `f8ff242` and `49da8ea` were already committed
+but remote branch was still `0e770d1`. No implementation was re-applied.
+
+Resolved live executable from `/proc/2210/cmdline`:
+`/srv/s22/hardware/bin/s22-phoned`, SHA256
+`11ce72e9c4e113e0a1304917f7890171d7c2ca3735cf291291488953c56e8762`,
+matching **20acf12** (not the new sender). No experimental sender deployed.
+Mute check level/left/right all 0; CP ONLINE, IPC open, SMS ready, EGPRS Vodafone
+GR; rmnet0–7 DOWN and rmnet0 RX/TX zero. ecm0/wlan0 UP, tailscale0 UP flag;
+all routes read only and unchanged. No deploy/kill/SET/GET/call/SMS/package/reboot
+occurred during this wrap-up.
+
+Parsed both retained IPC logs (19,772 valid rows, zero malformed): no experimental
+data SET in covered history; historical mode/PDP GETs remain recorded and were
+not replayed. Exact TX and RX fields, log coverage, deployed hash, safety rails,
+remaining deploy/variant/IP/proof work and test results are in the handoff.
+Original mobile-data success/exhausted-variants criterion remains unmet.
+Focused tests re-run via host verification: phoned 33 + experiments 10 passed;
+one non-failing ResourceWarning for an unclosed simulated Unix socket occurred.
+Do not confuse this synthetic proof with actual modem acceptance.
