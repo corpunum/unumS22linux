@@ -1494,21 +1494,27 @@ def cmd_record(args, sysif=None, alarm=True) -> int:
     result = {"ok": False, "dir": args.out, "node": args.vc0,
               "target_frames": target_frames, "fps": args.fps_limit or args.fps}
 
-    def consume(raw, frame):
-        now = time.monotonic()
-        state["seen"] += 1
-        if state["start"] is None:
-            state["start"] = now
-        if state["last"] is None or now - state["last"] >= min_dt:
-            state["frames"].append(raw)
-            state["kept"] += 1
-            state["last"] = now
-        return state["kept"] >= target_frames
-
     args.deadline = max(args.deadline, args.seconds + args.first_timeout + 30)
     try:
-        stream = run_stream(sysif, args, consume, alarm=alarm, report=result)
-        result.update(stream)
+        stream = None
+        while state["kept"] < target_frames:
+            remaining = target_frames - state["kept"]
+            session_target = min(args.chunk_frames, remaining)
+            kept_at_start = state["kept"]
+
+            def take_chunk(raw, frame):
+                now = time.monotonic()
+                state["seen"] += 1
+                if state["start"] is None:
+                    state["start"] = now
+                if state["last"] is None or now - state["last"] >= min_dt:
+                    state["frames"].append(raw)
+                    state["kept"] += 1
+                    state["last"] = now
+                return state["kept"] - kept_at_start >= session_target
+
+            stream = run_stream(sysif, args, take_chunk, alarm=alarm, report=result)
+            result.update(stream)
         meta = {"width": args.width, "height": args.height, "stride": stream["stride"],
                 "pixfmt": stream["pixfmt"], "bayer": args.bayer, "frames": state["kept"],
                 "fps": args.fps_limit or args.fps, "seconds": args.seconds}
@@ -1717,6 +1723,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", required=True)
     p.add_argument("--seconds", type=float, default=3.0)
     p.add_argument("--fps-limit", type=float, default=5.0)
+    p.add_argument("--chunk-frames", type=int, default=60,
+                   help="maximum frames per stream session; camera fully tears down between chunks")
     p.add_argument("--mjpeg", action="store_true", help="also build video.avi via gst-launch-1.0")
     p.add_argument("--keep-raw", action="store_true")
     _add_stream_args(p)
