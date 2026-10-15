@@ -504,7 +504,7 @@ impl Camera for CameraClient {
             "sessions": client["sessions"],
             "seconds": req.seconds,
             "effective_fps": client["effective_fps"],
-            "fps": req.fps.unwrap_or(30),
+            "fps": req.fps.unwrap_or(5),
         });
         self.prune_recordings();
         Ok(result)
