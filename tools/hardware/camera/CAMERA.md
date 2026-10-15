@@ -92,11 +92,38 @@ The run also writes `/tmp/cam0.raw` (6,275,072 bytes = 4096 x 1532) and
 On failure, `"ok": false` and `"error"` names the ioctl that failed. The
 `-v` ioctl log goes to stderr.
 
-Record a short sequence (frames are developed after the stream stops):
-`s22-camera.py record --seconds 3 --fps-limit 5 --out /tmp/seq [--mjpeg]`.
+Record a short sequence (frames are developed after the stream stops). Each record now defaults to 60 captured frames per camera stream, fully tearing down and reopening the camera between chunks; override with `--chunk-frames N` only after validating a larger safe limit. This avoids the long-stream `kthread_stop` wedge observed during record, at the cost of a gap at each chunk boundary:
+`s22-camera.py record --seconds 3 --fps-limit 5 --chunk-frames 60 --out /tmp/seq [--mjpeg]`.
 `--mjpeg` uses `gst-launch-1.0` from PATH. If that is missing, it runs it
 inside the Arch chroot, but only when the output directory is under
 `/mnt/omarchy-trial`.
+
+### record-safe.py: chunked recorder with deferred MJPEG encode
+
+`record-safe.py` (sibling of `s22-camera.py`) is the chunked recorder that
+`tools/s22d` `camera.record` calls. Instead of one long stream with
+`--chunk-frames`, it runs a chain of independent capture-style sessions: each
+session opens/stream/takes at most `--max-frames-per-session` frames (default
+7, the capture path's proven-clean length) and runs the capture path's full
+teardown before the next session starts. Raw frames are written only after
+that session's teardown; the MJPEG AVI encoder runs only after the last
+session's teardown, so no encoder ever runs while a stream is open.
+
+```
+record-safe.py --sensor rear|front --seconds N --out DIR
+               [--max-frames-per-session K] [--fps N] [--exposure-us N]
+               [--gain X] [--deadline S] [--scale N]
+               [--encoder auto|gst|python] [--keep-raw]
+```
+
+The last stdout line is one JSON object:
+`{"ok": true, "path": "DIR/video.avi", "frames": 25, "sessions": 4,
+"seconds": 5, "effective_fps": 4.2}`. It imports the capture path from
+`s22-camera.py` (run_stream/Session, not reimplemented). Encoding prefers
+`gst-launch-1.0` via the reviewed `make_mjpeg` path (`--encoder auto`);
+without it, a stdlib-only baseline-JPEG encoder + MJPEG AVI muxer built into
+the script produces `DIR/video.avi` (verified with ffprobe/ffmpeg). On session
+failure it prints `{"ok": false, "error": ...}` and does not encode.
 
 ## Independent review (2026-10-08): GO-WITH-CHANGES, applied
 

@@ -3,10 +3,10 @@
 //! `API.md` documents every route here; `catalog.rs` is its machine-readable twin.
 
 use crate::app::{tcp_guard, Shared};
-use crate::backends::{Answer, CaptureReq, TopSort, WifiConnect};
+use crate::backends::{Answer, CaptureReq, RecordReq, TopSort, WifiConnect};
 use crate::catalog::{self, Risk, BT_REASON};
 use crate::error::{ApiError, ApiResult};
-use crate::real::camera::validate as validate_capture;
+use crate::real::camera::{validate as validate_capture, validate_record};
 use crate::real::phoned::valid_number;
 use crate::real::services::ALLOWLIST;
 use axum::{
@@ -352,6 +352,23 @@ async fn camera_capture(State(app): State<Shared>, Body(req): Body<CaptureReq>) 
     finish(&app, "camera.capture", Risk::Reversible, detail, r)
 }
 
+async fn camera_record(State(app): State<Shared>, Body(req): Body<RecordReq>) -> Reply {
+    let detail = json!({"sensor": req.sensor, "seconds": req.seconds, "fps": req.fps, "exposure_us": req.exposure_us, "gain": req.gain});
+    let r = async {
+        validate_record(&req)?;
+        if let Some(why) = app.b.camera.availability() {
+            return Err(ApiError::unavailable(why));
+        }
+        let permit = app.camera.acquire()?;
+        let c = app.b.camera.clone();
+        let out = blocking(move || c.record(&req)).await;
+        permit.finish(out.is_ok());
+        out
+    }
+    .await;
+    finish(&app, "camera.record", Risk::Reversible, detail, r)
+}
+
 // ---------------------------------------------------------------- display
 
 async fn display_on(State(app): State<Shared>) -> Reply {
@@ -483,6 +500,7 @@ pub fn router(app: Shared, transport: Transport) -> Router {
         .route("/v1/call/hangup", post(call_hangup))
         .route("/v1/camera/status", get(camera_status))
         .route("/v1/camera/capture", post(camera_capture))
+        .route("/v1/camera/record", post(camera_record))
         .route("/v1/display", get(display_status))
         .route("/v1/display/on", post(display_on))
         .route("/v1/display/off", post(display_off))
