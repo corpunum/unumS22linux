@@ -13,7 +13,7 @@ JSON (payload starting with '{'), logs raw hex and never raises.
 Safety: SMS send and dial are refused unless state-dir/tx_enabled exists AND
 the destination is listed in state-dir/allowlist; emergency/short numbers are
 always refused; outbound is rate limited. PWR_PHONE_STATE is sent only with
---radio-normal. No NET attach/mode commands exist in this file.
+--radio-normal. Experimental data IPC requires explicit operator commands; no automatic attach.
 Python stdlib only (3.12+).
 """
 from __future__ import annotations
@@ -62,6 +62,9 @@ DISP_ICON_INFO, DISP_RSSI_INFO = (7, 1), (7, 6)
 NET_CURRENT_PLMN, NET_REGIST, NET_SERVING_NETWORK = (8, 3), (8, 5), (8, 8)
 GEN_PHONE_RES = (0x80, 1)
 GEN_OK = 0x8000
+DATA_CALL_ESTABLISH = (0x02, 0x03)  # stock RIL, NOT CALL_RELEASE for this command
+DATA_SET_ALLOWLIST = {(0x0D, i) for i in (0x01, 0x03, 0x04, 0x14, 0x1B, 0x1D)}
+IPC_GET_ALLOWLIST = {(0x08, 0x0A), (0x0D, 0x04)}
 
 NAMES = {
     PWR_PHONE_STATE: "PWR_PHONE_STATE", (1, 1): "PWR_PHONE_PWR_UP",
@@ -612,7 +615,8 @@ DECODERS = {GEN_PHONE_RES: dec_gen, SEC_PIN_STATUS: dec_sim, NET_REGIST: dec_reg
 def describe(frame):
     """Decode a frame without side effects. Never raises."""
     out = {"name": frame.name, "type": frame.type, "mseq": frame.mseq, "aseq": frame.aseq,
-           "hex": frame.data.hex()}
+           "hex": frame.data.hex(), "frame_hex": frame.encode().hex(),
+           "group": frame.group, "index": frame.index}
     fn = DECODERS.get(frame.cmd)
     try:
         if fn is not None and frame.data:
@@ -758,8 +762,11 @@ class LinkDown(Exception):
 
 
 class Pending:
-    def __init__(self, cmd, want_resp):
+    def __init__(self, cmd, want_resp, strict=False, typ=None):
         self.cmd, self.want_resp = cmd, want_resp
+        self.strict, self.typ = strict, typ
+        self.tx = self.gen_frame = None
+        self.completed = False
         self.event = threading.Event()
         self.gen = None          # decoded GEN_PHONE_RES
         self.resp = None         # RESP frame
@@ -885,15 +892,18 @@ class Link:
         self.log.write(rec)
         with self.plock:
             p = self.pending.get(fr.aseq) if fr.aseq else None
-            if fr.cmd == GEN_PHONE_RES and p is not None and len(fr.data) >= 5:
+            if (fr.cmd == GEN_PHONE_RES and p is not None and len(fr.data) >= 5
+                    and (not p.strict or (fr.type in (RESP, NOTI)
+                                         and tuple(fr.data[:2]) == p.cmd and fr.data[2] == p.typ))):
                 p.gen = dec_gen(fr.data)
+                p.gen_frame = fr
                 if not (p.want_resp and p.gen["ok"]):
                     p.event.set()
             elif fr.type == RESP:
                 if p is None or p.cmd != fr.cmd:      # async RESP with aseq 0: oldest waiter
                     p = next((q for q in self.pending.values()
-                              if q.cmd == fr.cmd and q.resp is None), None)
-                if p is not None:
+                              if not q.strict and q.cmd == fr.cmd and q.resp is None), None)
+                if p is not None and p.cmd == fr.cmd:
                     p.resp = fr
                     p.event.set()
         try:
@@ -909,10 +919,14 @@ class Link:
                 self.mseq = self.mseq % 0xFF + 1
                 if self.mseq not in self.pending:
                     break
+            else:
+                raise LinkDown("all IPC sequences are in use")
             mseq = self.mseq
             if pending is not None:
                 self.pending[mseq] = pending
         frame = Frame(mseq, 0, cmd[0], cmd[1], typ, data).encode()
+        if pending is not None:
+            pending.tx = frame
         self.log.write({"dir": "tx", "name": NAMES.get(cmd, f"{cmd[0]:02x}/{cmd[1]:02x}"),
                         "type": typ, "mseq": mseq,
                         "hex": frame[:HDR.size].hex() + ("<redacted>" if redact else frame[HDR.size:].hex())})
@@ -936,15 +950,16 @@ class Link:
         with self.plock:
             self.pending.pop(mseq, None)
 
-    def request(self, cmd, typ, data=b"", timeout=8.0, want_resp=None, redact=False):
-        """Send and wait. Returns Pending (check .ok/.gen/.resp) or None on timeout."""
+    def request(self, cmd, typ, data=b"", timeout=8.0, want_resp=None, redact=False, strict=False):
+        """Send once; strict mode retains actual TX even on timeout/link loss."""
         if want_resp is None:
             want_resp = typ == GET
-        p = Pending(cmd, want_resp)
+        p = Pending(cmd, want_resp, strict=strict, typ=typ)
         mseq = self.send(cmd, typ, data, redact=redact, pending=p)
         got = p.event.wait(timeout)
+        p.completed = bool(got and (p.gen is not None or p.resp is not None))
         self._forget(mseq)
-        if not got and p.gen is None:
+        if not got and p.gen is None and not strict:
             return None
         return p
 
@@ -990,6 +1005,9 @@ class Phone:
         self.outbox = JsonlStore(str(self.dir / "outbox.jsonl"))
         self.lock = threading.RLock()
         self.send_lock = threading.Lock()
+        self.ipc_send_lock = threading.Lock()
+        self.last_ipc_send = None
+        self.data_notifications = collections.deque(maxlen=64)
         self.link = None
         self.sim, self.sim_raw = "UNKNOWN", None
         self.pin_attempted = False
@@ -1126,6 +1144,13 @@ class Phone:
             self.send_acks.put(dec_sms_send(fr.data))
         info = describe(fr)
         dec = info.get("decoded")
+        if fr.group == 0x0D and fr.type == NOTI:
+            record = {"ts": now(), "group": fr.group, "index": fr.index,
+                      "frame_hex": fr.encode().hex(), "payload_hex": fr.data.hex(),
+                      "decoded": dec or {"unmapped_binary": True}}
+            with self.lock:
+                self.data_notifications.append(record)
+            self.events.emit("data_notification", **record)
         if dec is None:
             return
         h = {SEC_PIN_STATUS: self._on_sim, NET_REGIST: self._on_regist,
@@ -1663,6 +1688,99 @@ class Phone:
         data = bytes([len(digits)]) + b"".join(bytes([1, ord(ch)]) for ch in digits)
         return self._simple(CALL_BURST_DTMF, EXEC, data)
 
+    def ipc_get(self, group, index):
+        cmd = (int(group), int(index))
+        if cmd not in IPC_GET_ALLOWLIST:
+            return 400, {"ok": False, "error": "GET command not allow-listed"}
+        with self.lock:
+            state = self.modem_state()
+            if state != "ONLINE":
+                return 409, {"ok": False, "error": "modem is not ONLINE", "modem_state": state}
+            link = self.link
+            if not link or not link.is_open:
+                return 503, {"ok": False, "error": "IPC link is down"}
+            try:
+                pending = link.request(cmd, GET, b"", timeout=8.0)
+            except LinkDown as e:
+                return 503, {"ok": False, "error": str(e)}
+        resp = pending.resp if pending else None
+        data = resp.data if resp else b""
+        decoded = {"type": resp.type if resp else None, "payload_hex": data.hex()}
+        payload_json = _json(data) if data else None
+        if isinstance(payload_json, dict):
+            decoded.update(payload_json)
+        elif cmd == (0x08, 0x0A):
+            decoded["preferred_net_type_byte"] = data[0] if data else None
+        else:
+            count = data[0] if data else None
+            decoded.update({"count": count, "reserved": data[1] if len(data) > 1 else None,
+                            "contexts": [{"cid": data[i], "active": data[i + 1]}
+                                         for i in range(2, min(len(data), 2 + (count or 0) * 2), 2)]})
+        return 200, {"ok": bool(resp or (pending and pending.gen)),
+                     "request_hex": Frame(0, 0, *cmd, GET).encode().hex(),
+                     "response_hex": resp.encode().hex() if resp else None,
+                     "response": decoded if resp else None,
+                     "gen_phone_res": pending.gen if pending else None,
+                     "timed_out": pending is None}
+
+    def ipc_send(self, group, index, typ, payload):
+        """One explicit data experiment, no retries; strict sequence and inner-GEN matching."""
+        try:
+            group, index, typ = int(group), int(index), int(typ)
+            if not all(0 <= n <= 255 for n in (group, index, typ)):
+                raise ValueError("IPC fields must be bytes")
+            if not isinstance(payload, str):
+                raise ValueError("payload must be hex text or a JSON object string")
+            if payload.lstrip().startswith("{"):
+                value = json.loads(payload)
+                if not isinstance(value, dict):
+                    raise ValueError("JSON payload must be an object")
+                data = payload.encode("utf-8")
+            else:
+                data = bytes.fromhex(payload)
+            if len(data) > 4096:
+                raise ValueError("payload exceeds experimental limit 4096")
+        except (ValueError, TypeError) as e:
+            return 400, {"ok": False, "error": str(e)}
+        cmd = (group, index)
+        allowed = ((cmd in DATA_SET_ALLOWLIST and typ == SET) or
+                   (cmd == DATA_CALL_ESTABLISH and typ == SET and data in (b"\x01", b"\x02")) or
+                   (cmd in IPC_GET_ALLOWLIST and typ == GET and not data))
+        if not allowed:
+            return 403, {"ok": False, "error": "not an experimental data command; SMS/call gates cannot be bypassed"}
+        if not self.ipc_send_lock.acquire(blocking=False):
+            return 409, {"ok": False, "error": "an IPC experiment is already in progress"}
+        try:
+            elapsed = None if self.last_ipc_send is None else time.monotonic() - self.last_ipc_send
+            # Emergency data-off must remain possible even during the cooldown/offline state.
+            off = cmd == DATA_CALL_ESTABLISH and data == b"\x02"
+            if not off and elapsed is not None and elapsed < 30:
+                return 429, {"ok": False, "error": "wait at least 30s between experiments",
+                             "retry_after": round(30 - elapsed, 3)}
+            state = self.modem_state()
+            if state != "ONLINE" and not off:
+                return 409, {"ok": False, "error": "modem is not ONLINE", "modem_state": state}
+            link = self.link
+            if not link or not link.is_open:
+                return 503, {"ok": False, "error": "IPC link is down"}
+            self.last_ipc_send = time.monotonic()
+            try:
+                # send has a 3s write deadline; 6s reply wait keeps total below 10s.
+                pending = link.request(cmd, typ, data, timeout=6.0, want_resp=(typ == GET), strict=True)
+            except LinkDown as e:
+                return 503, {"ok": False, "error": str(e)}
+            resp = pending.resp if pending else None
+            gen = pending.gen if pending else None
+            return 200, {"ok": bool(pending and pending.ok),
+                         "request_hex": pending.tx.hex() if pending and pending.tx else None,
+                         "response_hex": resp.encode().hex() if resp else None,
+                         "response": describe(resp) if resp else None,
+                         "gen_phone_res": gen,
+                         "gen_response_hex": pending.gen_frame.encode().hex() if pending and pending.gen_frame else None,
+                         "timed_out": not bool(pending and pending.completed)}
+        finally:
+            self.ipc_send_lock.release()
+
     # -- status
     def status(self):
         with self.lock:
@@ -1672,6 +1790,7 @@ class Phone:
                     "operator": self.operator, "signal": self.signal, "sms_ready": self.sms_ready,
                     "tx_enabled": self.tx_enabled(), "calls": self.current_calls(),
                     "sim_sweep": self.sweep_result,
+                    "data_notifications": list(self.data_notifications),
                     "simulated": self.simulate}
 
 
@@ -1888,6 +2007,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             route = (method, u.path.rstrip("/") or "/")
             if route == ("GET", "/status"):
                 return self._send(200, ph.status())
+            if route == ("POST", "/ipc/send"):
+                return self._send(*ph.ipc_send(body.get("group"), body.get("index"),
+                                              body.get("type"), body.get("payload")))
+            if route == ("POST", "/ipc/get"):
+                return self._send(*ph.ipc_get(body.get("group", -1), body.get("index", -1)))
             if route == ("GET", "/calls"):
                 return self._send(200, {"ok": True, "calls": ph.current_calls(include_recent=True)})
             if route == ("GET", "/sms/inbox"):
@@ -2043,6 +2167,21 @@ def main(argv=None):
     st = sub.add_parser("status")
     st.add_argument("--socket", default="/run/s22-phoned.sock")
     st.add_argument("--port", type=int, default=8095)
+    ig = sub.add_parser("ipc-get", help="safe read-only GET for the two documented IPC commands")
+    ig.add_argument("group", type=lambda x: int(x, 0), choices=(0x08, 0x0D))
+    ig.add_argument("index", type=lambda x: int(x, 0))
+    ig.add_argument("--socket", default="/run/s22-phoned.sock")
+    ig.add_argument("--port", type=int, default=8095)
+    ip = sub.add_parser("ipc-send", help="ONE explicit experimental data IPC frame (hex or JSON object)")
+    for field in ("group", "index", "type"):
+        ip.add_argument(field, type=lambda x: int(x, 0))
+    ip.add_argument("payload")
+    ip.add_argument("--socket", default="/run/s22-phoned.sock")
+    ip.add_argument("--port", type=int, default=8095)
+    data_call = sub.add_parser("data-call", help="stock RIL exact on/off frame (02,03 type 03)")
+    data_call.add_argument("state", choices=("on", "off"))
+    data_call.add_argument("--socket", default="/run/s22-phoned.sock")
+    data_call.add_argument("--port", type=int, default=8095)
     dc = sub.add_parser("send-test-frame-decode")
     dc.add_argument("hex")
     a = ap.parse_args(argv)
@@ -2058,6 +2197,23 @@ def main(argv=None):
     if a.cmd == "status":
         print(json.dumps(cli_get("/status", a.socket, a.port), indent=2, ensure_ascii=False))
         return 0
+    if a.cmd in ("ipc-send", "data-call"):
+        body = ({"group": 2, "index": 3, "type": SET, "payload": "01" if a.state == "on" else "02"}
+                if a.cmd == "data-call" else
+                {"group": a.group, "index": a.index, "type": a.type, "payload": a.payload})
+        conn = UnixHTTPConnection(a.socket, timeout=12) if a.socket and os.path.exists(a.socket) else http.client.HTTPConnection("127.0.0.1", a.port, timeout=12)
+        conn.request("POST", "/ipc/send", json.dumps(body), {"Content-Type": "application/json"})
+        res = conn.getresponse()
+        result = json.loads(res.read())
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 0 if res.status == 200 and result.get("ok") else 1
+    if a.cmd == "ipc-get":
+        conn = UnixHTTPConnection(a.socket) if a.socket and os.path.exists(a.socket) else http.client.HTTPConnection("127.0.0.1", a.port, timeout=10)
+        conn.request("POST", "/ipc/get", json.dumps({"group": a.group, "index": a.index}),
+                     {"Content-Type": "application/json"})
+        res = conn.getresponse()
+        print(json.dumps(json.loads(res.read()), indent=2, ensure_ascii=False))
+        return 0 if res.status == 200 else 1
     os.umask(0o077)                     # inbox/outbox/ipc logs are private
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     opener = None if a.simulate else device_opener(serve_rfs=not a.no_rfs)
