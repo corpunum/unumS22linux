@@ -72,3 +72,10 @@ tapped answer; an edge swipe goes home; the status strip shows battery from s22d
 - Not run on the phone: Wayland behaviour, touch focus for the text field under sway (the Quickshell shell needed an Exclusive-focus workaround), and the keyboard reveal.
 - No app switcher (`switcher` is reported unsupported), no terminal/agent launchers, no camera preview, no voice.
 - Font coverage on the phone decides how glyphs look; the shell uses plain letters instead of symbols to stay safe.
+
+## On-phone findings (2026-10-10, sway + pixman)
+
+- The window must be resizable: with a fixed size sway floats it at 432x936 in the middle of the panel. Resizable, sway tiles it to the whole output and the squeekboard layer shrinks it when the keyboard shows.
+- Do not fullscreen it: sway hides layer-shell `top` surfaces (squeekboard) behind a fullscreen window.
+- The release profile uses `opt-level = 3`. With `opt-level = "z"` a full-panel frame took about 430 ms on the S22; with 3 it takes about 120 ms.
+- Tap to first frame about 120 ms and to the new page about 240 ms (Quickshell: 12 ms and 125 ms). The shell redraws the whole 1080x2340 buffer per change; damage-limited redraw is the next step.
