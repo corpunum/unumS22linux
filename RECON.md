@@ -87,3 +87,27 @@ Original mobile-data success/exhausted-variants criterion remains unmet.
 Focused tests re-run via host verification: phoned 33 + experiments 10 passed;
 one non-failing ResourceWarning for an unclosed simulated Unix socket occurred.
 Do not confuse this synthetic proof with actual modem acceptance.
+
+## Resume preflight (2026-10-15 08:02 UTC)
+
+Read git log -8, 49da8ea stat, this file, MOBILE-DATA-HANDOFF and both external
+briefs before proceeding. Actual assigned source checkout is the separate git
+store `/home/corpunum/.openunum/worktrees/s22-mobile-data`, clean at a16a58b;
+remote matches. Initial project checkout was fast-forwarded from 20acf12 to
+remote a16a58b only; no source implementation was re-applied.
+
+Live phoned listener PID **2203**, executable `/srv/s22/hardware/bin/s22-phoned`,
+SHA256 `11ce72e9c4e113e0a1304917f7890171d7c2ca3735cf291291488953c56e8762`
+(still 20acf12). ONLINE, IPC open, SMS ready, PB_INIT_COMPLETE, EGPRS Vodafone GR,
+no calls. Uptime 47403s (a different boot than previous checkpoint; no reboot by
+this session). Mute check level/left/right=0. rmnet0–7 DOWN; ecm0/wlan0 UP and
+tailscale0 UP/LOWER_UP. Defaults unchanged: ecm0 via 10.55.0.1 and wlan0 via
+192.168.50.1 metric 600. No link or route mutation.
+
+Downloaded both retained IPC logs to private untracked `out/mobile-data-20261015/`
+for row-by-row inspection: **15,016** rows, times 1792014424.907–1792051238.916.
+TX counts: (08,05) GET=2448, (08,03) GET=1224, (07,06) GET=1224; zero data-command
+TX in this covered interval. No experimental command to replay. This is bounded
+retention evidence, not all-time absence. No SET/GET/deploy/restart/reboot in this
+preflight. Stock JSON schema and validated IP decoder work proceeds on host;
+all phone transmissions remain coordinator-only.
