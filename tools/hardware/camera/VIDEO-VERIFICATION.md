@@ -18,3 +18,11 @@ Initial phone check: `camera/status` busy=false, cooldown_s=0; ecm0 and tailscal
 ## Acceptance
 
 Pending backed-up deployment and sequential 2-second/5-second rear recording tests (exposure 20000 us, gain 8). Require gallery AVI entries, rig-side ffprobe and full decode. If the camera client wedges, allow only the requested recovery reboot sequence: max-frames-per-session 7 → 5 → 3, at most two reboots, then stop and document.
+
+## Deployment checkpoint
+
+AArch64 musl release build and `cargo fmt --check` passed. Installed with phone installer (`--binary /tmp/s22d-camera-safe`). s22d SHA-256: `36a615c40ed411cc38a3a5d49c864d0268c593896cbede0bfdddf7245b2072d4`.
+
+Backup: `/srv/s22/state/s22d/camera-video-backup-20261015T080132Z` (original s22d, s22-camera, keepalive config). Original s22d hash `ab0ee8fd822aa1d9fa03d8787907d7cff72324eba925de91c8b88b31abed99f3`. Existing s22-camera matches branch source and was left unchanged; identical sibling `s22-camera.py` and new `record-safe.py` installed for imports. Script hashes: s22-camera.py `e0f0d3f776bd8d15906e6a338b925ce9c79e074b4deb25ce9127359223ff2437`; record-safe.py `0d9385cee964c6fda619887f7887d60df9fb4942190ba869d0595e811cc38cc9`.
+
+Post-deploy camera busy=false/cooldown_s=0, API answering, mute=0 and both PCM channels=0. Rollback: `sh /srv/s22/hardware/install-s22d.sh --rollback` (and remove the newly added Python siblings if rolling scripts back).
