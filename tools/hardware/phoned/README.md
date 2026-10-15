@@ -55,8 +55,9 @@ All state lives in `/srv/s22/state/phoned/` (mode 0700):
   the tx frame is written as `<redacted>`.
 - `inbox.jsonl` and `outbox.jsonl` are append-only; the last record with a given id wins.
 - `ipc.jsonl` logs every tx/rx frame in hex and rotates at 4 MiB to `.1`.
-- No PWR or NET attach/mode command is ever sent. The one exception is
-  `PWR_PHONE_STATE normal`, and only with `--radio-normal`.
+- No attach or mode mutation is automatic. `PWR_PHONE_STATE normal` requires
+  `--radio-normal`. Explicit experimental data controls below are operator-only;
+  they cannot transmit arbitrary calls, SMS, SIM commands or network-mode SETs.
 
 ## SIM day (first run with a SIM)
 
@@ -90,3 +91,35 @@ Since 2026-10-08 the phone runs `modem` (cbd) and `phoned` as `s22-keepalive` se
 
 Tests: `python3 -I -B tools/hardware/phoned/test_s22_phoned.py`. They use synthetic frames
 and simulate mode only, with no /dev access.
+
+## Explicit experimental data IPC (2026-10-14)
+
+```
+s22-phoned ipc-send <group> <index> <type> '<hex|JSON-object>'
+s22-phoned data-call on|off
+```
+
+`POST /ipc/send {group,index,type,payload}` uses the same guarded sender. Numbers
+on the CLI accept decimal or `0x` notation. Only SET (type 3) to `0d/01`, `0d/03`,
+`0d/04`, `0d/14`, `0d/1b`, `0d/1d`, and the exact stock RIL data-call control
+`02/03` selectors `01` (on) / `02` (off) are permitted. The two documented GETs
+`08/0a` and `0d/04` accept type 2 with an empty payload. JSON text is encoded
+unchanged as UTF-8; hex is decoded verbatim. Limit 4096 payload bytes.
+
+One frame, no retries; max 3 s write deadline plus 6 s reply wait. Matching requires
+nonzero ACK sequence and matching command; GEN_PHONE_RES also requires its inner
+command and request type. The result preserves the actual sequenced TX frame,
+matching RESP and/or full GEN frame and raw error code (`0x8000` = accepted), plus
+`timed_out`. An acceptance is **not proof of working data**. JSON RESP is retained
+without assigning undocumented success semantics. Concurrent experiments are
+refused; at least 30 s between frames. Emergency off bypasses cooldown/ONLINE
+checks but still requires an open link. Experiments require ONLINE otherwise.
+These controls do not alter SMS/call gates and do not change Linux routes.
+
+All RX/TX is logged in `ipc.jsonl`; `/status.data_notifications` and
+`data_notification` events expose a bounded 64-record history of all `(0d,*)`
+type-3 notifications, including full frame, raw payload and decoded JSON. Binary
+notifications without a proven layout are explicitly `unmapped_binary`, not
+assigned invented addresses or CIDs. Interface mapping must be verified before
+using any notification to configure rmnet. Stock builders and live experiments
+are documented in `RECON.md`.
