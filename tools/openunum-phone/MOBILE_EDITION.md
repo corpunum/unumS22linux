@@ -87,3 +87,25 @@ calls its method and path with exactly the parameters its schema names, that the
 
 Rollback: remove `$C/root/.openunum/plugins/s22-device` and restart OpenUnum. s22d and phone state are untouched.
 No phone hardware was available during development; installation and behaviour on the device are unverified.
+
+## On-demand Lightpanda CDP
+
+`lightpanda-ondemand.mjs` provides a loopback CDP proxy on `127.0.0.1:9222`. It starts
+`/opt/lightpanda/lightpanda serve` on backend port 19222 on the first HTTP/WebSocket CDP
+request, waits for the backend to accept connections before forwarding that request, and
+terminates the exact PID recorded in `$OPENUNUM_HOME/lightpanda/lightpanda.pid` after
+600 seconds without requests. `LIGHTPANDA_BIN`, `LIGHTPANDA_PORT`,
+`LIGHTPANDA_BACKEND_PORT`, and `LIGHTPANDA_IDLE_MS` can override paths/ports/timer. It
+runs inside the Arch chroot, so `/opt/lightpanda/lightpanda` is the chroot path.
+
+Install with `sh tools/openunum-phone/install-lightpanda-ondemand.sh` on the phone, then
+run `OPENUNUM_HOME=/root/.openunum node /opt/openunum/tools/lightpanda-ondemand.mjs serve`
+inside the chroot and point OpenUnum's browser CDP endpoint at `http://127.0.0.1:9222`.
+The proxy is deliberately separate from OpenUnum server startup; keep it running only
+when browser tools are enabled. It does not enable browser tools or edit OpenUnum's
+configuration. `status`, `start`, and `stop` are available for operational checks.
+
+Hardware-free lifecycle tests: `node --test tools/openunum-phone/tests/lightpanda-ondemand.test.mjs`
+(or `python3 tools/openunum-phone/test_lightpanda_ondemand.py`). This repository has no
+root `package.json`, `tests/unit`, or Vitest setup, so the requested OpenUnum Vitest command
+does not apply here.
