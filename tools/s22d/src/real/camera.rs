@@ -7,7 +7,7 @@
 //! global lock with a failure cooldown (`CameraGuard` in `app.rs`).
 
 use super::runner::Runner;
-use crate::backends::{Camera, CaptureReq};
+use crate::backends::{Camera, CaptureReq, RecordReq};
 use crate::config::Config;
 use crate::error::{ApiError, ApiResult};
 use axum::http::StatusCode;
@@ -116,7 +116,7 @@ impl CameraClient {
         a
     }
 
-    fn run_client(&self, args: &[String]) -> Result<String, ApiError> {
+    fn run_client(&self, args: &[String], deadline: Duration) -> Result<String, ApiError> {
         let mut child = Command::new(&self.cfg.python)
             .args(args)
             .stdin(Stdio::null())
@@ -126,7 +126,7 @@ impl CameraClient {
             .map_err(|e| ApiError::unavailable(format!("cannot start camera client: {e}")))?;
         let out = child.stdout.take().map(drain);
         let err = child.stderr.take().map(drain);
-        let hard = Duration::from_secs(self.cfg.camera_deadline_s) + self.extra_wait;
+        let hard = deadline + self.extra_wait;
         let start = Instant::now();
         let mut termed: Option<Instant> = None;
         loop {
@@ -210,6 +210,33 @@ impl CameraClient {
         }
     }
 
+    /// Copy a finished capture into the OpenUnum gallery. The gallery keeps it after `prune`
+    /// drops the working copy. Never fails the capture: errors come back as text.
+    fn save_to_gallery(
+        &self,
+        png: &Path,
+        stamp: u64,
+        sensor: &str,
+    ) -> Result<Option<PathBuf>, String> {
+        let Some(dir) = &self.cfg.gallery_dir else {
+            return Ok(None);
+        };
+        // Only when the OpenUnum home (<home>/assets/generated -> <home>) is there.
+        if !dir
+            .parent()
+            .and_then(Path::parent)
+            .is_some_and(Path::is_dir)
+            || !png.is_file()
+        {
+            return Ok(None);
+        }
+        let dst = dir.join(format!("cam-{stamp}-{sensor}.png"));
+        std::fs::create_dir_all(dir)
+            .and_then(|_| std::fs::copy(png, &dst))
+            .map(|_| Some(dst))
+            .map_err(|e| format!("gallery copy failed: {e}"))
+    }
+
     /// Keep the newest `camera_keep` captures; delete the rest (raw frames are 6 MB each).
     fn prune(&self) {
         let Ok(rd) = std::fs::read_dir(&self.cfg.camera_dir) else {
@@ -242,6 +269,109 @@ impl CameraClient {
 
     fn last_path(&self) -> PathBuf {
         self.cfg.camera_dir.join("last.json")
+    }
+}
+
+pub fn validate_record(req: &RecordReq) -> Result<(), ApiError> {
+    if req.sensor != "rear" && req.sensor != "front" {
+        return Err(ApiError::bad_request(
+            "sensor must be \"rear\" or \"front\"",
+        ));
+    }
+    if !(1..=30).contains(&req.seconds) {
+        return Err(ApiError::bad_request("seconds must be 1-30"));
+    }
+    if req.fps.is_some_and(|fps| !(1..=120).contains(&fps)) {
+        return Err(ApiError::bad_request("fps must be 1-120"));
+    }
+    if req.exposure_us.is_some_and(|e| !EXPOSURE_US.contains(&e)) {
+        return Err(ApiError::bad_request("exposure_us must be 100-30000"));
+    }
+    if req
+        .gain
+        .is_some_and(|g| !g.is_finite() || !GAIN.contains(&g))
+    {
+        return Err(ApiError::bad_request("gain must be 1.0-16.0"));
+    }
+    Ok(())
+}
+
+impl CameraClient {
+    fn record_args(&self, req: &RecordReq, out: &Path) -> Vec<String> {
+        let record_safe = self
+            .cfg
+            .camera_client
+            .parent()
+            .unwrap()
+            .join("record-safe.py");
+        let mut a = self.cfg.python_args.clone();
+        a.extend([
+            record_safe.display().to_string(),
+            "--sensor".into(),
+            req.sensor.clone(),
+            "--seconds".into(),
+            req.seconds.to_string(),
+            "--out".into(),
+            out.display().to_string(),
+            "--max-frames-per-session".into(),
+            "7".to_string(),
+        ]);
+        if let Some(fps) = req.fps {
+            a.extend(["--fps".into(), fps.to_string()]);
+        }
+        if let Some(e) = req.exposure_us {
+            a.extend(["--exposure-us".into(), e.to_string()]);
+        }
+        if let Some(g) = req.gain {
+            a.extend(["--gain".into(), g.to_string()]);
+        }
+        a.extend([
+            "--deadline".into(),
+            (u64::from(req.seconds) + 60).to_string(),
+        ]);
+        // record-safe.py always passes --allow-fw-stall to its own capture
+        // sessions (parity with the old `record` command, which passed it
+        // unconditionally); it is not a record-safe.py CLI flag.
+        a
+    }
+
+    fn save_video(
+        &self,
+        video: &Path,
+        stamp: u64,
+        sensor: &str,
+    ) -> Result<Option<PathBuf>, String> {
+        let Some(dir) = &self.cfg.gallery_dir else {
+            return Ok(None);
+        };
+        if !dir
+            .parent()
+            .and_then(Path::parent)
+            .is_some_and(Path::is_dir)
+            || !video.is_file()
+        {
+            return Ok(None);
+        }
+        let dst = dir.join(format!("vid-{stamp}-{sensor}.avi"));
+        std::fs::create_dir_all(dir)
+            .and_then(|_| std::fs::copy(video, &dst))
+            .map(|_| Some(dst))
+            .map_err(|e| format!("gallery copy failed: {e}"))
+    }
+
+    fn prune_recordings(&self) {
+        let Ok(rd) = std::fs::read_dir(&self.cfg.camera_dir) else {
+            return;
+        };
+        let mut files: Vec<_> = rd
+            .filter_map(Result::ok)
+            .filter(|e| e.file_name().to_string_lossy().starts_with("record-") && e.path().is_dir())
+            .collect();
+        files.sort_by_key(|e| e.file_name());
+        let count = files.len().saturating_sub(3);
+        for e in files.into_iter().take(count) {
+            let _ = std::fs::remove_dir_all(e.path());
+        }
     }
 }
 
@@ -287,7 +417,10 @@ impl Camera for CameraClient {
             .join(format!("cap-{stamp}-{}", req.sensor));
         let (png, raw) = (base.with_extension("png"), base.with_extension("raw"));
         let t0 = Instant::now();
-        let stdout = self.run_client(&self.client_args(req, &png, &raw))?;
+        let stdout = self.run_client(
+            &self.client_args(req, &png, &raw),
+            Duration::from_secs(self.cfg.camera_deadline_s),
+        )?;
         let client = last_json(&stdout)
             .ok_or_else(|| ApiError::upstream("camera client printed no JSON result"))?;
         if client["ok"] != true {
@@ -305,9 +438,12 @@ impl Camera for CameraClient {
         } else {
             None
         };
+        let gallery = self.save_to_gallery(&png, stamp, &req.sensor);
         let out = json!({
             "ok": true,
             "sensor": req.sensor,
+            "gallery_path": gallery.as_ref().ok().and_then(|p| p.as_ref()).map(|p| p.display().to_string()),
+            "gallery_error": gallery.as_ref().err(),
             "path": png.display().to_string(),
             "raw": raw.exists().then(|| raw.display().to_string()),
             "developed": developed,
@@ -321,6 +457,57 @@ impl Camera for CameraClient {
         let _ = std::fs::write(self.last_path(), out.to_string());
         self.prune();
         Ok(out)
+    }
+
+    fn record(&self, req: &RecordReq) -> ApiResult {
+        validate_record(req)?;
+        if let Some(why) = self.availability() {
+            return Err(ApiError::unavailable(why));
+        }
+        std::fs::create_dir_all(&self.cfg.camera_dir)?;
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let recording_dir = self
+            .cfg
+            .camera_dir
+            .join(format!("record-{stamp}-{}", req.sensor));
+        std::fs::create_dir_all(&recording_dir)?;
+        let deadline = Duration::from_secs(u64::from(req.seconds) + 60);
+        let stdout = self.run_client(&self.record_args(req, &recording_dir), deadline)?;
+        let client = last_json(&stdout)
+            .ok_or_else(|| ApiError::upstream("camera client printed no JSON result"))?;
+        if client["ok"] != true {
+            return Err(ApiError::new(
+                StatusCode::BAD_GATEWAY,
+                "camera_failed",
+                client["error"]
+                    .as_str()
+                    .unwrap_or("camera client reported failure")
+                    .to_string(),
+            ));
+        }
+        let video = recording_dir.join("video.avi");
+        if !video.is_file() {
+            return Err(ApiError::upstream(
+                "camera record completed without video.avi",
+            ));
+        }
+        let gallery = self.save_video(&video, stamp, &req.sensor);
+        let result = json!({
+            "ok": true,
+            "path": video.display().to_string(),
+            "gallery_path": gallery.as_ref().ok().and_then(|p| p.as_ref()).map(|p| p.display().to_string()),
+            "gallery_error": gallery.as_ref().err(),
+            "frames": client["frames"],
+            "sessions": client["sessions"],
+            "seconds": req.seconds,
+            "effective_fps": client["effective_fps"],
+            "fps": req.fps.unwrap_or(30),
+        });
+        self.prune_recordings();
+        Ok(result)
     }
 }
 
@@ -342,6 +529,7 @@ echo "{\"ok\": true, \"path\": \"$o\", \"width\": 510, \"height\": 383}"
     fn setup(script: &str) -> (Tmp, CameraClient) {
         let t = Tmp::new();
         t.script("srv/s22/hardware/bin/s22-camera", script);
+        t.script("srv/s22/hardware/bin/record-safe.py", script);
         let mut c = Config::rooted(t.path());
         c.python = "sh".into();
         c.python_args = vec![];
@@ -351,6 +539,16 @@ echo "{\"ok\": true, \"path\": \"$o\", \"width\": 510, \"height\": 383}"
         (t, cam)
     }
 
+    fn record_req(sensor: &str) -> RecordReq {
+        RecordReq {
+            sensor: sensor.into(),
+            seconds: 5,
+            fps: None,
+            exposure_us: None,
+            gain: None,
+        }
+    }
+
     fn req(sensor: &str) -> CaptureReq {
         CaptureReq {
             sensor: sensor.into(),
@@ -358,6 +556,29 @@ echo "{\"ok\": true, \"path\": \"$o\", \"width\": 510, \"height\": 383}"
             gain: None,
             develop: true,
         }
+    }
+
+    #[test]
+    fn video_recording_creates_gallery_copy_and_passes_deadline_controls() {
+        let (t, cam) = setup(
+            r#"
+while [ $# -gt 0 ]; do case "$1" in --out) o=$2;; esac; shift; done
+mkdir -p "$o"; echo avi > "$o/video.avi"
+echo "{\"ok\":true,\"frames\":25,\"sessions\":4,\"seconds\":5,\"effective_fps\":5.0,\"path\":\"$o/video.avi\"}"
+"#,
+        );
+        t.write("mnt/omarchy-trial/root/.openunum/openunum.json", "{}");
+        let mut r = record_req("rear");
+        r.exposure_us = Some(20000);
+        r.gain = Some(8.0);
+        let value = cam.record(&r).unwrap();
+        assert_eq!(value["frames"], 25);
+        assert_eq!(value["sessions"], 4);
+        assert!(value["gallery_path"].as_str().unwrap().ends_with(".avi"));
+        assert_eq!(
+            std::fs::read_to_string(value["gallery_path"].as_str().unwrap()).unwrap(),
+            "avi\n"
+        );
     }
 
     #[test]
@@ -408,6 +629,29 @@ echo "{\"ok\": true, \"path\": \"$o\", \"width\": 510, \"height\": 383}"
             assert!(args.contains(want), "{want} missing from {args}");
         }
         assert_eq!(cam.status().unwrap()["last"]["sensor"], "front");
+    }
+
+    #[test]
+    fn capture_is_copied_to_the_openunum_gallery() {
+        let (t, cam) = setup(OK_SCRIPT);
+        t.write("mnt/omarchy-trial/root/.openunum/openunum.json", "{}");
+        let v = cam.capture(&req("rear")).unwrap();
+        let g = v["gallery_path"].as_str().expect("gallery_path");
+        assert!(
+            g.contains(".openunum/assets/generated/cam-") && g.ends_with("-rear.png"),
+            "{g}"
+        );
+        assert_eq!(std::fs::read_to_string(g).unwrap(), "x\n");
+        assert!(v["gallery_error"].is_null());
+    }
+
+    #[test]
+    fn no_gallery_copy_without_an_openunum_home() {
+        let (t, cam) = setup(OK_SCRIPT);
+        let v = cam.capture(&req("rear")).unwrap();
+        assert_eq!(v["ok"], true);
+        assert!(v["gallery_path"].is_null());
+        assert!(!t.path().join("mnt/omarchy-trial/root/.openunum").exists());
     }
 
     #[test]

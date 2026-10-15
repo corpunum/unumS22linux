@@ -65,10 +65,28 @@ fn yes() -> bool {
     true
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct RecordReq {
+    pub sensor: String,
+    #[serde(default = "default_seconds")]
+    pub seconds: u8,
+    #[serde(default)]
+    pub fps: Option<u32>,
+    #[serde(default)]
+    pub exposure_us: Option<u32>,
+    #[serde(default)]
+    pub gain: Option<f32>,
+}
+
+fn default_seconds() -> u8 {
+    5
+}
+
 pub trait Camera: Send + Sync {
     fn availability(&self) -> Option<String>;
     fn status(&self) -> ApiResult;
     fn capture(&self, req: &CaptureReq) -> ApiResult;
+    fn record(&self, req: &RecordReq) -> ApiResult;
 }
 
 pub trait Display: Send + Sync {
