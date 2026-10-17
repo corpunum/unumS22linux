@@ -248,3 +248,74 @@ Re-activation: after the manual down, `s22-phoned mobile-data up` (new address `
 Open items: radio stays on EGPRS (2G) — LTE needs the initial-attach APN `(0D,14)`/profile sync `(0D,25)`
 work, not done here. DNS servers are reported but not written to resolv.conf (system DNS stays on Wi-Fi/USB).
 phoned keeps data state in memory; a phoned restart while data is up loses track of it (run `down` first).
+
+## S2b: LTE initial-attach APN from OPEN SOURCES ONLY (2026-10-17, written BEFORE the SET)
+
+Rule for this step: no disassembly of libsec-ril; only public open-source code.
+
+Sources fetched (git, shallow):
+- Replicant libsamsung-ipc `https://git.replicant.us/replicant/hardware_replicant_libsamsung-ipc.git`
+  master `81a412c` and branch `wip/herolte` `784c15b`: group 0x0D ends at `IPC_GPRS_PORT_LIST 0x0D11`
+  (`include/gprs.h:33-49`). **No attach-APN / LTE profile command upstream.**
+- Replicant samsung-ril `https://git.replicant.us/replicant/hardware_replicant_libsamsung-ril.git` `2dd9f22`:
+  no `RIL_REQUEST_SET_INITIAL_ATTACH_APN` / data-profile handling.
+- libsamsung-ipc fork for Shannon LTE modems `https://github.com/manoedinata/libsamsung-ipc` (GPL-2.0, branch
+  `shannon-lte-data`, commit `bba6a0d`): **defines it.**
+  - `include/gprs.h:63` `#define IPC_GPRS_LTE_ATTACH_APN_INFO 0x0D14` (also `:70` `SET_APN_INFO 0x0D1B`,
+    `:77` `SYNC_PROFILE_INFO 0x0D25`, names only).
+  - `include/gprs.h:222-250` `struct ipc_gprs_lte_attach_apn_info_data` (packed, 194 bytes, size-checked at
+    `samsung-ipc/gprs.c:34-35`; offsets asserted in `samsung-ipc/tests/shannon_data.c:116-123`).
+  - `samsung-ipc/gprs.c:120-158` `ipc_gprs_lte_attach_apn_info_setup()`: type 1, profile_id arg, protocol and
+    protocol_roaming = `IPC_GPRS_PROTOCOL_IPV4` 0x02 (`include/gprs.h:124`), APN strncpy, rest zero.
+  - Typical usage: samsungipcd `https://github.com/manoedinata/samsungipcd` `4e7bafd` `samsung-ipc.c:319-321`
+    (and `:435-437`): `setup(&attach, 1, apn, NULL, NULL)` then `ipc_client_send(..., IPC_GPRS_LTE_ATTACH_APN_INFO,
+    IPC_TYPE_SET, &attach, sizeof(attach))`. README: on a Galaxy J4 the modem re-registers onto LTE a few seconds
+  after this SET, answer code 0x8000.
+- Supporting evidence on a JSON-era Shannon CP (S5308, Galaxy A33), public doc
+  `github.com/mistrjirka/Linuxa33 docs/A33_MODEMMANAGER_SIPC_INTEGRATION_2026-09-28.md:361`: "the legacy
+  daemon's 0x0d14 APN attach SET ... was accepted by the modem". So the binary layout is accepted even
+  where other GPRS commands are JSON (our CP reports `gprs:[255]`).
+- No GET for 0x0D14 is defined in any of these sources -> step (2) "read current value" is impossible from
+  open sources; nothing is read. 0x0D14 was never sent by phoned before (ipc.jsonl, RECON above).
+
+Frame layout (payload offsets; IPC header `len_le16 mseq aseq grp idx type`):
+
+| off | size | field | value |
+|---|---|---|---|
+| 0 | 1 | type | 0x01 |
+| 1 | 1 | profile_id | 0x01 |
+| 2 | 1 | protocol | 0x02 (IPv4) |
+| 3 | 101 | apn | `internet.vodafone.gr` NUL-padded |
+| 104 | 23 | unknown1..4 | 0 |
+| 127 | 32 | username | 0 |
+| 159 | 32 | password | 0 |
+| 191 | 1 | auth | 0 |
+| 192 | 1 | protocol_roaming | 0x02 |
+| 193 | 1 | unknown5 | 0 |
+
+Exact TX (mseq shown as 00): `c9 00 00 00 0d 14 03` + `010102 696e7465726e65742e766f6461666f6e652e6772` +
+zeros to offset 192 + `02 00`. Builder: `lte_attach_apn_body()` in `tools/hardware/phoned/s22-phoned.py`,
+tested in `test_mobile_data.py`. IPv4 chosen because it is the only protocol value the source verified.
+
+Plan: one `s22-phoned ipc-send 0x0d 0x14 3 <hex>` (allow-listed already in deployed phoned `d42e488a`, no
+deploy). Expect GEN 0x8000 and a spontaneous re-registration (J4 behaviour). If none in ~60 s, least
+invasive trigger. Watch act/band/RSRP up to 3 min. Rollback if registration lost > 2 min: one SET of the same
+command with an empty APN (network-default attach). Data stays DOWN throughout.
+
+## S2b live result (2026-10-17 UTC): on LTE
+
+One SET only, no deploy (phoned `d42e488a` = master already allow-lists `(0D,14)`), no trigger needed.
+
+- Before (epoch 1792228041): `ONLINE egprs band 0 home_3gpp ps rej 0`, RSRP 0, lte_sig 99, rssi_level 32, volte 2.
+- TX `c90099000d1403010102696e7465726e65742e766f6461666f6e652e6772` + zeros + `0200` (194-byte payload, mseq 0x99).
+- Reply GEN `0c00cf998001020d14030080` = **0x8000 accepted**. Result JSON in `/srv/s22/state/mobile-data/lte-attach-apn-*.json`.
+- +10 s: `act lte`, service_domain `csps`; from +20 s steady `lte home_3gpp ps rej 0`, PCI 334, TAC 3062,
+  RSRP **-99 dBm**, RSRQ -7 dB, SNR 30 dB, lte_sig 12, rssi_level 72, bars 3. Registration never dropped (3 min, 10 s polls).
+- The modem's JSON `band` field stays 0 on LTE too (not populated by this CP), so band is unknown, not "0".
+- Modem-reported `volte` changed 2 -> 1 and `ims_emc` 2 -> 1 after moving to LTE. No IMS/VoLTE command was sent;
+  no calls, no SMS. Meaning of these values is not established.
+- End state: ONLINE, SMS ready, SIM READY, data call released (call_state 3), rmnet0 DOWN, routes unchanged
+  (ecm0 default, wlan0 metric 600), ecm0/wlan0/tailscale0 up. No rollback needed.
+
+Not persisted: the profile is sent by hand; after a modem/phone restart it must be sent again (samsungipcd sends
+it when the SIM is up). Follow-up: have phoned send `lte_attach_apn_body(DEFAULT_APN)` once after SIM READY.
