@@ -1,0 +1,110 @@
+#!/bin/sh
+# s22-clock: keep the S22's wall clock sane across boots (BusyBox sh, no packages).
+#
+# The phone can boot with the clock at 2021, which breaks TLS and logs
+# Tailscale out.  Sources, in order:
+#   1. restore: max(system clock, RTC, last saved time, build floor).  The
+#      clock only ever moves forward here, so this needs no network.
+#   2. net: HTTP Date header (plain http, no TLS validation), then busybox
+#      NTP as fallback.  Only accepted if the year is plausible.
+#   3. save: periodically persist the time (there is no shutdown hook under
+#      native-guardian) and write it to the RTC.
+# Usage: s22-clock restore | save | net | daemon | status
+STATE_DIR=${S22_CLOCK_STATE:-/srv/s22/state/clock}
+STATE=$STATE_DIR/last-time
+FLOOR=1792000000            # 2026-10-14; anything older is certainly wrong
+SAVE_EVERY=300
+NET_EVERY=21600
+HTTP_URLS="http://connectivitycheck.gstatic.com/generate_204 http://neverssl.com http://10.55.0.1"
+NTP_SERVERS="pool.ntp.org time.cloudflare.com"
+
+log() { echo "s22-clock: $*"; }
+now() { date -u +%s; }
+num() { case "$1" in ''|*[!0-9]*) echo 0 ;; *) echo "$1" ;; esac; }
+
+rtc_epoch() {
+    [ -e /dev/rtc0 ] || { echo 0; return; }
+    t=$(hwclock -r -u 2>/dev/null | head -1) || { echo 0; return; }
+    # busybox hwclock -r prints e.g. "Sat Oct 17 07:57:28 2026  0.000000 seconds"
+    set -- $t
+    [ $# -ge 5 ] || { echo 0; return; }
+    e=$(date -u -d "$(echo "$2 $3 $5 $4" | awk '{m=index("JanFebMarAprMayJunJulAugSepOctNovDec",$1);printf "%s-%02d-%02d %s",$3,(m+2)/3,$2,$4}')" +%s 2>/dev/null)
+    num "$e"
+}
+
+saved_epoch() { [ -r "$STATE" ] && num "$(head -1 "$STATE")" || echo 0; }
+
+set_clock() {   # $1 = epoch
+    date -u -s "@$1" >/dev/null 2>&1 || date -u -s "$(date -u -d "@$1" '+%Y-%m-%d %H:%M:%S' 2>/dev/null)" >/dev/null 2>&1
+}
+
+save() {
+    t=$(now)
+    [ "$t" -ge "$FLOOR" ] || { log "not saving implausible time $t"; return 1; }
+    mkdir -p "$STATE_DIR" && echo "$t" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+    [ -e /dev/rtc0 ] && hwclock -w -u 2>/dev/null
+    return 0
+}
+
+restore() {
+    cur=$(now); best=$cur; src=system
+    r=$(rtc_epoch); s=$(saved_epoch)
+    [ "$r" -gt "$best" ] && { best=$r; src=rtc; }
+    [ "$s" -gt "$best" ] && { best=$s; src=saved; }
+    [ "$FLOOR" -gt "$best" ] && { best=$FLOOR; src=floor; }
+    if [ "$best" -gt "$((cur + 2))" ]; then
+        set_clock "$best" && log "restored clock from $src: $(date -u)"
+    else
+        log "clock already ok: $(date -u)"
+    fi
+}
+
+http_epoch() {  # prints epoch from an HTTP Date header, or nothing
+    for u in $HTTP_URLS; do
+        d=$(curl -sI --max-time 6 "$u" 2>/dev/null | tr -d '\r' | awk 'tolower($1)=="date:"{print $3,$4,$5,$6}')
+        [ -n "$d" ] || continue
+        e=$(echo "$d" | awk '{m=index("JanFebMarAprMayJunJulAugSepOctNovDec",$2);printf "%s-%02d-%02d %s",$3,(m+2)/3,$1,$4}')
+        e=$(num "$(date -u -d "$e" +%s 2>/dev/null)")
+        [ "$e" -ge "$FLOOR" ] && { echo "$e"; return; }
+    done
+}
+
+net() {
+    e=$(http_epoch); how=http
+    if [ -z "$e" ]; then
+        for s in $NTP_SERVERS; do
+            if timeout 20 ntpd -q -n -p "$s" >/dev/null 2>&1; then
+                [ "$(now)" -ge "$FLOOR" ] && { save; log "synced via ntp $s: $(date -u)"; return 0; }
+            fi
+        done
+        log "no network time source reachable"; return 1
+    fi
+    cur=$(now); diff=$((e - cur)); [ "$diff" -lt 0 ] && diff=$((-diff))
+    if [ "$diff" -gt 3 ]; then set_clock "$e" && log "synced via $how (was off by ${diff}s): $(date -u)"; fi
+    save
+}
+
+daemon() {
+    mkdir -p "$STATE_DIR"
+    exec 9>"$STATE_DIR/daemon.lock"
+    flock -n 9 || { log "daemon already running"; exit 0; }
+    restore
+    last_net=0; synced=0
+    while :; do
+        t=$(now)
+        if [ "$synced" -eq 0 ] || [ $((t - last_net)) -ge "$NET_EVERY" ]; then
+            if net; then synced=1; last_net=$(now); else [ "$synced" -eq 0 ] || last_net=$t; fi
+        fi
+        [ "$(now)" -ge "$FLOOR" ] && save
+        sleep "$([ "$synced" -eq 0 ] && echo 30 || echo $SAVE_EVERY)"
+    done
+}
+
+case "$1" in
+    restore) restore ;;
+    save) save ;;
+    net) net ;;
+    daemon) daemon ;;
+    status) echo "system=$(now) rtc=$(rtc_epoch) saved=$(saved_epoch) floor=$FLOOR" ;;
+    *) echo "usage: $0 restore|save|net|daemon|status" >&2; exit 2 ;;
+esac
