@@ -46,6 +46,24 @@ class BodiesTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 P.define_pdp_body(1, bad)
 
+    def test_lte_attach_apn_layout_matches_libsamsung_ipc(self):
+        # Offsets asserted by libsamsung-ipc (manoedinata fork) samsung-ipc/tests/shannon_data.c:116-123.
+        b = P.lte_attach_apn_body('internet.vodafone.gr')
+        self.assertEqual(len(b), 194)
+        self.assertEqual(b[:3], bytes([1, 1, P.GPRS_PROTOCOL_IPV4]))      # type, profile_id, protocol
+        self.assertEqual(b[3:104].rstrip(b'\0'), b'internet.vodafone.gr')  # apn[101] at 3
+        self.assertEqual(b[127:191], bytes(64))                           # username @127, password @159
+        self.assertEqual(b[191:], bytes([0, P.GPRS_PROTOCOL_IPV4, 0]))     # auth @191, protocol_roaming, unknown5
+        self.assertEqual(b[104:127], bytes(23))
+        fr = frame(P.GPRS_LTE_ATTACH_APN_INFO, b)
+        self.assertEqual(fr[:7], bytes.fromhex('c90000000d1403'))
+        self.assertIn(P.GPRS_LTE_ATTACH_APN_INFO, P.DATA_SET_ALLOWLIST)
+        # empty APN (network-chosen default bearer) is the rollback value
+        self.assertEqual(P.lte_attach_apn_body('')[3:104], bytes(101))
+        for bad in ('a"b', 'x' * 101, 'a b'):
+            with self.assertRaises(ValueError):
+                P.lte_attach_apn_body(bad)
+
 
 class MobileDataTest(unittest.TestCase):
     def setUp(self):

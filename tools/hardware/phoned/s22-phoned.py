@@ -66,6 +66,7 @@ GEN_OK = 0x8000
 GPRS_DEFINE_PDP_CONTEXT, GPRS_PS, GPRS_PDP_CONTEXT = (0x0D, 0x01), (0x0D, 0x03), (0x0D, 0x04)
 GPRS_IP_CONFIGURATION, GPRS_PIN_CTRL, GPRS_CALL_STATUS = (0x0D, 0x09), (0x0D, 0x0F), (0x0D, 0x10)
 GPRS_MOBILE_DATA_SETTING = (0x0D, 0x1D)
+GPRS_LTE_ATTACH_APN_INFO = (0x0D, 0x14)   # libsamsung-ipc (manoedinata fork) include/gprs.h:63
 CFG_JSON_CMD_LIST = (0x0F, 0x3B)
 # Stock RIL JsonUtil::MakeJsonPacket: FastWriter text (sorted keys, trailing newline) at offset 7.
 CFG_JSON_CMD_LIST_BODY = b'{"jver":"1.0"}\n'
@@ -94,7 +95,7 @@ NAMES = {
     GPRS_DEFINE_PDP_CONTEXT: "GPRS_DEFINE_PDP_CONTEXT", GPRS_PS: "GPRS_PS",
     GPRS_PDP_CONTEXT: "GPRS_PDP_CONTEXT", GPRS_IP_CONFIGURATION: "GPRS_IP_CONFIGURATION",
     GPRS_PIN_CTRL: "GPRS_PIN_CTRL", GPRS_CALL_STATUS: "GPRS_CALL_STATUS",
-    GPRS_MOBILE_DATA_SETTING: "GPRS_MOBILE_DATA_SETTING", CFG_JSON_CMD_LIST: "CFG_JSON_CMD_LIST",
+    GPRS_MOBILE_DATA_SETTING: "GPRS_MOBILE_DATA_SETTING", GPRS_LTE_ATTACH_APN_INFO: "GPRS_LTE_ATTACH_APN_INFO", CFG_JSON_CMD_LIST: "CFG_JSON_CMD_LIST",
 }
 SIM_STATUS = {0x00: "READY", 0x01: "SIM_LOCK_REQUIRED", 0x02: "INSIDE_PF_ERROR",
               0x03: "LOCK_SC(PIN)", 0x04: "LOCK_FD", 0x05: "LOCK_PN", 0x06: "LOCK_PU",
@@ -135,6 +136,30 @@ def define_pdp_body(cid, apn):
 def pdp_state_body(cid, up):
     """(0D,04) SET body from IpcTxSetPdpContext: state 1 activates, 0 deactivates."""
     return stock_json({"auth_type": 0, "cid": cid, "reason": 0, "state": 1 if up else 0})
+
+
+LTE_ATTACH_APN_INFO_SIZE = 194
+GPRS_PROTOCOL_IPV4 = 0x02
+
+
+def lte_attach_apn_body(apn, profile_id=1):
+    """(0D,14) SET body: the LTE initial-attach profile, 194 bytes, binary (not JSON).
+
+    Layout from the open-source libsamsung-ipc fork github.com/manoedinata/libsamsung-ipc
+    (GPL-2.0, commit bba6a0d) include/gprs.h:236-250 struct ipc_gprs_lte_attach_apn_info_data,
+    filled as samsung-ipc/gprs.c:120-158 ipc_gprs_lte_attach_apn_info_setup() does and as
+    samsungipcd samsung-ipc.c:319-321 calls it: type 1, profile_id 1, protocol IPv4 (0x02) for
+    home and roaming, APN NUL-padded to 101 bytes, no username/password, auth 0, rest zero.
+    """
+    if apn != "" and not APN_RE.match(apn or ""):
+        raise ValueError("APN must be 1-100 chars of letters, digits, '.' or '-'")
+    if not 0 <= int(profile_id) <= 255:
+        raise ValueError("profile_id must be a byte")
+    body = (bytes([1, int(profile_id), GPRS_PROTOCOL_IPV4]) + apn.encode().ljust(101, b"\0")
+            + bytes(16 + 4 + 2 + 1) + bytes(32) + bytes(32)
+            + bytes([0, GPRS_PROTOCOL_IPV4, 0]))
+    assert len(body) == LTE_ATTACH_APN_INFO_SIZE
+    return body
 
 
 def run_ip(*args):
