@@ -13,7 +13,9 @@ JSON (payload starting with '{'), logs raw hex and never raises.
 Safety: SMS send and dial are refused unless state-dir/tx_enabled exists AND
 the destination is listed in state-dir/allowlist; emergency/short numbers are
 always refused; outbound is rate limited. PWR_PHONE_STATE is sent only with
---radio-normal. Experimental data IPC requires explicit operator commands; no automatic attach.
+--radio-normal. Experimental data IPC requires explicit operator commands. The one automatic
+radio-side SET is the LTE initial-attach profile (0D,14), sent once per modem start after the SIM
+is usable; disable it with state-dir/lte-attach.json {"enabled": false} or --no-lte-attach.
 Python stdlib only (3.12+).
 """
 from __future__ import annotations
@@ -138,6 +140,7 @@ def pdp_state_body(cid, up):
     return stock_json({"auth_type": 0, "cid": cid, "reason": 0, "state": 1 if up else 0})
 
 
+LTE_ATTACH_CONFIG = "lte-attach.json"   # state-dir file: {"enabled": true, "apn": "internet.vodafone.gr"}
 LTE_ATTACH_APN_INFO_SIZE = 194
 GPRS_PROTOCOL_IPV4 = 0x02
 
@@ -1066,7 +1069,10 @@ class Phone:
     def __init__(self, state_dir, simulate=False, max_sms_per_hour=10, max_dials_per_hour=5,
                  reassembly_timeout=600.0, modem_state_path=MODEM_STATE_PATH, radio_normal=False,
                  smsc=None, req_timeout=8.0, send_ack_timeout=20.0, ip_runner=None,
-                 net_sys=NET_SYS, data_timeout=30.0):
+                 net_sys=NET_SYS, data_timeout=30.0, lte_attach=None, lte_attach_apn=None):
+        self.lte_attach_override = (lte_attach, lte_attach_apn)   # CLI overrides of lte-attach.json
+        self.lte_attach_done = False        # attempted on this IPC link (= this modem start)
+        self.lte_attach_status = None
         self.send_ack_timeout = send_ack_timeout
         self.ip = ip_runner or ((lambda *a: (True, "simulated")) if simulate else run_ip)
         self.net_sys, self.data_timeout = net_sys, data_timeout
@@ -1187,6 +1193,7 @@ class Phone:
             with self.lock:
                 self.sms_ready = False
                 self.mem_reported = 0.0
+                self.lte_attach_done = False    # a new modem start needs the profile again
 
     def startup(self):
         if self.radio_normal:
@@ -1204,7 +1211,61 @@ class Phone:
         self._req(DISP_RSSI_INFO, GET)
         if self.sim in SIM_USABLE and not self.sms_ready:
             self.sms_device_ready()
+        if self.sim in SIM_USABLE and not self.lte_attach_done:
+            self.defer(self.send_lte_attach)    # queued behind the SMS setup, never in its way
         self.expire_partials()
+
+    def lte_attach_config(self):
+        """enabled/apn from state-dir/lte-attach.json, then CLI overrides; bad files -> defaults."""
+        cfg = {"enabled": True, "apn": DEFAULT_APN}
+        try:
+            raw = json.loads((self.dir / LTE_ATTACH_CONFIG).read_text())
+            if isinstance(raw, dict):
+                if isinstance(raw.get("enabled"), bool):
+                    cfg["enabled"] = raw["enabled"]
+                if isinstance(raw.get("apn"), str):
+                    cfg["apn"] = raw["apn"]
+        except FileNotFoundError:
+            pass
+        except (OSError, ValueError) as e:
+            cfg["config_error"] = repr(e)
+        enabled, apn = self.lte_attach_override
+        if enabled is not None:
+            cfg["enabled"] = bool(enabled)
+        if apn is not None:
+            cfg["apn"] = apn
+        return cfg
+
+    def send_lte_attach(self):
+        """Send the LTE initial-attach profile once per modem start. Never raises."""
+        with self.lock:
+            if self.lte_attach_done or self.sim not in SIM_USABLE:
+                return
+            if self.modem_state() != "ONLINE":
+                return                          # poll() retries once the modem is ONLINE
+            self.lte_attach_done = True
+        cfg = self.lte_attach_config()
+        rec = {"event": "lte_attach", "ts": now(), "enabled": cfg["enabled"], "apn": cfg["apn"]}
+        if "config_error" in cfg:
+            rec["config_error"] = cfg["config_error"]
+        if not cfg["enabled"]:
+            rec["result"] = "disabled"
+        else:
+            try:
+                body = lte_attach_apn_body(cfg["apn"])
+                p = self._req(GPRS_LTE_ATTACH_APN_INFO, SET, body, timeout=6.0, strict=True)
+                gen = p.gen if p else None
+                rec.update(gen_phone_res=gen, request_hex=p.tx.hex() if p and p.tx else None,
+                           result="accepted" if gen and gen.get("ok") else
+                                  ("rejected" if gen else "timeout"))
+            except (LinkDown, ValueError) as e:
+                rec["result"], rec["error"] = "error", str(e)
+            except Exception as e:  # noqa: BLE001 - never break the startup sequence
+                rec["result"], rec["error"] = "error", repr(e)
+        self.log.write(rec)
+        with self.lock:
+            self.lte_attach_status = rec
+        self.events.emit("lte_attach", **{k: v for k, v in rec.items() if k != "event"})
 
     def query_sim(self):
         self._req(SEC_PIN_STATUS, GET)
@@ -2029,7 +2090,7 @@ class Phone:
                     "pin_attempted": self.pin_attempted, "registration": self.registration,
                     "operator": self.operator, "signal": self.signal, "sms_ready": self.sms_ready,
                     "tx_enabled": self.tx_enabled(), "calls": self.current_calls(),
-                    "sim_sweep": self.sweep_result,
+                    "sim_sweep": self.sweep_result, "lte_attach": self.lte_attach_status,
                     "data_notifications": list(self.data_notifications),
                     "simulated": self.simulate}
 
@@ -2038,13 +2099,14 @@ class Phone:
 class FakeCP:
     """Answers FMT frames like the CP does, over a socketpair. For --simulate and tests."""
 
-    def __init__(self, sock, sim_status=0x00, pin="1234", smsc="+306970000000"):
+    def __init__(self, sock, sim_status=0x00, pin="1234", smsc="+306970000000", reject=None):
         self.sock, self.dec = sock, FrameDecoder()
         self.sim_status, self.fac, self.pin, self.smsc = sim_status, (FAC_PIN1 if sim_status == 3 else 0), pin, smsc
         self.mseq, self.mr, self.next_call = 0, 0, 1
         self.calls = {}
         self.sent, self.acks, self.rx = [], [], []
         self.sim_sms, self.sim_slots, self.mem_sets, self.deleted = {}, 40, [], []
+        self.reject = dict(reject or {})   # cmd -> GEN error code, for failure tests
         self.lock = threading.Lock()
         self.thread = threading.Thread(target=self._run, name="fake-cp", daemon=True)
         self.thread.start()
@@ -2080,6 +2142,9 @@ class FakeCP:
 
     def handle(self, fr):
         c, t = fr.cmd, fr.type
+        if c in self.reject:
+            self.gen(fr, self.reject[c])
+            return
         if c == SEC_PIN_STATUS and t == GET:
             self.out(c, RESP, self.sim_bytes(), fr.mseq)
         elif c == SEC_PIN_STATUS and t == SET:
@@ -2420,6 +2485,8 @@ def main(argv=None):
     sp.add_argument("--smsc", help="override SMSC (E.164); default: ask the CP")
     sp.add_argument("--max-sms-per-hour", type=int, default=10)
     sp.add_argument("--max-dials-per-hour", type=int, default=5)
+    sp.add_argument("--no-lte-attach", action="store_true", help="do not send the LTE attach profile at modem start")
+    sp.add_argument("--lte-attach-apn", help=f"APN for the LTE attach profile (default: {LTE_ATTACH_CONFIG} or {DEFAULT_APN})")
     sp.add_argument("--sim-locked", action="store_true", help="simulate: SIM starts PIN-locked (PIN 1234)")
     st = sub.add_parser("status")
     st.add_argument("--socket", default="/run/s22-phoned.sock")
@@ -2489,7 +2556,8 @@ def main(argv=None):
                host=a.host, port=None if a.port < 0 else a.port, opener=opener,
                sim_kwargs={"sim_status": 3} if a.sim_locked else None,
                radio_normal=a.radio_normal, smsc=a.smsc,
-               max_sms_per_hour=a.max_sms_per_hour, max_dials_per_hour=a.max_dials_per_hour)
+               max_sms_per_hour=a.max_sms_per_hour, max_dials_per_hour=a.max_dials_per_hour,
+               lte_attach=False if a.no_lte_attach else None, lte_attach_apn=a.lte_attach_apn)
     d.start()
     print(json.dumps({"event": "serving", "port": d.port, "socket": a.socket or None,
                       "simulate": a.simulate}), flush=True)
