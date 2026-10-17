@@ -48,6 +48,11 @@ pub trait Phoned: Send + Sync {
     fn calls(&self) -> ApiResult;
     fn dial(&self, number: &str) -> ApiResult;
     fn hangup(&self) -> ApiResult;
+    /// Mobile data on rmnet: PDP context state, address, counters.
+    fn mobile_data_status(&self) -> ApiResult;
+    /// Define + activate the PDP context and configure rmnet as a fallback route.
+    fn mobile_data_up(&self, apn: Option<&str>) -> ApiResult;
+    fn mobile_data_down(&self) -> ApiResult;
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]

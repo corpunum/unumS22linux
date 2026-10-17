@@ -423,6 +423,66 @@
     {
       "available": true,
       "confirm": "none",
+      "description": "Mobile data (rmnet) state: up/down, IPv4 address, DNS, MTU, bytes received/sent, radio technology and signal.",
+      "id": "mobile_data.status",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "GET",
+      "path": "/v1/mobile-data/status",
+      "reason": null,
+      "risk": "read",
+      "timeout_s": 25,
+      "tool": "mobile_data_status"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Bring mobile data up: the modem opens a data call (default APN internet.vodafone.gr) and rmnet0 gets a fallback default route behind Wi-Fi and USB, so the data plan is only used when those are down. Undo with mobile_data_down.",
+      "id": "mobile_data.up",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "apn": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/mobile-data/up",
+      "reason": null,
+      "risk": "reversible",
+      "timeout_s": 70,
+      "tool": "mobile_data_up"
+    },
+    {
+      "available": true,
+      "confirm": "none",
+      "description": "Take mobile data down: remove the rmnet route and address and release the modem data call.",
+      "id": "mobile_data.down",
+      "input_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "method": "POST",
+      "path": "/v1/mobile-data/down",
+      "reason": null,
+      "risk": "reversible",
+      "timeout_s": 70,
+      "tool": "mobile_data_down"
+    },
+    {
+      "available": true,
+      "confirm": "none",
       "description": "Camera availability, busy/cooldown state and the last capture.",
       "id": "camera.status",
       "input_schema": {
