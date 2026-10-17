@@ -54,18 +54,40 @@ class ExperimentalIpcTest(unittest.TestCase):
         self.assertEqual(len(received), 1)
         self.assertEqual(result[1]['request_hex'], received[0].hex())
         return result, received[0]
-    def test_exact_on_off_and_gen_rejection(self):
-        (status, result), raw = self.transact((2, 3, 3, '01'))
-        self.assertEqual(raw, bytes.fromhex('0800010002030301'))
+    UP = '{"auth_type":0,"cid":1,"reason":0,"state":1}\n'
+    DOWN = '{"auth_type":0,"cid":1,"reason":0,"state":0}\n'
+
+    def test_exact_activate_deactivate_and_gen_rejection(self):
+        (status, result), raw = self.transact((13, 4, 3, self.UP))
+        self.assertEqual(raw[4:7], b'\x0d\x04\x03')
+        self.assertEqual(raw[7:], self.UP.encode())
+        self.assertEqual(raw[0] | raw[1] << 8, 7 + len(self.UP))
         self.assertEqual(status, 200)
         self.assertTrue(result['ok'])
         self.assertFalse(result['timed_out'])
         self.assertEqual(result['gen_phone_res']['code'], 0x8000)
-        (status, result), raw = self.transact((2, 3, 3, '02'), code=0x8010)
-        self.assertEqual(raw, bytes.fromhex('0800020002030302'))
+        self.ph.last_ipc_send = time.monotonic()   # deactivate bypasses the cooldown
+        (status, result), raw = self.transact((13, 4, 3, self.DOWN), code=0x8010)
+        self.assertEqual(raw[7:], self.DOWN.encode())
         self.assertFalse(result['ok'])
-        self.assertEqual(result['gen_response_hex'], '0c0008028001020203031080')
+        self.assertTrue(result['gen_response_hex'].endswith('8001020d04031080'))
         self.assertEqual(len([r for r in self.log.rows if r.get('dir') == 'tx']), 2)
+
+    def test_json_cmd_list_get_requires_exact_stock_body(self):
+        self.assertEqual(self.ph.ipc_send(15, 0x3b, 2, '{"jver":"2.0"}\n')[0], 403)
+        self.assertEqual(self.ph.ipc_send(15, 0x3b, 3, '{"jver":"1.0"}\n')[0], 403)
+        (status, result), raw = self.transact((15, 0x3b, 2, '{"jver":"1.0"}\n'),
+                                              response=b'{"gprs":[[1,4]]}')
+        self.assertEqual(raw[:2], b'\x16\x00')
+        self.assertEqual(raw[4:], b'\x0f\x3b\x02{"jver":"1.0"}\n')
+        self.assertEqual(result['response']['decoded']['json'], {'gprs': [[1, 4]]})
+
+    def test_removed_call_release_frame_is_refused(self):
+        for payload in ('01', '02'):
+            self.assertEqual(self.ph.ipc_send(2, 3, 3, payload)[0], 403)
+            self.assertEqual(self.ph.ipc_send(3, 2, 3, payload)[0], 403)
+        self.assertEqual(self.log.rows, [])
+
     def test_json_bytes_preserved_and_response(self):
         payload = '{"mode":1,"mobile_data_enabled":1,"roaming_data_enabled":0}'
         (_, result), raw = self.transact((13, 29, 3, payload), response=b'{"result":0}')
@@ -86,7 +108,7 @@ class ExperimentalIpcTest(unittest.TestCase):
         self.state.write_text('OFFLINE')
         self.assertEqual(self.ph.ipc_send(13, 20, 3, '{}')[0], 409)
         self.ph.ipc_send_lock.acquire()
-        self.assertEqual(self.ph.ipc_send(2, 3, 3, '02')[0], 409)
+        self.assertEqual(self.ph.ipc_send(13, 4, 3, self.DOWN)[0], 409)
         self.ph.ipc_send_lock.release()
         self.assertEqual(self.log.rows, [])
     def test_strict_sequence_inner_command_and_type_matching(self):
@@ -131,7 +153,7 @@ class ExperimentalIpcTest(unittest.TestCase):
         self.assertTrue(pending.event.is_set())
         self.assertIsNotNone(pending.resp)
 
-    def test_http_and_cli_on_off_use_the_same_guarded_sender(self):
+    def test_http_and_cli_use_the_same_guarded_sender(self):
         import subprocess
         with tempfile.TemporaryDirectory() as tmp:
             daemon = P.Daemon(state_dir=tmp, simulate=True, socket_path=str(Path(tmp, 'p.sock')), port=0).start()
@@ -140,16 +162,14 @@ class ExperimentalIpcTest(unittest.TestCase):
                 while not daemon.phone.sms_ready and time.monotonic() < deadline:
                     time.sleep(0.01)
                 self.assertTrue(daemon.phone.sms_ready)
-                run = subprocess.run([os.sys.executable, P.__file__, 'data-call', 'on', '--socket', daemon.socket_path],
-                                     capture_output=True, text=True, timeout=12)
-                self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
-                result = json.loads(run.stdout)
-                self.assertTrue(result['ok'])
-                self.assertEqual(bytes.fromhex(result['request_hex'])[4:], b'\x02\x03\x03\x01')
-                run = subprocess.run([os.sys.executable, P.__file__, 'data-call', 'off', '--socket', daemon.socket_path],
-                                     capture_output=True, text=True, timeout=12)
-                self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
-                self.assertEqual(bytes.fromhex(json.loads(run.stdout)['request_hex'])[4:], b'\x02\x03\x03\x02')
+                for body in (self.UP, self.DOWN):
+                    typed = body.replace('\n', '\\n')        # what an operator types on the CLI
+                    run = subprocess.run([os.sys.executable, P.__file__, 'ipc-send', '0x0d', '4', '3', typed,
+                                          '--socket', daemon.socket_path],
+                                         capture_output=True, text=True, timeout=12)
+                    result = json.loads(run.stdout)
+                    self.assertEqual(bytes.fromhex(result['request_hex'])[4:], b'\x0d\x04\x03' + body.encode())
+                    self.assertFalse(result['timed_out'], result)
             finally:
                 daemon.stop()
 
