@@ -119,6 +119,15 @@ impl Phoned for Fake {
     fn hangup(&self) -> ApiResult {
         self.rec("hangup")
     }
+    fn mobile_data_status(&self) -> ApiResult {
+        self.rec("mobile_data_status")
+    }
+    fn mobile_data_up(&self, apn: Option<&str>) -> ApiResult {
+        self.rec(&format!("mobile_data_up {apn:?}"))
+    }
+    fn mobile_data_down(&self) -> ApiResult {
+        self.rec("mobile_data_down")
+    }
 }
 impl Camera for Fake {
     fn availability(&self) -> Option<String> {
@@ -858,6 +867,77 @@ async fn dial_and_hangup() {
         before,
         "hanging up needs no confirmation"
     );
+}
+
+#[tokio::test]
+async fn mobile_data_up_down_status_are_reversible_and_audited() {
+    let h = H::new();
+    let (s, v) = h.send("GET", "/v1/mobile-data/status", None).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(h.fake.called("mobile_data_status"), 1);
+    let before = h.fake.called("ask");
+    let (s, v) = h.send("POST", "/v1/mobile-data/up", None).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(h.fake.called("mobile_data_up None"), 1);
+    let (s, _) = h
+        .send(
+            "POST",
+            "/v1/mobile-data/up",
+            Some(json!({"apn": "internet.vodafone.gr"})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(
+        h.fake
+            .called("mobile_data_up Some(\"internet.vodafone.gr\")"),
+        1
+    );
+    assert_eq!(
+        h.send("POST", "/v1/mobile-data/down", None).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(h.fake.called("mobile_data_down"), 1);
+    assert_eq!(
+        h.fake.called("ask"),
+        before,
+        "mobile data needs no owner confirmation"
+    );
+    let actions: Vec<Value> = h
+        .audit_lines()
+        .iter()
+        .map(|l| l["action"].clone())
+        .collect();
+    assert_eq!(
+        actions,
+        vec![
+            json!("mobile_data.up"),
+            json!("mobile_data.up"),
+            json!("mobile_data.down")
+        ]
+    );
+}
+
+#[tokio::test]
+async fn mobile_data_rejects_bad_apn_and_missing_phoned() {
+    let h = H::new();
+    for bad in [
+        json!({"apn": "a b"}),
+        json!({"apn": 7}),
+        json!({"apn": "x\"; rm"}),
+    ] {
+        let (s, v) = h.send("POST", "/v1/mobile-data/up", Some(bad)).await;
+        assert_eq!((s, code(&v)), (StatusCode::BAD_REQUEST, "bad_request"));
+    }
+    assert_eq!(h.fake.called("mobile_data_up"), 0);
+    h.unavailable("phoned", "s22-phoned socket missing");
+    let (s, v) = h.send("POST", "/v1/mobile-data/up", None).await;
+    assert_eq!(
+        (s, code(&v)),
+        (StatusCode::SERVICE_UNAVAILABLE, "unavailable")
+    );
+    let (s, _) = h.send("POST", "/v1/mobile-data/down", None).await;
+    assert_eq!(s, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(h.fake.called("mobile_data_down"), 0);
 }
 
 #[tokio::test]
