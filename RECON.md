@@ -319,3 +319,19 @@ One SET only, no deploy (phoned `d42e488a` = master already allow-lists `(0D,14)
 
 Not persisted: the profile is sent by hand; after a modem/phone restart it must be sent again (samsungipcd sends
 it when the SIM is up). Follow-up: have phoned send `lte_attach_apn_body(DEFAULT_APN)` once after SIM READY.
+
+## S2c: LTE attach profile at every modem start (2026-10-17 UTC)
+
+phoned now sends `lte_attach_apn_body(apn)` once per IPC link (= modem start) when the SIM is usable and the
+modem ONLINE, queued after the SMS DEVICE_READY setup. Config: `state-dir/lte-attach.json`
+`{"enabled": true, "apn": "internet.vodafone.gr"}` (both optional; defaults shown), CLI `--no-lte-attach`,
+`--lte-attach-apn`. Result (`accepted|rejected|timeout|error|disabled`) is logged as `{"event":"lte_attach"}` in
+ipc.jsonl and exposed as `lte_attach` in `/status`. Failures never raise or block SMS.
+
+Deploy: backup `/srv/s22/hardware/bin/s22-phoned.pre-lte-attach.20261017T101246Z` (`d42e488a…`), new
+`1af0a5a1dd9550ec606913b30964351daffc00a17e8ff2bb98f36eddc1ec5c9e`, mode 0755. Rollback:
+`install -m 755 <backup> /srv/s22/hardware/bin/s22-phoned` then kill the phoned PID (keepalive restarts it).
+
+Verification: only phoned restarted (old PID 31646 -> new 32506; modem and phone untouched). SMS ready at +3 s;
+attach SET (mseq 0x31) answered GEN 0x8000 at +7 s; LTE home_3gpp ps, RSRP -100/-101 dBm, held 3 min.
+Data left DOWN, rmnet0 down, routes unchanged.
