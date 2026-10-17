@@ -111,3 +111,106 @@ TX in this covered interval. No experimental command to replay. This is bounded
 retention evidence, not all-time absence. No SET/GET/deploy/restart/reboot in this
 preflight. Stock JSON schema and validated IP decoder work proceeds on host;
 all phone transmissions remain coordinator-only.
+
+## S2 evidence pass: JSON wire formats (2026-10-17, written BEFORE any new SET)
+
+Blob: `rootfs/cellular-reuse-20260921/vendor/lib64/libsec-ril.so` (S901B FYI3, BuildID
+`3d512d374e3729cac2eacd1190bd665b`). Method: `aarch64-linux-gnu-objdump -d -C` plus a small
+annotator that resolves `adrp`+`add` pairs to `.rodata` C strings (vaddr == file offset for the
+first two LOAD segments). Every key name below is a string literal passed to
+`Json::Value::operator[](char const*)` in the named function.
+
+**Why JSON.** Live GETs already proved this CP answers `(08,0A)` and `(0D,04)` with JSON
+(`{"mode_select":75}`, `{"num_act":0,"records":[]}`). Each legacy `IpcProtocol41Data::IpcTx*`
+builder first asks `JsonUtil::IsSupportJsonCmd(group,index)` and, if true, delegates to
+`IpcProtocol41JsonData::IpcTx*`. The binary layouts recorded earlier in this file are the
+*legacy* path and are NOT what this CP expects.
+
+**Packet builder** `JsonUtil::MakeJsonPacket(char*,grp,idx,type,Json::Value*)` @`0x409204`:
+`Json::FastWriter::write(value)` (compact, keys in std::map order = sorted, ints unquoted,
+trailing `\n`), collapses `\\` to `\`, `strncpy`s the text to offset 7, `strh len+7` at
+offset 0, `strb` group/index/type at 4/5/6 (`0x409370-0x40937c`). No NUL terminator.
+
+### Corrections to earlier notes
+- `IpcTxSetDataCallEstablish(bool)` @`0x3bf728` stores the 64-bit constant `0x0003020300000008`
+  (`0x3bf740-0x3bf748`): wire bytes `08 00 00 00 03 02 03 sel`, i.e. **group 0x03 index 0x02**
+  (CDMA-data group), not `(02,03)`. `(02,03)` is CALL_RELEASE. The `data-call on|off` sender in
+  master (which emits `02 03`) is wrong and is removed; it was never sent to the modem.
+- `ActivatePdpContext` (`0x3a11a0`) dispatches through protocol vtable slot +128/+136
+  (`0x3a1b20`/`0x3a1af8`) = `IpcTxSetPdpContext` / `...Legacy`, i.e. GSM/LTE activation is
+  `(0D,04)` SET, not `(03,02)`.
+
+### F0. JSON command-list GET `(0F,3B)` type GET (read-only)
+`IpcProtocol41JsonConfig::IpcTxCfgGetSupportJsonCmdList` @`0x414a28`: key `jver` = string
+`"1.0"` (`0x414ab0`, `0x414ac0`), `MakeJsonPacket(...,0x0f,0x3b,0x02)` (`0x414aec-0x414af8`).
+`JsonUtil::IsSupportJsonCmd(u8,u8)` @`0x4097b0` hard-codes `(0f,3b)` as always-JSON, and the
+reply is fed to `SaveSupportJsonCmdList` (`0x414bd0`), parsed as an object keyed
+`net|call|disp|gprs|cfg` (`0x409748`).
+Exact frame: `16 00 MM 00 0f 3b 02` + `{"jver":"1.0"}\n`.
+
+### F1. Define PDP context `(0D,01)` SET
+`IpcProtocol41JsonData::IpcTxDefinePdpContext(AccessNetworkType, apn, cid, DataProtocol,
+SnssaiPdnInfo, DataProfile, bool, u8* v4, u8* v6, char*, int)` @`0x422478`:
+- `cid` = cid arg (`0x42254c-0x422560`).
+- `pdp_type`: DataProtocol 2→5, 3→6, 4→4 via table `0x17612c` = {5,6,4}; anything else → 2
+  (`0x42257c-0x4225a8`). `DataCallSetup::ToDataProtocol` @`0x32ec3c`: "IP"/"0"→1,
+  "IPV6"/"1"→2, "IPV4V6"/"2"→3. So **IPv4 "IP" → `pdp_type` 2**.
+- `apn` = APN string, rejected if length > 0x65 (`0x422680-0x4226b0`, `0x422794`).
+- `pdp_addrv6`/`pdp_addrv4` only if the (static-address) pointers are non-NULL (`0x4227b8`,
+  `0x42286c`) — omitted for dynamic addressing.
+- `5g_sa` object (snssai/psi/always_on_pdu) only if `SupportSaModemCapa()` (`0x422920`,
+  `0x422d10`); the CP is on EGPRS with no SA, so omitted.
+- `ap_pco` array: initialised empty (`append`+`clear`, `0x4227ac-0x4227b4`), then if the bool
+  arg is false → `[0]` (`0x424148`, `0x42417c-0x424190`); if true → `[12,1]` (IPV4V6), `[1]`
+  (IPV6) or `[12]` (IP) (`0x42414c-0x4241e8`). 12/1 are the 3GPP P-CSCF IPv4/IPv6 PCO ids, so
+  the bool is the IMS/P-CSCF request (ASSUMED from the values; false for an internet APN).
+- `MakeJsonPacket(...,0x0d,0x01,0x03)` (`0x424240-0x42424c`).
+Planned frame (cid 1, IPv4, no IMS): `{"ap_pco":[0],"apn":"internet.vodafone.gr","cid":1,"pdp_type":2}\n`.
+
+### F2. Activate / deactivate `(0D,04)` SET
+`IpcProtocol41JsonData::IpcTxSetPdpContext(u8 cid, int state, user, pass, int auth, int reason)`
+@`0x425274`:
+- `cid` (`0x42531c-0x42532c`); `state` = jump table `0x175fbf` maps arg 0..8 identically to wire
+  0..8 (`0x425348-0x4254c4`).
+- `auth_type` 0 and `reason` 0 always written (`0x4254dc-0x42551c`).
+- if wire `state`==1: `username`/`password` only when non-empty (≤100 chars), `auth_type` =
+  {1:1, 2:2, 3:1}[auth] else 0 (`0x42555c-0x425648`). → **state 1 = activate**.
+- if wire `state`==0: `reason` = table `0x1760d8`[reason+23] for reason in −23..−9, else 0
+  (`0x425688-0x4256c0`). → **state 0 = deactivate**.
+- `MakeJsonPacket(...,0x0d,0x04,0x03)` (`0x4256e0-0x4256ec`).
+Planned frames: up `{"auth_type":0,"cid":1,"reason":0,"state":1}\n`,
+down `{"auth_type":0,"cid":1,"reason":0,"state":0}\n`.
+
+### F3 (only if F2 is refused for a data-disabled cause). Mobile-data setting `(0D,1D)` SET
+`IpcProtocol41JsonData::IpcTxSetMobileDataSetting(bool data, bool roaming)` @`0x4299d8`: `mode`=1
+(`0x429a6c-0x429a78`), `mobile_data_enabled`=data&1 (`0x429a94-0x429aa4`),
+`roaming_data_enabled`=roaming&1 (`0x429ac0-0x429ad0`), `MakeJsonPacket(0x0d,0x1d,0x03)`.
+Frame: `{"mobile_data_enabled":1,"mode":1,"roaming_data_enabled":0}\n`.
+
+### Expected replies / notifications (JSON RX parsers)
+- GEN_PHONE_RES `(80,01)` binary `grp idx type code_le16`; 0x8000 = accepted.
+- `(0D,09)` IP configuration (`IpcRxIpConfiguration` @`0x4266a4`, `HandleIpAddr` @`0x421890`):
+  keys `cid`, `ipv4_mtu`, `ipv6_mtu`, `psi`, `ipv4_info{addr,dns}`, `ipv6_info{addr,dns}`,
+  `pcscf_addr`.
+- `(0D,10)` call status (`IpcRxGprsCallStatus` @`0x427640`): `cid`, `data_call_state`,
+  `data_callstate_rsn`, `throttle_timer`.
+- `(0D,04)` RESP/NOTI (`IpcRxPdpContext` @`0x425a74`): `num_act`, `records[{cid,state}]`.
+- `(0D,03)` PS state (`IpcRxGprsPsState` @`0x424bb8`): `state`, `transfer_state`, `suspend_reason`.
+Group-0D index names agree with libsamsung-ipc `include/gprs.h:33-49` (01 DEFINE_PDP_CONTEXT,
+03 PS, 04 PDP_CONTEXT, 09 IP_CONFIGURATION, 0F PIN_CTRL, 10 CALL_STATUS); the live `0d/0f`
+NOTI `{"signal":6,"status":0}` matches `IpcRxDunPinControl`.
+
+### Stored profile
+No stock GET builder exists for a stored APN/PDP profile: the only GPRS JSON GETs are
+`(0D,26)` PSI query, `(0D,27)` slice, `(0D,28)` QoS, `(0D,2A)` NSSAI, `(0D,2C)` TD query (all
+5G-SA) plus `(0D,04)` context state (enumerated from every `MakeJsonPacket` call site). The
+modem's NV profile is therefore not readable over IPC; the latest `(0D,04)` GET showed no
+active context. We define cid 1 explicitly with the operator APN.
+
+### rmnet mapping (hypothesis, verify live)
+rmnetN is `ARPHRD_RAWIP` (type 519). No stock code maps CID→ifname by literal; hypothesis
+cid 1 → rmnet0 is to be confirmed by the IP-configuration NOTI and interface counters.
+
+### Send plan (one frame at a time, ≥30 s apart, stop on any error)
+F0 GET → F1 define → F2 up (watch for 0D/09, 0D/10) → configure rmnet → proof → F2 down →
+F2 up → F2 down. Emergency stop = F2 down.
