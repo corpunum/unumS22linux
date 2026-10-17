@@ -63,6 +63,7 @@ pub fn map_reply(status: u16, body: Value) -> ApiResult {
             msg,
         )),
         503 => Err(ApiError::unavailable(format!("modem not ready: {msg}"))),
+        409 => Err(ApiError::busy("phoned_busy", msg)),
         400 | 404 | 422 => Err(ApiError::bad_request(format!("phoned: {msg}"))),
         s => Err(ApiError::upstream(format!("phoned answered {s}: {msg}"))),
     }
@@ -77,12 +78,14 @@ impl PhonedProxy {
     }
 
     fn call(&self, method: &str, target: &str, body: Option<Value>) -> ApiResult {
+        self.call_for(method, target, body, self.timeout)
+    }
+
+    fn call_for(&self, method: &str, target: &str, body: Option<Value>, t: Duration) -> ApiResult {
         let b = body.as_ref();
-        let first = over_unix(&self.cfg.phoned_sock, method, target, b, self.timeout);
+        let first = over_unix(&self.cfg.phoned_sock, method, target, b, t);
         let res = match first {
-            Err(HttpError::Connect(_)) => {
-                over_tcp(&self.cfg.phoned_tcp, method, target, b, self.timeout)
-            }
+            Err(HttpError::Connect(_)) => over_tcp(&self.cfg.phoned_tcp, method, target, b, t),
             other => other,
         };
         match res {
@@ -142,7 +145,26 @@ impl Phoned for PhonedProxy {
     fn hangup(&self) -> ApiResult {
         self.call("POST", "/call/hangup", Some(json!({})))
     }
+
+    fn mobile_data_status(&self) -> ApiResult {
+        self.call("GET", "/data/status", None)
+    }
+
+    fn mobile_data_up(&self, apn: Option<&str>) -> ApiResult {
+        // phoned waits up to 30 s for the modem's IP configuration after two acknowledged frames.
+        let body = match apn {
+            Some(a) => json!({"apn": a}),
+            None => json!({}),
+        };
+        self.call_for("POST", "/data/up", Some(body), MOBILE_DATA_TIMEOUT)
+    }
+
+    fn mobile_data_down(&self) -> ApiResult {
+        self.call_for("POST", "/data/down", Some(json!({})), MOBILE_DATA_TIMEOUT)
+    }
 }
+
+const MOBILE_DATA_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[cfg(test)]
 mod tests {
@@ -256,6 +278,43 @@ mod tests {
             .recv()
             .unwrap()
             .starts_with("GET /sms/inbox?limit=5&since=a%20b%26c "));
+    }
+
+    #[test]
+    fn mobile_data_up_forwards_the_apn_and_down_posts() {
+        let t = Tmp::new();
+        let rx = fake_phoned(&t, 200, r#"{"ok":true,"state":"up","ipv4":"10.0.0.2"}"#);
+        let p = proxy(&t);
+        assert_eq!(
+            p.mobile_data_up(Some("internet.vodafone.gr")).unwrap()["state"],
+            "up"
+        );
+        let req = rx.recv().unwrap();
+        assert!(req.starts_with("POST /data/up"));
+        assert!(req.contains(r#""apn":"internet.vodafone.gr""#));
+        p.mobile_data_down().unwrap();
+        assert!(rx.recv().unwrap().starts_with("POST /data/down"));
+        p.mobile_data_status().unwrap();
+        assert!(rx.recv().unwrap().starts_with("GET /data/status"));
+    }
+
+    #[test]
+    fn mobile_data_modem_refusal_and_busy_map_through() {
+        assert_eq!(
+            map_reply(
+                502,
+                json!({"error": "GPRS_PDP_CONTEXT refused, code 0x8010"})
+            )
+            .unwrap_err()
+            .code,
+            "upstream_error"
+        );
+        assert_eq!(
+            map_reply(409, json!({"error": "in progress"}))
+                .unwrap_err()
+                .status,
+            StatusCode::CONFLICT
+        );
     }
 
     #[test]
