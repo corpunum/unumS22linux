@@ -725,6 +725,26 @@ def prepare_data_mount(reuse: bool) -> list[Path]:
     return [MOUNT]
 
 
+def start_clock_keeper() -> None:
+    """Fix the 2021 boot clock before Tailscale needs valid TLS dates.
+
+    `restore` is synchronous and needs no network (RTC / last saved time).
+    The daemon then refines from HTTP Date/NTP once Wi-Fi is up and persists
+    the time periodically.  Best effort: never blocks or fails startup.
+    """
+    script = MOUNT / 'hardware/bin/s22-clock'
+    if not script.is_file():
+        return
+    try:
+        result = command('/bin/sh', str(script), 'restore', check=False)
+        say((result.stdout or result.stderr).strip() or 'clock keeper ran')
+        subprocess.Popen(['/bin/sh', str(script), 'daemon'], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True, close_fds=True)
+    except (OSError, subprocess.SubprocessError) as error:
+        say(f'optional clock keeper unavailable: {type(error).__name__}')
+
+
 def start_optional_tailscale() -> None:
     if not TAILSCALE_ENABLED.is_file():
         return
@@ -942,6 +962,7 @@ def main() -> int:
             readiness = preflight(mounted_ok=True)
             profile = str(readiness['model_profile'])
             # Remote access must not depend on the model or compositor starting.
+            start_clock_keeper()  # before tailscaled: TLS needs a sane date
             start_optional_tailscale()
             stage_optional_audio_firmware()
             threading.Thread(target=answer_audio_firmware_requests, daemon=True).start()
