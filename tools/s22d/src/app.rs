@@ -47,7 +47,7 @@ impl App {
         }
         match id.split('.').next().unwrap_or("") {
             "wifi" => self.b.wifi.availability(),
-            "modem" | "sms" | "call" => self.b.phoned.availability(),
+            "modem" | "sms" | "call" | "mobile_data" => self.b.phoned.availability(),
             "camera" => self.b.camera.availability(),
             "display" => self.b.display.availability(),
             "service" => self.b.services.availability(),

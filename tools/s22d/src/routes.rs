@@ -333,6 +333,60 @@ async fn call_hangup(State(app): State<Shared>) -> Reply {
     finish(&app, "call.hangup", Risk::Reversible, json!({}), r)
 }
 
+// ---------------------------------------------------------------- mobile data (reversible)
+
+async fn mobile_data_status(State(app): State<Shared>) -> Reply {
+    let p = app.b.phoned.clone();
+    reading(blocking(move || p.mobile_data_status()).await)
+}
+
+/// Same rule as s22-phoned: letters, digits, '.' and '-', at most 100 characters.
+pub fn valid_apn(a: &str) -> bool {
+    (1..=100).contains(&a.len())
+        && a.chars().next().is_some_and(|c| c.is_ascii_alphanumeric())
+        && a.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+}
+
+async fn mobile_data_up(State(app): State<Shared>, raw: axum::body::Bytes) -> Reply {
+    let r = async {
+        let body: Value = if raw.iter().all(u8::is_ascii_whitespace) {
+            json!({})
+        } else {
+            serde_json::from_slice(&raw)
+                .map_err(|e| ApiError::bad_request(format!("body must be JSON: {e}")))?
+        };
+        let apn = match &body["apn"] {
+            Value::Null => None,
+            Value::String(a) if valid_apn(a) => Some(a.clone()),
+            _ => {
+                return Err(ApiError::bad_request(
+                    "apn must be 1-100 letters, digits, '.' or '-'",
+                ))
+            }
+        };
+        if let Some(why) = app.b.phoned.availability() {
+            return Err(ApiError::unavailable(why));
+        }
+        let p = app.b.phoned.clone();
+        blocking(move || p.mobile_data_up(apn.as_deref())).await
+    }
+    .await;
+    finish(&app, "mobile_data.up", Risk::Reversible, json!({}), r)
+}
+
+async fn mobile_data_down(State(app): State<Shared>) -> Reply {
+    let r = async {
+        if let Some(why) = app.b.phoned.availability() {
+            return Err(ApiError::unavailable(why));
+        }
+        let p = app.b.phoned.clone();
+        blocking(move || p.mobile_data_down()).await
+    }
+    .await;
+    finish(&app, "mobile_data.down", Risk::Reversible, json!({}), r)
+}
+
 // ---------------------------------------------------------------- camera
 
 async fn camera_capture(State(app): State<Shared>, Body(req): Body<CaptureReq>) -> Reply {
@@ -498,6 +552,9 @@ pub fn router(app: Shared, transport: Transport) -> Router {
         .route("/v1/calls", get(call_list))
         .route("/v1/call/dial", post(call_dial))
         .route("/v1/call/hangup", post(call_hangup))
+        .route("/v1/mobile-data/status", get(mobile_data_status))
+        .route("/v1/mobile-data/up", post(mobile_data_up))
+        .route("/v1/mobile-data/down", post(mobile_data_down))
         .route("/v1/camera/status", get(camera_status))
         .route("/v1/camera/capture", post(camera_capture))
         .route("/v1/camera/record", post(camera_record))

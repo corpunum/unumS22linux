@@ -214,3 +214,37 @@ cid 1 → rmnet0 is to be confirmed by the IP-configuration NOTI and interface c
 ### Send plan (one frame at a time, ≥30 s apart, stop on any error)
 F0 GET → F1 define → F2 up (watch for 0D/09, 0D/10) → configure rmnet → proof → F2 down →
 F2 up → F2 down. Emergency stop = F2 down.
+
+## S2 live run (2026-10-17 UTC): mobile data works
+
+Deploys (backup + sha256 + rollback):
+- phoned 1: `8cd73c76…` (allowlist fix); backup `/srv/s22/hardware/bin/s22-phoned.pre-mobile-data.20261017T081123Z`
+  (`11ce72e9…` = 20acf12). Rollback: `cp -p <backup> /srv/s22/hardware/bin/s22-phoned && kill <phoned PID>`.
+- phoned 2: `d42e488a…` (mobile-data feature). The second copy landed mode 0644, so keepalive could not exec it
+  and phoned (SMS) was down for ~10 min until `chmod 755`. Lesson: `install -m 755`, not `cp`.
+- s22d: `3351b95a…`; backup `/srv/s22/hardware/bin/s22d.pre-mobile-data.20261017T082409Z` (`36a615c4…`);
+  rollback `sh /srv/s22/hardware/install-s22d.sh --rollback`.
+
+Frames, one at a time, ≥30 s apart; full JSON results in `/srv/s22/state/mobile-data/` on the phone:
+
+| # | TX (full frame) | Reply |
+|---|---|---|
+| F0 | `160031000f3b027b226a766572223a22312e30227d0a` | RESP `{"call":[26],"cfg":[59],"disp":[6],"gprs":[255],"jver":"1.0","net":[3,4,5,10,17,55,60,69]}`. `IsSupportJsonCmd` @`0x4096cc-0x4096ec` treats 255 as "every index" → **all GPRS commands are JSON** on this CP. |
+| F1 | `480036000d01037b2261705f70636f223a5b305d2c2261706e223a22696e7465726e65742e766f6461666f6e652e6772222c22636964223a312c227064705f74797065223a327d0a` | GEN `0c009e368001020d01030080` = 0x8000 accepted |
+| F2 up | `34003f000d04037b22617574685f74797065223a302c22636964223a312c22726561736f6e223a302c227374617465223a317d0a` | GEN 0x8000 (`0c00a73f8001020d04030080`), then NOTI `0d/09` `{"cid":1,"ipv4_info":{"addr":"10.207.171.49","default_gateway":"","dns":["62.74.130.15","62.74.131.12"],"pcscf_addr":[],"subnet_mask":""},"ipv4_mtu":1500,"ipv6_mtu":0}` and NOTI `0d/10` `{"cid":1,"data_call_state":1,"data_callstate_rsn":0,"external_ps_call":0,"qci":0,"throttle_timer":0}` |
+| F2 down | `340054000d04037b22617574685f74797065223a302c22636964223a312c22726561736f6e223a302c227374617465223a307d0a` | GEN 0x8000 (`0c00dc548001020d04030080`), NOTI `0d/10` `data_call_state 3` (released) |
+
+No mobile-data-setting `(0D,1D)` frame was needed. Modem stayed ONLINE, SMS ready, EGPRS/home_3gpp throughout.
+
+Interface: cid 1 → **rmnet0** confirmed (traffic flowed). `ip addr add <ip>/32 dev rmnet0; ip link set rmnet0 mtu 1500 up;
+ip route add default dev rmnet0 metric 9000` (ecm0 metric 0 and wlan0 600 unchanged). Proof:
+`curl --interface rmnet0 https://example.com` → HTTP 200 (4.9 s, then 1.8 s); public egress IP was a Vodafone GR
+address. Speed (EGPRS): 1,000,000 B in 93.9 s ≈ 10.7 kB/s; later 500,000 B ≈ 9.4 kB/s.
+
+Re-activation: after the manual down, `s22-phoned mobile-data up` (new address `10.207.187.184`), then via s22d
+`POST /v1/mobile-data/down` → `call_state 3`, `POST /v1/mobile-data/up` → `10.206.81.7` + curl 200, final
+`POST /v1/mobile-data/down`. End state: data call released, rmnet0 DOWN, no rmnet route, modem ONLINE, muted.
+
+Open items: radio stays on EGPRS (2G) — LTE needs the initial-attach APN `(0D,14)`/profile sync `(0D,25)`
+work, not done here. DNS servers are reported but not written to resolv.conf (system DNS stays on Wi-Fi/USB).
+phoned keeps data state in memory; a phoned restart while data is up loses track of it (run `down` first).
