@@ -16,8 +16,11 @@
 # piper (lessac-medium, ~0.26), kokoro (int8 v0.19, ~1.2, best prosody,
 # slower than real time), paradee (Paradee-8M int8, Kokoro af_heart distill,
 # own runner under /opt/s22-tts/paradee, see tools/hardware/tts/paradee/),
+# el-antonis / el-female (Greek Piper-medium voices distilled from the rig's VoxCPM2
+# voices, vits-piper-el-<voice> under /opt/s22-tts, espeak-ng data shared with piper),
 # espeak (formant). If the neural engine fails, it
-# falls back to espeak-ng. S22_TTS_ENGINE sets the default.
+# falls back to espeak-ng. S22_TTS_ENGINE sets the default. Greek text with no --engine given
+# goes to S22_TTS_GREEK (default el-antonis) when that voice is installed.
 #
 #   s22-say [--out speaker|earpiece|bottom|top] [--engine E] [--sid N] [--amp N] [--diag DIR] TEXT...
 #   s22-say [--out ...] --wav /path/inside/chroot.wav
@@ -36,6 +39,7 @@ AMP=60                     # espeak-ng amplitude (0-200, default 100)
 DIAG=
 WAV=
 ENGINE=${S22_TTS_ENGINE:-supertonic}
+ENGINE_SET=
 SID=${S22_TTS_SID:-0}       # supertonic sid 0-4 = female styles (0 = F1, owner's choice: female), 5-9 = male
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -43,7 +47,7 @@ while [ $# -gt 0 ]; do
     --amp) AMP=$2; shift 2;;
     --diag) DIAG=$2; shift 2;;
     --wav) WAV=$2; shift 2;;
-    --engine) ENGINE=$2; shift 2;;
+    --engine) ENGINE=$2; ENGINE_SET=1; shift 2;;
     --sid) SID=$2; shift 2;;
     --) shift; break;;
     *) break;;
@@ -61,6 +65,13 @@ run() { chroot "$CHROOT" /usr/bin/env LD_LIBRARY_PATH=$OPT/usr/lib ESPEAK_DATA_P
 batch() { run $OPT/usr/bin/amixer -c0 -q -s < "$MIX/$1.amixer"; }
 
 TTS=/opt/s22-tts
+# Greek letters are U+0370-03FF / U+1F00-1FFF: UTF-8 lead bytes 0xCE, 0xCF or 0xE1 0xBC-0xBF.
+GR1=$(printf '\316') GR2=$(printf '\317')
+if [ -z "$ENGINE_SET" ] && [ -n "$TEXT" ]; then
+  G=${S22_TTS_GREEK:-el-antonis}
+  case "$TEXT" in *"$GR1"*|*"$GR2"*)
+    [ -f "$CHROOT$TTS/vits-piper-$G/model.onnx" ] && ENGINE=$G;; esac
+fi
 neural_tts() {  # $1 = wav path inside the chroot, $2 = text
   M=$TTS
   case "$ENGINE" in
@@ -76,6 +87,14 @@ neural_tts() {  # $1 = wav path inside the chroot, $2 = text
     piper) S=$M/vits-piper-en_US-lessac-medium
       set -- "$1" "$2" --vits-model=$S/en_US-lessac-medium.onnx --vits-tokens=$S/tokens.txt \
         --vits-data-dir=$S/espeak-ng-data;;
+    el-*) S=$M/vits-piper-$ENGINE
+      # Same text rules as the rig server: product names spelled in Greek, and the Greek question mark ";"
+      # read as "?" (the voices learned question intonation from "?").
+      t=$(printf '%s' "$2" | sed -e 's/OpenUnum/Όπεν Ούνουμ/g; s/OpenLunum/Όπεν Λούνουμ/g' \
+        -e 's/UnumSearch/Ούνουμ Σερτς/g; s/Unum/Ούνουμ/g' \
+        -e 's/; /? /g; s/;$/?/; s/; /? /g; s/;$/?/')
+      set -- "$1" "$t" --vits-model=$S/model.onnx --vits-tokens=$S/tokens.txt \
+        --vits-data-dir=$M/vits-piper-en_US-lessac-medium/espeak-ng-data;;
     kokoro) S=$M/kokoro-int8-en-v0_19
       set -- "$1" "$2" --kokoro-model=$S/model.int8.onnx --kokoro-voices=$S/voices.bin \
         --kokoro-tokens=$S/tokens.txt --kokoro-data-dir=$S/espeak-ng-data;;
