@@ -301,3 +301,21 @@ Plan: one `s22-phoned ipc-send 0x0d 0x14 3 <hex>` (allow-listed already in deplo
 deploy). Expect GEN 0x8000 and a spontaneous re-registration (J4 behaviour). If none in ~60 s, least
 invasive trigger. Watch act/band/RSRP up to 3 min. Rollback if registration lost > 2 min: one SET of the same
 command with an empty APN (network-default attach). Data stays DOWN throughout.
+
+## S2b live result (2026-10-17 UTC): on LTE
+
+One SET only, no deploy (phoned `d42e488a` = master already allow-lists `(0D,14)`), no trigger needed.
+
+- Before (epoch 1792228041): `ONLINE egprs band 0 home_3gpp ps rej 0`, RSRP 0, lte_sig 99, rssi_level 32, volte 2.
+- TX `c90099000d1403010102696e7465726e65742e766f6461666f6e652e6772` + zeros + `0200` (194-byte payload, mseq 0x99).
+- Reply GEN `0c00cf998001020d14030080` = **0x8000 accepted**. Result JSON in `/srv/s22/state/mobile-data/lte-attach-apn-*.json`.
+- +10 s: `act lte`, service_domain `csps`; from +20 s steady `lte home_3gpp ps rej 0`, PCI 334, TAC 3062,
+  RSRP **-99 dBm**, RSRQ -7 dB, SNR 30 dB, lte_sig 12, rssi_level 72, bars 3. Registration never dropped (3 min, 10 s polls).
+- The modem's JSON `band` field stays 0 on LTE too (not populated by this CP), so band is unknown, not "0".
+- Modem-reported `volte` changed 2 -> 1 and `ims_emc` 2 -> 1 after moving to LTE. No IMS/VoLTE command was sent;
+  no calls, no SMS. Meaning of these values is not established.
+- End state: ONLINE, SMS ready, SIM READY, data call released (call_state 3), rmnet0 DOWN, routes unchanged
+  (ecm0 default, wlan0 metric 600), ecm0/wlan0/tailscale0 up. No rollback needed.
+
+Not persisted: the profile is sent by hand; after a modem/phone restart it must be sent again (samsungipcd sends
+it when the SIM is up). Follow-up: have phoned send `lte_attach_apn_body(DEFAULT_APN)` once after SIM READY.
