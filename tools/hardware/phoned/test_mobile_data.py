@@ -98,6 +98,11 @@ class MobileDataTest(unittest.TestCase):
         ph = self.start()
         code, st = ph.mobile_data_up()
         self.assertEqual(code, 200, st)
+        # up() returns as soon as the IP-configuration notification lands; the fake CP sends the
+        # call-status notification as a separate, later frame.  Wait for it (event-based) instead of
+        # assuming it was already processed, then re-read the status.
+        self.assertTrue(ph._wait_data(1, lambda d: d.get('call_state') == P.DATA_CALL_ACTIVE, 10.0))
+        st = ph.mobile_data_status()
         self.assertEqual((st['state'], st['ipv4'], st['interface']), ('up', '10.20.30.40', 'rmnet0'))
         self.assertEqual(st['dns'], ['192.0.2.53', '192.0.2.54'])
         self.assertEqual((st['rx_bytes'], st['tx_bytes'], st['call_state']), (1234, 567, 1))
