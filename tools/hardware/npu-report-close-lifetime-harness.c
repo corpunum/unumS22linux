@@ -476,7 +476,14 @@ static void mailbox_deinit(volatile struct mailbox_hdr *header, struct npu_syste
 	(void)system;
 	pthread_mutex_lock(&g_observer_lock);
 	++g_mailbox_deinit_calls;
-	if (g_gate_entered && !g_reader_returned)
+	/*
+	 * The reader is "still using the mailbox" while it is parked at the
+	 * controlled barrier.  Do not key this on the reader thread having set
+	 * g_reader_returned: a fixed close may legitimately deinitialize the
+	 * moment the reader drops its pin, which can precede the (scheduler
+	 * dependent) point where that thread records its own return.
+	 */
+	if (g_gate_entered && !g_gate_release)
 		++g_mailbox_deinit_before_reader_exit;
 	pthread_cond_broadcast(&g_observer_cond);
 	pthread_mutex_unlock(&g_observer_lock);
