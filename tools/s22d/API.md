@@ -171,6 +171,8 @@ It talks to `/run/s22-phoned.sock` and falls back to `127.0.0.1:8095`.
 | `mobile_data.up` | `POST /v1/mobile-data/up` | `{apn?}` (default `internet.vodafone.gr`); phoned defines + activates PDP cid 1 and configures `rmnet0` with a metric-9000 fallback default route. Modem refusal = 502 `upstream_error` with the GEN code |
 | `mobile_data.down` | `POST /v1/mobile-data/down` | `{}`; removes route/address, releases the data call |
 
+LTE is not an `s22d` capability. `s22-phoned` sends the LTE initial-attach APN (0x0D14) once per modem start after the SIM is usable; configure it in phoned's `state-dir/lte-attach.json` (`{enabled, apn}`, default on, `internet.vodafone.gr`) or with `--no-lte-attach` / `--lte-attach-apn`. The result is `lte_attach` in phoned's `/status`.
+
 The order for `sms.send` and `call.dial` is: validate (400), check phoned is running (503), ask the owner, forward.
 The owner is never asked about a request that cannot succeed.
 

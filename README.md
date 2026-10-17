@@ -145,10 +145,14 @@ and [measured results](docs/DRIVER_MODELS_2026-09-20.md).
 | NPU | Real ENN loads; vertex10 open/close passed. BOOTUP audit found unbounded waits and unsafe error cleanup; no speculative patch or firmware-boot acceptance |
 | Sensors | Accelerometer/gyro and now magnetometer/light frames sampled twice each. Compass accuracy is zero and light response untested; calibration, auto-rotation and autostart remain unaccepted |
 | Audio DSP | Card/controls work; missing native PCM node repaired for this boot. PREPARE/write accepted, but 19 RUNNING samples show no RDMA/pointer progress; cleanup verified, speaker/microphone unfinished |
-| Modem | Dependencies recovered; real Samsung RIL library loads in isolated phone runtime without a RIL call. CPIF remains INIT; SIM/data/calls not working |
+| Modem | Dependencies recovered; real Samsung RIL library loads in isolated phone runtime without a RIL call. CPIF remains INIT in that isolated runtime. Separately, the native `s22-phoned` path (2026-10-17, [RECON](RECON.md)) has SIM READY and SMS ready; calls are not working and there is no call audio |
+| Mobile data | Works over the modem (Vodafone GR, `internet.vodafone.gr`): `s22d` `mobile_data` `up`/`down`/`status` through phoned define and activate the PDP context and configure `rmnet0` with a metric-9000 fallback default route, so Wi-Fi/USB stay preferred. Measured on EGPRS about 10 kB/s with HTTP 200 over `rmnet0`. Reversible and audited. DNS servers are reported but not written to resolv.conf |
+| LTE | The initial-attach APN frame (0x0D14, built from the open-source libsamsung-ipc fork) moved the radio from EGPRS to LTE (RSRP about -99 dBm) in the live run. `s22-phoned` now resends it at every modem start (default on; `lte-attach.json`, `--no-lte-attach`, `--lte-attach-apn`). The modem reports no band on LTE, so band is unknown |
+| Clock | `s22-clock` (restore, net, save, daemon) keeps the wall clock from booting in 2021: it only moves forward from the RTC, saved time or a build floor, then syncs from an HTTP Date header (NTP fallback) before tailscaled starts |
+| Voice (TTS) | `s22-say` speaks Greek text with the Piper voices `el-antonis` (default for Greek text) and `el-female`, installed by `tools/hardware/tts/greek/install-greek-voice.sh` (with rollback); `s22-touchd` uses it. English keeps its previous engines |
 | Bluetooth | Real hci0 registration and 41-command/41-event plain-H4 exchange pass after IBS-profile fix; detach/power-off/WLAN preservation verified. Persistent service, pairing and Bluetooth audio unfinished |
 | Connectivity | Native USB SSH and Wi-Fi work; independent hardware rescue is not yet demonstrated. Association, DHCP, DNS and HTTPS previously passed after two automatic recovery startups |
-| Other everyday hardware | Usable audio, cellular, camera, GPS and suspend remain unaccepted |
+| Other everyday hardware | Usable audio, calls, camera, GPS and suspend remain unaccepted |
 
 Previous [hardware follow-up and evidence](docs/HARDWARE_FOLLOWUP_2026-09-21.md):
 Bluetooth transport, additional sensor frames, isolated RIL loading, and13/13
