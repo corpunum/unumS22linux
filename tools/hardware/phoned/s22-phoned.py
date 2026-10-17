@@ -36,6 +36,7 @@ import socket
 import socketserver
 import stat
 import struct
+import subprocess
 import sys
 import threading
 import time
@@ -62,7 +63,16 @@ DISP_ICON_INFO, DISP_RSSI_INFO = (7, 1), (7, 6)
 NET_CURRENT_PLMN, NET_REGIST, NET_SERVING_NETWORK = (8, 3), (8, 5), (8, 8)
 GEN_PHONE_RES = (0x80, 1)
 GEN_OK = 0x8000
-DATA_CALL_ESTABLISH = (0x02, 0x03)  # stock RIL, NOT CALL_RELEASE for this command
+GPRS_DEFINE_PDP_CONTEXT, GPRS_PS, GPRS_PDP_CONTEXT = (0x0D, 0x01), (0x0D, 0x03), (0x0D, 0x04)
+GPRS_IP_CONFIGURATION, GPRS_PIN_CTRL, GPRS_CALL_STATUS = (0x0D, 0x09), (0x0D, 0x0F), (0x0D, 0x10)
+GPRS_MOBILE_DATA_SETTING = (0x0D, 0x1D)
+CFG_JSON_CMD_LIST = (0x0F, 0x3B)
+# Stock RIL JsonUtil::MakeJsonPacket: FastWriter text (sorted keys, trailing newline) at offset 7.
+CFG_JSON_CMD_LIST_BODY = b'{"jver":"1.0"}\n'
+DEFAULT_APN = "internet.vodafone.gr"   # Vodafone GR; override with --apn / {"apn": ...}
+MOBILE_ROUTE_METRIC = 9000              # far behind ecm0 (0) and wlan0 (600): fallback only
+DATA_CALL_ACTIVE, DATA_CALL_RELEASED = 1, 3   # observed GPRS_CALL_STATUS data_call_state values
+NET_SYS = "/sys/class/net"
 DATA_SET_ALLOWLIST = {(0x0D, i) for i in (0x01, 0x03, 0x04, 0x14, 0x1B, 0x1D)}
 IPC_GET_ALLOWLIST = {(0x08, 0x0A), (0x0D, 0x04)}
 
@@ -81,6 +91,10 @@ NAMES = {
     NET_CURRENT_PLMN: "NET_CURRENT_PLMN", NET_REGIST: "NET_REGIST",
     NET_SERVING_NETWORK: "NET_SERVING_NETWORK", (0x0A, 1): "MISC_ME_VERSION",
     (0x0A, 3): "MISC_ME_SN", GEN_PHONE_RES: "GEN_PHONE_RES",
+    GPRS_DEFINE_PDP_CONTEXT: "GPRS_DEFINE_PDP_CONTEXT", GPRS_PS: "GPRS_PS",
+    GPRS_PDP_CONTEXT: "GPRS_PDP_CONTEXT", GPRS_IP_CONFIGURATION: "GPRS_IP_CONFIGURATION",
+    GPRS_PIN_CTRL: "GPRS_PIN_CTRL", GPRS_CALL_STATUS: "GPRS_CALL_STATUS",
+    GPRS_MOBILE_DATA_SETTING: "GPRS_MOBILE_DATA_SETTING", CFG_JSON_CMD_LIST: "CFG_JSON_CMD_LIST",
 }
 SIM_STATUS = {0x00: "READY", 0x01: "SIM_LOCK_REQUIRED", 0x02: "INSIDE_PF_ERROR",
               0x03: "LOCK_SC(PIN)", 0x04: "LOCK_FD", 0x05: "LOCK_PN", 0x06: "LOCK_PU",
@@ -101,6 +115,44 @@ MODEM_STATE_PATH = "/sys/devices/platform/cpif/modem_state"
 
 def now():
     return round(time.time(), 3)
+
+
+def stock_json(obj):
+    """Bytes as stock JsonUtil::MakeJsonPacket writes them: FastWriter (sorted, compact) + newline."""
+    return (json.dumps(obj, sort_keys=True, separators=(",", ":")) + "\n").encode()
+
+
+APN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,99}$")
+
+
+def define_pdp_body(cid, apn):
+    """(0D,01) SET body from IpcTxDefinePdpContext: IPv4 ("IP" -> pdp_type 2), no IMS -> ap_pco [0]."""
+    if not APN_RE.match(apn or ""):
+        raise ValueError("APN must be 1-100 chars of letters, digits, '.' or '-'")
+    return stock_json({"ap_pco": [0], "apn": apn, "cid": cid, "pdp_type": 2})
+
+
+def pdp_state_body(cid, up):
+    """(0D,04) SET body from IpcTxSetPdpContext: state 1 activates, 0 deactivates."""
+    return stock_json({"auth_type": 0, "cid": cid, "reason": 0, "state": 1 if up else 0})
+
+
+def run_ip(*args):
+    """Run iproute2; returns (ok, combined output). Never raises."""
+    try:
+        r = subprocess.run(["ip", *args], capture_output=True, text=True, timeout=10)
+        return r.returncode == 0, (r.stdout + r.stderr).strip()
+    except (OSError, subprocess.SubprocessError) as e:
+        return False, repr(e)
+
+
+def is_pdp_deactivate(data):
+    """True for a (0D,04) JSON body whose wire state is 0 (stock IpcTxSetPdpContext deactivate)."""
+    try:
+        v = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return False
+    return isinstance(v, dict) and v.get("state") == 0 and isinstance(v.get("cid"), int)
 
 
 # ---------------------------------------------------------------- SIPC framing
@@ -988,8 +1040,14 @@ def device_opener(nv_root=None, serve_rfs=True):
 class Phone:
     def __init__(self, state_dir, simulate=False, max_sms_per_hour=10, max_dials_per_hour=5,
                  reassembly_timeout=600.0, modem_state_path=MODEM_STATE_PATH, radio_normal=False,
-                 smsc=None, req_timeout=8.0, send_ack_timeout=20.0):
+                 smsc=None, req_timeout=8.0, send_ack_timeout=20.0, ip_runner=None,
+                 net_sys=NET_SYS, data_timeout=30.0):
         self.send_ack_timeout = send_ack_timeout
+        self.ip = ip_runner or ((lambda *a: (True, "simulated")) if simulate else run_ip)
+        self.net_sys, self.data_timeout = net_sys, data_timeout
+        self.data = {}                      # cid -> mobile data state, fed by GPRS notifications
+        self.data_cond = threading.Condition()
+        self.data_lock = threading.Lock()
         self.dir = Path(state_dir)
         self.dir.mkdir(parents=True, exist_ok=True)
         try:
@@ -1151,6 +1209,7 @@ class Phone:
             with self.lock:
                 self.data_notifications.append(record)
             self.events.emit("data_notification", **record)
+            self._on_data_noti(fr.cmd, (dec or {}).get("json"))
         if dec is None:
             return
         h = {SEC_PIN_STATUS: self._on_sim, NET_REGIST: self._on_regist,
@@ -1744,7 +1803,7 @@ class Phone:
             return 400, {"ok": False, "error": str(e)}
         cmd = (group, index)
         allowed = ((cmd in DATA_SET_ALLOWLIST and typ == SET) or
-                   (cmd == DATA_CALL_ESTABLISH and typ == SET and data in (b"\x01", b"\x02")) or
+                   (cmd == CFG_JSON_CMD_LIST and typ == GET and data == CFG_JSON_CMD_LIST_BODY) or
                    (cmd in IPC_GET_ALLOWLIST and typ == GET and not data))
         if not allowed:
             return 403, {"ok": False, "error": "not an experimental data command; SMS/call gates cannot be bypassed"}
@@ -1753,7 +1812,7 @@ class Phone:
         try:
             elapsed = None if self.last_ipc_send is None else time.monotonic() - self.last_ipc_send
             # Emergency data-off must remain possible even during the cooldown/offline state.
-            off = cmd == DATA_CALL_ESTABLISH and data == b"\x02"
+            off = cmd == GPRS_PDP_CONTEXT and typ == SET and is_pdp_deactivate(data)
             if not off and elapsed is not None and elapsed < 30:
                 return 429, {"ok": False, "error": "wait at least 30s between experiments",
                              "retry_after": round(30 - elapsed, 3)}
@@ -1780,6 +1839,162 @@ class Phone:
                          "timed_out": not bool(pending and pending.completed)}
         finally:
             self.ipc_send_lock.release()
+
+    # -- mobile data (stock RIL JSON frames; see RECON.md "S2 evidence pass")
+    @staticmethod
+    def data_ifname(cid):
+        return f"rmnet{cid - 1}"           # observed: cid 1 carries traffic on rmnet0
+
+    def _on_data_noti(self, cmd, j):
+        if not isinstance(j, dict) or not isinstance(j.get("cid"), int):
+            return
+        cid = j["cid"]
+        with self.data_cond:
+            d = self.data.setdefault(cid, {"cid": cid, "state": "down"})
+            if cmd == GPRS_IP_CONFIGURATION:
+                v4 = j.get("ipv4_info") or {}
+                d.update(ipv4=v4.get("addr") or None, dns=list(v4.get("dns") or []),
+                         mtu=j.get("ipv4_mtu") or 1500, ip_ts=now())
+            elif cmd == GPRS_CALL_STATUS:
+                d.update(call_state=j.get("data_call_state"), call_reason=j.get("data_callstate_rsn"),
+                         call_ts=now())
+                if j.get("data_call_state") == DATA_CALL_RELEASED and d.get("state") == "up":
+                    d["state"] = "released_by_network"
+                    self.defer(self._net_down, cid)
+            self.data_cond.notify_all()
+
+    def _net_up(self, cid, d):
+        dev = self.data_ifname(cid)
+        steps = [("addr", "flush", "dev", dev),
+                 ("addr", "add", f"{d['ipv4']}/32", "dev", dev),
+                 ("link", "set", dev, "mtu", str(int(d.get("mtu") or 1500)), "up"),
+                 ("route", "replace", "default", "dev", dev, "metric", str(MOBILE_ROUTE_METRIC))]
+        for st in steps:
+            ok, out = self.ip(*st)
+            self.log.write({"event": "mobile_data_ip", "args": list(st), "ok": ok, "out": out[:200]})
+            if not ok:
+                return f"ip {' '.join(st)}: {out}"
+        return None
+
+    def _net_down(self, cid):
+        dev = self.data_ifname(cid)
+        for st in (("route", "del", "default", "dev", dev, "metric", str(MOBILE_ROUTE_METRIC)),
+                   ("addr", "flush", "dev", dev), ("link", "set", dev, "down")):
+            ok, out = self.ip(*st)
+            self.log.write({"event": "mobile_data_ip", "args": list(st), "ok": ok, "out": out[:200]})
+
+    def _data_send(self, cmd, body):
+        p = self._req(cmd, SET, body, timeout=8.0, want_resp=False, strict=True)
+        gen = p.gen if p else None
+        return gen, (None if gen and gen.get("ok") else
+                     f"{NAMES[cmd]} {'timed out' if not gen else 'refused, code 0x%04x' % gen['code']}")
+
+    def _wait_data(self, cid, pred, timeout):
+        deadline = time.monotonic() + timeout
+        with self.data_cond:
+            while not pred(self.data.get(cid, {})):
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    return False
+                self.data_cond.wait(left)
+            return True
+
+    def mobile_data_up(self, apn=DEFAULT_APN, cid=1):
+        try:
+            cid = int(cid)
+            if not 1 <= cid <= 8:
+                raise ValueError("cid must be 1-8 (rmnet0-7)")
+            define = define_pdp_body(cid, apn or DEFAULT_APN)
+        except (TypeError, ValueError) as e:
+            return 400, {"ok": False, "error": str(e)}
+        if not self.data_lock.acquire(blocking=False):
+            return 409, {"ok": False, "error": "a mobile data change is already in progress"}
+        try:
+            if self.data.get(cid, {}).get("state") == "up":
+                return 200, self.mobile_data_status(cid)
+            state = self.modem_state()
+            if state != "ONLINE":
+                return 409, {"ok": False, "error": "modem is not ONLINE", "modem_state": state}
+            if not self.link or not self.link.is_open:
+                return 503, {"ok": False, "error": "IPC link is down"}
+            with self.data_cond:
+                self.data[cid] = {"cid": cid, "state": "activating", "apn": apn or DEFAULT_APN, "since": now()}
+            try:
+                _, err = self._data_send(GPRS_DEFINE_PDP_CONTEXT, define)
+                if not err:
+                    _, err = self._data_send(GPRS_PDP_CONTEXT, pdp_state_body(cid, True))
+                if not err and not self._wait_data(cid, lambda d: d.get("ipv4"), self.data_timeout):
+                    err = "no IP configuration from the modem"
+                if not err:
+                    err = self._net_up(cid, self.data[cid])
+            except LinkDown as e:
+                err = f"IPC link: {e}"
+            if err:
+                self._net_down(cid)
+                try:
+                    self._data_send(GPRS_PDP_CONTEXT, pdp_state_body(cid, False))
+                except LinkDown:
+                    pass
+                with self.data_cond:
+                    self.data[cid].update(state="down", error=err)
+                return 502, dict(self.mobile_data_status(cid), ok=False, error=err)
+            with self.data_cond:
+                self.data[cid].update(state="up", up_ts=now(), error=None)
+            return 200, self.mobile_data_status(cid)
+        finally:
+            self.data_lock.release()
+
+    def mobile_data_down(self, cid=1):
+        try:
+            cid = int(cid)
+            if not 1 <= cid <= 8:
+                raise ValueError("cid must be 1-8 (rmnet0-7)")
+        except (TypeError, ValueError) as e:
+            return 400, {"ok": False, "error": str(e)}
+        if not self.data_lock.acquire(blocking=False):
+            return 409, {"ok": False, "error": "a mobile data change is already in progress"}
+        try:
+            self._net_down(cid)
+            if not self.link or not self.link.is_open:
+                return 503, {"ok": False, "error": "IPC link is down"}
+            try:
+                _, err = self._data_send(GPRS_PDP_CONTEXT, pdp_state_body(cid, False))
+            except LinkDown as e:
+                err = f"IPC link: {e}"
+            if not err:
+                self._wait_data(cid, lambda d: d.get("call_state") == DATA_CALL_RELEASED, 10.0)
+            with self.data_cond:
+                d = self.data.setdefault(cid, {"cid": cid})
+                d.update(state="down", ipv4=None, dns=[], down_ts=now(), error=err)
+            out = self.mobile_data_status(cid)
+            return (502, dict(out, ok=False, error=err)) if err else (200, out)
+        finally:
+            self.data_lock.release()
+
+    def _counter(self, dev, name):
+        try:
+            return int(Path(self.net_sys, dev, "statistics", name).read_text())
+        except (OSError, ValueError):
+            return None
+
+    def mobile_data_status(self, cid=1):
+        dev = self.data_ifname(cid)
+        with self.data_cond:
+            d = dict(self.data.get(cid, {"cid": cid, "state": "down"}))
+        with self.lock:
+            reg = dict(self.registration or {})
+            sig = dict(self.signal or {})
+        try:
+            oper = Path(self.net_sys, dev, "operstate").read_text().strip()
+        except OSError:
+            oper = None
+        return {"ok": True, "cid": cid, "state": d.get("state", "down"), "apn": d.get("apn"),
+                "interface": dev, "operstate": oper, "ipv4": d.get("ipv4"), "dns": d.get("dns", []),
+                "mtu": d.get("mtu"), "call_state": d.get("call_state"), "route_metric": MOBILE_ROUTE_METRIC,
+                "rx_bytes": self._counter(dev, "rx_bytes"), "tx_bytes": self._counter(dev, "tx_bytes"),
+                "act": reg.get("act"), "band": reg.get("band"), "reg_status": reg.get("reg_status"),
+                "signal": sig, "modem_state": self.modem_state(), "error": d.get("error"),
+                "since": d.get("up_ts")}
 
     # -- status
     def status(self):
@@ -1922,6 +2137,17 @@ class FakeCP:
                 num = call["number"].encode()
                 body += bytes([0, 1, cid, call["term"], call["status"], 0, len(num), 0]) + num
             self.out(c, RESP, body, fr.mseq)
+        elif c == GPRS_PDP_CONTEXT and t == SET:
+            j = json.loads(fr.data)
+            self.gen(fr)
+            if j["state"] == 1:
+                self.out(GPRS_IP_CONFIGURATION, NOTI, json.dumps({
+                    "cid": j["cid"], "ipv4_info": {"addr": "10.20.30.40", "default_gateway": "",
+                                                   "dns": ["192.0.2.53", "192.0.2.54"], "pcscf_addr": [],
+                                                   "subnet_mask": ""}, "ipv4_mtu": 1500, "ipv6_mtu": 0}).encode())
+            self.out(GPRS_CALL_STATUS, NOTI, json.dumps({
+                "cid": j["cid"], "data_call_state": 1 if j["state"] == 1 else 3, "data_callstate_rsn": 0,
+                "external_ps_call": 0, "qci": 0, "throttle_timer": 0}).encode())
         elif t in (EXEC, SET):
             self.gen(fr)      # DTMF, DEVICE_READY, PWR, ... : generic success
 
@@ -2010,6 +2236,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if route == ("POST", "/ipc/send"):
                 return self._send(*ph.ipc_send(body.get("group"), body.get("index"),
                                               body.get("type"), body.get("payload")))
+            if route == ("GET", "/data/status"):
+                return self._send(200, ph.mobile_data_status(int(q.get("cid", 1))))
+            if route == ("POST", "/data/up"):
+                return self._send(*ph.mobile_data_up(body.get("apn") or DEFAULT_APN, body.get("cid", 1)))
+            if route == ("POST", "/data/down"):
+                return self._send(*ph.mobile_data_down(body.get("cid", 1)))
             if route == ("POST", "/ipc/get"):
                 return self._send(*ph.ipc_get(body.get("group", -1), body.get("index", -1)))
             if route == ("GET", "/calls"):
@@ -2178,10 +2410,11 @@ def main(argv=None):
     ip.add_argument("payload")
     ip.add_argument("--socket", default="/run/s22-phoned.sock")
     ip.add_argument("--port", type=int, default=8095)
-    data_call = sub.add_parser("data-call", help="stock RIL exact on/off frame (02,03 type 03)")
-    data_call.add_argument("state", choices=("on", "off"))
-    data_call.add_argument("--socket", default="/run/s22-phoned.sock")
-    data_call.add_argument("--port", type=int, default=8095)
+    md = sub.add_parser("mobile-data", help="bring mobile data up/down on rmnet (fallback route) or show it")
+    md.add_argument("action", choices=("up", "down", "status"))
+    md.add_argument("--apn", default=DEFAULT_APN)
+    md.add_argument("--socket", default="/run/s22-phoned.sock")
+    md.add_argument("--port", type=int, default=8095)
     dc = sub.add_parser("send-test-frame-decode")
     dc.add_argument("hex")
     a = ap.parse_args(argv)
@@ -2197,10 +2430,20 @@ def main(argv=None):
     if a.cmd == "status":
         print(json.dumps(cli_get("/status", a.socket, a.port), indent=2, ensure_ascii=False))
         return 0
-    if a.cmd in ("ipc-send", "data-call"):
-        body = ({"group": 2, "index": 3, "type": SET, "payload": "01" if a.state == "on" else "02"}
-                if a.cmd == "data-call" else
-                {"group": a.group, "index": a.index, "type": a.type, "payload": a.payload})
+    if a.cmd == "mobile-data":
+        conn = UnixHTTPConnection(a.socket, timeout=60) if a.socket and os.path.exists(a.socket) else http.client.HTTPConnection("127.0.0.1", a.port, timeout=60)
+        if a.action == "status":
+            conn.request("GET", "/data/status")
+        else:
+            conn.request("POST", f"/data/{a.action}", json.dumps({"apn": a.apn} if a.action == "up" else {}),
+                         {"Content-Type": "application/json"})
+        res = conn.getresponse()
+        result = json.loads(res.read())
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 0 if res.status == 200 and result.get("ok") else 1
+    if a.cmd == "ipc-send":
+        body = {"group": a.group, "index": a.index, "type": a.type,
+                "payload": a.payload.encode().decode("unicode_escape")}
         conn = UnixHTTPConnection(a.socket, timeout=12) if a.socket and os.path.exists(a.socket) else http.client.HTTPConnection("127.0.0.1", a.port, timeout=12)
         conn.request("POST", "/ipc/send", json.dumps(body), {"Content-Type": "application/json"})
         res = conn.getresponse()
