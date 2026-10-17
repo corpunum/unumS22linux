@@ -62,7 +62,12 @@ DISP_ICON_INFO, DISP_RSSI_INFO = (7, 1), (7, 6)
 NET_CURRENT_PLMN, NET_REGIST, NET_SERVING_NETWORK = (8, 3), (8, 5), (8, 8)
 GEN_PHONE_RES = (0x80, 1)
 GEN_OK = 0x8000
-DATA_CALL_ESTABLISH = (0x02, 0x03)  # stock RIL, NOT CALL_RELEASE for this command
+GPRS_DEFINE_PDP_CONTEXT, GPRS_PS, GPRS_PDP_CONTEXT = (0x0D, 0x01), (0x0D, 0x03), (0x0D, 0x04)
+GPRS_IP_CONFIGURATION, GPRS_PIN_CTRL, GPRS_CALL_STATUS = (0x0D, 0x09), (0x0D, 0x0F), (0x0D, 0x10)
+GPRS_MOBILE_DATA_SETTING = (0x0D, 0x1D)
+CFG_JSON_CMD_LIST = (0x0F, 0x3B)
+# Stock RIL JsonUtil::MakeJsonPacket: FastWriter text (sorted keys, trailing newline) at offset 7.
+CFG_JSON_CMD_LIST_BODY = b'{"jver":"1.0"}\n'
 DATA_SET_ALLOWLIST = {(0x0D, i) for i in (0x01, 0x03, 0x04, 0x14, 0x1B, 0x1D)}
 IPC_GET_ALLOWLIST = {(0x08, 0x0A), (0x0D, 0x04)}
 
@@ -81,6 +86,10 @@ NAMES = {
     NET_CURRENT_PLMN: "NET_CURRENT_PLMN", NET_REGIST: "NET_REGIST",
     NET_SERVING_NETWORK: "NET_SERVING_NETWORK", (0x0A, 1): "MISC_ME_VERSION",
     (0x0A, 3): "MISC_ME_SN", GEN_PHONE_RES: "GEN_PHONE_RES",
+    GPRS_DEFINE_PDP_CONTEXT: "GPRS_DEFINE_PDP_CONTEXT", GPRS_PS: "GPRS_PS",
+    GPRS_PDP_CONTEXT: "GPRS_PDP_CONTEXT", GPRS_IP_CONFIGURATION: "GPRS_IP_CONFIGURATION",
+    GPRS_PIN_CTRL: "GPRS_PIN_CTRL", GPRS_CALL_STATUS: "GPRS_CALL_STATUS",
+    GPRS_MOBILE_DATA_SETTING: "GPRS_MOBILE_DATA_SETTING", CFG_JSON_CMD_LIST: "CFG_JSON_CMD_LIST",
 }
 SIM_STATUS = {0x00: "READY", 0x01: "SIM_LOCK_REQUIRED", 0x02: "INSIDE_PF_ERROR",
               0x03: "LOCK_SC(PIN)", 0x04: "LOCK_FD", 0x05: "LOCK_PN", 0x06: "LOCK_PU",
@@ -101,6 +110,15 @@ MODEM_STATE_PATH = "/sys/devices/platform/cpif/modem_state"
 
 def now():
     return round(time.time(), 3)
+
+
+def is_pdp_deactivate(data):
+    """True for a (0D,04) JSON body whose wire state is 0 (stock IpcTxSetPdpContext deactivate)."""
+    try:
+        v = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return False
+    return isinstance(v, dict) and v.get("state") == 0 and isinstance(v.get("cid"), int)
 
 
 # ---------------------------------------------------------------- SIPC framing
@@ -1744,7 +1762,7 @@ class Phone:
             return 400, {"ok": False, "error": str(e)}
         cmd = (group, index)
         allowed = ((cmd in DATA_SET_ALLOWLIST and typ == SET) or
-                   (cmd == DATA_CALL_ESTABLISH and typ == SET and data in (b"\x01", b"\x02")) or
+                   (cmd == CFG_JSON_CMD_LIST and typ == GET and data == CFG_JSON_CMD_LIST_BODY) or
                    (cmd in IPC_GET_ALLOWLIST and typ == GET and not data))
         if not allowed:
             return 403, {"ok": False, "error": "not an experimental data command; SMS/call gates cannot be bypassed"}
@@ -1753,7 +1771,7 @@ class Phone:
         try:
             elapsed = None if self.last_ipc_send is None else time.monotonic() - self.last_ipc_send
             # Emergency data-off must remain possible even during the cooldown/offline state.
-            off = cmd == DATA_CALL_ESTABLISH and data == b"\x02"
+            off = cmd == GPRS_PDP_CONTEXT and typ == SET and is_pdp_deactivate(data)
             if not off and elapsed is not None and elapsed < 30:
                 return 429, {"ok": False, "error": "wait at least 30s between experiments",
                              "retry_after": round(30 - elapsed, 3)}
@@ -2178,10 +2196,6 @@ def main(argv=None):
     ip.add_argument("payload")
     ip.add_argument("--socket", default="/run/s22-phoned.sock")
     ip.add_argument("--port", type=int, default=8095)
-    data_call = sub.add_parser("data-call", help="stock RIL exact on/off frame (02,03 type 03)")
-    data_call.add_argument("state", choices=("on", "off"))
-    data_call.add_argument("--socket", default="/run/s22-phoned.sock")
-    data_call.add_argument("--port", type=int, default=8095)
     dc = sub.add_parser("send-test-frame-decode")
     dc.add_argument("hex")
     a = ap.parse_args(argv)
@@ -2197,10 +2211,9 @@ def main(argv=None):
     if a.cmd == "status":
         print(json.dumps(cli_get("/status", a.socket, a.port), indent=2, ensure_ascii=False))
         return 0
-    if a.cmd in ("ipc-send", "data-call"):
-        body = ({"group": 2, "index": 3, "type": SET, "payload": "01" if a.state == "on" else "02"}
-                if a.cmd == "data-call" else
-                {"group": a.group, "index": a.index, "type": a.type, "payload": a.payload})
+    if a.cmd == "ipc-send":
+        body = {"group": a.group, "index": a.index, "type": a.type,
+                "payload": a.payload.encode().decode("unicode_escape")}
         conn = UnixHTTPConnection(a.socket, timeout=12) if a.socket and os.path.exists(a.socket) else http.client.HTTPConnection("127.0.0.1", a.port, timeout=12)
         conn.request("POST", "/ipc/send", json.dumps(body), {"Content-Type": "application/json"})
         res = conn.getresponse()

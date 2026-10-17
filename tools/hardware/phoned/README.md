@@ -96,14 +96,16 @@ and simulate mode only, with no /dev access.
 
 ```
 s22-phoned ipc-send <group> <index> <type> '<hex|JSON-object>'
-s22-phoned data-call on|off
 ```
+
+(The CLI expands `\n` escapes so the stock trailing newline can be typed.)
 
 `POST /ipc/send {group,index,type,payload}` uses the same guarded sender. Numbers
 on the CLI accept decimal or `0x` notation. Only SET (type 3) to `0d/01`, `0d/03`,
-`0d/04`, `0d/14`, `0d/1b`, `0d/1d`, and the exact stock RIL data-call control
-`02/03` selectors `01` (on) / `02` (off) are permitted. The two documented GETs
-`08/0a` and `0d/04` accept type 2 with an empty payload. JSON text is encoded
+`0d/04`, `0d/14`, `0d/1b`, `0d/1d` is permitted. The documented GETs `08/0a` and
+`0d/04` accept type 2 with an empty payload; `0f/3b` (JSON command list) only with the
+exact stock body `{"jver":"1.0"}\n`. (An earlier `data-call` command sent `02/03`, which is
+CALL_RELEASE; the stock builder really emits `03/02`, the CDMA-data group, so it was removed.) JSON text is encoded
 unchanged as UTF-8; hex is decoded verbatim. Limit 4096 payload bytes.
 
 One frame, no retries; max 3 s write deadline plus 6 s reply wait. Matching requires
@@ -112,7 +114,7 @@ command and request type. The result preserves the actual sequenced TX frame,
 matching RESP and/or full GEN frame and raw error code (`0x8000` = accepted), plus
 `timed_out`. An acceptance is **not proof of working data**. JSON RESP is retained
 without assigning undocumented success semantics. Concurrent experiments are
-refused; at least 30 s between frames. Emergency off bypasses cooldown/ONLINE
+refused; at least 30 s between frames. Emergency off (`0d/04` SET with JSON `"state":0`) bypasses cooldown/ONLINE
 checks but still requires an open link. Experiments require ONLINE otherwise.
 These controls do not alter SMS/call gates and do not change Linux routes.
 
