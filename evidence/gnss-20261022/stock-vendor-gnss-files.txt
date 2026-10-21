@@ -1,0 +1,51 @@
+# Stock vendor GNSS files (FYI3 vendor, rootfs/live-vendor-readonly.img, host loop mount ro,norecovery)
+4373576  ae5a5e58a745b567  /vendor/bin/hw/gpsd
+621  9df96cda71ea240d  /vendor/bin/hw/gps.sh
+11496  04f02d12f83ae163  /vendor/bin/hw/vendor.samsung.hardware.gnss@2.1-service
+1243  06cf16c30e207185  /vendor/etc/init/init.gps.rc
+133  3454d3fe37309f1c  /vendor/etc/init/vendor.samsung.hardware.gnss@2.1-service.rc
+2654  6c5419b0318185b6  /vendor/etc/gnss/gps.cfg
+2709  0efe509083148e1b  /vendor/etc/gnss/gps.debug.cfg
+2651  9c3df783e1452280  /vendor/etc/gnss/gps.issuetracker.cfg
+73298  1a83198c43feb798  /vendor/etc/gnss/ca.pem
+208  1dafc488116bdf01  /vendor/etc/gnss/deleteLogCommands
+492736  84ed14c3dc79df17  /vendor/lib64/hw/vendor.samsung.hardware.gnss@2.1-impl.so
+822784  997d4cecdc3ca8d6  /vendor/lib64/hw/android.hardware.gnss@2.1-impl.so
+81200  b6255175f46b8a70  /vendor/lib64/libwrappergps.so
+198736  4554febd1a498252  /vendor/lib64/vendor.samsung.hardware.gnss@2.1.so
+308912  866fe8c7b9c21857  /vendor/lib64/vendor.samsung.hardware.gnss@2.0.so
+60  2783952c61bc5c81  /vendor/etc/gps_debug.conf
+
+# Not present in stock vendor: /vendor/firmware/os.checked.bin, /vendor/bin/hw/alive_image.bin (gpsd optional overrides; Kepler image is embedded in gpsd)
+(no gnss firmware files in /vendor/firmware)
+
+# vintf manifest GNSS entries
+83:        <name>android.hardware.gnss</name>
+84-        <transport>hwbinder</transport>
+85-        <version>1.1</version>
+86-        <interface>
+87-            <name>IGnss</name>
+88-            <instance>default</instance>
+89-        </interface>
+90-        <fqname>@1.1::IGnss/default</fqname>
+91-    </hal>
+--
+93:        <name>android.hardware.gnss</name>
+94-        <transport>hwbinder</transport>
+95-        <version>2.1</version>
+96-        <interface>
+97-            <name>IGnss</name>
+98-            <instance>default</instance>
+99-        </interface>
+100-        <fqname>@2.1::IGnss/default</fqname>
+101-    </hal>
+--
+288:        <name>vendor.samsung.hardware.gnss</name>
+289-        <transport>hwbinder</transport>
+290-        <version>2.1</version>
+291-        <interface>
+292-            <name>ISehGnss</name>
+293-            <instance>default</instance>
+294-        </interface>
+295-        <fqname>@2.1::ISehGnss/default</fqname>
+296-    </hal>

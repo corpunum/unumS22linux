@@ -1,0 +1,16 @@
+# Two gpsd code paths that touch things outside GNSS (static analysis, llvm-objdump of stock gpsd)
+
+1) AP watchdog reboot via GNSS_IOCTL_SET_WATCHDOG_RESET (0x4b10)
+   0xa1ba8: ldr w0,[x0,#0x48]; mov w1,#0x4b10; mov x2,xzr; b ioctl@plt
+   only caller: 0x91e6c (wrapper 0x91e3c), called once at 0x95110, inside the
+   "soft_dog" alarm handler, right after the log "KEP soft_dog SCANDUMP".
+   Gate: a global flag bit0 (0x2f1efc) AND a config lookup of "soft_dog_scan_dump".
+   Kernel side (gnss_io_device.c misc_ioctl): GNSS_IOCTL_SET_WATCHDOG_RESET ->
+   dbg_snapshot_expire_watchdog()  => whole phone resets (DSS module is loaded).
+
+2) CP status query via /dev/umts_boot0
+   0xa218c: open("/dev/umts_boot0", O_RDONLY); ioctl(fd, 0x6f27) = IOCTL_GET_CP_STATUS; close
+   strings: "modem state ONLINE !", "modem state unavailable, interface %s not present: %d"
+   Kernel side (cpif bootdump_io_device.c / ipc_io_device.c): returns phone_state, and
+   CLEARS mc->sim_state.changed if set (could swallow a SIM-change edge meant for cbd/phoned).
+   If the node is absent gpsd only logs "modem state unavailable".

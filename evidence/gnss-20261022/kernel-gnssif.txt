@@ -1,0 +1,98 @@
+# Kernel: drivers/soc/samsung/gnssif (CONFIG_EXYNOS_GNSS_IF=m; built as gnssif.ko + gnss_mbox.ko)
+40:#define GNSS_IOC_MAGIC	('K')
+42:#define GNSS_IOCTL_RESET			_IO(GNSS_IOC_MAGIC, 0x00)
+43:#define GNSS_IOCTL_LOAD_FIRMWARE		_IO(GNSS_IOC_MAGIC, 0x01)
+44:#define GNSS_IOCTL_REQ_FAULT_INFO		_IO(GNSS_IOC_MAGIC, 0x02)
+45:#define GNSS_IOCTL_REQ_BCMD			_IO(GNSS_IOC_MAGIC, 0x03)
+46:#define GNSS_IOCTL_READ_FIRMWARE		_IO(GNSS_IOC_MAGIC, 0x04)
+47:#define GNSS_IOCTL_CHANGE_SENSOR_GPIO		_IO(GNSS_IOC_MAGIC, 0x05)
+48:#define GNSS_IOCTL_CHANGE_TCXO_MODE		_IO(GNSS_IOC_MAGIC, 0x06)
+49:#define GNSS_IOCTL_SET_SENSOR_POWER		_IO(GNSS_IOC_MAGIC, 0x07)
+50:#define GNSS_IOCTL_SET_WATCHDOG_RESET		_IO(GNSS_IOC_MAGIC, 0x10)
+51:#define GNSS_IOCTL_READ_SHMEM_SIZE		_IO(GNSS_IOC_MAGIC, 0x11)
+52:#define GNSS_IOCTL_READ_RESET_COUNT		_IO(GNSS_IOC_MAGIC, 0x12)
+53:#define GNSS_IOCTL_GET_SWREG			_IOWR(GNSS_IOC_MAGIC, 0x20, char *)
+54:#define GNSS_IOCTL_GET_APREG			_IOWR(GNSS_IOC_MAGIC, 0x21, char *)
+55:#define GNSS_IOCTL_RELEASE_RESET		_IO(GNSS_IOC_MAGIC, 0x13)
+56:#define GNSS_IOCTL_POWER_ON			_IO(GNSS_IOC_MAGIC, 0x14)
+57:#define GNSS_IOCTL_LOAD_DATA			_IOWR(GNSS_IOC_MAGIC, 0x15, struct kepler_data_args)
+
+72:struct kepler_firmware_args {
+73-	u32 firmware_size;
+74-	u32 offset;
+75-	char *firmware_bin;
+76-};
+
+# watchdog ioctl handler
+707:	case GNSS_IOCTL_SET_WATCHDOG_RESET:
+708-		gif_info("%s: GNSS_IOCTL_SET_WATCHDOG_RESET\n", iod->name);
+709-#if IS_ENABLED(CONFIG_DEBUG_SNAPSHOT)
+710-		return dbg_snapshot_expire_watchdog();
+711-#else
+712-		gif_err("debug snapshot is not enabled\n");
+713-		return -EINVAL;
+714-#endif
+
+# DT (r0s_eur_openx_w01_r27.dts)
+			gnss_mailbox {
+				status = "okay";
+				compatible = "samsung,exynos-gnss-mailbox";
+				reg = <0x00 0x14c70000 0x200>;
+				interrupt-parent = <0xffffffff>;
+				interrupts = <0x00 0x31 0x04 0x00>;
+				mbox,name = "gnss_mailbox";
+				mbox,id = <0x00>;
+				num_shared_reg = <0x04>;
+				shared_reg_offset = <0x100>;
+				use_sw_reset_reg = <0x00>;
+				phandle = <0x72>;
+			};
+
+			gnssif {
+				status = "okay";
+				compatible = "samsung,exynos-gnss";
+				interrupt-parent = <0xffffffff>;
+				interrupts = <0x00 0x22 0x04 0x00 0x00 0x1de 0x04 0x00 0x00 0x1dd 0x04 0x00 0x00 0x1dc 0x01 0x00>;
+				interrupt-names = "ACTIVE\0WATCHDOG\0WAKEUP\0SW_INIT";
+				shmem,name = "KEPLER";
+				device_node_name = "gnss_ipc";
+				mbox_info = <0x72>;
+				mbx,int_bcmd = <0x00>;
+				mbx,int_req_fault_info = <0x01>;
+				mbx,int_ipc_msg = <0x02>;
+				mbx,int_ack_wake_set = <0x03>;
+				mbx,int_ack_wake_clr = <0x04>;
+				mbx,irq_bcmd = <0x00>;
+				mbx,irq_rsp_fault_info = <0x01>;
+				mbx,irq_ipc_msg = <0x02>;
+				mbx,irq_req_wake_clr = <0x04>;
+				mbx,irq_simple_lock = <0x0f>;
+				mbx,reg_bcmd_ctrl = <0x00 0x01 0x02 0x03>;
+				memory-region = <0xffffffff>;
+				reg_rx_ipc_msg = <0x01 0x05>;
+				reg_tx_ipc_msg = <0x01 0x04>;
+				reg_rx_head = <0x01 0x03>;
+				reg_rx_tail = <0x01 0x02>;
+				reg_tx_head = <0x01 0x01>;
+				reg_tx_tail = <0x01 0x00>;
+				fault_info = <0x01 0x200000 0x180000>;
+				shmem,code_offset = <0x00>;
+				shmem,code_allowed_size = <0x380000>;
+				shmem,ipc_offset = <0x380000>;
+				shmem,ipc_size = <0x80000>;
+				shmem,ipc_rx_offset = <0x00>;
+				shmem,ipc_rx_size = <0x40000>;
+				shmem,ipc_tx_offset = <0x40000>;
+				shmem,ipc_tx_size = <0x3ff80>;
+				shmem,ipc_reg_offset = <0x7ff80>;
+				shmem,ipc_reg_size = <0x80>;
+				shmem,base_addr = <0x60000000>;
+				shmem,base_addr_2nd = <0xa0000000>;
+			};
+
+# kernel config hits in builds/ and kernel/
+      1 CONFIG_EXYNOS_GNSS_IF=m
+      3 CONFIG_GNSS=y
+      1 obj-$(CONFIG_EXYNOS_GNSS_IF) += gnssif/
+      1 obj-$(CONFIG_EXYNOS_GNSS_IF) += gnssif.o
+      1 obj-$(CONFIG_EXYNOS_GNSS_IF) += gnss_mbox.o

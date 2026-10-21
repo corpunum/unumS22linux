@@ -1,0 +1,71 @@
+## date
+Wed Oct 21 22:05:17 UTC 2026
+## uname
+5.10.260-g4e5c5ad7d950
+## /dev/gnss_ipc
+crw-------    1 root     root       10,  73 Oct 21 20:56 /dev/gnss_ipc
+## /proc/devices gnss
+234 gnss
+## lsmod gnss/cp
+gnssif                 69632  0 
+gnss_mbox              28672  1 gnssif
+cpif                  385024  6 
+mcu_ipc                40960  2 cpif,direct_dm
+shm_ipc                28672  3 cpif,direct_dm,snd_soc_samsung_abox
+## platform drivers
+/sys/bus/platform/drivers/gnss_interface/:
+total 0
+--w-------    1 root     root          4096 Oct 21 21:57 bind
+lrwxrwxrwx    1 root     root             0 Oct 21 21:57 gnssif -> ../../../../devices/platform/gnssif
+lrwxrwxrwx    1 root     root             0 Oct 21 21:57 module -> ../../../../module/gnssif
+--w-------    1 root     root          4096 Oct 21 21:57 uevent
+--w-------    1 root     root          4096 Oct 21 21:57 unbind
+
+/sys/bus/platform/drivers/gnss_mailbox/:
+total 0
+lrwxrwxrwx    1 root     root             0 Oct 21 21:57 14c70000.gnss_mailbox -> ../../../../devices/platform/14c70000.gnss_mailbox
+lrwxrwxrwx    1 root     root             0 Oct 21 21:57 module -> ../../../../module/gnss_mbox
+--w-------    1 root     root          4096 Oct 21 21:57 uevent
+## gnss_status
+OFFLINE
+## runtime_status
+unsupported
+## /sys/class/gnss
+total 0
+drwxr-xr-x    2 root     root             0 Oct 21 21:57 .
+drwxr-xr-x  106 root     root             0 Oct 21 20:57 ..
+## reserved-memory gnss_rmem reg (big-endian words)
+ 00 00 00 08 a1 60 00 00 00 60 00 00
+## interrupts
+395:          0          0          0          0          0          0          0          0     GICv3  81 Level     14c70000.gnss_mailbox
+396:          0          0          0          0          0          0          0          0     GICv3  66 Level     kepler_active_handler
+397:          0          0          0          0          0          0          0          0     GICv3 510 Level     kepler_wdt_handler
+399:          0          0          0          0          0          0          0          0     GICv3 508 Edge      kepler_sw_init_handler
+## umts nodes (exist, owned by cbd/phoned; not opened)
+crw-rw----    1 1001     1001      508,  10 Oct 21 20:57 /dev/umts_boot0
+crw-rw----    1 1001     1001      508,   1 Oct 21 20:57 /dev/umts_ipc0
+## dmesg gnss (ring buffer only covers recent; boot lines rotated out)
+0
+## binder
+ls: /dev/binder: No such file or directory
+ls: /dev/hwbinder: No such file or directory
+nodev	binder
+## android-rt libs needed by gpsd
+libc++.so present
+liblog.so present
+libm.so present
+libandroid_net.so MISSING
+libssl.so present
+libcrypto.so present
+libz.so present
+libdl.so present
+libc.so present
+libhidlbase.so present
+libvndksupport.so MISSING
+## android-rt/dev has umts_boot0?
+/srv/s22/android-rt/dev/gnss_ipc
+/srv/s22/android-rt/dev/umts_boot0
+## free space
+overlay                 582.6M    314.0M    256.6M  55% /
+/dev/block/by-name/userdata
+                        104.5G     44.7G     59.9G  43% /srv/s22
