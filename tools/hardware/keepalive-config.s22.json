@@ -4,7 +4,15 @@
     "unumsearch",
     "modem",
     "phoned",
-    "llama"
+    "llama",
+    "touchui",
+    "guardian",
+    "s22d",
+    "sip_voice",
+    "wifi_wpa",
+    "wifi_dhcp",
+    "lightpanda_proxy",
+    "bluetooth"
   ],
   "pin_model": true,
   "pin": {
@@ -15,16 +23,66 @@
     "llama": {
       "argv": [
         "/usr/bin/python3",
+        "/srv/s22/hardware/bin/s22-llama-ondemand",
+        "serve"
+      ],
+      "needle": "/srv/s22/hardware/bin/s22-llama-ondemand serve",
+      "health": {
+        "http": "http://127.0.0.1:8090/health"
+      },
+      "requires": "/srv/s22/hardware/bin/s22-llama-ondemand",
+      "log": "/srv/s22/state/llama-ondemand/serve.log",
+      "start_wait_s": 15
+    },
+    "touchui": {
+      "argv": [
+        "/usr/bin/python3",
+        "/srv/s22/hardware/bin/s22-touchd"
+      ],
+      "needle": "python3 /srv/s22/hardware/bin/s22-touchd",
+      "requires": "/srv/s22/hardware/bin/s22-touchd",
+      "log": "/srv/s22/state/touchui/touchd.out",
+      "start_wait_s": 15
+    },
+    "guardian": {
+      "argv": [
+        "/usr/bin/python3",
+        "/srv/s22/hardware/bin/s22-guardian",
+        "serve"
+      ],
+      "needle": "/srv/s22/hardware/bin/s22-guardian serve",
+      "health": {
+        "file": "/run/s22-guardian/status.json"
+      },
+      "requires": "/srv/s22/hardware/bin/s22-guardian",
+      "log": "/srv/s22/state/guardian/serve.log",
+      "nice": 5,
+      "start_wait_s": 15
+    },
+    "llama_backend": {
+      "argv": [
+        "/usr/bin/python3",
         "/srv/s22/hardware/bin/s22-gpu-exec-isolated",
         "/srv/s22/gpu-compat-20260921/llama-vulkan",
+        "--sys",
         "--bridge-v4",
-        "/system/bin/llama-server",
+        "/system/bin/llama-server-b30266",
         "-m",
-        "/models/Qwen3.5-2B-Q4_0.gguf",
+        "/models/gemma-4-E2B-it-qat-q4_0-heretic-Q4_0_PURE.gguf",
+        "-md",
+        "/models/mtp-gemma-4-E2B-it.gguf",
+        "--spec-type",
+        "draft-mtp",
+        "--spec-draft-n-max",
+        "3",
+        "--spec-draft-p-min",
+        "0.7",
+        "-dev",
+        "none",
         "-ngl",
-        "99",
+        "0",
         "-t",
-        "4",
+        "2",
         "-c",
         "16384",
         "-np",
@@ -33,22 +91,131 @@
         "on",
         "--cache-ram",
         "0",
+        "--cache-reuse",
+        "256",
         "--host",
         "127.0.0.1",
         "--port",
         "8090",
-        "--reasoning",
-        "off",
-        "--no-webui"
+        "--no-webui",
+        "--jinja"
       ],
-      "needle": "llama-server -m /models/Qwen3.5-2B-Q4_0.gguf",
+      "needle": "llama-server-b30266 -m /models/gemma-4-E2B-it-qat-q4_0-heretic-Q4_0_PURE.gguf",
       "health": {
         "http": "http://127.0.0.1:8090/health"
       },
-      "requires": "/srv/s22/gpu-compat-20260921/llama-vulkan/system/bin/llama-server",
+      "requires": "/srv/s22/gpu-compat-20260921/llama-vulkan/system/bin/llama-server-b30266",
       "log": "/srv/s22/state/llama-gpu-8090.log",
       "start_wait_s": 120,
       "unhealthy_s": 600
+    },
+    "s22d": {
+      "argv": [
+        "/srv/s22/hardware/bin/s22d"
+      ],
+      "needle": "/srv/s22/hardware/bin/s22d",
+      "requires": "/srv/s22/hardware/bin/s22d",
+      "health": {
+        "tcp": [
+          "127.0.0.1",
+          8766
+        ]
+      },
+      "log": "/srv/s22/state/s22d/s22d.log",
+      "start_wait_s": 10
+    },
+    "sip_voice": {
+      "argv": [
+        "/bin/sh",
+        "/srv/s22/hardware/bin/s22-sip-voice"
+      ],
+      "needle": "/srv/s22/hardware/bin/s22-sip-voice",
+      "requires": "/srv/s22/hardware/bin/s22-sip-voice",
+      "log": "/srv/s22/state/sip/sip-voice.log",
+      "start_wait_s": 5
+    },
+    "wifi_wpa": {
+      "argv": [
+        "/sbin/wpa_supplicant",
+        "-D",
+        "nl80211",
+        "-i",
+        "wlan0",
+        "-c",
+        "/srv/s22/hardware/wifi-private/wpa_supplicant.conf"
+      ],
+      "needle": "wpa_supplicant -D nl80211 -i wlan0",
+      "requires": "/sys/module/wlan",
+      "log": "/srv/s22/hardware/wifi-private/wpa-keepalive.log",
+      "start_wait_s": 10
+    },
+    "wifi_dhcp": {
+      "argv": [
+        "/sbin/udhcpc",
+        "-f",
+        "-i",
+        "wlan0",
+        "-p",
+        "/run/s22-udhcpc.pid",
+        "-s",
+        "/srv/s22/hardware/wifi-tools/wifi-dhcp-hook.py",
+        "-t",
+        "4",
+        "-T",
+        "3",
+        "-A",
+        "30",
+        "-a1000"
+      ],
+      "needle": "udhcpc -f -i wlan0",
+      "requires": "/sys/module/wlan",
+      "log": "/srv/s22/hardware/wifi-private/udhcpc-keepalive.log",
+      "start_wait_s": 10
+    },
+    "lightpanda_proxy": {
+      "argv": [
+        "/usr/sbin/chroot",
+        "/mnt/omarchy-trial",
+        "/usr/bin/env",
+        "OPENUNUM_HOME=/root/.openunum",
+        "/opt/node/bin/node",
+        "/opt/openunum/tools/lightpanda-ondemand.mjs",
+        "serve"
+      ],
+      "needle": "/opt/openunum/tools/lightpanda-ondemand.mjs serve",
+      "health": {
+        "tcp": [
+          "127.0.0.1",
+          9222
+        ]
+      },
+      "requires": "/mnt/omarchy-trial/opt/openunum/tools/lightpanda-ondemand.mjs",
+      "log": "/srv/s22/state/lightpanda-proxy/serve.log",
+      "start_wait_s": 15
+    },
+    "bluetooth": {
+      "argv": [
+        "/bin/sh",
+        "/srv/s22/hardware/bin/s22-bt",
+        "up"
+      ],
+      "needle": "bt-qca6490-hci-hold",
+      "health": {
+        "file": "/sys/class/bluetooth/hci0/uevent"
+      },
+      "requires": "/srv/s22/bt-hold/bt-qca6490-hci-hold",
+      "log": "/srv/s22/state/bt/keepalive-up.log",
+      "start_wait_s": 70
     }
-  }
+  },
+  "pin_allow": [
+    {
+      "provider": "llama-cpp-local",
+      "model": "llama-cpp-local//models/gemma-4-E2B-it-qat-q4_0-heretic-Q4_0_PURE.gguf"
+    },
+    {
+      "provider": "llama-cpp-local",
+      "model": "llama-cpp-local//models/Qwen3.5-0.8B-Q4_0.gguf"
+    }
+  ]
 }

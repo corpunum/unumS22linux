@@ -29,7 +29,9 @@ Mute guard (owner instruction 2026-10-08: keep the phone muted): after every
 restart, and on every check, the saved level (/srv/s22/buttons/volume) and the
 CS35L41 amp gain are read. With "enforce_mute" (default true) anything above
 0 is set back to 0 and logged. Turn it off in config.json if the owner wants
-sound again.
+sound again. While s22-say holds /run/s22-say.lock (a playback is running;
+s22-say raises a muted amp to a speech level and restores it on exit) the
+check is skipped, so the guard never cuts a sentence off (2026-10-21).
 
 Model pin (config "pin_model": true): OpenUnum's default model must stay
 the pinned one (default openai/gpt-6-luna; or model.provider/model/routing
@@ -355,6 +357,26 @@ def needs_mute(state: dict) -> bool:
     return bool(amp) and any(v not in (0, None) for v in amp)
 
 
+SAY_LOCK = Path('/run/s22-say.lock')
+
+
+def playback_active(lock: Path = SAY_LOCK) -> bool:
+    """True while another process holds the s22-say lock (non-blocking probe)."""
+    try:
+        fd = os.open(lock, os.O_RDONLY)
+    except OSError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return True
+    else:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return False
+    finally:
+        os.close(fd)
+
+
 def apply_mute(buttons: Path = BUTTONS, runner=amp_run) -> None:
     (buttons / 'volume').write_text('0\n')
     if Path('/sys/class/sound/card0').exists():
@@ -502,6 +524,8 @@ class Keepalive:
         return ok
 
     def mute_check(self, reason: str) -> dict:
+        if playback_active():
+            return {'skipped': 'playback'}
         try:
             st = read_mute_state()
         except Exception as e:  # noqa: BLE001 - the guard must never kill the loop
