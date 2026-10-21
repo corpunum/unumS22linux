@@ -4,6 +4,8 @@ and s22-ui (CLI against a fake daemon). Run: python3 tools/touchui/test_s22_touc
 import importlib.machinery
 import importlib.util
 import json
+import sys
+import time
 import os
 import socket
 import tempfile
@@ -345,3 +347,22 @@ class BackendTest(unittest.TestCase):
         self.assertIn('S22_TOUCH_RUN=/run/s22-touch', unum)
         self.assertIn('quickshell', td.shell_command(env, 'quickshell'))
         self.assertNotIn(td.UNUM_SHELL, td.shell_command(env, 'quickshell'))
+
+    def test_fastshell_launch_and_selection(self):
+        env = {'WAYLAND_DISPLAY': 'wayland-1', 'HOME': '/root'}
+        fs = td.shell_command(env, 'fastshell')
+        self.assertEqual(fs[-1], td.FASTSHELL)
+        self.assertNotIn('chroot', fs)                     # native root, not the chroot
+        self.assertIn(f'S22_TOUCH_RUN={td.RUN}', fs)
+        td.UI_BACKEND_FILE.write_text('fastshell\n')
+        saved = td.FASTSHELL
+        try:
+            td.FASTSHELL = str(self.run_dir / 'missing-binary')
+            self.assertEqual(td.ui_backend(), 'quickshell', 'no binary -> classic shell')
+            td.FASTSHELL = sys.executable
+            self.assertEqual(td.ui_backend(), 'fastshell')
+            td.FALLBACK_UNTIL[0] = time.time() + 60
+            self.assertEqual(td.ui_backend(), 'quickshell', 'crash-loop fallback')
+        finally:
+            td.FASTSHELL = saved
+            td.FALLBACK_UNTIL[0] = 0.0

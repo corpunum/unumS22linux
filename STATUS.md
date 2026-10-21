@@ -1,7 +1,32 @@
 # S22 native Linux status
 
-Updated 2026-10-06 by the Claude lead session (directly on the device).
+Updated 2026-10-21 (fast touch shell); earlier sections updated 2026-10-06 by the Claude lead session.
 The 2026-10-02 task board and earlier checkpoints below are historical.
+
+## Fast touch shell is the default — 2026-10-21
+
+The desktop is **sway-pixman** (wlroots pixman renderer) with a touch shell on top. It is not Hyprland: Hyprland is only the supervisor's fallback compositor, and the old "Hyprland on llvmpipe, ~680 ms/frame" lag is history.
+
+The default touch shell is now **unum-fastshell** (`tools/unum-fastshell`).
+- **What it is:** a static Rust binary that draws straight to KMS through its own seatd session, on top of sway.
+- **Features:**
+  - CPU damage renderer with anti-aliased Noto Sans (Latin + Greek);
+  - kinetic scrolling;
+  - native EN/Greek keyboard;
+  - live home cards;
+  - streaming Agent chat;
+  - agent cards and confirms over the unchanged s22-touchd protocol;
+  - Power-key lock with real DPMS;
+  - edge swipes;
+  - Terminal hands the panel to sway (foot + squeekboard).
+- **Speed:** tap → page p50 12 ms at the panel (Quickshell: 63 ms; 123 ms counted from touch-down), 18 ms touch → flip-complete.
+- **Cost:** 0.4 % idle CPU, 11 MB RSS.
+- **Reboot:** it survived `s22-reboot recovery`.
+- **Switch:** `s22-desktop-profile fastshell|sway-pixman`. `/etc/s22-desktop` stays `sway-pixman`.
+- **Ways back:** hold Power 1 s → Quickshell. touchd also falls back by itself after a crash loop or a hung shell.
+- **Not tested:** the voice button, camera capture and real finger latency.
+
+[Evidence](evidence/fastshell-20261021/README.md).
 
 ## Audio firmware graph works — 2026-10-21
 
