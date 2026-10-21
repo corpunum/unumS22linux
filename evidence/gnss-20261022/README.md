@@ -1,8 +1,7 @@
 # GNSS investigation evidence — 2026-10-22
 
-This is read-only evidence for `tools/hardware/gnss/GNSS.md`.
-Nothing was started, loaded, written or ioctl'd on the phone.
-No IPC was sent to the modem.
+The files in the first table are read-only evidence for `tools/hardware/gnss/GNSS.md`. While they were captured, nothing was started, loaded, written or ioctl'd on the phone, and no IPC was sent to the modem.
+The supervised power-on came later and is described at the end.
 
 | File | What it holds | Source |
 |---|---|---|
@@ -16,3 +15,26 @@ No IPC was sent to the modem.
 
 No IMEI, serial number, phone number or location appears in these files.
 The phone was up 1 h with load average about 14 at capture time; the cause is unrelated to this work.
+
+## Supervised power-on and satellite tracking (2026-10-22, about 01:30–01:56 EEST)
+
+The owner gave permission, through the coordinator, to power Kepler on.
+The phone sat indoors on its usual spot. Tools and the runner are in `tools/hardware/gnss/` (see GNSS.md §0).
+
+| File | What it holds |
+|---|---|
+| `run-gpsd.txt` | guard self-test on the phone; gpsd codeload → OPERATIONAL; the first attempt's codeload failure (`linker64 gpsd` cannot find its embedded patch); kernel state lines |
+| `run-strace-summary.txt` | gpsd syscall audit over 21 min: **0** attempts at ioctl 0x4b10/0x6f27, `umts_*` or reboot; the only device it opened was `/dev/gnss_ipc`; DNS went to 0.0.0.0:53 (no resolver in the root, nothing listens), so no data left the phone |
+| `run-probe.txt` | two gnss-probe runs (5 min, 15 min), every 6th SV report: GPS 15 near zenith (el 90→83°, C/N0 22–36 dB-Hz) and GLONASS 21 (C/N0 36–43 dB-Hz), both with ephemeris; 0 fixes (1–2 SVs indoors) |
+
+Health checks:
+
+| Check | Result |
+|---|---|
+| Before power-on | modem ONLINE, SIM READY, home_3gpp/LTE, SMS ready, Wi-Fi UP, Tailscale up, hci0 present, `s22-reboot` present |
+| During (after 5 min of tracking) | modem ONLINE, SIM READY, home_3gpp/LTE, SMS ready |
+| After `gnss-rt.sh stop` | Kepler HOLD_RESET, no gpsd, no namespace mounts left behind; modem ONLINE / SIM READY / home_3gpp LTE / SMS ready / ipc_open; Wi-Fi UP; Tailscale up; hci0 present with the BT holder running |
+
+No reboot: uptime ran continuously, 1:32 → 1:59. No calls and no SMS were made.
+
+gpsd log files and `rawbinlog.out` stay on the phone (`/srv/s22/state/gnss`, `/srv/s22/gnss-rt/data/vendor/gps`). They are not committed, because they are raw engine logs.

@@ -1,0 +1,28 @@
+### gnss-guard --selftest (phone, native root)
+ioctl 0x4b10 -> -1 errno 1 (blocked)
+ioctl 0x6f27 -> -1 errno 1 (blocked)
+ioctl 0x4b11 -> -1 errno 25 (passes)
+reboot(bad magic) -> -1 errno 1 (blocked)
+
+### gpsd codeload + state (gpsd log excerpt, run 2026-10-21T22:34:50Z)
+<22:34:50.465>: |7| build_attributes GNSS_SW=31(Unknown API Version),commit=d3bd91eace096ecec3a655a075b72688d56a2d3a,vendor=MCD,arch=64-bit,product=DAEMON,major=4,minor=6
+<22:34:50.483>: |0| state: UNUSABLE -> CODELOAD
+<22:34:50.488>: |0| LAL_Start - Loading embedded patch: (null)
+<22:34:50.492>: |0| Generated patch - load addr: 00000004: size: 00000330
+<22:34:50.606>: |0| Loading embedded patch from end of /vendor/bin/hw/gpsd offset -703858
+<22:34:50.672>: |0| state: CODELOAD -> OPERATIONAL
+<22:34:50.675>: |0| lal_router_opstate: enabled:1 chip_type:21 hw_id:18200251 rom_sw_id:20210319
+<22:34:50.677>: |0| lal_router_send_opstate: Send out tBETP_COMMON_OPSTATE message
+<22:35:22.728>: |0| lal_router_send_opstate: Send out tBETP_COMMON_OPSTATE message
+<22:35:22.880>: |7| build_attributes GNSS_SW=31(Unknown API Version),commit=d3bd91eace096ecec3a655a075b72688d56a2d3a,vendor=MCD,arch=64-bit,product=DAEMON,major=4,minor=6
+<22:35:22.947>: |7| build_attributes GNSS_SW=31(Unknown API Version),commit=d3bd91eace096ecec3a655a075b72688d56a2d3a,vendor=MCD,arch=64-bit,product=DAEMON,major=4,minor=6
+<22:35:28.456>: |0| lal_router_send_opstate: Send out tBETP_COMMON_OPSTATE message
+
+### first attempt (gpsd started as linker64 gpsd): codeload failure
+gpsd: Critical Error: Unable to locate patch for K401
+gpsd: Critical Error: Unable to locate patch for K401
+<22:33:59.343>: |0| Unable to locate patch for K401
+gpsd: Critical Error: Critical error: Codeload failed
+
+### kernel (gif) lines during the good run
+[ 7143.595072] [3:gnss-hold-reset: 1314] gif: gnss_state_changed: KEPLER state changed (ONLINE -> HOLD_RESET)

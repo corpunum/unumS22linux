@@ -1,0 +1,11 @@
+### strace summary of gpsd (run 2026-10-21T22:34:50Z, 21 min)
+lines: 5238
+ioctl 0x4b10 / 0x6f27 / umts_* / reboot attempts:
+0
+device opens:
+      1 "/dev/gnss_ipc"
+network: connect() by family/port:
+    163 sa_family=AF_INET, sin_port=htons(0)
+    652 sa_family=AF_INET, sin_port=htons(53)
+    163 sa_family=AF_INET6, sin6_port=htons(0)
+    330 sa_family=AF_UNIX, sun_path="/dev/socket/logdw"

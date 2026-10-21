@@ -1,7 +1,59 @@
 # GNSS on the S22 under native Linux — findings and plan
 
-Date: 2026-10-22. Status: **research only, no fix yet.** Nothing was started on the phone.
-Evidence: [`evidence/gnss-20261022/`](../../../evidence/gnss-20261022/README.md).
+Date: 2026-10-22.
+
+## 0. Status (2026-10-22, night): Kepler runs, satellites tracked, no fix yet (indoors)
+
+**Running:** the stock engine and our client run under Linux.
+- **Engine:** `gpsd` loads its embedded Kepler patch and brings the core to OPERATIONAL.
+- **Client:** `gnss-probe` loads Samsung's HAL in-process, connects to gpsd (abstract unix socket `@GNSSND`) and starts a standalone session.
+
+**Results:**
+- Engine name `S.LSI,K401,SPOTNAV_4.6.2_7_E23`, capabilities 0x3c7, hw_id 0x18200251.
+- In a 5-minute run the phone sat indoors. First SV after 10.6 s. Then **GPS 15 (C/N0 33–36 dB-Hz, el 89°) and GLONASS 21 (37–43 dB-Hz)**, both with ephemeris.
+- Only 2 SVs, so **no position fix**. A fix needs at least 4, which needs the phone at a window or outside.
+- Modem, SIM, SMS, Wi-Fi and Tailscale were unaffected (checked before, during and after).
+
+**How it is made safe:**
+
+| Piece | What it does |
+|---|---|
+| `src/gnss-guard.c` | A seccomp filter for everything in the GNSS root. `ioctl 0x4b10` (SET_WATCHDOG_RESET: whole-phone reset), `ioctl 0x6f27` (CP status, clears the SIM-changed flag), reboot, kexec and module loading fail with EPERM. `--selftest` proves it on the phone. |
+| `/srv/s22/gnss-rt` | The minimal root. `/dev` holds only null, zero, random, urandom and gnss_ipc: **no umts_*, no modem nodes**. `/system` is android-rt read-only, `/sys` is read-only, and it runs in a private mount namespace. |
+| `src/gnss-hold-reset.c` | `GNSS_IOCTL_RESET`: Kepler back to HOLD_RESET after gpsd stops (closing the fd does not do it). |
+| `src/propshim.c` + `linux.prop` | LD_PRELOAD property getter. Stock gpsd waits forever for `service.bootanim.exit=1`, and there is no property service here. |
+| `src/stub-libandroid_net.c`, `src/stub-libvndksupport.c` | Stubs for the two libraries android-rt lacks. |
+| `src/gnss-probe.cpp` | The HIDL client (IGnss@2.1 passthrough). It prints SV/C/N0, status and NMEA. **Coordinates are redacted** unless `--show-location`. |
+| `gnss-rt.sh` | `check` / `start` / `probe` / `stop` / `status`. |
+
+**Gotchas found on the way:**
+- **Start gpsd directly** (its PT_INTERP is `/system/bin/linker64`), not as `linker64 gpsd`. gpsd loads the Kepler patch "from end of /vendor/bin/hw/gpsd", meaning its own executable. Under `linker64 gpsd` it found no patch ("Unable to locate patch for K401"), and Kepler cycled ONLINE→fault→HOLD_RESET.
+- **The config:** `gps.linux.cfg` = stock `gps.cfg` with these changes:
+  - `Aiding_AidingType=0` (no SUPL);
+  - `Sif_UseFwXtraInterface=0` (no SGEE download);
+  - `debug_enable=1` with logs in `/data/vendor/gps`;
+  - `soft_dog_scan_dump=0`.
+
+  The CP mailbox and DCXO settings are stock.
+- **gpsd writes `rawbinlog.out`** (about 4 MB per 5 min of tracking) into `/srv/s22/gnss-rt/data/vendor/gps`. Delete it between runs.
+
+**Run it:**
+
+```sh
+sh /srv/s22/gnss-rt/gnss-rt.sh start                 # gpsd under strace + guard; Kepler -> ONLINE
+sh /srv/s22/gnss-rt/gnss-rt.sh probe --seconds 600 --nmea
+sh /srv/s22/gnss-rt/gnss-rt.sh stop                  # exact PID, then Kepler HOLD_RESET
+```
+
+Build on the rig: `src/build.sh`. It uses NDK r27c plus AOSP `prebuilts/vndk/v30` generated HIDL headers, and links against the phone's own libc++ (std::__1) and libhidlbase.
+Evidence: [`evidence/gnss-20261022/`](../../../evidence/gnss-20261022/README.md) (`run-*.txt`).
+
+**Next:**
+1. Put the phone by a window or outside and run `probe --seconds 900`.
+2. If the fix is slow, inject a coarse position and time (the client already injects the time), or enable SUPL (privacy trade-off).
+3. Wrap it as a service and an OpenUnum tool.
+
+The sections below are the original read-only investigation, kept for reference.
 
 ## 1. Short answer
 

@@ -1,0 +1,84 @@
+### probe-1 (gnss-probe, coordinates redacted by design)
+[   0.0] HAL loaded: /vendor/lib64/hw/android.hardware.gnss@2.1-impl.so
+[   0.0] capabilities 0x3c7
+[   0.0] system info: year of hw 2021
+[   0.0] engine name: S.LSI,K401,SPOTNAV_4.6.2_7_E23
+[   0.0] setCallback_2_1 -> 1
+[   0.0] setPositionMode_1_1(standalone, 1 s) -> 1
+[   0.0] injectTime(system clock, +-2 s) -> 1
+[   0.0] status ENGINE_ON
+[   0.0] status SESSION_BEGIN
+[   0.0] start -> 1
+[   0.5] HAL requests a location (network location not available)
+[   1.6] NMEA $PSAMXCLK,0,0,0,1,311840,2945,713,23383,-59623747,56,-1,-1,-1,-1,-1*0A
+[  10.0] svs: 0 SVs in view (), used in fix 0, C/N0>=20 0, best C/N0 0.0 dB-Hz; reports 0, nmea 1, fixes 0
+[  70.2] svs: 2 SVs in view (GLO 1, GPS 1), used in fix 0, C/N0>=20 2, best C/N0 36.4 dB-Hz; reports 61, nmea 1, fixes 0
+         GPS    15  C/N0 32.2  el  90 az  34 eph
+         GLO    21  C/N0 36.4  el  63 az 168 eph
+[ 130.3] svs: 2 SVs in view (GLO 1, GPS 1), used in fix 0, C/N0>=20 2, best C/N0 38.1 dB-Hz; reports 121, nmea 1, fixes 0
+         GPS    15  C/N0 33.0  el  89 az  34 eph
+         GLO    21  C/N0 38.1  el  62 az 168 eph
+[ 190.4] svs: 2 SVs in view (GLO 1, GPS 1), used in fix 0, C/N0>=20 2, best C/N0 39.7 dB-Hz; reports 181, nmea 1, fixes 0
+         GPS    15  C/N0 33.9  el  89 az  34 eph
+         GLO    21  C/N0 39.7  el  62 az 168 eph
+[ 250.5] svs: 2 SVs in view (GLO 1, GPS 1), used in fix 0, C/N0>=20 2, best C/N0 39.6 dB-Hz; reports 241, nmea 1, fixes 0
+         GPS    15  C/N0 33.7  el  88 az  34 eph
+         GLO    21  C/N0 39.6  el  61 az 168 eph
+[ 300.0] FINAL: 2 SVs in view (GLO 1, GPS 1), used in fix 0, C/N0>=20 2, best C/N0 40.0 dB-Hz; reports 291, nmea 1, fixes 0
+SUMMARY engine="S.LSI,K401,SPOTNAV_4.6.2_7_E23" caps=0x3c7 status=1 sv_reports=291 nmea=1 fixes=0 first_sv_s=10.6 first_fix_s=-1.0 last_acc_m=-1
+[ 300.0] status SESSION_END
+[ 300.0] status ENGINE_OFF
+[ 300.2] status SESSION_END
+[ 300.2] stopped
+
+### probe-2 (gnss-probe, coordinates redacted by design)
+[   0.0] HAL loaded: /vendor/lib64/hw/android.hardware.gnss@2.1-impl.so
+[   0.0] capabilities 0x3c7
+[   0.0] system info: year of hw 2021
+[   0.0] engine name: S.LSI,K401,SPOTNAV_4.6.2_7_E23
+[   0.0] setCallback_2_1 -> 1
+[   0.0] setPositionMode_1_1(standalone, 1 s) -> 1
+[   0.0] injectTime(system clock, +-2 s) -> 1
+[   0.0] status ENGINE_ON
+[   0.0] status SESSION_BEGIN
+[   0.0] start -> 1
+[   0.5] HAL requests a location (network location not available)
+[   1.6] NMEA $PSAMXCLK,2441,34086992,0,1,317650,0,601,19713,-281856000,56,-1,-1,-1,-1,-1*08
+[  10.0] svs: 1 SVs in view (GPS 1), used in fix 0, C/N0>=20 1, best C/N0 37.2 dB-Hz; reports 8, nmea 1, fixes 0
+         GPS    15  C/N0 37.2  el  90 az 180 eph
+[  70.2] svs: 2 SVs in view (GLO 1, GPS 1), used in fix 0, C/N0>=20 2, best C/N0 36.2 dB-Hz; reports 69, nmea 1, fixes 0
+         GPS    15  C/N0 36.1  el  89 az  37 eph
+         GLO    21  C/N0 36.2  el  58 az 173 eph
+[ 130.3] svs: 1 SVs in view (GPS 1), used in fix 0, C/N0>=20 1, best C/N0 37.0 dB-Hz; reports 129, nmea 1, fixes 0
+         GPS    15  C/N0 37.0  el  89 az  37 eph
+[ 190.4] svs: 1 SVs in view (GPS 1), used in fix 0, C/N0>=20 1, best C/N0 36.1 dB-Hz; reports 189, nmea 1, fixes 0
+         GPS    15  C/N0 36.1  el  88 az  37 eph
+[ 250.5] svs: 1 SVs in view (GPS 1), used in fix 0, C/N0>=20 1, best C/N0 35.4 dB-Hz; reports 249, nmea 1, fixes 0
+         GPS    15  C/N0 35.4  el  88 az  37 eph
+[ 310.7] svs: 1 SVs in view (GPS 1), used in fix 0, C/N0>=20 1, best C/N0 34.7 dB-Hz; reports 309, nmea 1, fixes 0
+         GPS    15  C/N0 34.7  el  88 az  37 eph
+[ 370.8] svs: 1 SVs in view (GPS 1), used in fix 0, C/N0>=20 1, best C/N0 35.0 dB-Hz; reports 370, nmea 1, fixes 0
+         GPS    15  C/N0 35.0  el  87 az  38 eph
+[ 430.9] svs: 1 SVs in view (GPS 1), used in fix 0, C/N0>=20 1, best C/N0 33.8 dB-Hz; reports 430, nmea 1, fixes 0
+         GPS    15  C/N0 33.8  el  86 az  38 eph
+[ 491.0] svs: 1 SVs in view (GPS 1), used in fix 0, C/N0>=20 1, best C/N0 28.8 dB-Hz; reports 490, nmea 1, fixes 0
+         GPS    15  C/N0 28.8  el  86 az  38 eph
+[ 551.2] svs: 1 SVs in view (GPS 1), used in fix 0, C/N0>=20 1, best C/N0 22.9 dB-Hz; reports 550, nmea 1, fixes 0
+         GPS    15  C/N0 22.9  el  85 az  38 eph
+[ 611.3] svs: 1 SVs in view (GPS 1), used in fix 0, C/N0>=20 1, best C/N0 28.2 dB-Hz; reports 610, nmea 1, fixes 0
+         GPS    15  C/N0 28.2  el  85 az  38 eph
+[ 671.4] svs: 1 SVs in view (GPS 1), used in fix 0, C/N0>=20 1, best C/N0 31.4 dB-Hz; reports 670, nmea 1, fixes 0
+         GPS    15  C/N0 31.4  el  84 az  38 eph
+[ 731.5] svs: 1 SVs in view (GPS 1), used in fix 0, C/N0>=20 1, best C/N0 32.1 dB-Hz; reports 730, nmea 1, fixes 0
+         GPS    15  C/N0 32.1  el  84 az  39 eph
+[ 791.7] svs: 1 SVs in view (GPS 1), used in fix 0, C/N0>=20 1, best C/N0 30.1 dB-Hz; reports 791, nmea 1, fixes 0
+         GPS    15  C/N0 30.1  el  83 az  39 eph
+[ 851.8] svs: 1 SVs in view (GPS 1), used in fix 0, C/N0>=20 1, best C/N0 28.0 dB-Hz; reports 851, nmea 1, fixes 0
+         GPS    15  C/N0 28.0  el  83 az  39 eph
+[ 900.1] FINAL: 1 SVs in view (GPS 1), used in fix 0, C/N0>=20 1, best C/N0 23.7 dB-Hz; reports 899, nmea 1, fixes 0
+SUMMARY engine="S.LSI,K401,SPOTNAV_4.6.2_7_E23" caps=0x3c7 status=1 sv_reports=899 nmea=1 fixes=0 first_sv_s=3.6 first_fix_s=-1.0 last_acc_m=-1
+[ 900.1] status SESSION_END
+[ 900.1] status ENGINE_OFF
+[ 900.2] status SESSION_END
+[ 900.2] stopped
+
