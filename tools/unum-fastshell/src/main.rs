@@ -551,6 +551,7 @@ fn demo_app() -> App {
     a.st.thermal = Some(38.0);
     a.st.thermal_detail = "BIG 38 · MID 36 · LITTLE 35 · G3D 34".into();
     a.st.net = "usb · ts".into();
+    a.st.radio = Some("5G");
     a.clock = "21:47".into();
     a.date = "Wednesday 21 October".into();
     a.chat = vec![
@@ -640,7 +641,15 @@ fn states() -> Vec<(&'static str, Box<dyn Fn(&mut App)>)> {
                 serde_json::json!({"calls": []}),
             ));
         })),
-        ("camera", Box::new(|a: &mut App| a.goto(Page::Camera))),
+        ("camera", Box::new(|a: &mut App| {
+            a.goto(Page::Camera);
+            a.camera_sensor = "front";
+            if let Ok(p) = std::env::var("FS_DUMP_CAMERA") {
+                a.camera_img = ui::load_png(&p, 1016, 1400);
+            }
+            a.camera_state = ui::camera_summary(&serde_json::json!({"rc": 0, "sensor": "front", "exposure_us": 30000, "gain": 8.0,
+                "develop_ok": true, "stacked": 4, "jpeg": "/x/cam-1792620000-front.jpg"}));
+        })),
     ]
 }
 

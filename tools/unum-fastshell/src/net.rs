@@ -47,6 +47,7 @@ pub enum Msg {
     Touchd(&'static str, Value),
     Ctl(crate::ctl::Call, Sender<String>),
     Assistant(Value),
+    Radio(Value),
 }
 
 #[derive(Clone)]
@@ -418,6 +419,33 @@ pub fn refresh_agent(net: &Net) {
             n.send(Msg::Device(v));
         }
     });
+    // s22-phoned: registration + NR (5G NSA) state for the status-bar badge
+    net.spawn(|n| {
+        let v = get(&format!("{}/status", n.phoned), 6).unwrap_or(Value::Null);
+        n.send(Msg::Radio(v));
+    });
+}
+
+/// Status-bar radio badge from s22-phoned's /status: "5G" while the CP reports an NR
+/// leg (NSA: act stays "lte", so `radio.nr_nsa` or an `nr_last_seen` within 120 s),
+/// "4G" when registered on LTE, "3G"/"2G" for older RATs, None when not registered.
+pub fn radio_badge(v: &Value, now: f64) -> Option<&'static str> {
+    if v["ok"] != true {
+        return None;
+    }
+    let reg = &v["registration"];
+    let rs = reg["reg_status"].as_str().unwrap_or("");
+    if !(rs.starts_with("home") || rs.starts_with("roam")) {
+        return None;
+    }
+    let nr_recent = v["nr_last_seen"].as_f64().is_some_and(|t| (now - t).abs() < 120.0);
+    match reg["act"].as_str().unwrap_or("") {
+        "nr" | "5g" | "nr5g" => Some("5G"),
+        "lte" | "lte_ca" | "4g" => Some(if v["radio"]["nr_nsa"] == true || nr_recent { "5G" } else { "4G" }),
+        "umts" | "wcdma" | "hspa" | "3g" => Some("3G"),
+        "gsm" | "gprs" | "edge" | "2g" => Some("2G"),
+        _ => None,
+    }
 }
 
 /// "2026-10-21T19:16:21.517Z" -> unix seconds.

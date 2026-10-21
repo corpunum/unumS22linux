@@ -34,6 +34,7 @@ import select
 import signal
 import socket
 import struct
+import shutil
 import subprocess
 import sys
 import threading
@@ -53,6 +54,11 @@ TTS_ENGINES = {'supertonic', 'paradee', 'kitten', 'piper', 'kokoro', 'el-antonis
 TTS_OUTPUTS = {'speaker', 'earpiece', 'top', 'bottom'}
 DISPLAY_STATE = Path('/run/s22-display-state')
 CAMERA = '/srv/s22/hardware/bin/s22-camera'   # reviewed client (sha256 3f1375f6...) since 2026-10-09
+DEVELOP = '/srv/s22/hardware/bin/s22-develop'  # software ISP (tools/hardware/camera/s22-develop)
+CAMERA_WORK = Path('/srv/s22/tmp/camera-work')   # raws (6 MB each) stay off the 64 MB run tmpfs
+GALLERY = Path(str(CHROOT) + '/root/.openunum/assets/generated')
+# sensor -> (max analog gain, burst frames, preview rotation for a portrait panel)
+CAMERA_SENSORS = {'rear': (16.0, 4, 0), 'front': (8.0, 4, 0)}
 BUTTONS = Path('/srv/s22/buttons')
 AUDIO_OPT = '/opt/s22-audio'
 AMP_CONTROLS = ('Left Digital PCM Volume', 'Right Digital PCM Volume')
@@ -474,6 +480,71 @@ def display_state() -> str:
 
 # ------------------------------------------------------------------ daemon
 
+def _last_json(text: str) -> dict:
+    for line in reversed((text or '').strip().splitlines()):
+        line = line.strip()
+        if line.startswith('{'):
+            try:
+                return json.loads(line)
+            except ValueError:
+                return {}
+    return {}
+
+
+def camera_photo(sensor: str, run=subprocess.run) -> dict:
+    """Meter frame (10 ms / 2x) -> s22-develop meter -> burst at the metered exposure ->
+    s22-develop develop --stack. Returns the camera.json fields (rc 0 = picture shown)."""
+    max_gain, burst, rot = CAMERA_SENSORS[sensor]
+    CAMERA_WORK.mkdir(parents=True, exist_ok=True)
+    for f in CAMERA_WORK.glob('*.raw*'):
+        f.unlink()
+    preview = RUN / 'camera-latest.png'
+    base = ['/usr/bin/python3', '-I', '-B', CAMERA, 'capture', '--sensor', sensor, '--allow-fw-stall',
+            '--skip', '3', '--deadline', '120']
+    t0 = time.time()
+    exp_us, gain, meter = 20000, 8.0, None
+    have_dev = os.path.exists(DEVELOP)
+    if have_dev:
+        m = run(base + ['--out', str(CAMERA_WORK / 'meter.png'), '--raw', str(CAMERA_WORK / 'meter.raw'),
+                        '--frames', '1', '--cis-exposure-us', '10000', '--cis-again', '2'],
+                capture_output=True, text=True, timeout=180)
+        if m.returncode == 0:
+            r = run([DEVELOP, 'meter', str(CAMERA_WORK / 'meter.raw'), '--exposure-us', '10000', '--gain', '2',
+                     '--max-gain', str(max_gain), '--max-exposure-us', '30000'],
+                    capture_output=True, text=True, timeout=60)
+            meter = _last_json(r.stdout)
+            if meter.get('ok'):
+                exp_us, gain = int(meter['exposure_us']), float(meter['gain'])
+    raw = CAMERA_WORK / 'shot.raw'
+    cap = run(base + ['--out', str(CAMERA_WORK / 'shot-quick.png'), '--raw', str(raw), '--raw-burst',
+                      '--frames', str(burst), '--cis-exposure-us', str(exp_us), '--cis-again', str(gain)],
+              capture_output=True, text=True, timeout=180)
+    out = {'rc': cap.returncode, 'sensor': sensor, 'exposure_us': exp_us, 'gain': gain, 'meter': meter,
+           'tail': (cap.stdout + cap.stderr)[-400:]}
+    if cap.returncode != 0:
+        return out
+    stamp = int(time.time())
+    jpg = GALLERY / f'cam-{stamp}-{sensor}.jpg'
+    dev = {}
+    if have_dev:
+        GALLERY.mkdir(parents=True, exist_ok=True)
+        d = run([DEVELOP, 'develop', str(raw), '--stack', '--out', str(jpg), '--preview', str(preview),
+                 '--preview-max', '1016x1400', '--rotate', str(rot)],
+                capture_output=True, text=True, timeout=120)
+        dev = _last_json(d.stdout)
+    if dev.get('ok'):
+        out.update(develop_ok=True, path=f'{RUN_IN}/camera-latest.png', jpeg=str(jpg),
+                   jpeg_in_chroot='/root/.openunum/assets/generated/' + jpg.name,
+                   stacked=dev.get('stacked'), info=dev.get('info'), develop_ms=dev.get('ms'))
+    else:
+        # fallback: the capture client's own quick develop (1/4 resolution, the old picture)
+        shutil.copyfile(CAMERA_WORK / 'shot-quick.png', preview)
+        out.update(develop_ok=False, develop_error=dev.get('error') or ('no s22-develop' if not have_dev else 'develop failed'),
+                   path=f'{RUN_IN}/camera-latest.png')
+    out['ms'] = int((time.time() - t0) * 1000)
+    return out
+
+
 class Daemon:
     def __init__(self, gestures: bool = True, ui: bool = True):
         self.gestures_on, self.ui_on = gestures, ui
@@ -631,29 +702,31 @@ class Daemon:
         return ui_call(fn, *args[1:], timeout=float(req.get('timeout', 8)))
 
     def cmd_camera(self, req: dict) -> dict:
+        """Take a processed photo: AE meter frame -> burst -> s22-develop (software ISP).
+        Writes RUN/camera-latest.png (preview, what the shells show), a full-size JPEG in the
+        OpenUnum gallery and RUN/camera.json. Without s22-develop it falls back to the client's
+        own 1/4-resolution PNG (the old behaviour)."""
         if not os.path.exists(CAMERA):
             return {'ok': False, 'error': 'no_camera_tool'}
+        sensor = str(req.get('sensor') or req.get('arg') or 'rear')
+        if sensor not in CAMERA_SENSORS:
+            return {'ok': False, 'error': 'bad_sensor', 'allowed': sorted(CAMERA_SENSORS)}
         if not self.camera_busy.acquire(blocking=False):
             return {'ok': False, 'error': 'busy'}
 
         def run():
-            out = RUN / 'camera-latest.png'
             res = RUN / 'camera.json'
             try:
-                res.write_text(json.dumps({'state': 'running', 'started': time.time()}))
-                r = subprocess.run(['/usr/bin/python3', CAMERA, 'capture', '--out', str(out), '--allow-fw-stall',
-                                    '--exposure-us', '20000', '--iso', '400'],
-                                   capture_output=True, text=True, timeout=180)
-                res.write_text(json.dumps({'state': 'done', 'rc': r.returncode, 'finished': time.time(),
-                                           'path': f'{RUN_IN}/camera-latest.png' if out.exists() else None,
-                                           'tail': (r.stdout + r.stderr)[-600:]}))
-                log(event='camera', rc=r.returncode)
-            except (OSError, subprocess.SubprocessError) as e:
+                res.write_text(json.dumps({'state': 'running', 'sensor': sensor, 'started': time.time()}))
+                out = camera_photo(sensor)
+                res.write_text(json.dumps(dict(out, state='done', finished=time.time())))
+                log(event='camera', sensor=sensor, rc=out.get('rc'), develop=out.get('develop_ok'))
+            except (OSError, subprocess.SubprocessError, ValueError) as e:
                 res.write_text(json.dumps({'state': 'failed', 'error': str(e)}))
             finally:
                 self.camera_busy.release()
         threading.Thread(target=run, daemon=True).start()
-        return {'ok': True, 'state': 'running', 'result_file': f'{RUN_IN}/camera.json'}
+        return {'ok': True, 'state': 'running', 'sensor': sensor, 'result_file': f'{RUN_IN}/camera.json'}
 
     def cmd_model(self, req: dict) -> dict:
         """Switch OpenUnum's default model AND tell s22-keepalive to pin the new choice

@@ -262,6 +262,62 @@ class SessionEnvTest(unittest.TestCase):
         self.assertEqual(env['WAYLAND_DISPLAY'], 'wayland-1')
 
 
+
+class CameraPhotoTest(unittest.TestCase):
+    """camera_photo(): meter -> burst -> develop, with a fake subprocess.run."""
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        t = Path(self.tmp.name)
+        self.saved = (td.CAMERA_WORK, td.GALLERY, td.RUN, td.DEVELOP, td.CAMERA)
+        td.CAMERA_WORK, td.GALLERY, td.RUN = t / 'work', t / 'gallery', t / 'run'
+        td.RUN.mkdir()
+        td.DEVELOP = str(t / 'dev')
+        td.CAMERA = str(t / 'cam')
+        Path(td.DEVELOP).write_text('x')
+        self.calls = []
+
+    def tearDown(self):
+        td.CAMERA_WORK, td.GALLERY, td.RUN, td.DEVELOP, td.CAMERA = self.saved
+        self.tmp.cleanup()
+
+    def fake(self, develop_ok=True):
+        class R:
+            def __init__(s, rc, out):
+                s.returncode, s.stdout, s.stderr = rc, out, ''
+
+        def run(cmd, **kw):
+            self.calls.append(cmd)
+            if cmd[0] == td.DEVELOP and cmd[1] == 'meter':
+                return R(0, '{"ok": true, "exposure_us": 30000, "gain": 5.5}')
+            if cmd[0] == td.DEVELOP:
+                return R(0, '{"ok": true, "stacked": 4, "ms": 300}' if develop_ok else '{"ok": false, "error": "x"}')
+            out = cmd[cmd.index('--out') + 1]
+            Path(out).write_bytes(b'png')
+            return R(0, '{"ok": true}')
+        return run
+
+    def test_metered_burst_is_developed(self):
+        out = td.camera_photo('front', run=self.fake())
+        self.assertTrue(out['develop_ok'])
+        self.assertEqual((out['exposure_us'], out['gain'], out['stacked']), (30000, 5.5, 4))
+        shot = self.calls[2]
+        self.assertIn('--raw-burst', shot)
+        self.assertEqual(shot[shot.index('--cis-exposure-us') + 1], '30000')
+        self.assertEqual(shot[shot.index('--cis-again') + 1], '5.5')
+        self.assertEqual(shot[shot.index('--sensor') + 1], 'front')
+        self.assertIn('--stack', self.calls[3])
+
+    def test_develop_failure_falls_back_to_quick_png(self):
+        out = td.camera_photo('rear', run=self.fake(develop_ok=False))
+        self.assertFalse(out['develop_ok'])
+        self.assertEqual(out['rc'], 0)
+        self.assertEqual((td.RUN / 'camera-latest.png').read_bytes(), b'png')
+
+    def test_bad_sensor_rejected(self):
+        d = td.Daemon.__new__(td.Daemon)
+        Path(td.CAMERA).write_text('x')
+        self.assertEqual(td.Daemon.cmd_camera(d, {'sensor': 'side'})['error'], 'bad_sensor')
+
 if __name__ == '__main__':
     unittest.main()
 
