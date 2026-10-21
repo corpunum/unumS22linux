@@ -1,7 +1,32 @@
 # S22 native Linux status
 
-Updated 2026-10-21 (fast touch shell); earlier sections updated 2026-10-06 by the Claude lead session.
+Updated 2026-10-22 (camera ISP, 5G badge, GNSS plan); 2026-10-21 (fast touch shell); earlier sections updated 2026-10-06 by the Claude lead session.
 The 2026-10-02 task board and earlier checkpoints below are historical.
+
+## Processed camera photos, 5G badge, GNSS plan — 2026-10-22 (late)
+
+**Camera:** photos are now processed by our own software ISP, `s22-develop`. It is a static Rust binary that develops a full-resolution frame in about 0.35 s on the phone.
+- **Stages:** black level, defect pixels, radial lens shading, per-colour flare/offset, grey-world AWB, Malvar-He-Cutler demosaic, a colour matrix taken from the stock Pablo setfiles, chroma denoise, auto exposure, sRGB tone.
+- **Output:** a JPEG and a preview.
+- **Shell:** the Camera page has a Rear/Front toggle. Hold to capture: touchd meters, takes a 4-frame burst, stacks it and shows the processed picture. Tap to picture takes about 2.1 s. The JPEG lands in the OpenUnum gallery.
+- **Result:** the old picture was a 1/4-resolution grey-world PNG. The new one is 1824x1368 (front), with 3.1x less noise in the stack.
+- **Verified:** on the real front camera (ceiling at night). Taps were injected.
+- **Not verified:**
+  - colour accuracy (no chart);
+  - which rotation makes the picture upright;
+  - the rear camera in real light (it lies lens-down);
+  - NPU denoise (not tried).
+
+**5G badge:** the shell status bar shows a **5G/4G** pill from s22-phoned. It was verified live: mobile data up → NR n78 → 5G, then data down → 4G after 120 s.
+Tap → page re-measured on the rebuilt shell: p50 9.4 ms.
+[Evidence](evidence/camera-develop-20261022/README.md).
+
+**GPS:** no fix yet. GNSS is the Exynos 2200's own "Kepler" core with an S5520 RF chip (not Broadcom, not the modem).
+- **Already in place:** `/dev/gnss_ipc` (gnssif) exists.
+- **Engine:** the stock Bionic `gpsd` with its firmware embedded.
+- **Two risky code paths found in gpsd:** a watchdog ioctl that resets the whole phone, and a modem status ioctl on `umts_boot0`. They need a blocking shim plus a minimal root.
+- **Also needed:** a small HAL client, and one supervised first power-on of Kepler.
+- **Plan:** [tools/hardware/gnss/GNSS.md](tools/hardware/gnss/GNSS.md).
 
 ## NPU re-verified + 5G NSA confirmed — 2026-10-22
 
