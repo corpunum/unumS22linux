@@ -1,0 +1,14 @@
+play rc=0 
+rec rc=0 
+say.last: graph pcm=100 rc=0 t=1792614861
+restored L=0 R=0
+t=1.00 rms=0.0013 peak=  1000Hz target/noise=   945.9
+t=1.25 rms=0.0013 peak=  1000Hz target/noise=   922.6
+t=1.50 rms=0.0013 peak=  1000Hz target/noise=   928.6
+t=1.75 rms=0.0005 peak=    52Hz target/noise=     9.5
+t=2.00 rms=0.0004 peak=    52Hz target/noise=     5.4
+t=2.25 rms=0.0004 peak=    52Hz target/noise=     4.2
+t=2.50 rms=0.0004 peak=    52Hz target/noise=     5.1
+t=2.75 rms=0.0004 peak=    52Hz target/noise=     4.1
+t=3.00 rms=0.0004 peak=    52Hz target/noise=     7.7
+t=3.25 rms=0.0004 peak=    52Hz target/noise=     4.3

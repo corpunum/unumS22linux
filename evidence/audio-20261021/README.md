@@ -163,3 +163,79 @@ undisturbed; s22-say no longer uses pcm102.
 | 31 | 3 consecutive tone loopbacks (level 2, concurrent s22-rec on the graph) | 3/3 graph; tone 1000 Hz for the full 1.5 s (run 1 ratio 70–300 with a raised room noise floor, runs 2–3 ~620–870×) | fix-mmap-tone-loopback-x3.txt |
 | 32 | touchd `tts --play`, English Piper + Greek el-antonis, level 2, recorded | both `graph pcm=100 rc=0`. Whisper: EN "The phone can talk now. The sentence was spoken by the Piper voice on the Galaxy S22." (1 word off); EL exact. Phone Parakeet EN weaker | fix-mmap-speech.txt |
 | 33 | Coordinator repro `S22_SAY_LEVEL=0 s22-say "ok"` ×5 | 5/5 graph, no retry or fallback; pcm100 OK, pcm102 still EBADFD (leak until reboot); ABOX ONLINE; volume 0 | fix-mmap-repro-x5.txt |
+
+## After the UI worker's reboot (23:14 local): audio, Bluetooth, disk, Talk button
+
+**Audio** (reboot2-pcm102-and-crash-recovery.txt, reboot2-speech.txt)
+- hw:0,102 healed by the reboot (speaker-test OK; `S22_GRAPH_PCM=102 s22-say` →
+  `graph pcm=102 rc=0`), and it was still OK after the crash tests (the crash
+  helper writes 48k stereo straight to hw:0,102: no plug, no mmap).
+- Forced Calliope fault on the NEW code: s22-say → "failsafe reset" →
+  `graph pcm=100 rc=0`, ONLINE; s22-rec → reset → rc 0, ONLINE.
+- touchd TTS EN/EL, both `last=graph pcm=100`. Whisper: "…spoken by the Piper
+  voice of the Galaxy S22." (1 word off); "…με τη φωνή του Ατώνη." (1 letter off).
+
+**Bluetooth did not come back.** Root cause: the holder's shared-WLAN-rail
+gate (`votes_match`) required exactly two `qcom,cnss-qca6490-vreg_wlan`
+consumer lines in regulator_summary. On this boot CNSS held the rail through
+one (`vreg_wlan 1`, `bt 0`, `cnss 1`), so every attempt failed the gate with
+-EBUSY. That was printed only as `baud_probe_result=-5`, because rc starts at
+-EIO. All other gates were true (wlan module and wlan0, CNSS
+`0x420107 … COLD_BOOT_CAL_DONE`, ecm0 carrier 1, no hci). Keepalive backed
+off and would have stopped after 5 failures per 30 min.
+
+Fix:
+- Patch the deployed static holder (2 bytes: `ccmp w0,#2` →
+  `ccmp w0,w0`, vaddr 0x401920; sha 66c7863c… → 3ec69d2f…; original kept as
+  `.orig-66c7863c`; tool `bt/patch-hci-hold-cnss-lines.py`) so that only the
+  line-COUNT term is dropped. The rail-use, BT-vote and CNSS-vote-sum checks
+  are unchanged. The source has the same change, but it cannot be rebuilt:
+  the NVM payload header is gone.
+- `s22-bt up` waits up to 45 s for the prerequisites.
+- keepalive has per-service `max_restarts`/`window_s`/`backoff_max_s`;
+  bluetooth = 1000 / 300 s.
+
+Result: a manual `s22-bt up` gave hci0 in 4 s, with Wi-Fi unaffected (gateway
+ping OK; votes rail 2 / bt 1 / cnss 1). After another `s22-reboot recovery`
+(BT up at the time), hci0 came up by itself about 60 s after boot. The first
+try reached the chip but timed out (`-110`) and powered off cleanly; the
+retry 24 s later succeeded (reboot3-state.txt). **The ECM gate is still in
+place: with the USB cable to the rig unplugged (ecm0 carrier 0), Bluetooth
+will not start.** That is the rescue-path safety rule from the original
+review; changing it is the owner's decision.
+
+**Disk** (native-root-reclaim.txt): the root overlay's upper dir is on the
+583 MB CACHE partition. Nothing was growing quickly (about 1 MB in 4 days,
+`/var/log` 32 KB). It was full because of installed Mesa/LLVM: libLLVM.so.22.1
+alone is 172 MB. `native-root-reclaim.sh` copies each item to
+`/srv/s22/archive/native-root-20261021/`, verifies its sha256 (MANIFEST,
+19/19 re-verified), then:
+- symlinks libLLVM, libgallium and libvulkan_radeon (no running process mapped
+  them; dlopen of libgallium → LLVM via the symlink works; they survived the
+  reboot);
+- removes the moved unumsearch v0.1.{2,5,6} .bak files, /var/cache/apk,
+  /usr/lib/debug and the mesa shader cache.
+
+**/ went from 96 % (20.8 MB free) to 55 % (262.7 MB free).** Guard:
+s22-keepalive `root_guard` checks every loop. Below 40 MB free it caps logs on
+/ (/var/log, /root/*.log) at 1 MiB and empties regenerable caches (mesa shader
+cache, apk cache, pip cache), logging `root_low` with before/after.
+
+**Talk button (unum-fastshell)** (talk-button-test.txt)
+- An injected tap on Talk (`fs-inject.py` takes NORMALISED coordinates:
+  0.1759, 0.6107) started s22-assistant. rec-ready came after 200 ms.
+- A pre-rendered Piper question was played into the open mic window.
+  Parakeet heard "It is the capital of France." The agent replied "Paris is
+  the capital of France."
+- Filler "Just a second…" at 1.22 s, then the answer.
+- All five s22-say plays of the run (cue, question, earcon, filler, answer)
+  were `graph pcm=100 rc=0`.
+- Whisper on a mic recording that covered the answer: "Paris is the capital
+  of France." (quiet: level 2 via `/run/s22-say.level`). The filler played
+  before that recording started.
+- My first attempts failed only because I passed pixel coordinates.
+
+s22-say additions: `/run/s22-say.level` (runtime speech-level override) and
+`/run/s22-say.history` (last 50 paths). The first history version never
+renamed its temp file, because `tail` failing on the missing file made the
+group's status non-zero; this is fixed and verified.

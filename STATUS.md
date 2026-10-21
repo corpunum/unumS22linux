@@ -28,6 +28,18 @@ The default touch shell is now **unum-fastshell** (`tools/unum-fastshell`).
 
 [Evidence](evidence/fastshell-20261021/README.md).
 
+## Bluetooth at boot, root disk, Talk button — 2026-10-21 (night)
+
+Bluetooth now comes up by itself after `s22-reboot recovery`: the holder's
+WLAN-rail gate no longer requires a specific number of CNSS consumer lines,
+and keepalive keeps retrying. hci0 was verified about 60 s after boot.
+Bluetooth still requires the USB link to the rig (ECM carrier), a deliberate
+rescue-path gate. The native root went from 96 % to 55 % (libLLVM and other
+Mesa libraries moved to /srv with symlinks), and keepalive now guards free
+space on /. The new shell's Talk button runs the full voice loop with filler
+and answer on the graph audio path.
+[Evidence](evidence/audio-20261021/README.md).
+
 ## Audio firmware graph works — 2026-10-21
 
 The "RDMA2/3 never advance" problem is solved. Those DMAs are *outputs* of

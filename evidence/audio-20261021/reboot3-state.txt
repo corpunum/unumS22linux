@@ -1,0 +1,22 @@
+ 20:33:53 up 4 min,  0 users,  load average: 13.96, 8.23, 3.45
+boot=1792614588
+hci0
+up (pid 2496)
+hci0
+{"detail": "exited rc=1", "event": "restart", "ok": false, "service": "bluetooth", "t": 1792614623.871, "was_running": false}
+{"detail": "pid 2488", "event": "restart", "ok": true, "service": "bluetooth", "t": 1792614647.998, "was_running": false}
+baud_probe_result=-110
+h4=UNKNOWN non_event_byte=fe
+hci0 up after 4s (pid 2496)
+ vreg_wlan                        2    2      0 unknown     0mV     0mA     0mV     0mV 
+    bt_qca6490-vreg_wlan          1                                 0mA     0mV     0mV
+    qcom,cnss-qca6490-vreg_wlan   1                                 0mA     0mV     0mV
+abox=ONLINE
+overlay                 596544    321528    262728  55% /
+lrwxrwxrwx    1 root     root            61 Oct 21 20:27 /usr/lib/libLLVM.so.22.
+ 1666 /usr/bin/dbus-run-session -- /usr/bin/sway -c /root/s22-sway-pixman.conf
+ 1668 /usr/bin/sway -c /root/s22-sway-pixman.conf
+ 1686 /usr/bin/python3 /srv/s22/hardware/bin/s22-keepalive
+ 2300 /usr/bin/python3 /srv/s22/hardware/bin/s22-touchd
+ 2304 /srv/s22/hardware/bin/unum-fastshell
+0

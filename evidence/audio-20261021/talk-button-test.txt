@@ -1,0 +1,12 @@
+rec-ready after 200 ms
+question played rc=0
+assistant finished after ~8s
+== s22-say history (newest first)
+== new assistant.jsonl entries
+cat: can't open '/run/s22-say.history': No such file or directory
+{"agent_ms": 4842, "agent_start_ms": 43, "answer_launch_t": 1792615429.979, "ask_t0": 1792615423.88, "asr_ms": 1139, "content_events": 8, "cue_ms": 836, "engine": "parakeet", "fillers": [{"at_s": 1.22, "category": "general", "duration_s": 1.58, "kind": "filler", "lang": "en", "n": 7, "phrase": "Just a second\u2026"}], "mode": "release", "model": "openai/gpt-6-luna", "record_s": 5.39, "render_ms": 1238, "render_total_ms": 4394, "reply": "Paris is the capital of France.", "reply_chars": 31, "reply_t": 1792615428.719, "reply_wait_ms": 4838, "result": "ok", "speak_ms": 4394, "spoken": "Paris is the capital of France.", "spoken_chars": 31, "t": 1792615416.505, "to_speech_ms": 12234, "total_ms": 16629, "transcript": "It is the capital of France.", "truncated": false}
+-rw-r--r--    1 root     root       3840044 Oct 21 20:44 /mnt/omarchy-trial/tmp/talk-answer.wav
+dur 40.0
+rms/0.5s 0.0009 0.0004 0.0002 0.0002 0.0002 0.0002 0.0002 0.0002 0.0002 0.0003 0.0005 0.0004 0.0002 0.0003 0.0003 0.0002 0.0002 0.0002 0.0002 0.0002 0.0002 0.0002 0.0002 0.0002 0.0002 0.0002 0.0002
+== whisper (en) on filler+answer recording: [00:00:00.000 --> 00:00:14.000]   Paris is the capital of France. 
+== s22-say play records (recovered from temp files): 20:43:37 cue, :39 question, :43 earcon?, :47 filler, :53 answer -- all "graph pcm=100 rc=0"

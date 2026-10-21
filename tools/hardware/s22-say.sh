@@ -174,7 +174,10 @@ restore_vol() { [ -n "$VOLSET" ] && { amx cset 'name=Left Digital PCM Volume' "$
 trap 'restore_vol; batch "$ROUTE.reset"; [ -n "${CLEANWAV:-}" ] && rm -f "$CHROOT$WAV"' EXIT
 trap 'exit 130' INT TERM
 batch "$ROUTE" || exit 1
-LVL=${S22_SAY_LEVEL:-4}
+# Runtime override without touching callers (quiet hours, tests): a level in
+# /run/s22-say.level applies when S22_SAY_LEVEL is not set.
+LVL=${S22_SAY_LEVEL:-$(cat /run/s22-say.level 2>/dev/null || echo 4)}
+case "$LVL" in ''|*[!0-9]*) LVL=4;; esac
 if [ "${OLDL:-0}" = 0 ] && [ "${OLDR:-0}" = 0 ] && [ "$LVL" -gt 0 ] 2>/dev/null; then
   [ "$LVL" -le 10 ] || LVL=10
   RAW=$((817 - (10 - LVL) * 32))
@@ -241,6 +244,8 @@ else
   play_direct "$WAV"; rc=$?
 fi
 printf '%s pcm=%s rc=%s t=%s\n' "$USED" "$PCM" "$rc" "$(date +%s)" > /run/s22-say.last
+# Bounded history of every playback path (the last 50), for verification.
+{ cat /run/s22-say.last; tail -n 49 /run/s22-say.history 2>/dev/null || :; } > /run/s22-say.history.$$ && mv -f /run/s22-say.history.$$ /run/s22-say.history
 if [ -n "$DIAG" ]; then
   wait
   dmesg > "$DIAG/dmesg-after.txt" 2>&1
