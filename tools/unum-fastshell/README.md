@@ -12,8 +12,9 @@ Measurements and screenshots are in [`evidence/fastshell-20261021/`](../../evide
 | Renderer | CPU, immediate-mode, with damage tracking. Every primitive is clipped to the damaged rectangles, and only those are copied to the back buffer. Rounded rectangles are anti-aliased.<br>Text is Noto Sans (Latin + Greek subset, vendored, OFL-1.1, see `fonts/OFL.txt`), rasterised with `ab_glyph` into a glyph cache.<br>Lists (chat, files, phone, text viewer) scroll kinetically. A scroll step moves the pixels in place and redraws only the newly exposed strip. |
 | Touch | Reads `sec_touchscreen` evdev without grabbing it. Implements its own edge swipes with the same thresholds as s22-touchd:<br>• bottom edge up: home, or unlock;<br>• left/right edge inward: back;<br>• top edge down: apps. |
 | Keyboard | Native on-screen keyboard: English QWERTY, Greek (with a tonos dead key) and a symbol layer. Native because squeekboard is a Wayland client of sway, and sway is inactive while the shell owns the panel. squeekboard is still used under sway for foot. |
-| Pages | **Home:** live cards for OpenUnum model/health, sessions in the last hour and running missions (`:18880`), battery and thermal (sysfs); app tiles; Talk / Apps / Lock; last reply.<br>**Agent chat:** session `touch`. `POST /api/chat`, then the `/api/chat/stream` SSE (content deltas, tool activity, `ask_user` options). Stop button.<br>**Phone:** read-only view of s22-phoned `:8095`.<br>**Camera:** hold-to-capture through touchd `camera_capture`, PNG preview.<br>**Files:** browses the chroot's `/root`; text and PNG preview.<br>**Settings:** network, brightness slider (touchd), model switch (touchd, hold), screen off, sway desktop, back to the classic shell (hold).<br>**Apps:** the switcher. **Lock** cover. |
+| Pages | **Home:** live cards for OpenUnum model/health, sessions in the last hour and running missions (`:18880`), battery and thermal (sysfs); app tiles; Talk / Apps / Lock; last reply.<br>**Agent chat:** session `touch`. `POST /api/chat`, then the `/api/chat/stream` SSE (content deltas, tool activity, `ask_user` options). Stop button.<br>**Phone:** read-only view of s22-phoned `:8095`.<br>**Camera:** Rear/Front toggle; hold-to-capture through touchd `camera_capture` (`sensor`), which meters, takes a 4-frame burst and develops it with `s22-develop` (software ISP); the processed preview plus a line with exposure, gain, frames and the gallery JPEG name.<br>**Files:** browses the chroot's `/root`; text and PNG preview.<br>**Settings:** network, brightness slider (touchd), model switch (touchd, hold), screen off, sway desktop, back to the classic shell (hold).<br>**Apps:** the switcher. **Lock** cover. |
 | Foreign apps | **Terminal** focuses (or starts) `foot` under sway, makes sure squeekboard runs and shows it, then switches the seat to sway.<br>Any edge swipe under sway goes through s22-touchd as `gesture`, and the shell takes the panel back with `wtype -k XF86Switch_VT_<n>`. |
+| Status bar | Clock, health dot, a **5G / 4G** pill from s22-phoned `/status` (every 20 s), battery, thermal, link. 5G = `radio.nr_nsa`, or `nr_last_seen` within 120 s (NSA keeps `act` = lte). |
 | Agent protocol | `shell.sock` in s22-touchd's run dir, the same JSON-line protocol as unum-shell: `home back switcher open card confirm confirmResult lock unlock keyboard state perf`, plus `display`, `gesture`, `ping` and `send`.<br>Confirm answers go to `confirm/<id>.json`, so `s22-ui`, the OpenUnum `s22-ui` plugin and s22d keep working unchanged. |
 | Voice | **Talk** runs `/srv/s22/hardware/bin/s22-assistant` exactly like the button hook: fixed recording window, ASR, session `voice`, spoken answer. The last `assistant.jsonl` entry is then shown as a card. |
 | Screen power | s22-touchd's `display`/`power` (the Power key) is forwarded to the shell. It draws the lock cover, then sets DPMS on its own DRM fd, which takes the CRTC inactive and powers the panel off. While sway is showing, the shell answers `delegate` and `s22-display` does it as before. |
@@ -37,7 +38,7 @@ Automatic fallbacks:
 ```sh
 export PATH=$HOME/.cargo/bin:$PATH
 cd tools/unum-fastshell
-cargo test --offline --release                     # 8 tests: SSE/chunked parsing, touchd protocol, confirm file, keyboard, gestures
+cargo test --offline --release                     # 10 tests: SSE/chunked parsing, touchd protocol, confirm file, keyboard, gestures, 5G badge, camera line
 cargo run --release -- dump /tmp/shots             # offscreen PNG of every screen
 flock ~/.cache/rig-heavy.lock env CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld \
   cargo build --offline --release --target aarch64-unknown-linux-musl
@@ -66,7 +67,6 @@ Logs:
 
 - Not tested on the phone:
   - the Talk button: it plays audio, and another worker was running audio loopback tests;
-  - camera capture: it only goes through touchd's existing `camera_capture`, the same call Quickshell makes;
   - the model switch and the "classic shell" button from inside the shell (the profile command and the Power long-press were tested);
   - real finger latency, photon time and power draw.
 - No app switcher thumbnails: Apps is a page list plus "Sway desktop".

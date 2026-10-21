@@ -1448,6 +1448,8 @@ def cmd_capture(args, sysif=None, alarm=True) -> int:
         if holder["seen"] <= args.skip:
             return False
         holder["raw"], holder["frame"] = raw, frame
+        if getattr(args, "raw_burst", False):
+            holder.setdefault("burst", []).append(raw)  # bytes copies; written after teardown
         holder.setdefault("kept", 0)
         holder["kept"] += 1
         return holder["kept"] >= args.frames
@@ -1467,6 +1469,11 @@ def cmd_capture(args, sysif=None, alarm=True) -> int:
         if args.raw:
             write_raw(args.raw, holder["raw"], meta)
             result["raw"] = args.raw
+            if getattr(args, "raw_burst", False):
+                # every kept frame as RAW.<i> (for multi-frame stacking in s22-develop)
+                for i, b in enumerate(holder.get("burst", [])):
+                    write_raw("%s.%d" % (args.raw, i), b, meta)
+                result["raw_burst"] = len(holder.get("burst", []))
         ow, oh, rows, stats = develop(holder["raw"], args.width, args.height, stream["stride"],
                                       fmt, **_develop_args(args))
         write_image(args.out, ow, oh, rows)
@@ -1716,6 +1723,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("capture", help="capture one developed still")
     p.add_argument("--out", required=True)
     p.add_argument("--raw")
+    p.add_argument("--raw-burst", action="store_true",
+                   help="with --raw and --frames N: also write every kept frame as RAW.0..N-1")
     p.add_argument("--frames", type=int, default=1)
     p.add_argument("--skip", type=int, default=4, help="frames to discard first (AE/settle)")
     _add_stream_args(p)

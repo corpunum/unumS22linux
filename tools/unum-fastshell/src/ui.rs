@@ -106,6 +106,7 @@ pub enum Act {
     Classic,
     ScreenOff,
     Capture,
+    CamSensor(&'static str),
     Refresh,
     Nothing,
 }
@@ -161,6 +162,7 @@ pub struct Status {
     pub thermal_detail: String,
     pub net: String,
     pub device: Option<Value>,
+    pub radio: Option<&'static str>,
 }
 
 struct Touching {
@@ -241,6 +243,7 @@ pub struct App {
     pub camera_state: String,
     pub camera_img: Option<(Vec<u32>, i32, i32)>,
     pub camera_poll: Option<Instant>,
+    pub camera_sensor: &'static str,
     pub brightness: (i32, i32),
     bright_sent: Instant,
     pub note: String,
@@ -316,6 +319,7 @@ impl App {
             camera_state: String::new(),
             camera_img: None,
             camera_poll: None,
+            camera_sensor: "rear",
             brightness: (128, 255),
             bright_sent: Instant::now(),
             note: String::new(),
@@ -494,6 +498,14 @@ impl App {
                 }
             }
             Msg::Touchd(tag, v) => self.on_touchd(tag, v),
+            Msg::Radio(v) => {
+                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+                let b = net::radio_badge(&v, now);
+                if b != self.st.radio {
+                    self.st.radio = b;
+                    self.dirty(Rect::new(0, 0, W, STATUS_H));
+                }
+            }
             Msg::Assistant(v) => {
                 let you = v["transcript"].as_str().or(v["text"].as_str()).unwrap_or("").to_string();
                 let ans = v["reply"].as_str().or(v["answer"].as_str()).unwrap_or("").to_string();
@@ -511,7 +523,7 @@ impl App {
         match tag {
             "camera" => {
                 if v["ok"] == true {
-                    self.camera_state = "capturing… (takes up to a minute)".into();
+                    self.camera_state = format!("{} camera: metering, then a burst…", v["sensor"].as_str().unwrap_or("rear"));
                     self.camera_poll = Some(Instant::now());
                 } else {
                     self.camera_state = format!("camera: {}", v["error"].as_str().unwrap_or("failed"));
@@ -547,7 +559,7 @@ impl App {
             Some("done") => {
                 self.camera_poll = None;
                 if v["rc"] == 0 {
-                    self.camera_state = "captured".into();
+                    self.camera_state = camera_summary(&v);
                     self.load_camera_image();
                 } else {
                     self.camera_state = format!("capture failed (rc {})", v["rc"]);
@@ -795,6 +807,7 @@ impl App {
                 "thermal": self.st.thermal.map(|t| format!("{t:.0}°C")),
                 "model": self.st.model,
                 "healthy": self.st.health,
+                "radio": self.st.radio,
             },
         })
     }
@@ -1138,8 +1151,12 @@ impl App {
             Act::Capture => {
                 self.camera_state = "starting the camera…".into();
                 if let Some(n) = &self.net {
-                    net::touchd_async(n, "camera", json!({"cmd": "camera_capture"}), 10);
+                    net::touchd_async(n, "camera", json!({"cmd": "camera_capture", "sensor": self.camera_sensor}), 10);
                 }
+                self.dirty_content();
+            }
+            Act::CamSensor(s) => {
+                self.camera_sensor = s;
                 self.dirty_content();
             }
             Act::Refresh => {
@@ -1589,6 +1606,13 @@ impl App {
             let s = right.join("  ·  ");
             let w = self.fonts.measure(Face::Regular, 32, &s);
             self.txt(cv, Face::Regular, 32, W - M - w, 62, &s, DIM);
+            if let Some(badge) = self.st.radio {
+                // small pill left of the status text: 5G accent, others plain
+                let bw = self.fonts.measure(Face::Bold, 28, badge);
+                let pill = Rect::new(W - M - w - bw - 52, 30, bw + 28, 44);
+                cv.rrect(&pill, 12, if badge == "5G" { ACCENT } else { SURF2 });
+                self.txt(cv, Face::Bold, 28, pill.x + 14, 62, badge, TEXT);
+            }
             let dot = match self.st.health.as_deref() {
                 Some("healthy") => GOOD,
                 Some("down") => BAD,
@@ -2017,7 +2041,8 @@ impl App {
     }
 
     fn draw_camera(&mut self, cv: &mut Canvas) {
-        let top = self.header(cv, "Camera", "rear still · s22-camera through s22-touchd");
+        let sub = format!("{} · processed by s22-develop", self.camera_sensor);
+        let top = self.header(cv, "Camera", &sub);
         let area = Rect::new(M, top + 10, W - 2 * M, 1400);
         if !self.layout_pass && area.hits(&cv.clip) {
             cv.rrect(&area, 28, SURF);
@@ -2040,6 +2065,17 @@ impl App {
         if !busy {
             if let Some(h) = self.hits.last_mut().filter(|_| self.layout_pass) {
                 h.hold_ms = 1000;
+            }
+        }
+        // sensor choice: two half-width toggles under the shutter button
+        let half = (W - 3 * M) / 2;
+        for (i, (s, label)) in [("rear", "Rear"), ("front", "Front")].into_iter().enumerate() {
+            let r = Rect::new(M + i as i32 * (half + M), b.bottom() + 30, half, 110);
+            let on = self.camera_sensor == s;
+            let act = if busy { Act::Nothing } else { Act::CamSensor(s) };
+            self.button(cv, r, label, act, if on { SURF2 } else { SURF }, PRESS, 34);
+            if on && !self.layout_pass && r.hits(&cv.clip) {
+                cv.rrect(&Rect::new(r.x + r.w / 2 - 40, r.bottom() - 14, 80, 6), 3, ACCENT);
             }
         }
     }
@@ -2310,6 +2346,22 @@ pub fn human(n: u64) -> String {
 }
 
 /// Decode a PNG and scale it (nearest) to fit max_w x max_h. XRGB out.
+/// One line for the Camera page from touchd's camera.json.
+pub fn camera_summary(v: &Value) -> String {
+    let s = v["sensor"].as_str().unwrap_or("rear");
+    let ms = v["exposure_us"].as_f64().map(|e| format!("{:.0} ms", e / 1000.0)).unwrap_or_default();
+    let g = v["gain"].as_f64().map(|g| format!("{g:.1}x")).unwrap_or_default();
+    if v["develop_ok"] == true {
+        let n = v["stacked"].as_u64().unwrap_or(1);
+        let f = v["jpeg"].as_str().and_then(|p| p.rsplit('/').next()).unwrap_or("");
+        format!("{s} · {ms} · {g} · {n} frames stacked · {f}")
+    } else if v["develop_ok"] == false {
+        format!("{s} · raw preview only ({})", v["develop_error"].as_str().unwrap_or("develop failed"))
+    } else {
+        "captured".into()
+    }
+}
+
 pub fn load_png(path: &str, max_w: i32, max_h: i32) -> Option<(Vec<u32>, i32, i32)> {
     let f = std::fs::File::open(path).ok()?;
     let mut dec = png::Decoder::new(f);
@@ -2430,4 +2482,33 @@ mod tests {
         a.touch(crate::touch::Touch::Up(540, 1100, 300_000));
         assert!(!a.locked);
     }
+
+    #[test]
+    fn radio_badge_5g_nsa_and_lte() {
+        let base = json!({"ok": true, "registration": {"reg_status": "home_3gpp", "act": "lte"}, "radio": {"nr_nsa": false}, "nr_last_seen": null});
+        assert_eq!(net::radio_badge(&base, 1000.0), Some("4G"));
+        let mut v = base.clone();
+        v["radio"]["nr_nsa"] = json!(true);
+        assert_eq!(net::radio_badge(&v, 1000.0), Some("5G"));
+        let mut v = base.clone();
+        v["nr_last_seen"] = json!(950.0);
+        assert_eq!(net::radio_badge(&v, 1000.0), Some("5G"), "NR seen 50 s ago");
+        assert_eq!(net::radio_badge(&v, 1200.0), Some("4G"), "NR seen 250 s ago is stale");
+        let mut v = base.clone();
+        v["registration"]["reg_status"] = json!("searching");
+        assert_eq!(net::radio_badge(&v, 1000.0), None);
+        assert_eq!(net::radio_badge(&json!({"ok": false}), 1000.0), None);
+        assert_eq!(net::radio_badge(&Value::Null, 1000.0), None);
+    }
+
+    #[test]
+    fn camera_summary_lines() {
+        let v = json!({"rc": 0, "sensor": "front", "exposure_us": 30000, "gain": 5.5, "develop_ok": true, "stacked": 4,
+                       "jpeg": "/mnt/omarchy-trial/root/.openunum/assets/generated/cam-1-front.jpg"});
+        assert_eq!(camera_summary(&v), "front · 30 ms · 5.5x · 4 frames stacked · cam-1-front.jpg");
+        let v = json!({"rc": 0, "sensor": "rear", "exposure_us": 20000, "gain": 8.0, "develop_ok": false, "develop_error": "no s22-develop"});
+        assert!(camera_summary(&v).contains("raw preview only (no s22-develop)"));
+        assert_eq!(camera_summary(&json!({"rc": 0})), "captured");
+    }
+
 }

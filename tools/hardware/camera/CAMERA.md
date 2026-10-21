@@ -282,3 +282,55 @@ s22-camera.py develop /tmp/seq.raw --out /tmp/seq.png --bayer GRBG --min-white 0
 The DDK path (`is_lib.bin`/`is_rta.bin`) is kernel-executed and loads only when an
 ischain opens. It is not needed for raw capture and has **not** been run. It is MEDIUM
 risk and needs owner approval.
+
+## Software ISP: `s22-develop` (2026-10-22)
+
+`s22-develop/` is a static Rust binary (aarch64 musl, 0.6 MB, installed as
+`/srv/s22/hardware/bin/s22-develop`). It turns a raw dump plus its `.raw.json` sidecar into a photo.
+It replaces the old `pipeline/` prototype (rawpy/LibRaw on the rig), which needs numpy. The phone has no numpy.
+
+| Stage | What it does |
+|---|---|
+| Black / white | Black 64 and white 1023 (10-bit), times `stack_scale` for `stack` raws. |
+| Defect pixels | A pixel more than max(0.04, 0.6 × neighbour max) away from its 4 same-colour neighbours is replaced by their median. |
+| Lens shading | Generic radial gain 1 + k·r², k = 0.35 (`--lsc`). It is not the stock LSC table, which is not decoded. |
+| Offset / flare | Per colour, the 1st percentile of 16x16 block means goes to black, capped at 35 % of that colour's mean (`--no-auto-black` turns it off). |
+| White balance | Grey-world over 2x2 quads that are neither clipped nor in the noise floor; gains are clamped to 0.4–5 (`--wb grayworld\|none\|R,B`). |
+| Demosaic | Malvar-He-Cutler at full resolution; `--half` bins 2x2 instead. |
+| Colour matrix | The stock matrix (`--ccm stock\|none\|9 floats`), see below. |
+| Chroma denoise | A linear-light chroma blur before any clipping, then a gamma-domain one. The radius grows with the digital gain (3/5/8 px). |
+| Exposure / tone | The bright 0.5 % goes to 0.95, with the mean capped at 0.28 linear (`--ev` shifts it). Soft highlight roll-off, sRGB gamma and a 20 % smoothstep S-curve. |
+| Output | JPEG (`--out`, q 90), PNG (`--png`), and a preview PNG scaled to fit (`--preview`, `--preview-max 1016x1400`). `--before` writes the raw mosaic as grey. `--rotate` rotates the output. |
+
+- **Stacking:** `--stack` averages `RAW.0`, `RAW.1`, …. They come from the new `s22-camera capture --raw-burst`, which writes every kept frame
+  after teardown. Without alignment, so the phone has to be still for about 4 frames (130 ms at 30 fps).
+- **AE:** `s22-develop meter RAW --exposure-us E --gain G [--max-gain N]` reads the centre-green mean of a meter frame.
+  It prints the next exposure/gain pair as JSON: target mean 0.16, exposure first up to 30 ms, then analog gain.
+
+**Colour matrix source.** A scan of the stock Pablo setfiles (`setfile_imx374.bin`, `setfile_gn3.bin`) looked for
+int16 Q8 3x3 matrices whose rows sum to 256 and have a positive diagonal. It found four per-illuminant matrices and one generic saturation matrix,
+at the same relative offsets in both files.
+- The one in use is `[332 -47 -29; -82 394 -56; -26 -105 387]/256`, at IMX374 @0x17050 and GN3 @0x170e0. It is the least saturating of the four.
+- The others: @0x16e68 `[380 -113 -11; -30 297 -11; 30 -141 367]`, @0x1732c, @0x17514. The generic one, @0x17608, is 1.61/-0.31.
+
+Which illuminant each matrix belongs to is not decoded, and the colour accuracy was not measured (no chart).
+
+**Shell path.** s22-touchd's `camera_capture` (optional `sensor`: `rear`/`front`) runs:
+1. a meter frame (10 ms, 2x);
+2. `s22-develop meter`;
+3. a 4-frame `--raw-burst` at the metered values;
+4. `s22-develop develop --stack`.
+
+Raws go to `/srv/s22/tmp/camera-work`, not to the 64 MB run tmpfs. The preview goes to `RUN/camera-latest.png`, which is
+what both shells show. The full JPEG goes to the OpenUnum gallery as `cam-<ts>-<sensor>.jpg`. If `s22-develop` is missing
+or fails, touchd shows the client's old quick PNG instead, so the old behaviour is the fallback.
+The front camera takes about 2.1 s from tap to picture.
+
+```sh
+s22-camera capture --sensor front --raw /srv/s22/tmp/x.raw --raw-burst --frames 4 --skip 3 \
+    --out /srv/s22/tmp/x-quick.png --allow-fw-stall --cis-exposure-us 30000 --cis-again 8
+s22-develop develop /srv/s22/tmp/x.raw --stack --out x.jpg --preview x-prev.png --before x-raw.png
+cd s22-develop && cargo test --offline --release      # 9 tests (demosaic per pattern, WB, defects, AE, I/O)
+```
+
+Evidence: [`evidence/camera-develop-20261022/`](../../../evidence/camera-develop-20261022/README.md).
