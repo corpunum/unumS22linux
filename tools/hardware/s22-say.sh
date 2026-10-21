@@ -33,7 +33,7 @@ set -u
 CHROOT=/mnt/omarchy-trial
 OPT=/opt/s22-audio
 MIX=$CHROOT$OPT/mixer
-PCM=6                      # RDMA6: hardware SPUS path (RDMA2/3 need the firmware graph tick, not working yet)
+PCM=102                    # calliope_2 firmware-graph frontend (S22_AUDIO_PATH=direct: RDMA6 = pcm 6)
 OUT=speaker
 AMP=60                     # espeak-ng amplitude (0-200, default 100)
 DIAG=
@@ -161,9 +161,25 @@ if [ -z "$WAV" ]; then
   CLEANWAV=1
 fi
 
-trap 'batch "$ROUTE.reset"; [ -n "${CLEANWAV:-}" ] && rm -f "$CHROOT$WAV"' EXIT
+# Speech level (2026-10-21, owner wants the phone to talk): the resting state
+# stays muted (s22-keepalive enforce_mute; it skips the check while this
+# script holds /run/s22-say.lock). If the amps are at 0, raise them to
+# S22_SAY_LEVEL (s22-buttons scale 0-10, default 4 = -24 dB) for this playback
+# only and put the previous raw value back on exit. A non-zero level chosen
+# with the volume keys is left as it is. S22_SAY_LEVEL=0 plays silently.
+amx() { run $OPT/usr/bin/amixer -c0 -q "$@"; }
+amp_raw() { run $OPT/usr/bin/amixer -c0 cget "name=$1 Digital PCM Volume" | sed -n 's/^  : values=//p'; }
+OLDL=$(amp_raw Left); OLDR=$(amp_raw Right); VOLSET=
+restore_vol() { [ -n "$VOLSET" ] && { amx cset 'name=Left Digital PCM Volume' "${OLDL:-0}"; amx cset 'name=Right Digital PCM Volume' "${OLDR:-0}"; }; }
+trap 'restore_vol; batch "$ROUTE.reset"; [ -n "${CLEANWAV:-}" ] && rm -f "$CHROOT$WAV"' EXIT
 trap 'exit 130' INT TERM
 batch "$ROUTE" || exit 1
+LVL=${S22_SAY_LEVEL:-4}
+if [ "${OLDL:-0}" = 0 ] && [ "${OLDR:-0}" = 0 ] && [ "$LVL" -gt 0 ] 2>/dev/null; then
+  [ "$LVL" -le 10 ] || LVL=10
+  RAW=$((817 - (10 - LVL) * 32))
+  amx cset 'name=Left Digital PCM Volume' $RAW && amx cset 'name=Right Digital PCM Volume' $RAW && VOLSET=1
+fi
 
 if [ -n "$DIAG" ]; then
   mkdir -p "$DIAG"
@@ -175,20 +191,37 @@ fi
 
 # s22spk (alsa-s22.conf) = plug -> hw:0,6 at 48 kHz stereo; RDMA6's own ASRC
 # garbles 22.05 kHz mono (espeak's native format).
-# S22_AUDIO_PATH=graph (opt-in, 2026-10-21): play like the stock AudioProxy into
-# the firmware-graph frontend calliope_2 (hw:0,102 -> VPCMOUT_DAI2 -> VDSP3 ->
-# RDMA2 -> SPUS). Needs HAL-sized periods: 6000-frame periods lost audio, and
-# with the SBLL pipeline they crashed Calliope (data abort at 0x82800000).
-APDEV=s22spk; APOPTS=
-if [ "${S22_AUDIO_PATH:-direct}" = graph ]; then
-  APDEV=s22graph; APOPTS="--period-size=480 --buffer-size=1920"; PCM=102
-fi
+# Default (2026-10-21): play like the stock AudioProxy into the firmware-graph
+# frontend calliope_2 (s22graph = plug -> hw:0,102 -> VPCMOUT_DAI2 -> VDSP3 ->
+# RDMA2 -> SPUS; every media-* route sets VDSP3). HAL-sized periods are
+# required: 6000-frame periods lost audio and, with the SBLL pipeline, crashed
+# Calliope (data abort at 0x82800000). S22_AUDIO_PATH=direct uses RDMA6.
+# If Calliope faults (failsafe OFFLINE) it is reset the way the stock HAL does
+# and the playback is retried once; a second graph failure falls back to RDMA6.
+APDEV=s22graph; APOPTS="--period-size=480 --buffer-size=1920"
+[ "${S22_AUDIO_PATH:-graph}" = direct ] && { APDEV=s22spk; APOPTS=; PCM=6; }
+abox_recover() {
+  [ "$(cat /proc/abox/failsafe/online 2>/dev/null)" = OFFLINE ] || return 0
+  echo "s22-say: ABOX OFFLINE, failsafe reset" >&2
+  printf CALLIOPE > /proc/abox/failsafe/reset
+  i=0; while [ $i -lt 20 ] && [ "$(cat /proc/abox/failsafe/online)" = OFFLINE ]; do sleep 0.25; i=$((i + 1)); done
+}
 play() { timeout 60 chroot "$CHROOT" /usr/bin/env LD_LIBRARY_PATH=$OPT/usr/lib \
   ALSA_CONFIG_PATH=$OPT/mixer/alsa-s22.conf $OPT/usr/bin/aplay -q -D $APDEV $APOPTS "$@"; }
+abox_recover
 # ABOX powers Calliope down ~0.5 s after the last close; a short silent
 # stream first makes sure the firmware is up before the real trigger.
 play -t raw -f S16_LE -r 48000 -c 2 -s 4800 /dev/zero >/dev/null 2>&1
 play "$WAV"
+rc=$?
+if [ $rc -ne 0 ] && [ "$APDEV" = s22graph ]; then
+  abox_recover; echo "s22-say: graph playback rc=$rc, retrying" >&2
+  play "$WAV"; rc=$?
+  if [ $rc -ne 0 ]; then
+    abox_recover; echo "s22-say: graph failed again, falling back to RDMA6" >&2
+    APDEV=s22spk; APOPTS=; play "$WAV"; rc=$?
+  fi
+fi
 rc=$?
 if [ -n "$DIAG" ]; then
   wait

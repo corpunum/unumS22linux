@@ -127,6 +127,23 @@ class MuteTest(unittest.TestCase):
         self.assertTrue(mod.needs_mute({'level': 3, 'amp': [0, 0]}))
         self.assertFalse(mod.needs_mute({'level': None, 'amp': None}))
 
+    def test_playback_active_probe(self):
+        import fcntl, os, tempfile
+        with tempfile.TemporaryDirectory() as d:
+            lock = Path(d) / 'say.lock'
+            self.assertFalse(mod.playback_active(lock))          # no file
+            lock.write_text('')
+            self.assertFalse(mod.playback_active(lock))          # free
+            fd = os.open(lock, os.O_RDONLY)
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            try:
+                pid = os.fork()
+                if pid == 0:                                     # flock is per open file: probe from a child
+                    os._exit(0 if mod.playback_active(lock) else 1)
+                self.assertEqual(os.waitpid(pid, 0)[1], 0)
+            finally:
+                os.close(fd)
+
     def test_apply_mute_writes_level_and_amps(self):
         calls = []
         with tempfile.TemporaryDirectory() as d, mock.patch.object(mod.Path, 'exists', return_value=True):

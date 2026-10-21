@@ -50,6 +50,7 @@ DISPLAY = '/srv/s22/hardware/bin/s22-display'
 BACKLIGHT = Path('/sys/class/backlight/panel')
 SAY = '/srv/s22/hardware/bin/s22-say'
 TTS_ENGINES = {'supertonic', 'paradee', 'kitten', 'piper', 'kokoro', 'el-antonis', 'el-female', 'espeak'}
+TTS_OUTPUTS = {'speaker', 'earpiece', 'top', 'bottom'}
 DISPLAY_STATE = Path('/run/s22-display-state')
 CAMERA = '/srv/s22/hardware/bin/s22-camera'   # reviewed client (sha256 3f1375f6...) since 2026-10-09
 BUTTONS = Path('/srv/s22/buttons')
@@ -647,8 +648,9 @@ class Daemon:
         return {'ok': True, 'brightness': int((BACKLIGHT / 'brightness').read_text().strip()), 'max': mx}
 
     def cmd_tts(self, req: dict) -> dict:
-        """Render speech to a WAV with s22-say in render-only mode (S22_SAY_OUT set): no mixer,
-        no route, no amp, no playback, so the phone stays muted. Returns the chroot path."""
+        """Render speech to a WAV with s22-say in render-only mode (S22_SAY_OUT set), and with
+        "play": true then speak it: s22-say --wav (firmware-graph path, temporary speech level,
+        amps back to the resting mute afterwards). Returns the chroot path."""
         text = str(req.get('text') or '').strip()
         if not text:
             return {'ok': False, 'error': 'empty_text'}
@@ -657,6 +659,10 @@ class Daemon:
         engine = str(req.get('engine') or 'supertonic')
         if engine not in TTS_ENGINES:
             return {'ok': False, 'error': 'bad_engine', 'engines': sorted(TTS_ENGINES)}
+        play = bool(req.get('play'))
+        out = str(req.get('out') or 'speaker')
+        if out not in TTS_OUTPUTS:
+            return {'ok': False, 'error': 'bad_out', 'outputs': sorted(TTS_OUTPUTS)}
         out_dir = RUN / 'tts'
         out_dir.mkdir(exist_ok=True)
         old = sorted(out_dir.glob('*.wav'), key=lambda f: f.stat().st_mtime)
@@ -667,10 +673,22 @@ class Daemon:
         t0 = time.monotonic()
         r = subprocess.run([SAY, '--engine', engine, text], env=env, capture_output=True, text=True, timeout=180)
         ok = r.returncode == 0 and (out_dir / name).exists()
-        log(event='tts', engine=engine, chars=len(text), ok=ok)
-        return {'ok': ok, 'path': f'{RUN_IN}/tts/{name}' if ok else None, 'engine': engine,
-                'ms': round((time.monotonic() - t0) * 1000), 'played': False,
-                **({} if ok else {'error': 'render_failed', 'tail': (r.stdout + r.stderr)[-400:]})}
+        res = {'ok': ok, 'path': f'{RUN_IN}/tts/{name}' if ok else None, 'engine': engine,
+               'ms': round((time.monotonic() - t0) * 1000), 'played': False,
+               **({} if ok else {'error': 'render_failed', 'tail': (r.stdout + r.stderr)[-400:]})}
+        if ok and play:
+            penv = {k: v for k, v in os.environ.items() if k != 'S22_SAY_OUT'}
+            t1 = time.monotonic()
+            try:
+                p = subprocess.run([SAY, '--out', out, '--wav', f'{RUN_IN}/tts/{name}'], env=penv,
+                                   capture_output=True, text=True, timeout=300)
+                res.update(played=p.returncode == 0, play_rc=p.returncode, out=out,
+                           play_ms=round((time.monotonic() - t1) * 1000),
+                           **({} if p.returncode == 0 else {'play_tail': (p.stdout + p.stderr)[-400:]}))
+            except subprocess.TimeoutExpired:
+                res.update(played=False, play_rc=None, out=out, play_error='timeout')
+        log(event='tts', engine=engine, chars=len(text), ok=ok, play=play, played=res['played'])
+        return res
 
     def cmd_gesture(self, req: dict) -> dict:
         name = req.get('name')

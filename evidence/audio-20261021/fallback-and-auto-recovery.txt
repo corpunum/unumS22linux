@@ -1,0 +1,20 @@
+== direct fallback (muted)
+say_rc=0
+rec_rc=0 96044
+== induce Calliope fault (6000-frame periods + SBLL, muted)
+aplay rc=1 aplay: pcm_write:2191: write error: Input/output error
+[389023.808822]I[0:      swapper/0:    0] abox 18c50000.abox: data abort(0x1, 0x82800000, 0x800378bc, 0x29380) is reported from calliope
+failsafe=OFFLINE
+== s22-say after fault (level 0)
+s22-say: ABOX OFFLINE, failsafe reset
+say_rc=0
+failsafe=ONLINE
+== induce again, then s22-rec
+aplay rc=0 
+failsafe=ONLINE
+rec_rc=0 96044
+failsafe=ONLINE
+attempt 1 failsafe=OFFLINE
+s22-rec: ABOX OFFLINE, failsafe reset
+rec_rc=0 96044
+failsafe=ONLINE

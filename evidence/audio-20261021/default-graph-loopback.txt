@@ -1,0 +1,23 @@
+vol before=0
+t1 vol=561 p102=hw_ptr : 4800 c110=hw_ptr : 88416
+t2 vol=561 p102=hw_ptr : 25440 c110=hw_ptr : 109056
+t3 vol=561 p102=hw_ptr : 46080 c110=hw_ptr : 129696
+t4 vol=561 p102=hw_ptr : 67200 c110=hw_ptr : 150816
+t5 vol=0 p102= c110=hw_ptr : 170976
+say rc=0 
+rec rc=0 
+vol after=0
+ONLINE
+-rw-r--r--    1 root     root        480044 Oct 21 18:48 /mnt/omarchy-trial/tmp/d-rec.wav
+t=1.00 rms=0.0002 peak=    20Hz target/noise=     8.3
+t=1.25 rms=0.0003 peak=    20Hz target/noise=     9.6
+t=1.50 rms=0.0002 peak=    20Hz target/noise=     7.0
+t=1.75 rms=0.0009 peak=  1000Hz target/noise=   622.8
+t=2.00 rms=0.0010 peak=  1000Hz target/noise=   752.8
+t=2.25 rms=0.0010 peak=  1000Hz target/noise=   681.8
+t=2.50 rms=0.0010 peak=  1000Hz target/noise=   700.4
+t=2.75 rms=0.0010 peak=  1000Hz target/noise=   697.2
+t=3.00 rms=0.0010 peak=  1000Hz target/noise=   721.5
+t=3.25 rms=0.0002 peak=    20Hz target/noise=     7.8
+t=3.50 rms=0.0002 peak=   132Hz target/noise=     9.1
+t=3.75 rms=0.0002 peak=    20Hz target/noise=     8.7

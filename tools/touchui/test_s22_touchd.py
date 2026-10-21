@@ -166,6 +166,44 @@ class SocketTest(unittest.TestCase):
         self.assertEqual(ui.main(['home'])['error'], 'touchd_unreachable')
 
 
+
+class TtsPlayTest(unittest.TestCase):
+    """cmd_tts renders with S22_SAY_OUT, then (play=true) speaks the WAV with s22-say --wav."""
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.orig = (td.RUN, td.subprocess.run)
+        td.RUN = Path(self.tmp.name)
+        self.calls = []
+
+        def fake_run(argv, env=None, **kw):
+            self.calls.append((argv, dict(env or {})))
+            if env and env.get('S22_SAY_OUT'):
+                Path(env['S22_SAY_OUT']).write_bytes(b'RIFF')
+            class R:
+                returncode, stdout, stderr = 0, '', ''
+            return R()
+        td.subprocess.run = fake_run
+        self.d = td.Daemon(gestures=False, ui=False)
+
+    def tearDown(self):
+        td.RUN, td.subprocess.run = self.orig
+        self.tmp.cleanup()
+
+    def test_render_only_by_default(self):
+        r = self.d.cmd_tts({'text': 'hello'})
+        self.assertTrue(r['ok']); self.assertFalse(r['played']); self.assertEqual(len(self.calls), 1)
+
+    def test_play_speaks_rendered_wav(self):
+        r = self.d.cmd_tts({'text': 'γεια σου', 'engine': 'el-antonis', 'play': True, 'out': 'earpiece'})
+        self.assertTrue(r['played']); self.assertEqual(r['out'], 'earpiece')
+        argv, env = self.calls[1]
+        self.assertEqual(argv[1:4], ['--out', 'earpiece', '--wav'])
+        self.assertEqual(argv[4], r['path'])
+        self.assertNotIn('S22_SAY_OUT', env)
+
+    def test_bad_out_rejected(self):
+        self.assertEqual(self.d.cmd_tts({'text': 'x', 'play': True, 'out': 'hdmi'})['error'], 'bad_out')
+
 class SessionEnvTest(unittest.TestCase):
     """Hyprland is preferred; the opt-in sway-pixman desktop is found via its session file."""
 
