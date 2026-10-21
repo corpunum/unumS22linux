@@ -81,6 +81,7 @@ More in [`measurements.jsonl`](measurements.jsonl).
 
 ## Phone state at the end
 
+- Final screen (23:17): [final-home](final-home.png).
 - Default touch shell: fastshell (`/srv/s22/state/touchui/ui-backend` = `fastshell`). `/etc/s22-desktop` = `sway-pixman`, unchanged.
 - Installed:
   - `/srv/s22/hardware/bin/unum-fastshell`;
