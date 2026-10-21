@@ -3143,3 +3143,25 @@ Evidence: `evidence/modem-5g-20261021/`.
 - **Plan:** an ioctl-blocking shim, a minimal root without the modem nodes, a reset tool, a small HAL client, then one supervised power-on.
   Details in `tools/hardware/gnss/GNSS.md`. Evidence: `evidence/gnss-20261022/`.
 
+### 2026-10-22 (night) — GNSS: Kepler powered on under Linux, satellites tracked (no fix indoors)
+
+- **Permission:** the owner allowed the supervised power-on (via the coordinator).
+- **Built on the rig:** NDK r27c plus AOSP `prebuilts/vndk/v30` generated HIDL headers.
+  - `gnss-guard` (static seccomp launcher);
+  - `gnss-hold-reset`;
+  - `propshim.so`;
+  - stub `libandroid_net`/`libvndksupport`;
+  - `gnss-probe`: an IGnss@2.1 passthrough client, `-fno-rtti`, libc++ `__config_site` switched to the platform's `std::__1`, linked against the phone's libhidlbase/libc++.
+- **Root:** `/srv/s22/gnss-rt`, a private mount namespace with only null/zero/random/urandom/gnss_ipc in /dev and read-only /system and /sys.
+- **Problems found and fixed in order:**
+  - gpsd idled forever: it polls `service.bootanim.exit` (disassembly at 0x85c5c). Fixed with propshim.
+  - As `linker64 gpsd` it could not find its embedded patch ("Unable to locate patch for K401"), and Kepler cycled ONLINE→REQ_FAULT_INFO timeout→HOLD_RESET 12 times. Started directly, it reads the patch from the end of its own binary (offset −703858) and goes CODELOAD→OPERATIONAL.
+- **Probe results:**
+  - Engine `S.LSI,K401,SPOTNAV_4.6.2_7_E23`.
+  - 5-min run: GPS 15 + GLONASS 21.
+  - 15-min run: GPS 15 only, its elevation falling 90→83° as the satellite moves.
+  - C/N0 22–43 dB-Hz, ephemeris decoded, 0 fixes (indoors).
+- **Audit:** 0 attempts at ioctl 0x4b10/0x6f27/umts/reboot. DNS lookups went to 0.0.0.0 (no resolver in the root).
+- **After stop:** Kepler HOLD_RESET. Modem ONLINE, SIM READY, registered, SMS ready, Wi-Fi/Tailscale/BT fine, no reboot.
+- **Evidence:** `evidence/gnss-20261022/run-*.txt`.
+

@@ -3,7 +3,7 @@
 Updated 2026-10-22 (camera ISP, 5G badge, GNSS plan); 2026-10-21 (fast touch shell); earlier sections updated 2026-10-06 by the Claude lead session.
 The 2026-10-02 task board and earlier checkpoints below are historical.
 
-## Processed camera photos, 5G badge, GNSS plan — 2026-10-22 (late)
+## Processed camera photos, 5G badge, GNSS tracking — 2026-10-22 (late)
 
 **Camera:** photos are now processed by our own software ISP, `s22-develop`. It is a static Rust binary that develops a full-resolution frame in about 0.35 s on the phone.
 - **Stages:** black level, defect pixels, radial lens shading, per-colour flare/offset, grey-world AWB, Malvar-He-Cutler demosaic, a colour matrix taken from the stock Pablo setfiles, chroma denoise, auto exposure, sRGB tone.
@@ -21,12 +21,14 @@ The 2026-10-02 task board and earlier checkpoints below are historical.
 Tap → page re-measured on the rebuilt shell: p50 9.4 ms.
 [Evidence](evidence/camera-develop-20261022/README.md).
 
-**GPS:** no fix yet. GNSS is the Exynos 2200's own "Kepler" core with an S5520 RF chip (not Broadcom, not the modem).
-- **Already in place:** `/dev/gnss_ipc` (gnssif) exists.
-- **Engine:** the stock Bionic `gpsd` with its firmware embedded.
-- **Two risky code paths found in gpsd:** a watchdog ioctl that resets the whole phone, and a modem status ioctl on `umts_boot0`. They need a blocking shim plus a minimal root.
-- **Also needed:** a small HAL client, and one supervised first power-on of Kepler.
-- **Plan:** [tools/hardware/gnss/GNSS.md](tools/hardware/gnss/GNSS.md).
+**GPS:** the GNSS core now runs under Linux and **tracks real satellites**, but there is **no fix yet**: the phone lies indoors and sees only 1–2 SVs.
+- **Engine:** the stock Samsung `gpsd` loads its embedded patch, and the Exynos "Kepler" core reaches OPERATIONAL.
+- **Client:** our `gnss-probe` drives the stock HAL in-process (no binder).
+- **Indoors:** GPS 15 near zenith (C/N0 up to 36 dB-Hz) and GLONASS 21 (up to 43 dB-Hz), both with ephemeris, first SV within 4–11 s.
+- **Safety:** a seccomp guard blocks gpsd's two dangerous paths (whole-phone watchdog reset, modem status ioctl) plus reboot and module loading. gpsd runs in a minimal root with no modem device nodes. A strace audit showed 0 attempts at either path.
+- **Health:** modem, SIM, SMS, Wi-Fi, Tailscale and BT were all fine afterwards, with no reboot.
+- **Next:** a run at a window or outside for a fix.
+- **Details:** [tools/hardware/gnss/GNSS.md](tools/hardware/gnss/GNSS.md) §0, [evidence](evidence/gnss-20261022/README.md).
 
 ## NPU re-verified + 5G NSA confirmed — 2026-10-22
 
