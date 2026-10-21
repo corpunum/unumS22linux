@@ -1,0 +1,16 @@
+{"ok": true, "path": "/run/s22-touch/tts/1792608981733-2332.wav", "engine": "piper", "ms": 1178, "played": true, "play_rc": 0, "out": "speaker", "play_ms": 6035}
+
+rec rc=0 
+abox=ONLINE
+restored L=0 R=0
+======
+{"ok": true, "path": "/run/s22-touch/tts/1792608995731-2332.wav", "engine": "el-antonis", "ms": 1532, "played": true, "play_rc": 0, "out": "speaker", "play_ms": 4520}
+
+rec rc=0 
+abox=ONLINE
+restored L=0 R=0
+{"ok": true, "path": "/run/s22-touch/tts/1792609059380-2332.wav", "engine": "piper", "ms": 1048, "played": true, "play_rc": 0, "out": "speaker", "play_ms": 5398}
+
+rec rc=0 
+abox=ONLINE
+restored L=0 R=0

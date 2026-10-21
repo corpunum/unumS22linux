@@ -1,0 +1,21 @@
+abox=ONLINE vol=0 defaults_marker=ls: /run/s22-audio-defaults: No such file or directory
+t1 vol=561 p102=hw_ptr : 960 c110=hw_ptr : 4032
+t2 vol=561 p102=hw_ptr : 12000 c110=hw_ptr : 24864
+t3 vol=561 p102=hw_ptr : 33120 c110=hw_ptr : 45504
+t4 vol=561 p102=hw_ptr : 53280 c110=hw_ptr : 66144
+t5 vol=561 p102= c110=hw_ptr : 88224
+say rc=0 
+rec rc=0 
+vol after=0 abox=ONLINE
+t=1.00 rms=0.0010 peak=  1000Hz target/noise=   677.1
+t=1.25 rms=0.0010 peak=  1000Hz target/noise=   699.7
+t=1.50 rms=0.0011 peak=  1000Hz target/noise=   692.9
+t=1.75 rms=0.0012 peak=    20Hz target/noise=     7.9
+t=2.00 rms=0.0005 peak=   100Hz target/noise=     8.9
+t=2.25 rms=0.0011 peak=    40Hz target/noise=     5.5
+t=2.50 rms=0.0005 peak=    20Hz target/noise=     9.0
+t=2.75 rms=0.0004 peak=    52Hz target/noise=    11.0
+t=3.00 rms=0.0004 peak=    52Hz target/noise=    10.5
+t=3.25 rms=0.0005 peak=    52Hz target/noise=     7.9
+t=3.50 rms=0.0004 peak=    52Hz target/noise=     8.5
+t=3.75 rms=0.0004 peak=   104Hz target/noise=     7.8

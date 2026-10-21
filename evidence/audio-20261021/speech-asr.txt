@@ -1,0 +1,12 @@
+== sp-en RMS per 0.5 s
+0.0005 0.0003 0.0003 0.0004 0.0003 0.0015 0.0025 0.0016 0.0032 0.0033 0.0028 0.0029 0.0027 0.0027 0.0034 0.0022 0.0013 0.0004 0.0004 0.0004 0.0003 0.0004 0.0004 0.0003 0.0004 0.0004 0.0004
+== sp-el RMS per 0.5 s
+0.0007 0.0004 0.0004 0.0010 0.0016 0.0005 0.0007 0.0011 0.0007 0.0004 0.0007 0.0005 0.0004 0.0004 0.0004 0.0003 0.0004 0.0004 0.0003 0.0007 0.0003 0.0003 0.0004 0.0004 0.0004 0.0004 0.0004
+== phone Parakeet (en, on-device) on sp-en.wav
+{"lang": "", "emotion": "", "event": "", "text": "", "timestamps": [], "durations": [], "tokens":[], "ys_log_probs": [], "words": []}
+== rig whisper large-v3-turbo (en) on sp-en.wav
+ foreign== rig whisper large-v3-turbo (el) on sp-el.wav
+ Καλησπέρα, το τηλέφωνο μιλάει τώρα ελληνικά με τη φωνή του Αντώνη."text": "The phone can talk now. This sentence was spoken by the piper voice on the Galaxy S twenty two."
+== repeat English take (sp-en2.wav): RMS 0.0010-0.0023 during speech, peak 0.019, no clipping
+rig whisper large-v3-turbo (en): The phone can talk now. This sentence was spoken by the Piper voice on the Galaxy S22.
+render check (render-en.wav, 22.05 kHz mono 5.0 s) whisper: The phone can talk now. This sentence was spoken by the Piper voice on the Galaxy S22.
