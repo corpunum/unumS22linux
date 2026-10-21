@@ -3,6 +3,21 @@
 Updated 2026-10-06 by the Claude lead session (directly on the device).
 The 2026-10-02 task board and earlier checkpoints below are historical.
 
+## Audio firmware graph works — 2026-10-21
+
+The "RDMA2/3 never advance" problem is solved. Those DMAs are *outputs* of
+the stock ABOX firmware graph. Like the stock AudioProxy, play into the virtual
+frontends calliope_N (`hw:0,102` → VPCMOUT_DAI2 → VDSP3 → RDMA2 → speaker;
+`hw:0,100` → BD_MIXER → RDMA3) and record from `hw:0,110` (WDMA1 →
+TDM_DEMUX0). Use HAL-sized periods (480–960 frames). 6000-frame periods lost
+audio, and with the SBLL pipeline they crashed Calliope (recover with
+`audio-abox-recover.sh`). Verified with the phone's own mic: graph playback
+→ graph capture gives the 1 kHz test tone at ~1000× noise. `s22-say` has an
+opt-in `S22_AUDIO_PATH=graph`, and the default stays on the owner-accepted
+RDMA6/WDMA4 path. Also fixed: a s22-say/s22-rec race on the once-per-boot mixer
+defaults that made concurrent recording fail with EIO.
+[Evidence](evidence/audio-20261021/README.md).
+
 ## Touch UI, Phase 1 — 2026-10-09
 
 The phone is now usable by finger. `s22-touchd` keeps a separate big-tile Quickshell touch shell running, with:
@@ -124,8 +139,8 @@ NV writes into the private EFS copy only, updating its md5. The real EFS is
 never touched. Data, voice and SMS need a SIM, and calls/SMS need the owner's go-ahead.
 [Evidence](evidence/modem-20261006/README.md).
 
-Still open: the firmware-graph DMAs (RDMA2/3, most WDMAs) do not advance, so
-only the hardware-direct RDMA6/9 playback and WDMA4 capture work. GPU is unchanged
+(Resolved 2026-10-21: the firmware-graph DMAs RDMA2/3/WDMA1 run when the
+calliope_N frontends are used; see the 2026-10-21 section.) GPU is unchanged
 from the checkpoints below. A runtime rebind of `0.abox-tplg` panics the
 kernel (recovered automatically); do not repeat it. RECOVERY image unchanged
 (`b1041271…`); no partition writes.

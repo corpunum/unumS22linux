@@ -27,9 +27,15 @@ for n in /sys/class/sound/*; do
   IFS=: read ma mi < "$n/dev"; mknod -m 660 "$d" c "$ma" "$mi" && chgrp audio "$d"
 done
 exec 8>/run/s22-rec.lock; flock 8
-if [ ! -e /run/s22-audio-defaults ]; then
-  run $OPT/usr/bin/amixer -c0 -q -s < "$MIX/defaults.amixer" && touch /run/s22-audio-defaults
-fi
+# The once-per-boot defaults batch resets NSRC4/WDMA4 among 320 controls; s22-say
+# checks the same marker under its own lock, so serialize on a shared lock
+# (2026-10-21: a concurrent first use re-applied defaults mid-capture -> EIO).
+(
+  flock 7
+  if [ ! -e /run/s22-audio-defaults ]; then
+    run $OPT/usr/bin/amixer -c0 -q -s < "$MIX/defaults.amixer" && touch /run/s22-audio-defaults
+  fi
+) 7>/run/s22-audio-defaults.lock
 # S22_REC_RAW=/path (inside the chroot) names the raw capture file, so a
 # caller can read the 4-slot S16_LE stream live while it is recorded
 # (s22-converse runs its voice-activity detection on it).

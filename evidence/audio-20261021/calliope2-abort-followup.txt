@@ -1,0 +1,38 @@
+[388443.606682]I[0:      swapper/0:    0] abox 18c50000.abox: data abort(0x1, 0x82800000, 0x800378bc, 0x29380) is reported from calliope
+[388443.606732]I[0:      swapper/0:    0] abox 18c50000.abox: ========================================
+[388443.606757]I[0:      swapper/0:    0] abox 18c50000.abox: A-Box core register dump (6XH0)
+[388443.606778]I[0:      swapper/0:    0] abox 18c50000.abox: ----------------------------------------
+[388443.606800]I[0:      swapper/0:    0] abox 18c50000.abox: CORE: 0
+[388443.607197]I[0:      swapper/0:    0] abox 18c50000.abox: CORE: 1
+[388443.607591]I[0:      swapper/0:    0] abox 18c50000.abox: CORE: 2
+[388443.607987]I[0:      swapper/0:    0] abox 18c50000.abox: status : 00000000
+[388443.608008]I[0:      swapper/0:    0] abox 18c50000.abox: ========================================
+[388443.642453] [1:  kworker/u16:3: 1490] abox_debug_string_update_workfunc: [388443.642442] DABRT 0x1 0x82800000 0x800378bc 0x29380 mode 0:388035.813454 modem ev 2:17.827763
+[388444.126982] [1:          aplay: 5896] abox-vdma abox-vdma.102: abox_vdma_trigger[p](0)
+[388444.127103] [1:          aplay: 5896] abox-if 18c50c20.abox-uaif: abox_uaif_mute_stream[P](1)
+[388444.161344] [1:          aplay: 5896] abox-rdma 18c51200.abox-rdma: abox_rdma_mute_stream(1)
+[388444.161479] [1:          aplay: 5896] abox-if 18c50c20.abox-uaif: abox_qos_request_aud(0xda100051, 0)
+[388444.161791] [1:          aplay: 5896] abox-rdma 18c51200.abox-rdma: abox_rdma_close
+[388444.161835] [1:          aplay: 5896] abox-rdma 18c51200.abox-rdma: abox_qos_request_aud(0xda100062, 0)
+[388444.161869] [1:          aplay: 5896] abox 18c50000.abox: ABOX SPUS ASRC2 off
+[388444.162009] [1:          aplay: 5896] abox-vdma abox-vdma.102: abox_vdma_close[p]
+[388444.181717] [0:          aplay: 5896] abox-if 18c50c20.abox-uaif: abox_if_disable_qchannel(0)
+[388445.151255] [7:    kworker/7:2:23376] PM: Pending Wakeup Sources: dwc3-otg usb_notify 19eb0000.drmdsim 19f00000.drmdecon 
+[388445.679366] [1:         amixer: 5981] abox-tplg 0.abox-tplg: pipeline ABOX VDSP0 : none
+[388445.681505] [1:         amixer: 5981] abox-tplg 0.abox-tplg: pipeline ABOX VDSP3 : none
+[388445.685254] [1:         amixer: 5981] abox 18c50000.abox: channels_put(0x14, 2)
+[388445.685375] [1:         amixer: 5981] abox 18c50000.abox: width_put(0x14, 24)
+[388455.392522] [7:    kworker/7:2:23376] PM: Pending Wakeup Sources: dwc3-otg usb_notify 19eb0000.drmdsim 19f00000.drmdecon 
+
+closed
+debug
+dump
+dump_auto_start
+dump_auto_stop
+failsafe
+log-00
+log-01
+qos
+runtime
+snapshot_0
+OFFLINE

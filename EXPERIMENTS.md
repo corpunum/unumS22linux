@@ -2852,3 +2852,44 @@ Samezerostreamstillstalled:7RUNNINGhw_ptr0/status0,10sdeadline,total15.297s,
 8WRITEIsuccess/77EAGAIN; selectorsrestored,PCMclosed,ampsoff,modelhealthy.
 See docs/DRIVER_CHECKPOINT_2026-09-22.md and sanitized late-control/audio-extras
 receipts. Physicalaudio,NPUinference,cellular,HCI/pairing remainunfinished.
+
+### 2026-10-21 — Audio: firmware-graph DMA solved (calliope frontends), defaults race fixed
+
+Claude session on the live phone (no reboot, no flash, no module change). Full
+table and raw logs: `evidence/audio-20261021/README.md`.
+
+- Baseline: RDMA6 playback DMA advanced (≈48 k frames/s). The first concurrent
+  s22-rec + s22-say run gave arecord **EIO**. Cause: both scripts apply the
+  once-per-boot `defaults` batch under *different* locks, so it was re-applied
+  mid-capture (NSRC4 → RESERVED). Fix: a shared `/run/s22-audio-defaults.lock`
+  in `s22-say.sh`/`s22-rec.sh` (deployed; backups `*.bak-20261021`). 2/2
+  cold-marker re-runs passed.
+- The loopback first showed no tone because the amp digital volume was 0
+  (owner/keepalive mute). At level 2 (−32 dB) the RDMA6 path gave a 1 kHz tone
+  at ~1000× noise in the phone's own mic recording. Volume was restored to 0.
+- Root cause of "RDMA2/3 never advance": in the stock sectiongraph,
+  RDMA2/RDMA3 are graph *outputs*, with `RDMA2_A`/`RDMA2_1` as source
+  selectors. `rdma2-vpcmout` = calliope_2 → VPCMOUT_DAI2 → VDSP3 → RDMA2, and
+  abox_tplg binds `VPCMOUT_DAIn` to `calliope_n playback`. Disassembly of
+  stock `libaudioproxy2.so` (recovered today from super.img) shows
+  `get_pcm_device_number()` opens 100/102/105 (+6/8/9/26) for playback and
+  110/111/112/115/116 for capture, never RDMA2.
+- calliope_2 (hw:0,102) with aplay's default 6000-frame periods and the SBLL
+  pipeline: RDMA2 backend opened, 3 periods consumed, then a **Calliope data
+  abort at 0x82800000** and ABOX OFFLINE. Recovered with the stock HAL method,
+  `printf CALLIOPE > /proc/abox/failsafe/reset` (now `audio-abox-recover.sh`).
+- calliope_2 with 480/960-frame periods (`rdma2-vpcmout` and `rdma2-sbll-vpcmout`):
+  real-time pointer, no abort. Acoustic loopback: full 1.5 s tone, 1000 Hz,
+  ~1000–1090× noise. With 6000-frame periods only ~0.75 s was heard.
+- Mic over the graph: calliope_10 (hw:0,110) with the stock media-mic route
+  opened WDMA1 → TDM_DEMUX0 → VPCMIN_DAI0. **Full stock-equivalent loopback**
+  (calliope_2 play, calliope_10 record): tone at ~1050× noise for 1.5 s, clean
+  stereo, no 4-slot distortion.
+- calliope_0 (hw:0,100), bdmixer-normal → RDMA3: real-time DMA, rc 0 (muted,
+  not acoustically checked).
+- `s22-say` gains an opt-in `S22_AUDIO_PATH=graph` (s22graph plug → hw:0,102,
+  480×4 periods). Loopback: tone at ~700× noise for 1.5 s. The default path is
+  unchanged.
+- Backups: all 25 ABOX firmware images on the phone are byte-identical to
+  stock vendor (re-extracted from `s22-private-backups/.../super.img`).
+  The vendor init rc starts only HAL services; no extra ABOX daemon exists.

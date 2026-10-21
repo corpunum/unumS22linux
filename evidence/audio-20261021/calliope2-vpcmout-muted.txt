@@ -1,0 +1,53 @@
+OFFLINE
+t1 pcm102p: state: RUNNING hw_ptr : 0 
+t1 pcm2p: 
+t1 pcm3p: 
+t2 pcm102p: 
+t2 pcm2p: 
+t2 pcm3p: 
+t3 pcm102p: 
+t3 pcm2p: 
+t3 pcm3p: 
+t4 pcm102p: 
+t4 pcm2p: 
+t4 pcm3p: 
+t5 pcm102p: 
+t5 pcm2p: 
+t5 pcm3p: 
+t6 pcm102p: 
+t6 pcm2p: 
+t6 pcm3p: 
+aplay rc=1 aplay: pcm_write:2191: write error: Input/output error
+T0=388532.49
+[388532.486833] [0:         amixer: 6700] abox 18c50000.abox: width_put(0x14, 32)
+[388532.486937] [0:         amixer: 6700] abox 18c50000.abox: channels_put(0x14, 4)
+[388532.489875] [0:         amixer: 6700] abox-tplg 0.abox-tplg: pipeline ABOX VDSP3 : rdma2-sbll-vpcmout
+[388532.490466] [0:         amixer: 6700] abox-tplg 0.abox-tplg: pipeline ABOX VDSP0 : bdmixer-normal
+[388532.498959] [0:         amixer: 6701] abox-tplg 0.abox-tplg: pipeline ABOX VDSP3 : rdma2-vpcmout
+[388532.507145] [3:          aplay: 6705] abox-if 18c50c20.abox-uaif: abox_qos_request_aud(0xda100051, 200000)
+[388532.507219] [3:          aplay: 6705] abox-rdma 18c51200.abox-rdma: abox_rdma_open
+[388532.507229] [3:          aplay: 6705] abox-rdma 18c51200.abox-rdma: abox_qos_request_aud(0xda100062, 200000)
+[388532.507273] [3:          aplay: 6705] abox-vdma abox-vdma.102: abox_vdma_open[p]
+[388532.507630] [3:          aplay: 6705] abox-if 18c50c20.abox-uaif: abox_uaif_hw_params[P]
+[388532.507646] [3:          aplay: 6705] abox-if 18c50c20.abox-uaif: current pll_aud: 663551999(target: 663552000)
+[388532.507671] [3:          aplay: 6705] abox-if 18c50c20.abox-uaif: audif clock: 73727999
+[388532.507703] [3:          aplay: 6705] abox-if 18c50c20.abox-uaif: rate=48000, width=32, channel=4, bclk=6143999
+[388532.507728] [3:          aplay: 6705] abox 18c50000.abox: reset sifs0_cnt_val
+[388532.507777] [3:          aplay: 6705] abox-rdma 18c51200.abox-rdma: ion_buffer abox_rdma_hw_params bytes(1536) size(524288)
+[388532.507830] [3:          aplay: 6705] abox-rdma 18c51200.abox-rdma: Playback:Total=1536 PrdSz=96(384) #Prds=4 rate=48000, width=16, channels=2
+[388532.507843] [3:          aplay: 6705] abox-vdma abox-vdma.102: Playback:Total=96000 PrdSz=6000(24000) #Prds=4 rate=48000, width=16, channels=2
+[388532.509308] [3:          aplay: 6705] abox-if 18c50c20.abox-uaif: abox_if_disable_qchannel(1)
+[388532.519857] [3:          aplay: 6705] abox-if 18c50c20.abox-uaif: abox_uaif_mute_stream[P](0)
+[388532.521252] [3:          aplay: 6705] abox-rdma 18c51200.abox-rdma: abox_rdma_mute_stream(0)
+[388532.521779] [3:          aplay: 6705] abox 18c50000.abox: asrc_config(3, 0, 15, 48000Hz, 15, 48000Hz, 1000, 32bit, 0)
+[388532.521801] [3:          aplay: 6705] abox 18c50000.abox: ABOX SPUS ASRC2 off
+[388532.522422] [3:          aplay: 6705] abox-vdma abox-vdma.102: abox_vdma_trigger[p](1)
+[388533.087728] [0:          aplay: 6705] abox-vdma abox-vdma.102: abox_vdma_trigger[p](0)
+[388533.087815] [0:          aplay: 6705] abox-if 18c50c20.abox-uaif: abox_uaif_mute_stream[P](1)
+[388533.124476] [0:          aplay: 6705] abox-rdma 18c51200.abox-rdma: abox_rdma_mute_stream(1)
+[388533.124815] [0:          aplay: 6705] abox-if 18c50c20.abox-uaif: abox_qos_request_aud(0xda100051, 0)
+[388533.125909] [0:          aplay: 6705] abox-rdma 18c51200.abox-rdma: abox_rdma_close
+[388533.126128] [0:          aplay: 6705] abox-rdma 18c51200.abox-rdma: abox_qos_request_aud(0xda100062, 0)
+[388533.126274] [0:          aplay: 6705] abox 18c50000.abox: ABOX SPUS ASRC2 off
+[388533.127164] [0:          aplay: 6705] abox-vdma abox-vdma.102: abox_vdma_close[p]
+[388533.159283] [0:          aplay: 6705] abox-if 18c50c20.abox-uaif: abox_if_disable_qchannel(0)

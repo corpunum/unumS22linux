@@ -1,0 +1,21 @@
+c1 pcm110c: state: RUNNING hw_ptr : 22080 
+c2 pcm110c: state: RUNNING hw_ptr : 46560 
+c3 pcm110c: state: RUNNING hw_ptr : 70560 
+arecord rc=0
+-rw-r--r--    1 root     root        384000 Oct 21 18:42 /mnt/omarchy-trial/tmp/c10.raw
+ONLINE
+[388669.775846] [4:         amixer: 8296] abox-tplg 0.abox-tplg: pipeline ABOX VDSP4 : wdma1-tdmdemux0-normal-capture
+[388669.788312] [1:        arecord: 8299] abox-wdma 18c53100.abox-wdma: abox_wdma_open
+[388669.788324] [1:        arecord: 8299] abox-wdma 18c53100.abox-wdma: abox_qos_request_aud(0xda100071, 200000)
+[388669.788385] [1:        arecord: 8299] abox-vdma abox-vdma.110: abox_vdma_open[c]
+[388669.789152] [1:        arecord: 8299] abox-wdma 18c53100.abox-wdma: ion_buffer abox_wdma_hw_params bytes(6144) size(524288)
+[388669.789172] [1:        arecord: 8299] abox-wdma 18c53100.abox-wdma: Capture:Total=6144 PrdSz=96(1536) #Prds=4 rate=48000, width=24, channels=4
+[388669.789186] [1:        arecord: 8299] abox-vdma abox-vdma.110: Capture:Total=7680 PrdSz=480(1920) #Prds=4 rate=48000, width=16, channels=2
+[388669.792620] [2:        arecord: 8299] abox-wdma 18c53100.abox-wdma: abox_wdma_mute_stream(0)
+[388669.793799] [2:        arecord: 8299] abox-vdma abox-vdma.110: abox_vdma_trigger[c](1)
+[388671.816852] [1:        arecord: 8299] abox-vdma abox-vdma.110: abox_vdma_trigger[c](0)
+[388671.818927] [1:        arecord: 8299] abox-wdma 18c53100.abox-wdma: abox_wdma_mute_stream(1)
+[388671.820302] [1:        arecord: 8299] abox-wdma 18c53100.abox-wdma: abox_wdma_close
+[388671.820346] [1:        arecord: 8299] abox-wdma 18c53100.abox-wdma: abox_qos_request_aud(0xda100071, 0)
+[388671.820524] [1:        arecord: 8299] abox-vdma abox-vdma.110: abox_vdma_close[c]
+[388671.834926] [3:         amixer: 8351] abox-tplg 0.abox-tplg: pipeline ABOX VDSP4 : none

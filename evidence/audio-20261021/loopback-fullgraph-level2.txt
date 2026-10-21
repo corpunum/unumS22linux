@@ -1,0 +1,27 @@
+old=0/0
+aplay rc=0 
+c1 pcm110c: state: RUNNING hw_ptr : 22656 
+c2 pcm110c: state: RUNNING hw_ptr : 47136 
+c3 pcm110c: state: RUNNING hw_ptr : 71616 
+arecord rc=0
+-rw-r--r--    1 root     root        768000 Oct 21 18:43 /mnt/omarchy-trial/tmp/c10-lb.raw
+restored 0
+ONLINE
+ch 0
+  t=0.00 rms=0.0006 peak=    20Hz 1k/noise=     6.9
+  t=0.50 rms=0.0002 peak=    20Hz 1k/noise=     8.4
+  t=1.00 rms=0.0002 peak=   184Hz 1k/noise=     9.2
+  t=1.50 rms=0.0014 peak=  1000Hz 1k/noise=  1051.3
+  t=2.00 rms=0.0014 peak=  1000Hz 1k/noise=  1082.5
+  t=2.50 rms=0.0014 peak=  1000Hz 1k/noise=  1010.1
+  t=3.00 rms=0.0002 peak=    20Hz 1k/noise=     8.6
+  t=3.50 rms=0.0002 peak=    44Hz 1k/noise=     6.3
+ch 1
+  t=0.00 rms=0.0006 peak=    20Hz 1k/noise=     6.9
+  t=0.50 rms=0.0002 peak=    20Hz 1k/noise=     8.4
+  t=1.00 rms=0.0002 peak=   184Hz 1k/noise=     9.2
+  t=1.50 rms=0.0014 peak=  1000Hz 1k/noise=  1051.3
+  t=2.00 rms=0.0014 peak=  1000Hz 1k/noise=  1082.5
+  t=2.50 rms=0.0014 peak=  1000Hz 1k/noise=  1010.1
+  t=3.00 rms=0.0002 peak=    20Hz 1k/noise=     8.6
+  t=3.50 rms=0.0002 peak=    44Hz 1k/noise=     6.3

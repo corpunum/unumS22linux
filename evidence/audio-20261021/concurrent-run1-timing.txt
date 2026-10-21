@@ -1,0 +1,100 @@
+--t1
+p6: hw_ptr      : 0
+c16: state: RUNNING hw_ptr      : 66000 
+--t2
+p6: hw_ptr      : 24000
+c16: state: RUNNING hw_ptr      : 90000 
+--t3
+p6: hw_ptr      : 42000
+c16: state: RUNNING hw_ptr      : 108000 
+--t4
+p6: hw_ptr      : 60000
+c16: state: RUNNING hw_ptr      : 126000 
+--t5
+p6: closed
+c16: state: RUNNING hw_ptr      : 150000 
+--t6
+p6: closed
+c16: state: RUNNING hw_ptr      : 168000 
+T0=387900.72
+-rw-r--r--    1 root     root        384044 Oct 21 18:30 /mnt/omarchy-trial/tmp/s22-rec4.wav
+[387785.695916] [7:    kworker/7:2:23376] stm_ts_spi spi2.0: [sec_input] tc:0 noise:0/0 ext_n:0 wet:0 wc:0(f:0) lp:0 fn:0061/0000 irqd:0 ED:0 PK:0 LS:0// v:ST07180033 C01T0022.LCIA.L Cal_flag:1 fail_cnt:0 chk:0 // tmp:27 // #12624 12417
+[387810.863417] [0:         amixer: 2008] abox 18c50000.abox: width_put(0x14, 24)
+[387810.863568] [0:         amixer: 2008] abox 18c50000.abox: width_put(0x15, 32)
+[387810.863649] [0:         amixer: 2008] abox 18c50000.abox: width_put(0x16, 16)
+[387810.863692] [0:         amixer: 2008] abox 18c50000.abox: width_put(0x17, 16)
+[387810.863734] [0:         amixer: 2008] abox 18c50000.abox: width_put(0x18, 16)
+[387810.863777] [0:         amixer: 2008] abox 18c50000.abox: width_put(0x19, 16)
+[387810.863823] [0:         amixer: 2008] abox 18c50000.abox: channels_put(0x14, 2)
+[387810.863991] [0:         amixer: 2008] abox-if 18c50c00.abox-uaif: abox_if_config_put(0x00000000, 16)
+[387810.864051] [3:  kworker/u17:1:21498] abox 18c50000.abox: abox_sysevent_powerup: powerup callback
+[387810.864084] [3:  kworker/u17:1:21498] abox 18c50000.abox: abox_enable
+[387810.864094] [3:  kworker/u17:1:21498] abox 18c50000.abox: abox_qos_apply_aud_base(200000)
+[387810.864388] [3:  kworker/u17:1:21498] abox 18c50000.abox: abox_qos_request_aud(0xab0cdefa, 1210000)
+[387810.864926] [3:  kworker/u17:1:21498] abox 18c50000.abox: abox_core_download_firmware
+[387810.881566] [3:  kworker/u17:1:21498] abox-core 18c55000.abox-core: Loaded ABOX Signed Firmware : calliope_sram.bin
+[387810.882604] [3:  kworker/u17:1:21498] exynos_s2mpu_verify_subsystem_fw: ABOX FW[0] is verified!
+[387810.882639] [3:  kworker/u17:1:21498] exynos_s2mpu_request_fw_stage2_ap: Allow ABOX FW Stage 2 access permission
+[387810.888182] [3:  kworker/u17:1:21498] abox 18c50000.abox: slogargs: 0x295f8, 0
+[387810.888244] [3:  kworker/u17:1:21498] abox 18c50000.abox: abox_core_power(1)
+[387810.889131] [1:         amixer: 2008] abox-if 18c50c00.abox-uaif: abox_if_config_put(0x00000001, 2)
+[387810.889277] [1:         amixer: 2008] abox-if 18c50c00.abox-uaif: abox_if_config_put(0x00000002, 48000)
+[387810.889324] [1:         amixer: 2008] abox-if 18c50c00.abox-uaif: current pll_aud: 663551999(target: 663552000)
+[387810.889363] [1:         amixer: 2008] abox-if 18c50c00.abox-uaif: audif clock: 73727999
+[387810.889601] [1:         amixer: 2008] abox-if 18c50c20.abox-uaif: abox_if_config_put(0x00000000, 32)
+[387810.889737] [1:         amixer: 2008] abox-if 18c50c20.abox-uaif: abox_if_config_put(0x00000001, 4)
+[387810.889871] [1:         amixer: 2008] abox-if 18c50c20.abox-uaif: abox_if_config_put(0x00000002, 48000)
+[387810.889895] [1:         amixer: 2008] abox-if 18c50c20.abox-uaif: current pll_aud: 663551999(target: 663552000)
+[387810.889918] [1:         amixer: 2008] abox-if 18c50c20.abox-uaif: audif clock: 73727999
+[387810.890080] [1:         amixer: 2008] abox-if 18c50c20.abox-uaif: abox_if_extend_bclk_put(1)
+[387810.890201] [1:         amixer: 2008] abox-if 18c50c40.abox-uaif: abox_if_config_put(0x00000000, 16)
+[387810.890344] [1:         amixer: 2008] abox-if 18c50c40.abox-uaif: abox_if_config_put(0x00000001, 2)
+[387810.890483] [1:         amixer: 2008] abox-if 18c50c40.abox-uaif: abox_if_config_put(0x00000002, 48000)
+[387810.890508] [1:         amixer: 2008] abox-if 18c50c40.abox-uaif: current pll_aud: 663551999(target: 663552000)
+[387810.890530] [1:         amixer: 2008] abox-if 18c50c40.abox-uaif: audif clock: 73727999
+[387810.890912] [1:         amixer: 2008] abox-if 18c50c60.abox-uaif: abox_if_config_put(0x00000000, 16)
+[387810.891059] [1:         amixer: 2008] abox-if 18c50c60.abox-uaif: abox_if_config_put(0x00000001, 2)
+[387810.891202] [1:         amixer: 2008] abox-if 18c50c60.abox-uaif: abox_if_config_put(0x00000002, 48000)
+[387810.891225] [1:         amixer: 2008] abox-if 18c50c60.abox-uaif: current pll_aud: 663551999(target: 663552000)
+[387810.891248] [1:         amixer: 2008] abox-if 18c50c60.abox-uaif: audif clock: 73727999
+[387810.891267] [1:         amixer: 2008] failed div_rate DIV_CLK_AUD_UAIF3 1209600000:1536000:787:512
+[387810.891274] [1:         amixer: 2008] [CAL]cal_vclk_set_rate failed 83886100 1536000 -22.
+[387810.891433] [1:         amixer: 2008] abox-if 18c50c80.abox-uaif: abox_if_config_put(0x00000000, 16)
+[387810.891582] [1:         amixer: 2008] abox-if 18c50c80.abox-uaif: abox_if_config_put(0x00000001, 2)
+[387810.891726] [1:         amixer: 2008] abox-if 18c50c80.abox-uaif: abox_if_config_put(0x00000002, 48000)
+[387810.891749] [1:         amixer: 2008] abox-if 18c50c80.abox-uaif: current pll_aud: 663551999(target: 663552000)
+[387810.891771] [1:         amixer: 2008] abox-if 18c50c80.abox-uaif: audif clock: 73727999
+[387810.892022] [1:         amixer: 2008] abox-if 18c50ca0.abox-uaif: abox_if_config_put(0x00000000, 16)
+[387810.892169] [1:         amixer: 2008] abox-if 18c50ca0.abox-uaif: abox_if_config_put(0x00000001, 2)
+[387810.892316] [1:         amixer: 2008] abox-if 18c50ca0.abox-uaif: abox_if_config_put(0x00000002, 48000)
+[387810.892339] [1:         amixer: 2008] abox-if 18c50ca0.abox-uaif: current pll_aud: 663551999(target: 663552000)
+[387810.892361] [1:         amixer: 2008] abox-if 18c50ca0.abox-uaif: audif clock: 73727999
+[387810.892541] [1:         amixer: 2008] abox-if 18c50cc0.abox-uaif: abox_if_config_put(0x00000000, 16)
+[387810.892673] [1:         amixer: 2008] abox-if 18c50cc0.abox-uaif: abox_if_config_put(0x00000001, 4)
+[387810.892792] [1:         amixer: 2008] abox-if 18c50cc0.abox-uaif: abox_if_config_put(0x00000002, 48000)
+[387810.892814] [1:         amixer: 2008] abox-if 18c50cc0.abox-uaif: current pll_aud: 663551999(target: 663552000)
+[387810.892837] [1:         amixer: 2008] abox-if 18c50cc0.abox-uaif: audif clock: 73727999
+[387810.893254] [1:         amixer: 2008] abox 18c50000.abox: spus_asrc_enable_put(0, 0)
+[387810.893274] [1:         amixer: 2008] abox 18c50000.abox: spus_asrc_enable_put(0, 1)
+[387810.893290] [1:         amixer: 2008] abox 18c50000.abox: spus_asrc_enable_put(0, 2)
+[387810.893308] [1:         amixer: 2008] abox 18c50000.abox: spus_asrc_enable_put(0, 3)
+[387810.893322] [1:         amixer: 2008] abox 18c50000.abox: spus_asrc_enable_put(0, 4)
+[387810.893339] [1:         amixer: 2008] abox 18c50000.abox: spus_asrc_enable_put(0, 5)
+[387810.893354] [1:         amixer: 2008] abox 18c50000.abox: spus_asrc_enable_put(0, 6)
+[387810.893369] [1:         amixer: 2008] abox 18c50000.abox: spus_asrc_enable_put(0, 7)
+[387810.893385] [1:         amixer: 2008] abox 18c50000.abox: spus_asrc_enable_put(0, 8)
+[387810.893400] [1:         amixer: 2008] abox 18c50000.abox: spus_asrc_enable_put(0, 9)
+[387810.893416] [1:         amixer: 2008] abox 18c50000.abox: spus_asrc_enable_put(0, 10)
+[387810.893433] [1:         amixer: 2008] abox 18c50000.abox: spus_asrc_enable_put(0, 11)
+[387810.898791] [1:         amixer: 2008] abox 18c50000.abox: spum_asrc_enable_put(0, 0)
+[387810.898817] [1:         amixer: 2008] abox 18c50000.abox: spum_asrc_enable_put(0, 1)
+[387810.898840] [1:         amixer: 2008] abox 18c50000.abox: spum_asrc_enable_put(0, 2)
+[387810.898861] [1:         amixer: 2008] abox 18c50000.abox: spum_asrc_enable_put(0, 3)
+[387810.898882] [1:         amixer: 2008] abox 18c50000.abox: spum_asrc_enable_put(0, 4)
+[387810.898905] [1:         amixer: 2008] abox 18c50000.abox: spum_asrc_enable_put(0, 5)
+[387810.898926] [1:         amixer: 2008] abox 18c50000.abox: spum_asrc_enable_put(0, 6)
+[387810.898946] [1:         amixer: 2008] abox 18c50000.abox: spum_asrc_enable_put(0, 7)
+[387810.907452]I[0:      swapper/0:    0] abox 18c50000.abox: Calliope is ready to sing (version:6XH0)
+[387810.907548]I[0:      swapper/0:    0] abox 18c50000.abox: abox_qos_request_aud(0xb00d, 663000)
+[387810.907636] [0:    kworker/0:1:25284] abox 18c50000.abox: pm qos aud: 1210000kHz, max: 1402000kHz(at 387810.907630270)
+[387810.907648] [0:    kworker/0:1:25284] abox 18c50000.abox: abox_qos_request_aud(0xab0cdefa, 0)

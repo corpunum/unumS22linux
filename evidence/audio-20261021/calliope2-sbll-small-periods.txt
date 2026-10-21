@@ -1,0 +1,4 @@
+t1 pcm102p: state: RUNNING hw_ptr : 15360 
+t3 pcm102p: state: RUNNING hw_ptr : 51360 
+aplay rc=0 
+ONLINE

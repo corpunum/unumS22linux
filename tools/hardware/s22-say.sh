@@ -143,9 +143,14 @@ done
 
 exec 9>/run/s22-say.lock
 flock 9
-if [ ! -e /run/s22-audio-defaults ]; then
-  batch defaults && touch /run/s22-audio-defaults
-fi
+# Shared with s22-rec: apply the once-per-boot defaults under one lock so a
+# concurrent first use cannot re-apply them mid-capture (2026-10-21 race).
+(
+  flock 7
+  if [ ! -e /run/s22-audio-defaults ]; then
+    batch defaults && touch /run/s22-audio-defaults
+  fi
+) 7>/run/s22-audio-defaults.lock
 
 if [ -z "$WAV" ]; then
   WAV=/tmp/s22-say-$$.wav
@@ -170,8 +175,16 @@ fi
 
 # s22spk (alsa-s22.conf) = plug -> hw:0,6 at 48 kHz stereo; RDMA6's own ASRC
 # garbles 22.05 kHz mono (espeak's native format).
+# S22_AUDIO_PATH=graph (opt-in, 2026-10-21): play like the stock AudioProxy into
+# the firmware-graph frontend calliope_2 (hw:0,102 -> VPCMOUT_DAI2 -> VDSP3 ->
+# RDMA2 -> SPUS). Needs HAL-sized periods: 6000-frame periods lost audio, and
+# with the SBLL pipeline they crashed Calliope (data abort at 0x82800000).
+APDEV=s22spk; APOPTS=
+if [ "${S22_AUDIO_PATH:-direct}" = graph ]; then
+  APDEV=s22graph; APOPTS="--period-size=480 --buffer-size=1920"; PCM=102
+fi
 play() { timeout 60 chroot "$CHROOT" /usr/bin/env LD_LIBRARY_PATH=$OPT/usr/lib \
-  ALSA_CONFIG_PATH=$OPT/mixer/alsa-s22.conf $OPT/usr/bin/aplay -q -D s22spk "$@"; }
+  ALSA_CONFIG_PATH=$OPT/mixer/alsa-s22.conf $OPT/usr/bin/aplay -q -D $APDEV $APOPTS "$@"; }
 # ABOX powers Calliope down ~0.5 s after the last close; a short silent
 # stream first makes sure the firmware is up before the real trigger.
 play -t raw -f S16_LE -r 48000 -c 2 -s 4800 /dev/zero >/dev/null 2>&1

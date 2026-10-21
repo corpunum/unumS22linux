@@ -1,0 +1,77 @@
+t1 pcm102p: state: RUNNING hw_ptr : 30000 
+t1 pcm2p: 
+t1 pcm3p: 
+t2 pcm102p: state: DRAINING hw_ptr : 60000 
+t2 pcm2p: 
+t2 pcm3p: 
+t3 pcm102p: 
+t3 pcm2p: 
+t3 pcm3p: 
+t4 pcm102p: 
+t4 pcm2p: 
+t4 pcm3p: 
+t5 pcm102p: 
+t5 pcm2p: 
+t5 pcm3p: 
+t6 pcm102p: 
+t6 pcm2p: 
+t6 pcm3p: 
+aplay rc=0 
+T0=388571.40
+[388571.395261] [4:         amixer: 6969] abox 18c50000.abox: width_put(0x14, 32)
+[388571.395341] [4:         amixer: 6969] abox 18c50000.abox: channels_put(0x14, 4)
+[388571.395964] [1:  kworker/u17:2: 5413] abox 18c50000.abox: abox_sysevent_powerup: powerup callback
+[388571.395986] [1:  kworker/u17:2: 5413] abox 18c50000.abox: abox_enable
+[388571.395993] [1:  kworker/u17:2: 5413] abox 18c50000.abox: abox_qos_apply_aud_base(200000)
+[388571.396678] [1:  kworker/u17:2: 5413] abox 18c50000.abox: abox_qos_request_aud(0xab0cdefa, 1210000)
+[388571.397073] [1:  kworker/u17:2: 5413] abox 18c50000.abox: abox_core_download_firmware
+[388571.397515] [4:         amixer: 6969] abox-tplg 0.abox-tplg: pipeline ABOX VDSP3 : rdma2-sbll-vpcmout
+[388571.398003] [4:         amixer: 6969] abox-tplg 0.abox-tplg: pipeline ABOX VDSP0 : bdmixer-normal
+[388571.403707] [1:  kworker/u17:2: 5413] abox-core 18c55000.abox-core: Loaded ABOX Signed Firmware : calliope_sram.bin
+[388571.404671] [1:  kworker/u17:2: 5413] exynos_s2mpu_verify_subsystem_fw: ABOX FW[0] is verified!
+[388571.404693] [1:  kworker/u17:2: 5413] exynos_s2mpu_request_fw_stage2_ap: Allow ABOX FW Stage 2 access permission
+[388571.406497] [1:  kworker/u17:2: 5413] abox 18c50000.abox: slogargs: 0x295f8, 0
+[388571.406538] [1:  kworker/u17:2: 5413] abox 18c50000.abox: abox_core_power(1)
+[388571.407815] [2:         amixer: 6973] abox-tplg 0.abox-tplg: pipeline ABOX VDSP3 : rdma2-vpcmout
+[388571.421699] [2:          aplay: 6980] abox-if 18c50c20.abox-uaif: abox_qos_request_aud(0xda100051, 200000)
+[388571.421797] [2:          aplay: 6980] abox-rdma 18c51200.abox-rdma: abox_rdma_open
+[388571.421808] [2:          aplay: 6980] abox-rdma 18c51200.abox-rdma: abox_qos_request_aud(0xda100062, 200000)
+[388571.421861] [2:          aplay: 6980] abox-vdma abox-vdma.102: abox_vdma_open[p]
+[388571.422315] [2:          aplay: 6980] abox-if 18c50c20.abox-uaif: abox_uaif_hw_params[P]
+[388571.422334] [2:          aplay: 6980] abox-if 18c50c20.abox-uaif: current pll_aud: 663551999(target: 663552000)
+[388571.422366] [2:          aplay: 6980] abox-if 18c50c20.abox-uaif: audif clock: 73727999
+[388571.422401] [2:          aplay: 6980] abox-if 18c50c20.abox-uaif: rate=48000, width=32, channel=4, bclk=6143999
+[388571.422433] [2:          aplay: 6980] abox 18c50000.abox: reset sifs0_cnt_val
+[388571.422499] [2:          aplay: 6980] abox-rdma 18c51200.abox-rdma: ion_buffer abox_rdma_hw_params bytes(1536) size(524288)
+[388571.422521] [2:          aplay: 6980] abox-rdma 18c51200.abox-rdma: Playback:Total=1536 PrdSz=96(384) #Prds=4 rate=48000, width=16, channels=2
+[388571.422537] [2:          aplay: 6980] abox-vdma abox-vdma.102: Playback:Total=96000 PrdSz=6000(24000) #Prds=4 rate=48000, width=16, channels=2
+[388571.423062] [2:          aplay: 6980] abox-if 18c50c20.abox-uaif: abox_if_disable_qchannel(1)
+[388571.425469]I[0:           node: 1650] abox 18c50000.abox: Calliope is ready to sing (version:6XH0)
+[388571.425540]I[0:           node: 1650] abox 18c50000.abox: abox_qos_request_aud(0xb00d, 663000)
+[388571.427952] [0:    kworker/0:2: 2244] abox 18c50000.abox: pm qos aud: 1210000kHz, max: 1402000kHz(at 388571.427944293)
+[388571.427997] [0:    kworker/0:2: 2244] abox 18c50000.abox: abox_qos_request_aud(0xab0cdefa, 0)
+[388571.429161] [1:  kworker/u16:0:30802] abox 18c50000.abox: pm qos aud: 663000kHz, max: 1402000kHz(at 388571.429152106)
+[388571.432990]I[0:      swapper/0:    0] abox 18c50000.abox: abox_qos_request_aud(0xb00d, 0)
+[388571.433485] [0:  kworker/u16:0:30802] abox 18c50000.abox: pm qos aud: 200000kHz, max: 1402000kHz(at 388571.433475622)
+[388571.435824] [2:          aplay: 6980] abox-if 18c50c20.abox-uaif: abox_uaif_mute_stream[P](0)
+[388571.437559] [1:          aplay: 6980] abox-rdma 18c51200.abox-rdma: abox_rdma_mute_stream(0)
+[388571.438435] [1:          aplay: 6980] abox 18c50000.abox: asrc_config(3, 0, 15, 48000Hz, 15, 48000Hz, 1000, 32bit, 0)
+[388571.438457] [1:          aplay: 6980] abox 18c50000.abox: ABOX SPUS ASRC2 off
+[388571.439618] [4:          aplay: 6980] abox-vdma abox-vdma.102: abox_vdma_trigger[p](1)
+[388571.440242]I[0:      swapper/0:    0] abox 18c50000.abox: abox_qos_request_mif(0xab0cca11, 421000)
+[388572.258326]I[0:      swapper/0:    0] abox-vdma abox-vdma.102: abox_vdma_trigger[p](0)
+[388572.259918] [3:          aplay: 6980] abox-if 18c50c20.abox-uaif: abox_uaif_mute_stream[P](1)
+[388572.296517] [3:          aplay: 6980] abox-rdma 18c51200.abox-rdma: abox_rdma_mute_stream(1)
+[388572.296636] [3:          aplay: 6980] abox-if 18c50c20.abox-uaif: abox_qos_request_aud(0xda100051, 0)
+[388572.297204] [3:          aplay: 6980] abox-rdma 18c51200.abox-rdma: abox_rdma_close
+[388572.297285] [3:          aplay: 6980] abox-rdma 18c51200.abox-rdma: abox_qos_request_aud(0xda100062, 0)
+[388572.297329] [3:          aplay: 6980] abox 18c50000.abox: ABOX SPUS ASRC2 off
+[388572.297670] [3:          aplay: 6980] abox-vdma abox-vdma.102: abox_vdma_close[p]
+[388572.316152] [3:          aplay: 6980] abox-if 18c50c20.abox-uaif: abox_if_disable_qchannel(0)
+[388572.395154]I[0:      swapper/0:    0] abox 18c50000.abox: abox_qos_request_aud(0x72766f67, 0)
+[388572.554862]I[0:      swapper/0:    0] abox 18c50000.abox: abox_qos_request_aud(0x72766f67, 0)
+[388572.923007] [2:   kworker/2:37: 2044] abox 18c50000.abox: abox_sysevent_shutdown: shutdown callback
+[388572.923057] [2:   kworker/2:37: 2044] abox 18c50000.abox: abox_disable
+[388572.933733] [2:   kworker/2:37: 2044] abox 18c50000.abox: abox_qos_apply_aud_base(0)
+[388572.933823] [2:   kworker/2:1H:  412] abox 18c50000.abox: request pcmc osc
+ONLINE
