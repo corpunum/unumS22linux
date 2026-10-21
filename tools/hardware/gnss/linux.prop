@@ -1,0 +1,11 @@
+# Properties served to gpsd and the GNSS HAL by propshim.so (no Android property service here).
+service.bootanim.exit=1
+sys.boot_completed=1
+ro.build.version.sdk=31
+ro.vendor.build.version.sdk=31
+ro.hardware=s5e9925
+ro.product.board=s5e9925
+ro.product.vendor.brand=samsung
+ro.product.vendor.device=r0s
+ro.product.vendor.model=SM-S901B
+ro.vendor.build.fingerprint=samsung/r0sxxx/r0s:12/SP1A.210812.016/S901BXXSIFYI3:user/release-keys
