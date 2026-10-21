@@ -1,0 +1,16 @@
+before: overlay                 596544    563452     20804  96% /
+linked /usr/lib/libLLVM.so.22.1 -> /srv/s22/archive/native-root-20261021/usr/lib/libLLVM.so.22.1
+linked /usr/lib/libgallium-26.1.6.so -> /srv/s22/archive/native-root-20261021/usr/lib/libgallium-26.1.6.so
+linked /usr/lib/libvulkan_radeon.so -> /srv/s22/archive/native-root-20261021/usr/lib/libvulkan_radeon.so
+moved /usr/local/bin/unumsearch.v0.1.2.bak
+moved /usr/local/bin/unumsearch.v0.1.5.bak
+moved /usr/local/bin/unumsearch.v0.1.6.bak
+moved /var/cache/apk
+moved /usr/lib/debug
+moved /root/.cache/mesa_shader_cache
+after: overlay                 596544    321528    262728  55% /
+lrwxrwxrwx    1 root     root            61 Oct 21 20:27 /usr/lib/libLLVM.so.22.1 -> /srv/s22/archive/native-root-20261021/usr/lib/libLLVM.so.22.1
+lrwxrwxrwx    1 root     root            66 Oct 21 20:27 /usr/lib/libgallium-26.1.6.so -> /srv/s22/archive/native-root-20261021/usr/lib/libgallium-26.1.6.so
+lrwxrwxrwx    1 root     root            65 Oct 21 20:27 /usr/lib/libvulkan_radeon.so -> /srv/s22/archive/native-root-20261021/usr/lib/libvulkan_radeon.so
+19
+236.3M	/srv/s22/archive/native-root-20261021

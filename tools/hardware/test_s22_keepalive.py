@@ -237,6 +237,51 @@ class ServiceTableTest(unittest.TestCase):
             self.assertEqual(k.decide('llama', True, False, 1601), 'restart')
 
 
+    def test_per_service_restart_limits(self):
+        with tempfile.TemporaryDirectory() as d:
+            bt = mod.Generic('bluetooth', {'argv': ['x'], 'max_restarts': 1000, 'backoff_max_s': 300})
+            other = mod.Generic('s22d', {'argv': ['y']})
+            k = mod.Keepalive(dict(mod.DEFAULTS), state=Path(d), services={'bluetooth': bt, 's22d': other})
+            for name in ('bluetooth', 's22d'):
+                k.history[name] = [5000 + i for i in range(5)]
+                k.next_try[name] = 0
+                k.bad_since[name] = 0
+            self.assertEqual(k.decide('bluetooth', False, False, 5100), 'restart')   # keeps retrying
+            self.assertEqual(k.decide('s22d', False, False, 5100), 'limited')        # global limit
+            self.assertEqual(k.limit('bluetooth', 'backoff_max_s'), 300.0)
+            self.assertEqual(k.limit('s22d', 'backoff_max_s'), float(mod.DEFAULTS['backoff_max_s']))
+
+    def test_prune_root_caps_logs_and_empties_caches(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / 'var/log').mkdir(parents=True)
+            big = root / 'var/log/x.log'
+            big.write_bytes(b'a' * (mod.ROOT_LOG_CAP + 500) + b'END')
+            small = root / 'var/log/y.log'
+            small.write_text('keep')
+            cache = root / 'root/.cache/mesa_shader_cache'
+            (cache / 'sub').mkdir(parents=True)
+            (cache / 'sub/blob').write_bytes(b'x' * 10)
+            keep = root / 'root/work.txt'
+            keep.write_text('mine')
+            done = mod.prune_root(root)
+            self.assertEqual(big.stat().st_size, mod.ROOT_LOG_CAP)
+            self.assertTrue(big.read_bytes().endswith(b'END'))
+            self.assertEqual(small.read_text(), 'keep')
+            self.assertTrue(cache.is_dir())
+            self.assertEqual(list(cache.iterdir()), [])
+            self.assertEqual(keep.read_text(), 'mine')
+            self.assertEqual(len(done), 2)
+
+    def test_root_guard_only_acts_when_low(self):
+        with tempfile.TemporaryDirectory() as d:
+            k = mod.Keepalive(dict(mod.DEFAULTS, root_min_free_mb=0), state=Path(d), services={})
+            self.assertNotIn('pruned', k.root_guard(d))
+            k = mod.Keepalive(dict(mod.DEFAULTS, root_min_free_mb=10 ** 9), state=Path(d), services={})
+            with mock.patch.object(mod, 'prune_root', return_value=['x']) as pr:
+                self.assertEqual(k.root_guard(d)['pruned'], ['x'])
+                pr.assert_called_once()
+
 class ModelPinTest(unittest.TestCase):
     PIN = {'provider': 'openai', 'model': 'openai/gpt-6-luna'}
 

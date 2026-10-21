@@ -205,7 +205,9 @@
       },
       "requires": "/srv/s22/bt-hold/bt-qca6490-hci-hold",
       "log": "/srv/s22/state/bt/keepalive-up.log",
-      "start_wait_s": 70
+      "start_wait_s": 110,
+      "max_restarts": 1000,
+      "backoff_max_s": 300
     }
   },
   "pin_allow": [
