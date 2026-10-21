@@ -1,0 +1,50 @@
+=== --period-size=960 --buffer-size=3840
+t1 p6: p102:hw_ptr : 17280 c16:hw_ptr : 84000
+t2 p6: p102:hw_ptr : 37440 c16:hw_ptr : 102000
+t3 p6: p102:hw_ptr : 56640 c16:hw_ptr : 120000
+t4 p6: p102: c16:hw_ptr : 144000
+t5 p6: p102: c16:hw_ptr : 162000
+t6 p6: p102: c16:hw_ptr : 180000
+t7 p6: p102: c16:hw_ptr : 204000
+play rc=0 aplay rc=0 
+rec rc=0 
+restored L=0 R=0
+[388624.429935] [0:          aplay: 7589] abox-rdma 18c51200.abox-rdma: Playback:Total=1536 PrdSz=96(384) #Prds=4 rate=48000, width=16, channels=2
+[388624.429955] [0:          aplay: 7589] abox-vdma abox-vdma.102: Playback:Total=15360 PrdSz=960(3840) #Prds=4 rate=48000, width=16, channels=2
+ONLINE
+t=0.75 rms=0.0003 peak=    20Hz target/noise=     7.9
+t=1.00 rms=0.0002 peak=    28Hz target/noise=     6.1
+t=1.25 rms=0.0006 peak=    20Hz target/noise=    22.8
+t=1.50 rms=0.0014 peak=  1000Hz target/noise=  1087.8
+t=1.75 rms=0.0014 peak=  1000Hz target/noise=  1054.0
+t=2.00 rms=0.0014 peak=  1000Hz target/noise=  1057.7
+t=2.25 rms=0.0014 peak=  1000Hz target/noise=  1085.2
+t=2.50 rms=0.0014 peak=  1000Hz target/noise=  1016.4
+t=2.75 rms=0.0012 peak=  1000Hz target/noise=   257.6
+t=3.00 rms=0.0002 peak=    44Hz target/noise=     6.7
+t=3.25 rms=0.0002 peak=   100Hz target/noise=     6.3
+=== --period-size=480 --buffer-size=1920
+t1 p6: p102:hw_ptr : 16800 c16:hw_ptr : 84000
+t2 p6: p102:hw_ptr : 36960 c16:hw_ptr : 102000
+t3 p6: p102:hw_ptr : 56640 c16:hw_ptr : 126000
+t4 p6: p102: c16:hw_ptr : 144000
+t5 p6: p102: c16:hw_ptr : 162000
+t6 p6: p102: c16:hw_ptr : 186000
+t7 p6: p102: c16:hw_ptr : 204000
+play rc=0 aplay rc=0 
+rec rc=0 
+restored L=0 R=0
+[388630.545238] [3:          aplay: 7829] abox-rdma 18c51200.abox-rdma: Playback:Total=1536 PrdSz=96(384) #Prds=4 rate=48000, width=16, channels=2
+[388630.545254] [3:          aplay: 7829] abox-vdma abox-vdma.102: Playback:Total=7680 PrdSz=480(1920) #Prds=4 rate=48000, width=16, channels=2
+ONLINE
+t=0.75 rms=0.0002 peak=    20Hz target/noise=     7.3
+t=1.00 rms=0.0002 peak=   108Hz target/noise=     6.6
+t=1.25 rms=0.0003 peak=   160Hz target/noise=     7.6
+t=1.50 rms=0.0014 peak=  1000Hz target/noise=  1084.7
+t=1.75 rms=0.0014 peak=  1000Hz target/noise=  1034.4
+t=2.00 rms=0.0015 peak=  1000Hz target/noise=  1019.5
+t=2.25 rms=0.0015 peak=  1000Hz target/noise=  1009.1
+t=2.50 rms=0.0014 peak=  1000Hz target/noise=  1050.9
+t=2.75 rms=0.0013 peak=  1000Hz target/noise=   965.5
+t=3.00 rms=0.0002 peak=   160Hz target/noise=     9.6
+t=3.25 rms=0.0002 peak=    20Hz target/noise=     7.6

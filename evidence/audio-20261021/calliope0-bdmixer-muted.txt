@@ -1,0 +1,11 @@
+t1 pcm100p: state: RUNNING hw_ptr : 13920 
+t1 pcm3p: 
+t3 pcm100p: state: RUNNING hw_ptr : 48960 
+t3 pcm3p: 
+aplay rc=0 
+[388700.205494] [1:          aplay: 8613] abox-rdma 18c51300.abox-rdma: abox_rdma_open
+[388700.206052] [1:          aplay: 8613] abox-rdma 18c51300.abox-rdma: Playback:Total=7680 PrdSz=240(1920) #Prds=4 rate=48000, width=32, channels=2
+[388700.206064] [1:          aplay: 8613] abox-vdma abox-vdma.100: Playback:Total=7680 PrdSz=480(1920) #Prds=4 rate=48000, width=16, channels=2
+[388700.219584] [3:          aplay: 8613] abox-vdma abox-vdma.100: abox_vdma_trigger[p](1)
+[388701.765203]I[0:      swapper/0:    0] abox-vdma abox-vdma.100: abox_vdma_trigger[p](0)
+ONLINE

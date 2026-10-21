@@ -1,0 +1,19 @@
+--t1
+--t2
+state: RUNNING
+hw_ptr      : 0
+--t3
+state: RUNNING
+hw_ptr      : 18000
+appl_ptr    : 42000
+--t4
+state: RUNNING
+hw_ptr      : 36000
+appl_ptr    : 60000
+--t5
+state: DRAINING
+hw_ptr      : 54000
+appl_ptr    : 72000
+--t6
+arecord: pcm_read:2285: read error: Input/output error
+ls: /mnt/omarchy-trial/tmp/s22-rec-20261021.wav: No such file or directory

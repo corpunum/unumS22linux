@@ -1,0 +1,7 @@
+bb627d2d41e4c080a88569a399de324d  /srv/s22/hardware/bin/s22-say
+10e0eeffbf8e61857ad4a9784b01055d  /srv/s22/hardware/bin/s22-rec
+== trial 1 (marker removed)
+-rw-r--r--    1 root     root        384044 Oct 21 18:32 /mnt/omarchy-trial/tmp/s22-rec-race1.wav
+== trial 2 (marker removed)
+-rw-r--r--    1 root     root        384044 Oct 21 18:32 /mnt/omarchy-trial/tmp/s22-rec-race2.wav
+-rw-r--r--    1 root     root             0 Oct 21 18:32 /run/s22-audio-defaults

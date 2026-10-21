@@ -1,0 +1,48 @@
+--t1
+state: RUNNING
+hw_ptr      : 12000
+appl_ptr    : 12000
+--t2
+state: RUNNING
+hw_ptr      : 36000
+appl_ptr    : 36000
+--t3
+state: RUNNING
+hw_ptr      : 66000
+appl_ptr    : 66000
+--t4
+state: RUNNING
+hw_ptr      : 90000
+appl_ptr    : 90000
+--t5
+-rw-r--r--    1 root     root        192044 Oct 21 18:28 /mnt/omarchy-trial/tmp/s22-rec2.wav
+[387831.716838] [0:          udevd: 2294] max77705_fg_read_avg_current: avg_current=3mA
+[387831.717788] [0:          udevd: 2294] max77705_fg_read_current: current=7mA
+[387831.718711] [0:          udevd: 2294] max77705_fg_read_avg_current: avg_current=3mA
+[387831.796541] [7:    kworker/7:2:23376] throughput 0(0) MB/sec
+[387832.036129] [3:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c347, wtcnt = cbce
+[387832.037722] [3:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-10-21 18:28:11(0x08)PM
+[387832.037773] [3:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f63b, wtcnt = fec2
+[387832.039136] [3:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-10-21 18:28:11(0x08)PM
+[387832.039184] [3:native-guardian:    1] Watchdog: secdbg_wdd_ping_handler RTC 2026-10-21 18:28:52 UTC
+[387832.705280] [2:simpleinteracti:  251] sci_info: llc_region_alloc: region[1]: off
+[387832.705861] [2:simpleinteracti:  251] sci_info: exynos_sci_llc_enable: LLC is disabled
+[387833.040573] [0:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c347, wtcnt = cbce
+[387833.041983] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-10-21 18:28:12(0x08)PM
+[387833.042012] [0:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f63b, wtcnt = fec2
+[387833.043216] [0:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-10-21 18:28:12(0x08)PM
+[387833.043237] [0:native-guardian:    1] Watchdog: secdbg_wdd_ping_handler RTC 2026-10-21 18:28:53 UTC
+[387834.045155] [1:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c346, wtcnt = cbce
+[387834.046762] [1:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-10-21 18:28:13(0x08)PM
+[387834.046790] [1:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f63a, wtcnt = fec2
+[387834.048097] [1:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-10-21 18:28:13(0x08)PM
+[387834.048118] [1:native-guardian:    1] Watchdog: secdbg_wdd_ping_handler RTC 2026-10-21 18:28:54 UTC
+[387834.467898] [0:simpleinteracti:  251] sci_info: exynos_sci_llc_enable: LLC is enabled
+[387834.468212] [0:simpleinteracti:  251] sci_info: llc_region_alloc: region[1]: on
+[387835.048912] [1:native-guardian:    1] s3c2410-wdt 10060000.watchdog_cl1: Watchdog cluster 1 keepalive!, old_wtcnt = c348, wtcnt = cbce
+[387835.050385] [1:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-10-21 18:28:14(0x08)PM
+[387835.050436] [1:native-guardian:    1] s3c2410-wdt 10050000.watchdog_cl0: Watchdog cluster 0 keepalive!, old_wtcnt = f63c, wtcnt = fec2
+[387835.051794] [1:native-guardian:    1] s2mps25-rtc s2mps25-rtc: s2m_rtc_read_time: 2026-10-21 18:28:14(0x08)PM
+[387835.051818] [1:native-guardian:    1] Watchdog: secdbg_wdd_ping_handler RTC 2026-10-21 18:28:55 UTC
+[387835.871579] [1:  kworker/u16:0:30802] [SSP]: debug_work_func(0) - Sensor state: 0x3feff, RC: 0(0, 0, 0), CC: 0, TC: 0 NSC: 0 EC: 0
+[387835.871620] [1:  kworker/u16:0:30802] [SSP] debugwork_mcu : PC(0x0), LR(0x0)

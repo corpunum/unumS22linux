@@ -1,0 +1,25 @@
+== default path (muted)
+rc=0
+== graph path loopback level 2
+t1 p6: p102:hw_ptr : 5760 c16:hw_ptr : 84000
+t2 p6: p102:hw_ptr : 25920 c16:hw_ptr : 102000
+t3 p6: p102:hw_ptr : 46080 c16:hw_ptr : 126000
+t4 p6: p102:hw_ptr : 66240 c16:hw_ptr : 144000
+t5 p6: p102: c16:hw_ptr : 162000
+t6 p6: p102: c16:hw_ptr : 186000
+t7 p6: p102: c16:hw_ptr : 204000
+play rc=0 
+rec rc=0 
+restored L=0 R=0
+aplay_rc=0
+ONLINE
+t=1.00 rms=0.0002 peak=    20Hz target/noise=     6.1
+t=1.25 rms=0.0002 peak=   156Hz target/noise=     5.8
+t=1.50 rms=0.0003 peak=    32Hz target/noise=     6.0
+t=1.75 rms=0.0010 peak=  1000Hz target/noise=   737.6
+t=2.00 rms=0.0010 peak=  1000Hz target/noise=   693.6
+t=2.25 rms=0.0010 peak=  1000Hz target/noise=   652.5
+t=2.50 rms=0.0010 peak=  1000Hz target/noise=   680.8
+t=2.75 rms=0.0010 peak=  1000Hz target/noise=   729.7
+t=3.00 rms=0.0009 peak=  1000Hz target/noise=   673.3
+t=3.25 rms=0.0002 peak=   140Hz target/noise=     5.8

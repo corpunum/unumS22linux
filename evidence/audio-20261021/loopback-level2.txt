@@ -1,0 +1,33 @@
+old raw L=0 R=0 -> test raw 561 (level 2)
+bd before: max_exc_0=0.0000 max_exc_1=0.0000 max_temp_0=0.0000 max_temp_1=0.0000 abnm_mute_0=0 abnm_mute_1=0 
+t1 p6:hw_ptr : 0 c16:hw_ptr : 84000
+t2 p6:hw_ptr : 18000 c16:hw_ptr : 102000
+t3 p6:hw_ptr : 42000 c16:hw_ptr : 120000
+t4 p6:hw_ptr : 60000 c16:hw_ptr : 144000
+t5 p6: c16:hw_ptr : 162000
+t6 p6: c16:hw_ptr : 180000
+t7 p6: c16:hw_ptr : 204000
+say rc=0 
+rec rc=0 
+bd after: max_exc_0=0.1171 max_exc_1=0.1733 max_temp_0=23.0000 max_temp_1=23.0000 abnm_mute_0=0 abnm_mute_1=0 
+-rw-r--r--    1 root     root        480044 Oct 21 18:31 /mnt/omarchy-trial/tmp/s22-rec5.wav
+restored L=0 R=0
+t=0.00 rms=0.3320 peak=    20Hz 1k/noise=     6.9
+t=0.25 rms=0.0008 peak=    20Hz 1k/noise=     9.4
+t=0.50 rms=0.0006 peak=   104Hz 1k/noise=     7.1
+t=0.75 rms=0.0005 peak=   104Hz 1k/noise=     5.9
+t=1.00 rms=0.0005 peak=   104Hz 1k/noise=     4.5
+t=1.25 rms=0.0005 peak=   104Hz 1k/noise=     5.4
+t=1.50 rms=0.0007 peak=   104Hz 1k/noise=    18.0
+t=1.75 rms=0.0015 peak=  1000Hz 1k/noise=   991.5
+t=2.00 rms=0.0015 peak=  1000Hz 1k/noise=  1115.8
+t=2.25 rms=0.0017 peak=  1000Hz 1k/noise=  1074.8
+t=2.50 rms=0.0015 peak=  1000Hz 1k/noise=  1044.7
+t=2.75 rms=0.0016 peak=  1000Hz 1k/noise=  1117.7
+t=3.00 rms=0.0015 peak=  1000Hz 1k/noise=   681.8
+t=3.25 rms=0.0005 peak=   108Hz 1k/noise=     7.8
+t=3.50 rms=0.0005 peak=   108Hz 1k/noise=     8.2
+t=3.75 rms=0.0004 peak=   104Hz 1k/noise=     6.2
+t=4.00 rms=0.0004 peak=   104Hz 1k/noise=     5.0
+t=4.25 rms=0.0004 peak=   104Hz 1k/noise=     8.0
+t=4.50 rms=0.0005 peak=   108Hz 1k/noise=     6.6

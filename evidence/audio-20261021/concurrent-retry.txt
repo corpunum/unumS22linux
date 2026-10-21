@@ -1,0 +1,86 @@
+rec status:
+state: RUNNING
+hw_ptr      : 60000
+--t1
+p6: hw_ptr      : 6000
+c16: hw_ptr      : 90000
+--t2
+p6: hw_ptr      : 30000
+c16: hw_ptr      : 114000
+--t3
+p6: hw_ptr      : 54000
+c16: hw_ptr      : 138000
+--t4
+p6: closed
+c16: hw_ptr      : 162000
+--t5
+p6: closed
+c16: hw_ptr      : 186000
+--t6
+p6: closed
+c16: hw_ptr      : 210000
+--t7
+p6: closed
+c16: hw_ptr      : 234000
+T0=387855.90
+-rw-r--r--    1 root     root        480044 Oct 21 18:29 /mnt/omarchy-trial/tmp/s22-rec3.wav
+[387857.713260] [2:          aplay: 2439] abox-if 18c50c20.abox-uaif: abox_uaif_mute_stream[P](0)
+[387857.713290] [2:          aplay: 2439] cs35l41 5-0041: cs35l41_pcm_mute mute=0
+[387857.713896] [2:          aplay: 2439] cs35l41 5-0041: cs35l41_pcm_mute: Unmuted
+[387857.713910] [2:          aplay: 2439] cs35l41 5-0041: PWR_CTRL1 = 0x1
+[387857.713919] [2:          aplay: 2439] cs35l41 5-0041: PWR_CTRL2 = 0x3721
+[387857.713928] [2:          aplay: 2439] cs35l41 5-0041: DIG_VOL_CTRL = 0xa679
+[387857.713936] [2:          aplay: 2439] cs35l41 5-0041: GAIN_CTRL = 0x273
+[387857.713944] [2:          aplay: 2439] cs35l41 5-0040: cs35l41_pcm_mute mute=0
+[387857.714573] [2:          aplay: 2439] cs35l41 5-0040: cs35l41_pcm_mute: Unmuted
+[387857.714584] [2:          aplay: 2439] cs35l41 5-0040: PWR_CTRL1 = 0x1
+[387857.714592] [2:          aplay: 2439] cs35l41 5-0040: PWR_CTRL2 = 0x3721
+[387857.714600] [2:          aplay: 2439] cs35l41 5-0040: DIG_VOL_CTRL = 0xa679
+[387857.714610] [2:          aplay: 2439] cs35l41 5-0040: GAIN_CTRL = 0x273
+[387857.715393] [2:          aplay: 2439] abox 18c50000.abox: asrc_config(3, 0, 15, 48000Hz, 15, 48000Hz, 1000, 32bit, 0)
+[387857.715429] [2:          aplay: 2439] abox 18c50000.abox: ABOX SPUS ASRC6 off
+[387857.716347] [2:          aplay: 2439] abox-rdma 18c51600.abox-rdma: abox_rdma_trigger(1)
+[387859.217056]I[0:      swapper/0:    0] abox-rdma 18c51600.abox-rdma: abox_rdma_trigger(0)
+[387859.217825] [2:          aplay: 2439] abox-if 18c50c20.abox-uaif: abox_uaif_mute_stream[P](1)
+[387859.219469] [1:          aplay: 2439] cs35l41 5-0041: cs35l41_pcm_mute mute=1
+[387859.240077] [0:          aplay: 2439] cs35l41 5-0041: IRQ1_STATUS1 = 0x1c00000
+[387859.240480] [0:          aplay: 2439] cs35l41 5-0041: MBOX status = 0x0
+[387859.240508] [0:          aplay: 2439] cs35l41 5-0040: cs35l41_pcm_mute mute=1
+[387859.257063] [0:          aplay: 2439] cs35l41 5-0040: IRQ1_STATUS1 = 0x1c00000
+[387859.257578] [0:          aplay: 2439] cs35l41 5-0040: MBOX status = 0x0
+[387859.257821] [0:          aplay: 2439] abox-if 18c50c20.abox-uaif: abox_qos_request_aud(0xda100051, 0)
+[387859.259274] [0:          aplay: 2439] abox-rdma 18c51600.abox-rdma: abox_rdma_close
+[387859.259503] [0:          aplay: 2439] abox-rdma 18c51600.abox-rdma: abox_qos_request_aud(0xda100016, 0)
+[387859.259660] [0:          aplay: 2439] abox 18c50000.abox: ABOX SPUS ASRC6 off
+[387859.270729] [0:          aplay: 2439] cs35l41 5-0041: cs35l41_main_amp_event PMD
+[387859.276309] [0:          aplay: 2439] cs35l41 5-0040: cs35l41_main_amp_event PMD
+[387859.276883] [0:          aplay: 2439] abox-if 18c50c20.abox-uaif: abox_if_disable_qchannel(0)
+[387859.308168] [2:         amixer: 2451] abox-tplg 0.abox-tplg: pipeline ABOX VDSP0 : none
+[387859.310056] [2:         amixer: 2451] abox-tplg 0.abox-tplg: pipeline ABOX VDSP3 : none
+[387859.316228] [2:         amixer: 2451] abox 18c50000.abox: channels_put(0x14, 2)
+[387859.316352] [2:         amixer: 2451] abox 18c50000.abox: width_put(0x14, 24)
+[387861.050488] [0:        arecord: 2426] abox-wdma 18c53400.abox-wdma: abox_wdma_trigger(0)
+[387861.051095] [0:        arecord: 2426] abox-if 18c50cc0.abox-uaif: abox_uaif_mute_stream[C](1)
+[387861.052753] [0:        arecord: 2426] abox-if 18c50cc0.abox-uaif: abox_qos_request_aud(0xda100056, 0)
+[387861.054424] [0:        arecord: 2426] abox-wdma 18c53400.abox-wdma: abox_wdma_close
+[387861.054497] [0:        arecord: 2426] abox-wdma 18c53400.abox-wdma: abox_qos_request_aud(0xda100024, 0)
+[387861.054547] [0:        arecord: 2426] abox 18c50000.abox: ABOX SPUM ASRC4 off
+[387861.101418]I[0:      swapper/0:    0] abox 18c50000.abox: abox_qos_request_aud(0x72766f67, 0)
+[387861.139327] [1:         amixer: 2475] abox-tplg 0.abox-tplg: pipeline ABOX VDSP4 : none
+[387861.141786] [1:         amixer: 2475] abox-if 18c50cc0.abox-uaif: abox_if_config_put(0x00000002, 48000)
+[387861.141868] [1:         amixer: 2475] abox-if 18c50cc0.abox-uaif: current pll_aud: 663551999(target: 663552000)
+[387861.141934] [1:         amixer: 2475] abox-if 18c50cc0.abox-uaif: audif clock: 73727999
+[387861.142166] [1:         amixer: 2475] time out, 'DIV_CLK_AUD_UAIF6' [0000000074555d5f]=10020 [0000000074555d5f]=10020
+[387861.142345] [1:         amixer: 2475] abox-if 18c50cc0.abox-uaif: abox_if_config_put(0x00000001, 4)
+[387861.142368] [1:         amixer: 2475] abox-if 18c50cc0.abox-uaif: current pll_aud: 663551999(target: 663552000)
+[387861.142401] [1:         amixer: 2475] abox-if 18c50cc0.abox-uaif: audif clock: 73727999
+[387861.142614] [1:         amixer: 2475] time out, 'DIV_CLK_AUD_UAIF6' [0000000074555d5f]=10020 [0000000074555d5f]=10020
+[387861.142877] [1:         amixer: 2475] abox-if 18c50cc0.abox-uaif: abox_if_config_put(0x00000000, 16)
+[387861.142902] [1:         amixer: 2475] abox-if 18c50cc0.abox-uaif: current pll_aud: 663551999(target: 663552000)
+[387861.142938] [1:         amixer: 2475] abox-if 18c50cc0.abox-uaif: audif clock: 73727999
+[387861.143152] [1:         amixer: 2475] time out, 'DIV_CLK_AUD_UAIF6' [0000000074555d5f]=10020 [0000000074555d5f]=10020
+[387861.261937]I[0:      swapper/0:    0] abox 18c50000.abox: abox_qos_request_aud(0x72766f67, 0)
+[387861.683407] [3:    kworker/3:0:17712] abox 18c50000.abox: abox_sysevent_shutdown: shutdown callback
+[387861.683436] [3:    kworker/3:0:17712] abox 18c50000.abox: abox_disable
+[387861.690139] [3:    kworker/3:0:17712] abox 18c50000.abox: abox_qos_apply_aud_base(0)
+[387861.690159] [3:   kworker/3:1H:  410] abox 18c50000.abox: request pcmc osc
