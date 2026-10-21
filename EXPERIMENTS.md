@@ -2912,3 +2912,44 @@ Details: `evidence/audio-20261021/README.md` (follow-up section, tests 19–29).
   in on-phone Parakeet ("Galaxy S twenty two").
 - s22-keepalive no longer mutes during a playback (it skips while the say
   lock is held). No mute event occurred during the test playbacks.
+
+### 2026-10-21 (evening) — Natural voice on the phone: fillers, enhanced answers, spoken thinking
+
+Brings OpenUnum 89ac48de's natural-voice features (`enhanceForVoice`, filler clips, speak-thinking) to
+the phone's voice loop. Code: `tools/hardware/s22_voice.py`, `voice/`, edits to `s22-assistant.py` and
+`s22-converse.py`; tests `test_s22_voice.py` (parity with the rig's JS), `test_s22_assistant.py`.
+- Phone OpenUnum is a git checkout at 4723a12 (`/mnt/omarchy-trial/opt/openunum`): no `enhanceForVoice`,
+  no `/api/tts/enhance`. It was NOT updated (no restart needed, nothing to roll back); the features are a
+  Python port loaded by the Python voice scripts. Port output is byte-identical to the JS on 13 replies x
+  3 styles (fixtures `voice/parity.json`, regenerate with `voice/gen-parity.mjs` on the rig). One
+  deliberate divergence: the JS classifier's Greek patterns contain final sigmas but are matched against
+  sigma-folded text, so "πες μου για…" / "ποιος είναι…" never match upstream; the port folds the patterns.
+- 132 filler clips rendered ON the phone (`voice/s22-render-fillers.py`, ~4 min, 18 MB) into the chroot's
+  `/root/.openunum/assets/voice-fillers/<lang>/<cat>/<n>.wav` + `manifest.json` (rig format). Voice =
+  what the loop's answers use: `s22-say` default (Supertonic F1) for English, el-antonis for Greek. NOT the
+  lessac Piper voice: s22-converse/assistant never pass `--engine`, so Piper would not match the answers.
+- Loop: transcript -> ask runs in a thread; no reply after 1.2 s -> category clip (never the same clip
+  twice, state in `/srv/s22/state/voice-filler-last.json`); 6 s -> a "general" second clip, then every 25 s
+  (max 5 clips). Clips finish (are not cut) before the answer; the answer is synthesized (render-only
+  `S22_SAY_OUT`) while a clip plays, and a long answer is split after its first sentence/clause so playback
+  starts while the rest renders. Answers go through `reply_to_speech` (framework notes dropped, `°C`
+  spoken, then enhanceForVoice): bullets -> "First, ... And finally, ...".
+- Speak thinking: the phone's `/api/chat/stream` does emit `reasoning_delta` (hosted gpt-6-luna streamed a
+  summary on one of five runs: "Hmm, let me think… Preparing sleep tips", spoken). Wired via a
+  `ThinkingSpeaker` port; on by default (`speak_thinking`), silent when no reasoning arrives.
+- Verified on the phone: ASR (Parakeet, English only) -> OpenUnum -> fillers -> TTS -> speaker with the
+  phone mic recording the speaker (speech level 4/10, restored by s22-say). Live `s22-converse` turn with the
+  question played from the speaker into the mic (VAD floor relaxed in memory only, `voice/converse-e2e.py`):
+  question audio ends 0 s -> VAD end +0.3 s -> ask +1.3 s (ASR 1.0 s) -> filler 1 launched +2.55 s
+  ("Just a second…", audible ~0.3-1 s after launch) -> filler 2 at +7.4 s -> reply +12.7 s -> answer launched
+  +13.9 s (1.2 s after the reply: 1.1 s render). Greek (text injected, no Greek ASR on the phone): filler
+  "Λοιπόν, να δω τι βρίσκω…" +1.2 s after ask, reply +4.5 s, answer launched +6.6 s (2.1 s render).
+  Agent latency (gpt-6-luna) was 3.7-15.7 s here, up to 65 s on an earlier probe.
+- Not verified / caveats: Greek speech INPUT (no Greek ASR installed); button-hold PTT with a real key press
+  (injected WAV); an English Piper-voice filler set; onset times are from a quiet mic recording (the mic
+  hears the level-4 speaker faintly) so audible-onset offsets are +-0.3 s. At test time the graph playback
+  path failed in `aplay` hw_params ("Unable to install hw params", rc 1) for every s22-say call and fell
+  back to RDMA6 (audible, but slower; the phone had rebooted at 18:52 and s22-say/keepalive were edited by
+  another worker at 18:48): not touched, worth a look.
+- Phone files: backups `s22-assistant.bak-voice-20261021`, `s22-converse.bak-voice-20261021` next to the
+  scripts. Install/redo: `tools/hardware/voice/install-voice.sh`.

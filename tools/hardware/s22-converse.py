@@ -376,13 +376,14 @@ class Converser(A.Assistant):
         self.say_n = 0
         self.rendered: list[str] = []
         self.turns: list[dict] = []
+        self.prerender = not self.silent
 
     # -- audio out
-    def say(self, text: str = '', wav: str | None = None, wait: bool = True):
+    def say(self, text: str = '', wav: str | None = None, wait: bool = True, filler: bool = False):
         argv = [str(A.BIN / 's22-say')] + (['--wav', wav] if wav else [text])
         env = dict(os.environ)
         if self.silent:
-            if wav:                     # earcons: nothing to verify, skip them
+            if wav and not filler:      # earcons: nothing to verify, skip them
                 return None
             self.say_n += 1
             out = self.out_dir / f'turn{self.turn:02d}-say{self.say_n:02d}.wav'
@@ -472,7 +473,8 @@ class Converser(A.Assistant):
     # -- one turn
     def take_turn(self, utterance: array.array, rate: int) -> dict:
         rec: dict = {'turn': self.turn, 'session': self.session,
-                     'utterance_s': round(len(utterance) / rate, 2)}
+                     'utterance_s': round(len(utterance) / rate, 2),
+                     't_vad_end': round(time.time(), 3)}   # end-of-utterance detected (speech ended ~end_silence_s earlier)
         wav_chroot = f'{A.WORK}/conv-utt{self.turn:02d}.wav'
         write_wav(A.CHROOT / wav_chroot.lstrip('/'), utterance, rate)
         if self.silent and self.out_dir:
@@ -489,15 +491,19 @@ class Converser(A.Assistant):
             self.say('Goodbye.')
             return rec
         t = time.time()
-        reply = self.ask(text)
+        reply = self.ask_with_fillers(text)
         rec['agent_ms'] = int((time.time() - t) * 1000)
         rec['model'] = self.rec.get('model')
-        spoken, cut = A.summarize(A.clean_for_speech(reply), int(self.cfg['max_spoken_chars']))
+        rec['fillers'] = self.rec.get('fillers')
+        spoken, cut = self.speakable(reply)
         if not spoken:
             spoken = 'The assistant returned an empty answer.'
         rec.update(reply=reply[:2000], spoken=spoken, truncated=cut, result='ok')
         t = time.time()
-        self.say(spoken)
+        self.speak_answer(spoken)
+        rec['render_ms'] = self.rec.get('render_ms')
+        for k in ('ask_t0', 'reply_t', 'answer_launch_t'):
+            rec[k] = self.rec.get(k)
         rec['speak_ms'] = int((time.time() - t) * 1000)
         return rec
 

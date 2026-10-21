@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+"""s22-render-fillers: render OpenUnum's filler phrase bank with the PHONE's own TTS.
+
+Runs on the phone (root). Each phrase of filler-phrases.json (the rig's
+FILLER_PHRASES from src/ui/modules/voice-fillers.js) is synthesized by s22-say
+in render-only mode (S22_SAY_OUT: nothing is played, the sound card is not
+touched) with exactly the engine that speaks the answers, so a filler and the
+answer that follows it share one voice: Greek text goes to el-antonis,
+English to s22-say's default engine. Output layout and manifest.json match
+the rig's ~/.openunum/assets/voice-fillers:
+
+  <out>/<lang>/<category>/<n>.wav      (n starts at 1)
+  <out>/manifest.json                  {"version":1,"generatedAt":..,"clips":{lang:{cat:[{n,phrase,durationSec}]}}}
+
+  s22-render-fillers [--phrases FILE] [--out DIR] [--only en|el] [--force]
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import time
+import wave
+from pathlib import Path
+
+CHROOT = Path('/mnt/omarchy-trial')
+DEFAULT_OUT = CHROOT / 'root/.openunum/assets/voice-fillers'
+DEFAULT_PHRASES = Path(__file__).resolve().parent / 'filler-phrases.json'
+SAY = '/srv/s22/hardware/bin/s22-say'
+
+
+def wav_seconds(path: Path) -> float:
+    with wave.open(str(path), 'rb') as w:
+        return round(w.getnframes() / float(w.getframerate()), 2)
+
+
+def render(text: str, out: Path) -> None:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    env = {**os.environ, 'S22_SAY_OUT': str(out)}
+    r = subprocess.run([SAY, text], env=env, capture_output=True, text=True, timeout=180)
+    if r.returncode != 0 or not out.is_file() or out.stat().st_size < 1000:
+        raise RuntimeError(f'render failed rc={r.returncode} {r.stderr[-200:]!r} for {text!r}')
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--phrases', default=str(DEFAULT_PHRASES))
+    ap.add_argument('--out', default=str(DEFAULT_OUT))
+    ap.add_argument('--only', choices=['en', 'el'])
+    ap.add_argument('--force', action='store_true', help='re-render clips that already exist')
+    args = ap.parse_args(argv)
+    bank = json.loads(Path(args.phrases).read_text())['phrases']
+    out = Path(args.out)
+    manifest = {'version': 1, 'generatedAt': time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime()),
+                'voice': 'phone s22-say default engine (en) / el-antonis (el)', 'clips': {}}
+    done = skipped = 0
+    for lang, cats in bank.items():
+        if args.only and lang != args.only:
+            continue
+        for cat, phrases in cats.items():
+            entries = []
+            for i, phrase in enumerate(phrases, 1):
+                wav = out / lang / cat / f'{i}.wav'
+                if args.force or not wav.is_file():
+                    render(phrase, wav)
+                    done += 1
+                else:
+                    skipped += 1
+                entries.append({'n': i, 'phrase': phrase, 'durationSec': wav_seconds(wav)})
+                print(f'{lang}/{cat}/{i} {entries[-1]["durationSec"]}s', flush=True)
+            manifest['clips'].setdefault(lang, {})[cat] = entries
+    (out / 'manifest.json').write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + '\n')
+    print(json.dumps({'rendered': done, 'kept': skipped, 'out': str(out)}))
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

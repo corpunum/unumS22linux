@@ -1,0 +1,166 @@
+{
+ "version": 1,
+ "source": "openunum 89ac48de src/ui/modules/voice-fillers.js FILLER_PHRASES",
+ "phrases": {
+  "en": {
+   "general": [
+    "Hmm, give me a second…",
+    "Well, let me think about that…",
+    "Okay, one moment…",
+    "Right, let me see…",
+    "Hmm, good question…",
+    "Let me think…",
+    "Just a second…",
+    "Mm, give me a moment…",
+    "Alright, let me work that out…",
+    "So, let me have a look…",
+    "Okay, bear with me a second…"
+   ],
+   "search": [
+    "Let me look that up…",
+    "Hmm, let me search for that…",
+    "Okay, checking that now…",
+    "Give me a second, I am looking it up…",
+    "Let me dig around for that…",
+    "One moment, searching…",
+    "Well, let me find out…",
+    "Let me check what is out there…",
+    "Hmm, let me see what I can find…",
+    "Okay, looking into it…",
+    "Just a moment, I am checking…"
+   ],
+   "analysis": [
+    "Hmm, let me work that out…",
+    "Okay, let me crunch the numbers…",
+    "Well, let me think it through…",
+    "Give me a second to calculate…",
+    "Let me go through this carefully…",
+    "Hmm, let me run the numbers…",
+    "Okay, let me analyse that…",
+    "One moment, I am working it out…",
+    "So, let me break this down…",
+    "Let me compare those for a second…",
+    "Hmm, let me figure this out…"
+   ],
+   "creative": [
+    "Hmm, let me think of something good…",
+    "Okay, let me put some words together…",
+    "Well, give me a moment to write that…",
+    "Let me find the right words…",
+    "Hmm, let me draft something…",
+    "Okay, one moment while I compose that…",
+    "Let me get creative for a second…",
+    "Right, let me come up with something…",
+    "Give me a second to put that into words…",
+    "Hmm, let me shape that up…",
+    "Well, let me try a few ideas…"
+   ],
+   "device": [
+    "Okay, on it…",
+    "Hmm, let me check the device…",
+    "Alright, doing that now…",
+    "Give me a second, I am on it…",
+    "Let me take care of that…",
+    "One moment, working on your phone…",
+    "Okay, let me do that for you…",
+    "Well, let me sort that out…",
+    "Hmm, let me see what the device says…",
+    "Right, handling it now…",
+    "Just a moment, I am doing it…"
+   ],
+   "greeting": [
+    "Oh, hello there…",
+    "Hey, good to hear you…",
+    "Hi, give me just a second…",
+    "Hello, one moment…",
+    "Hey there, hold on a second…",
+    "Well, hello…",
+    "Hi, nice to hear from you…",
+    "Hey, let me gather my thoughts…",
+    "Hello, just a moment…",
+    "Oh, hi, hold on…",
+    "Hey, one second…"
+   ]
+  },
+  "el": {
+   "general": [
+    "Εμμ, μισό λεπτό…",
+    "Λοιπόν, για να σκεφτώ…",
+    "Εντάξει, μια στιγμή…",
+    "Χμμ, καλή ερώτηση…",
+    "Για να δω…",
+    "Περίμενε λίγο να σκεφτώ…",
+    "Εμμ, δώσε μου ένα δευτερόλεπτο…",
+    "Ωραία, να το δούμε…",
+    "Λοιπόν, μια στιγμή…",
+    "Χμμ, για να το δω αυτό…",
+    "Στάσου λίγο να το σκεφτώ…"
+   ],
+   "search": [
+    "Για να το ψάξω λίγο…",
+    "Εμμ, να το ψάξω…",
+    "Εντάξει, το ελέγχω τώρα…",
+    "Μισό λεπτό, το ψάχνω…",
+    "Λοιπόν, να δω τι βρίσκω…",
+    "Χμμ, για να το αναζητήσω…",
+    "Μια στιγμή, το κοιτάζω…",
+    "Για να δω τι υπάρχει εκεί έξω…",
+    "Ωραία, το ψάχνω αμέσως…",
+    "Εμμ, να το ελέγξω…",
+    "Περίμενε λίγο, το ψάχνω…"
+   ],
+   "analysis": [
+    "Εμμ, για να το υπολογίσω…",
+    "Λοιπόν, να κάνω τους υπολογισμούς…",
+    "Χμμ, για να το δω αναλυτικά…",
+    "Μισό λεπτό, το δουλεύω…",
+    "Εντάξει, να το σκεφτώ βήμα βήμα…",
+    "Για να τα συγκρίνω λίγο…",
+    "Λοιπόν, να το αναλύσω…",
+    "Χμμ, να βγάλω τα νούμερα…",
+    "Μια στιγμή, το υπολογίζω…",
+    "Εμμ, για να το ξεκαθαρίσω…",
+    "Ωραία, να το περάσω από την αρχή…"
+   ],
+   "creative": [
+    "Χμμ, για να σκεφτώ κάτι καλό…",
+    "Εντάξει, να βάλω τις λέξεις σε σειρά…",
+    "Λοιπόν, δώσε μου μια στιγμή να το γράψω…",
+    "Για να βρω τις σωστές λέξεις…",
+    "Εμμ, να φτιάξω ένα πρώτο σχέδιο…",
+    "Μισό λεπτό, το συνθέτω…",
+    "Για να βάλω λίγη φαντασία…",
+    "Ωραία, να σκεφτώ μερικές ιδέες…",
+    "Χμμ, να το διαμορφώσω…",
+    "Λοιπόν, για να το πω όμορφα…",
+    "Εμμ, δώσε μου ένα δευτερόλεπτο να το γράψω…"
+   ],
+   "device": [
+    "Εντάξει, το κάνω αμέσως…",
+    "Χμμ, να δω τι λέει η συσκευή…",
+    "Ωραία, το αναλαμβάνω…",
+    "Μισό λεπτό, το φροντίζω…",
+    "Εμμ, το κάνω τώρα…",
+    "Λοιπόν, δουλεύω στο τηλέφωνο…",
+    "Μια στιγμή, το τακτοποιώ…",
+    "Για να το χειριστώ…",
+    "Εντάξει, για να το κάνω για σένα…",
+    "Χμμ, να το ελέγξω στη συσκευή…",
+    "Περίμενε λίγο, το κάνω…"
+   ],
+   "greeting": [
+    "Ω, γεια σου…",
+    "Γεια σου, μια στιγμή…",
+    "Εμμ, καλώς όρισες…",
+    "Χαίρομαι που σε ακούω…",
+    "Γεια, μισό λεπτό…",
+    "Λοιπόν, γεια σου…",
+    "Ω, καλημέρα, μια στιγμή…",
+    "Γεια σου, να μαζέψω τις σκέψεις μου…",
+    "Εδώ είμαι, μισό δευτερόλεπτο…",
+    "Χαίρετε, μια στιγμή…",
+    "Εμμ, γεια, περίμενε λίγο…"
+   ]
+  }
+ }
+}
