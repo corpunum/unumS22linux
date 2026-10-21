@@ -101,7 +101,7 @@ class IpcGetTest(unittest.TestCase):
     def test_only_allowlisted_gets_use_empty_body_and_decode_response(self):
         for group, index, expected in (
             (0x08, 0x0A, {"type": P.RESP, "payload_hex": "7b226d6f64655f73656c656374223a37357d",
-                            "mode_select": 75}),
+                            "mode_select": 75, "rats": ["gsm", "wcdma", "lte", "nr"]}),
             (0x0D, 0x04, {"type": P.RESP, "payload_hex": "020001010300", "count": 2, "reserved": 0,
                            "contexts": [{"cid": 1, "active": 1}, {"cid": 3, "active": 0}]}),
         ):

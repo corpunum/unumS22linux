@@ -1,0 +1,18 @@
+# last_kmsg excerpt (boot that crashed, uptime 1601 s), firmware will_note tail + WDT trigger
+[ 1601.830596] [0:irq/49-16100000:  312] NPU:[ERR]fw_will_note_to_kernel:1741:[__LOW][0001601.790] [I] ncp_manager_pwr_ctl() npu pm(req-1)
+[ 1601.830601] [0:irq/49-16100000:  312] NPU:[ERR]fw_will_note_to_kernel:1741:[__LOW][0001601.791] [I] => MSG(0) cmd(8, MODE)
+[ 1601.830605] [0:irq/49-16100000:  312] NPU:[ERR]fw_will_note_to_kernel:1741:[__LOW][0001601.791] [I] ncp_manager_mode() mode(0) llc(0x400000)
+[ 1601.830610] [0:irq/49-16100000:  312] NPU:[ERR]fw_will_note_to_kernel:1741:[__LOW][0001601.794] [I] => MSG(0) cmd(9, IMB_SIZE)
+[ 1601.830614] [0:irq/49-16100000:  312] NPU:[ERR]fw_will_note_to_kernel:1741:[__LOW][0001601.796] [I] => MSG(0) cmd(0, LOAD)
+[ 1601.830619] [0:irq/49-16100000:  312] NPU:[ERR]fw_will_note_to_kernel:1741:[__LOW][0001601.796] [W] t0 portion is 0 and adjusted to 100
+[ 1601.830623] [0:irq/49-16100000:  312] NPU:[ERR]fw_will_note_to_kernel:1741:[__LOW][0001601.796] [I] ncp_obj_load() oid(1) tid(-1) model(26_SRIB_HumanSegVid) res(0)
+[ 1601.830628] [0:irq/49-16100000:  312] NPU:[ERR]fw_will_note_to_kernel:1741:[__LOW][0001601.796] [I] => MSG(32) cmd(5, PWR_CTL)
+[ 1601.830633] [0:irq/49-16100000:  312] NPU:[ERR]fw_will_note_to_kernel:1741:[__LOW][0001601.796] [I] dsp_task_control_power() cmd_ext(002220e0) magic(0xdeadbeef) dsp_pwr(0x000001)
+[ 1601.830637] [0:irq/49-16100000:  312] NPU:[ERR]fw_will_note_to_kernel:1741:[__LOW][0001601.796] [I] dsp_task_create_task() dsp_tsk->task(00000000)
+[ 1601.830642] [0:irq/49-16100000:  312] NPU:[ERR]fw_will_note_to_kernel:1741:[__DSP][0001601.796] [I] TASK_dsp() enter dsp_task(0027774c) loop
+[ 1601.830647] [0:irq/49-16100000:  312] NPU:[ERR]fw_will_note_to_kernel:1749:----------- End of will_note for fw -------------
+[ 1601.838374] [0:irq/49-16100000:  312] debug-snapshot dss: Caller: npu_util_dump_handle_error_k+0x64/0x80 [npu], WDTRESET right now!
+[0:    2.663254] [EXIN] sec_debug_set_extra_info_lastklog: klg: [ 1601.838374] [0:irq/49-16100000:  312] debug-snapshot dss: Caller: npu_util_dump_handle_error_k+0x64/0x80 [npu], WDTRESET right now!
+
+# /proc/reset_reason after reboot: DPON; /proc/reset_summary fields (device ID omitted):
+RR=DP WDGC=debug-wdt(npu_util_dump_handle_error_k+0x64/0x80) SMU="IP_DNC (DRAM) READ PAGE FAULT at 0x33500000 (0x00000009c8c78000 0x2)" KLG="debug-snapshot dss: Caller: npu_util_dump_handle_error_k+0x64/0x80 [npu], WDTRESET right now!"

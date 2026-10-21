@@ -20,7 +20,7 @@ s22-phoned send-test-frame-decode <hex>      # decode raw FMT frame(s) from ipc.
 
 | Request | Response |
 |---|---|
-| `GET /status` | `{ok, modem_state, ipc_open, sim, pin_attempted, registration, operator, signal, sms_ready, tx_enabled, calls, simulated}` |
+| `GET /status` | `{ok, modem_state, ipc_open, sim, pin_attempted, registration, operator, signal, sms_ready, tx_enabled, calls, radio, nr_last_seen, simulated}` |
 | `POST /sim/pin {"pin"}` | `{ok, error?}` |
 | `POST /sms/send {"to","text"}` | `{ok, id, parts, status: sent\|queued\|refused, error?}` |
 | `GET /sms/inbox?since=<id or ts>&limit=N` | `{ok, messages:[{id, from, text, ts, parts, smsc}]}` |
@@ -125,3 +125,13 @@ notifications without a proven layout are explicitly `unmapped_binary`, not
 assigned invented addresses or CIDs. Interface mapping must be verified before
 using any notification to configure rmnet. Stock builders and live experiments
 are documented in `RECON.md`.
+
+## 5G NSA visibility (2026-10-22)
+
+In EN-DC (5G NSA) the registration `act` stays `lte`. The NR leg only shows in the physical channel
+config notification `(08,3C)` (JSON `{num_pch, pch:[{act, band:{band,rat}, conn_state, dlbw, dlch_num, pcid, ulbw, ...}]}`,
+stock `IpcRxPhysicalChannelConfig`). phoned decodes it into `/status.radio`
+`{cells, nr_nsa, nr_bands, total_dl_khz, ts}` plus `nr_last_seen`, emits a `radio` event when `nr_nsa` changes, and adds
+`nr_nsa`/`phys_channels` to `/data/status`. `ipc-get 0x08 0x0a` adds `rats` from the stock
+mode_select bit map (GSM 0x01, WCDMA 0x02, CDMA 0x04, LTE 0x08, TD-SCDMA 0x10, EVDO 0x20, NR 0x40).
+The CP default is 75 = NR|LTE|WCDMA|GSM. Evidence: `evidence/modem-5g-20261021/`.
