@@ -1,0 +1,98 @@
+19:16:08 fastui-trial: placeholder active: sway switched away
+fastui: card /dev/dri/card1 crtc 184 connector 191 mode 1080x2340@120hs 1080x2340
+19:16:08 fastui-trial: cmd pid=17447: /root/fastui/fastui gpu --gpu-mode import --seconds 40
+fastui: waiting for fastui-vk on /srv/s22/gpu-compat-20260921/llama-vulkan/tmp/fastui.sock
+19:16:09 fastui-trial: gpu client pid=17450
+ISOLATED uid=1000 caps=0 NoNewPrivs=1
+linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+WARNING: linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+fastui-vk: mode=1 1080x2340 pitch=4320 nbuf=2 fds=2
+VULKAN_BRIDGE_TRACE GIPA:entry
+VULKAN_BRIDGE_TRACE init:before-dlopen
+VULKAN_BRIDGE_TRACE init:after-dlopen
+VULKAN_BRIDGE_TRACE init:before-dlsym-HMI
+VULKAN_BRIDGE_TRACE init:after-dlsym-HMI
+VULKAN_BRIDGE_TRACE HMI fields module=0x7d7c31b1a8 error=(null) tag=0x48574d54 id=vulkan methods=0x7d7c31b1a0 open=0x7d7adc9be4
+VULKAN_BRIDGE_TRACE init:before-HMI-open
+VULKAN_BRIDGE_TRACE init:after-HMI-open
+VULKAN_BRIDGE_TRACE init:callbacks-valid
+VULKAN_BRIDGE_TRACE init:ready
+VULKAN_BRIDGE_TRACE CreateInstance:entry
+VULKAN_BRIDGE_TRACE CreateInstance:before-vendor
+VULKAN_BRIDGE_TRACE CreateInstance:after-vendor
+VULKAN_BRIDGE_TRACE GIPA:entry
+VULKAN_BRIDGE_TRACE GIPA:before-vendor
+VULKAN_BRIDGE_TRACE GIPA:entry
+VULKAN_BRIDGE_TRACE GIPA:before-vendor
+VULKAN_BRIDGE_TRACE GIPA:entry
+VULKAN_BRIDGE_TRACE GIPA:before-vendor
+VULKAN_BRIDGE_TRACE GIPA:entry
+VULKAN_BRIDGE_TRACE GIPA:before-vendor
+VULKAN_BRIDGE_TRACE GIPA:entry
+VULKAN_BRIDGE_TRACE GIPA:before-vendor
+VULKAN_BRIDGE_TRACE GIPA:entry
+VULKAN_BRIDGE_TRACE GIPA:before-vendor
+VULKAN_BRIDGE_TRACE GIPA:entry
+fastui-vk: device Samsung Xclipse 920 api 1.3
+fastui-vk: 141 device extensions; enabling 4 external-memory ones
+fastui-vk:   VK_KHR_external_memory
+fastui-vk:   VK_KHR_external_memory_fd
+fastui-vk:   VK_EXT_external_memory_dma_buf
+fastui-vk:   VK_EXT_queue_family_foreign
+fastui-vk: memtype 0 heap 0 flags 0x7
+fastui-vk: memtype 1 heap 0 flags 0x1
+fastui-vk: memtype 2 heap 1 flags 0x7
+fastui-vk: memtype 3 heap 1 flags 0x1
+fastui-vk: memtype 4 heap 0 flags 0xf
+fastui-vk: memtype 5 heap 0 flags 0x1
+fastui-vk: memtype 6 heap 1 flags 0x1
+fastui-vk: memtype 7 heap 1 flags 0x21
+fastui-vk: memtype 8 heap 0 flags 0x7
+fastui-vk: memtype 9 heap 0 flags 0x1
+fastui-vk: memtype 10 heap 1 flags 0x7
+fastui-vk: memtype 11 heap 1 flags 0x1
+fastui-vk: memtype 12 heap 0 flags 0xf
+fastui-vk: memtype 13 heap 0 flags 0x1
+fastui-vk: memtype 14 heap 1 flags 0x1
+fastui-vk: memtype 15 heap 1 flags 0x21
+fastui-vk: dma-buf 4 importable memtype bits 0xeaea (buffer wants 0x6a, size 10108800)
+fastui-vk: dma-buf 5 importable memtype bits 0xeaea (buffer wants 0x6a, size 10108800)
+fastui: GPU client ready: mode=import pitch=4320 nbuf=2 size=10108800 fds=0 memtype=1 flags=0x1
+fastui-vk: ready in 33.4 ms (memtype 1 flags 0x1)
+fastui: first frame on panel 1142.9 ms after setup start (render 5663 us copy 0 us)
+fastui: touch /dev/input/event7 ranges ((0, 4095), (0, 4095)); running 40 s
+fastui: touch-down hl=Some(1) frame 20.64 ms (render 8.58 copy 0.00 gpu 7.48 flip 12.05) touch->flip 21.27 ms
+fastui: touch-up hl=None frame 14.81 ms (render 6.53 copy 0.00 gpu 6.17 flip 8.27) touch->flip 15.09 ms
+fastui: touch-down hl=Some(1) frame 19.42 ms (render 9.34 copy 0.00 gpu 8.82 flip 10.08) touch->flip 19.71 ms
+fastui: touch-up hl=None frame 21.15 ms (render 8.83 copy 0.00 gpu 8.32 flip 12.31) touch->flip 21.99 ms
+fastui: touch-down hl=Some(2) frame 12.26 ms (render 6.58 copy 0.00 gpu 6.37 flip 5.67) touch->flip 12.42 ms
+fastui: touch-up hl=None frame 12.54 ms (render 7.03 copy 0.00 gpu 6.72 flip 5.50) touch->flip 13.23 ms
+fastui: touch-down hl=Some(2) frame 18.24 ms (render 7.62 copy 0.00 gpu 7.17 flip 10.62) touch->flip 19.03 ms
+fastui: touch-up hl=None frame 12.87 ms (render 6.32 copy 0.00 gpu 6.06 flip 6.54) touch->flip 13.15 ms
+fastui: touch-down hl=Some(3) frame 14.40 ms (render 7.86 copy 0.00 gpu 7.51 flip 6.54) touch->flip 15.01 ms
+fastui: touch-up hl=None frame 16.60 ms (render 6.40 copy 0.00 gpu 6.12 flip 10.20) touch->flip 17.07 ms
+fastui: touch-down hl=Some(3) frame 14.03 ms (render 6.43 copy 0.00 gpu 6.22 flip 7.60) touch->flip 14.30 ms
+fastui: touch-up hl=None frame 16.53 ms (render 6.94 copy 0.00 gpu 6.72 flip 9.59) touch->flip 16.88 ms
+fastui: touch-down hl=Some(4) frame 10.28 ms (render 6.73 copy 0.00 gpu 6.54 flip 3.55) touch->flip 10.62 ms
+fastui: touch-up hl=None frame 12.59 ms (render 6.76 copy 0.00 gpu 6.48 flip 5.83) touch->flip 12.93 ms
+fastui: touch-down hl=Some(4) frame 17.78 ms (render 10.23 copy 0.00 gpu 9.02 flip 7.55) touch->flip 18.44 ms
+fastui: touch-up hl=None frame 20.11 ms (render 8.59 copy 0.00 gpu 7.69 flip 11.52) touch->flip 20.35 ms
+fastui: touch-down hl=Some(5) frame 20.26 ms (render 9.06 copy 0.00 gpu 8.59 flip 11.19) touch->flip 20.99 ms
+fastui: touch-up hl=None frame 15.95 ms (render 8.13 copy 0.00 gpu 7.84 flip 7.82) touch->flip 16.14 ms
+fastui: touch-down hl=Some(5) frame 19.30 ms (render 9.56 copy 0.00 gpu 8.84 flip 9.74) touch->flip 20.04 ms
+fastui: touch-up hl=None frame 19.33 ms (render 8.50 copy 0.00 gpu 8.05 flip 10.83) touch->flip 20.22 ms
+fastui: touch-down hl=Some(6) frame 14.90 ms (render 7.32 copy 0.00 gpu 6.84 flip 7.58) touch->flip 15.06 ms
+fastui: touch-up hl=None frame 16.34 ms (render 8.93 copy 0.00 gpu 8.26 flip 7.41) touch->flip 16.97 ms
+fastui: touch-down hl=Some(6) frame 10.04 ms (render 6.09 copy 0.00 gpu 5.93 flip 3.95) touch->flip 10.21 ms
+fastui: touch-up hl=None frame 18.65 ms (render 9.46 copy 0.00 gpu 8.57 flip 9.20) touch->flip 19.62 ms
+fastui: touch-down hl=Some(7) frame 15.00 ms (render 6.51 copy 0.00 gpu 6.34 flip 8.49) touch->flip 15.09 ms
+fastui: touch-up hl=None frame 16.93 ms (render 8.36 copy 0.00 gpu 7.92 flip 8.56) touch->flip 17.49 ms
+fastui: touch-down hl=Some(7) frame 20.31 ms (render 8.88 copy 0.00 gpu 8.01 flip 11.43) touch->flip 21.08 ms
+fastui: touch-up hl=None frame 22.85 ms (render 10.36 copy 0.00 gpu 9.86 flip 12.49) touch->flip 23.92 ms
+fastui: touch-down hl=Some(2) frame 21.37 ms (render 9.70 copy 0.00 gpu 9.16 flip 11.66) touch->flip 22.21 ms
+fastui: touch-up hl=None frame 16.93 ms (render 8.07 copy 0.00 gpu 7.78 flip 8.86) touch->flip 17.55 ms
+{"label": "gpu-interactive", "frames": 30, "wall_s": 21.56, "cpu_s": 0.083, "cpu_pct_one_core": 0.39, "avg_bytes_copied": 0, "render": {"n": 30, "p50_ms": 8.13, "p95_ms": 10.23, "max_ms": 10.36, "mean_ms": 7.99}, "copy": {"n": 30, "p50_ms": 0.00, "p95_ms": 0.00, "max_ms": 0.00, "mean_ms": 0.00}, "gpu": {"n": 30, "p50_ms": 7.69, "p95_ms": 9.16, "max_ms": 9.86, "mean_ms": 7.51}, "flip_wait": {"n": 30, "p50_ms": 8.86, "p95_ms": 12.31, "max_ms": 12.49, "mean_ms": 8.75}, "frame": {"n": 30, "p50_ms": 16.93, "p95_ms": 21.37, "max_ms": 22.85, "mean_ms": 16.75}, "touch_to_flip": {"n": 30, "p50_ms": 17.49, "p95_ms": 22.21, "max_ms": 23.92, "mean_ms": 17.27}, "first_frame_ms": 1142.9}
+fastui-vk: done
+19:16:32 fastui-trial: stop requested
+19:16:32 fastui-trial: restore: begin
+19:16:33 fastui-trial: restore: sway owns the panel again (dpms cycles=0)

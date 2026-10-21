@@ -1,0 +1,16 @@
+[package]
+name = "fastui"
+version = "0.1.0"
+edition = "2021"
+description = "S22 fast-UI spike: DRM/KMS dumb-buffer + evdev touch proof, CPU damage renderer and Samsung-Vulkan dma-buf client mode"
+license = "Apache-2.0"
+
+[dependencies]
+libc = "0.2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

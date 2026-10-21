@@ -1,0 +1,8 @@
+19:18:28 fastui-trial: placeholder active: sway switched away
+fastui: card /dev/dri/card1 crtc 184 connector 191 mode 1080x2340@120hs 1080x2340
+19:18:28 fastui-trial: cmd pid=19151: /root/fastui/fastui sw --bench 360
+fastui: first frame on panel 50.9 ms after setup start (render 1110 us copy 750 us)
+{"label": "sw-bench-damage", "frames": 360, "wall_s": 3.26, "cpu_s": 1.416, "cpu_pct_one_core": 43.50, "avg_bytes_copied": 3572371, "render": {"n": 360, "p50_ms": 1.71, "p95_ms": 2.98, "max_ms": 5.90, "mean_ms": 1.80}, "copy": {"n": 360, "p50_ms": 1.65, "p95_ms": 4.22, "max_ms": 5.60, "mean_ms": 1.86}, "gpu": null, "flip_wait": {"n": 360, "p50_ms": 5.32, "p95_ms": 7.81, "max_ms": 13.56, "mean_ms": 5.30}, "frame": {"n": 360, "p50_ms": 8.33, "p95_ms": 16.42, "max_ms": 17.36, "mean_ms": 8.98}, "touch_to_flip": null, "first_frame_ms": 50.9, "gpu_mode": "-"}
+19:18:31 fastui-trial: cmd exited
+19:18:31 fastui-trial: restore: begin
+19:18:33 fastui-trial: restore: sway owns the panel again (dpms cycles=0)

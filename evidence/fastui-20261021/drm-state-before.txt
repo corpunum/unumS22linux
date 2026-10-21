@@ -1,0 +1,472 @@
+plane[54]: plane-0
+	crtc=exynos-crtc
+	fb=197
+		allocated by = sway
+		refcount=2
+		format=XR24 little-endian (0x34325258)
+		modifier=0x0
+		size=1080x2340
+		layers:
+			size[0]=1080x2340
+			pitch[0]=4320
+			offset[0]=0
+			obj[0]:
+				name=0
+				refcount=1
+				start=00000000
+				size=10108928
+				imported=yes
+	crtc-pos=1080x2340+0+0
+	src-pos=1080.000000x2340.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=0
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	alpha: 0xffff
+	blend_mode: 0x0
+	split: 0x0
+	standard: 0
+	transfer: 0
+	range: 0
+	hdr_fd: 0
+		win_id=0
+	DPP #0 (off)
+plane[61]: plane-1
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=1
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	alpha: 0xffff
+	blend_mode: 0x0
+	split: 0x0
+	standard: 0
+	transfer: 0
+	range: 0
+	hdr_fd: 0
+	DPP #1 (off)
+plane[68]: plane-2
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=2
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	alpha: 0xffff
+	blend_mode: 0x0
+	split: 0x0
+	standard: 0
+	transfer: 0
+	range: 0
+	hdr_fd: 0
+	DPP #2 (off)
+plane[75]: plane-3
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=3
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	alpha: 0xffff
+	blend_mode: 0x0
+	split: 0x0
+	standard: 0
+	transfer: 0
+	range: 0
+	hdr_fd: 0
+	DPP #3 (off)
+plane[82]: plane-4
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=4
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	alpha: 0xffff
+	blend_mode: 0x0
+	split: 0x0
+	standard: 0
+	transfer: 0
+	range: 0
+	hdr_fd: 0
+	DPP #4 (off)
+plane[89]: plane-5
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=5
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	alpha: 0xffff
+	blend_mode: 0x0
+	split: 0x0
+	standard: 0
+	transfer: 0
+	range: 0
+	hdr_fd: 0
+	DPP #5 (off)
+plane[96]: plane-6
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=6
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	alpha: 0xffff
+	blend_mode: 0x0
+	split: 0x0
+	standard: 0
+	transfer: 0
+	range: 0
+	hdr_fd: 0
+	DPP #6 (off)
+plane[103]: plane-7
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=7
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	alpha: 0xffff
+	blend_mode: 0x0
+	split: 0x0
+	standard: 0
+	transfer: 0
+	range: 0
+	hdr_fd: 0
+	DPP #7 (off)
+plane[110]: plane-8
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=8
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	alpha: 0xffff
+	blend_mode: 0x0
+	split: 0x0
+	standard: 0
+	transfer: 0
+	range: 0
+	hdr_fd: 0
+	DPP #8 (off)
+plane[117]: plane-9
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=9
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	alpha: 0xffff
+	blend_mode: 0x0
+	split: 0x0
+	standard: 0
+	transfer: 0
+	range: 0
+	hdr_fd: 0
+	DPP #9 (off)
+plane[124]: plane-10
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=a
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	alpha: 0xffff
+	blend_mode: 0x0
+	split: 0x0
+	standard: 0
+	transfer: 0
+	range: 0
+	hdr_fd: 0
+	DPP #10 (off)
+plane[131]: plane-11
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=b
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	alpha: 0xffff
+	blend_mode: 0x0
+	split: 0x0
+	standard: 0
+	transfer: 0
+	range: 0
+	hdr_fd: 0
+	DPP #11 (off)
+plane[138]: plane-12
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=c
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	alpha: 0xffff
+	blend_mode: 0x0
+	split: 0x0
+	standard: 0
+	transfer: 0
+	range: 0
+	hdr_fd: 0
+	DPP #12 (off)
+plane[145]: plane-13
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=d
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	alpha: 0xffff
+	blend_mode: 0x0
+	split: 0x0
+	standard: 0
+	transfer: 0
+	range: 0
+	hdr_fd: 0
+	DPP #13 (off)
+plane[152]: plane-14
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=e
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	alpha: 0xffff
+	blend_mode: 0x0
+	split: 0x0
+	standard: 0
+	transfer: 0
+	range: 0
+	hdr_fd: 0
+	DPP #14 (off)
+plane[159]: plane-15
+	crtc=(null)
+	fb=0
+	crtc-pos=0x0+0+0
+	src-pos=0.000000x0.000000+0.000000+0.000000
+	rotation=0
+	normalized-zpos=f
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	alpha: 0xffff
+	blend_mode: 0x0
+	split: 0x0
+	standard: 0
+	transfer: 0
+	range: 0
+	hdr_fd: 0
+	DPP #15 (off)
+crtc[184]: exynos-crtc
+	enable=1
+	active=1
+	self_refresh_active=0
+	planes_changed=1
+	mode_changed=0
+	active_changed=0
+	connectors_changed=0
+	color_mgmt_changed=0
+	plane_mask=1
+	connector_mask=8
+	encoder_mask=4
+	mode: "1080x2340@120hs": 120 306892 1080 1080 1080 1080 2340 2340 2340 2368 0x48 0x0
+	reserved_win_mask=0x1
+	dsr_status=0
+	color_mode=0
+	render_intent=0
+	modeset_only=0
+	dqe_fd=0
+	no partial region request
+	Decon #0 (state:2)
+		type=0x1
+		size=1080x2340
+		mode=cmd (0)
+		in_bpc=8 out_bpc=8
+		bts_fps=120
+crtc[185]: exynos-crtc
+	enable=0
+	active=0
+	self_refresh_active=0
+	planes_changed=0
+	mode_changed=0
+	active_changed=0
+	connectors_changed=0
+	color_mgmt_changed=0
+	plane_mask=0
+	connector_mask=0
+	encoder_mask=0
+	mode: "": 0 0 0 0 0 0 0 0 0 0 0x0 0x0
+	reserved_win_mask=0x0
+	dsr_status=0
+	color_mode=0
+	render_intent=0
+	modeset_only=0
+	dqe_fd=0
+	no partial region request
+	Decon #1 (state:3)
+		type=0x100
+		size=0x0
+		mode=cmd (3)
+		in_bpc=0 out_bpc=0
+		bts_fps=0
+crtc[186]: exynos-crtc
+	enable=0
+	active=0
+	self_refresh_active=0
+	planes_changed=0
+	mode_changed=0
+	active_changed=0
+	connectors_changed=0
+	color_mgmt_changed=0
+	plane_mask=0
+	connector_mask=0
+	encoder_mask=0
+	mode: "": 0 0 0 0 0 0 0 0 0 0 0x0 0x0
+	reserved_win_mask=0x0
+	dsr_status=0
+	color_mode=0
+	render_intent=0
+	modeset_only=0
+	dqe_fd=0
+	no partial region request
+	Decon #2 (state:3)
+		type=0x10
+		size=0x0
+		mode=video (3)
+		in_bpc=0 out_bpc=0
+		bts_fps=0
+crtc[187]: exynos-crtc
+	enable=0
+	active=0
+	self_refresh_active=0
+	planes_changed=0
+	mode_changed=0
+	active_changed=0
+	connectors_changed=0
+	color_mgmt_changed=0
+	plane_mask=0
+	connector_mask=0
+	encoder_mask=0
+	mode: "": 0 0 0 0 0 0 0 0 0 0 0x0 0x0
+	reserved_win_mask=0x0
+	dsr_status=0
+	color_mode=0
+	render_intent=0
+	modeset_only=0
+	dqe_fd=0
+	no partial region request
+	Decon #3 (state:3)
+		type=0x10
+		size=0x0
+		mode=video (3)
+		in_bpc=0 out_bpc=0
+		bts_fps=0
+connector[171]: Writeback-1
+	crtc=(null)
+	self_refresh_aware=0
+	max_requested_bpc=0
+	repeater_buffer: en=0 idx=0
+	type: None
+	DPP #16 (off)
+connector[179]: Writeback-2
+	crtc=(null)
+	self_refresh_aware=0
+	max_requested_bpc=0
+	repeater_buffer: en=0 idx=0
+	type: None
+	DPP #17 (off)
+connector[190]: DP-1
+	crtc=(null)
+	self_refresh_aware=0
+	max_requested_bpc=0
+connector[191]: DSI-1
+	crtc=exynos-crtc
+	self_refresh_aware=0
+	max_requested_bpc=0
+	enabled: 1
+ 	current mode: 1080x2340@120hs
+ 	current exynos_mode:
+ 		dsc: en=1 dsc_cnt=2 slice_cnt=2 slice_h=117
+ 		panel bpc: 8
+ 		op_mode: cmd
+ 		lp_mode_state: 0
+ 		bts_fps: 120
+	luminance: [5, 4500000] avg: 1200000
+	hdr_formats: 0x1c
+	adjusted_fps: 120
+DP-1
+DSI-1
+Writeback-1
+Writeback-2
+clients
+crtc-0
+crtc-1
+crtc-2
+crtc-3
+framebuffer
+gem_names
+internal_clients
+name
+state
+framebuffer[197]:
+	allocated by = sway
+	refcount=2
+	format=XR24 little-endian (0x34325258)
+	modifier=0x0
+	size=1080x2340
+	layers:
+		size[0]=1080x2340
+		pitch[0]=4320
+		offset[0]=0
+		obj[0]:
+			name=0
+			refcount=1
+			start=00000000
+			size=10108928
+			imported=yes
+framebuffer[195]:
+	allocated by = sway
+	refcount=1
+	format=XR24 little-endian (0x34325258)
+	modifier=0x0
+	size=1080x2340
+	layers:
+		size[0]=1080x2340
+		pitch[0]=4320
+		offset[0]=0
+		obj[0]:
+			name=0
+			refcount=1
+			start=00000000
+			size=10108928
+			imported=yes
+/usr/bin/modetest

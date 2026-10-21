@@ -1,0 +1,67 @@
+19:14:18 fastui-trial: placeholder active: sway switched away
+fastui: card /dev/dri/card1 crtc 184 connector 191 mode 1080x2340@120hs 19:14:18 fastui-trial: cmd pid=15793: /root/fastui/fastui gpu --gpu-mode import --bench 240
+1080x2340
+fastui: waiting for fastui-vk on /srv/s22/gpu-compat-20260921/llama-vulkan/tmp/fastui.sock
+19:14:19 fastui-trial: gpu client pid=15796
+ISOLATED uid=1000 caps=0 NoNewPrivs=1
+linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+WARNING: linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+fastui-vk: mode=1 1080x2340 pitch=4320 nbuf=2 fds=2
+VULKAN_BRIDGE_TRACE GIPA:entry
+VULKAN_BRIDGE_TRACE init:before-dlopen
+VULKAN_BRIDGE_TRACE init:after-dlopen
+VULKAN_BRIDGE_TRACE init:before-dlsym-HMI
+VULKAN_BRIDGE_TRACE init:after-dlsym-HMI
+VULKAN_BRIDGE_TRACE HMI fields module=0x7d6fa681a8 error=(null) tag=0x48574d54 id=vulkan methods=0x7d6fa681a0 open=0x7d6e516be4
+VULKAN_BRIDGE_TRACE init:before-HMI-open
+VULKAN_BRIDGE_TRACE init:after-HMI-open
+VULKAN_BRIDGE_TRACE init:callbacks-valid
+VULKAN_BRIDGE_TRACE init:ready
+VULKAN_BRIDGE_TRACE CreateInstance:entry
+VULKAN_BRIDGE_TRACE CreateInstance:before-vendor
+VULKAN_BRIDGE_TRACE CreateInstance:after-vendor
+VULKAN_BRIDGE_TRACE GIPA:entry
+VULKAN_BRIDGE_TRACE GIPA:before-vendor
+VULKAN_BRIDGE_TRACE GIPA:entry
+VULKAN_BRIDGE_TRACE GIPA:before-vendor
+VULKAN_BRIDGE_TRACE GIPA:entry
+VULKAN_BRIDGE_TRACE GIPA:before-vendor
+VULKAN_BRIDGE_TRACE GIPA:entry
+VULKAN_BRIDGE_TRACE GIPA:before-vendor
+VULKAN_BRIDGE_TRACE GIPA:entry
+VULKAN_BRIDGE_TRACE GIPA:before-vendor
+VULKAN_BRIDGE_TRACE GIPA:entry
+VULKAN_BRIDGE_TRACE GIPA:before-vendor
+VULKAN_BRIDGE_TRACE GIPA:entry
+fastui-vk: device Samsung Xclipse 920 api 1.3
+fastui-vk: 141 device extensions; enabling 4 external-memory ones
+fastui-vk:   VK_KHR_external_memory
+fastui-vk:   VK_KHR_external_memory_fd
+fastui-vk:   VK_EXT_external_memory_dma_buf
+fastui-vk:   VK_EXT_queue_family_foreign
+fastui-vk: memtype 0 heap 0 flags 0x7
+fastui-vk: memtype 1 heap 0 flags 0x1
+fastui-vk: memtype 2 heap 1 flags 0x7
+fastui-vk: memtype 3 heap 1 flags 0x1
+fastui-vk: memtype 4 heap 0 flags 0xf
+fastui-vk: memtype 5 heap 0 flags 0x1
+fastui-vk: memtype 6 heap 1 flags 0x1
+fastui-vk: memtype 7 heap 1 flags 0x21
+fastui-vk: memtype 8 heap 0 flags 0x7
+fastui-vk: memtype 9 heap 0 flags 0x1
+fastui-vk: memtype 10 heap 1 flags 0x7
+fastui-vk: memtype 11 heap 1 flags 0x1
+fastui-vk: memtype 12 heap 0 flags 0xf
+fastui-vk: memtype 13 heap 0 flags 0x1
+fastui-vk: memtype 14 heap 1 flags 0x1
+fastui-vk: memtype 15 heap 1 flags 0x21
+fastui-vk: dma-buf 4 importable memtype bits 0xeaea (buffer wants 0x6a, size 10108800)
+fastui-vk: dma-buf 5 importable memtype bits 0xeaea (buffer wants 0x6a, size 10108800)
+fastui: GPU client ready: mode=import pitch=4320 nbuf=2 size=10108800 fds=0 memtype=1 flags=0x1
+fastui-vk: ready in 35.4 ms (memtype 1 flags 0x1)
+fastui: first frame on panel 1133.9 ms after setup start (render 5493 us copy 0 us)
+{"label": "gpu-bench-damage", "frames": 240, "wall_s": 2.81, "cpu_s": 0.225, "cpu_pct_one_core": 8.02, "avg_bytes_copied": 0, "render": {"n": 240, "p50_ms": 6.67, "p95_ms": 8.52, "max_ms": 9.80, "mean_ms": 6.76}, "copy": {"n": 240, "p50_ms": 0.00, "p95_ms": 0.00, "max_ms": 0.00, "mean_ms": 0.00}, "gpu": {"n": 240, "p50_ms": 6.08, "p95_ms": 7.52, "max_ms": 8.79, "mean_ms": 6.15}, "flip_wait": {"n": 240, "p50_ms": 3.05, "p95_ms": 10.05, "max_ms": 10.67, "mean_ms": 4.87}, "frame": {"n": 240, "p50_ms": 8.95, "p95_ms": 17.15, "max_ms": 18.04, "mean_ms": 11.63}, "touch_to_flip": null, "first_frame_ms": 1133.9, "gpu_mode": "import"}
+fastui-vk: done
+19:14:22 fastui-trial: cmd exited
+19:14:22 fastui-trial: restore: begin
+19:14:23 fastui-trial: restore: sway owns the panel again (dpms cycles=0)

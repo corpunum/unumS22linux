@@ -1,0 +1,9 @@
+19:20:11 fastui-trial: placeholder active: sway switched away
+fastui: card /dev/dri/card1 crtc 184 connector 191 mode 1080x2340@120hs 1080x2340
+19:20:11 fastui-trial: cmd pid=20088: /root/fastui/fastui info
+{"crtc": 184, "connector": 191, "mode": "1080x2340@120hs", "w": 1080, "h": 2340, "dumb_pitch": 4320, "dumb_size": 10108928, "dumb_prime_export": true}
+19:20:12 fastui-trial: cmd exited
+19:20:12 fastui-trial: restore: begin
+19:20:13 fastui-trial: restore: sway owns the panel again (dpms cycles=0)
+19:20:13 fastui-trial: restore: restarting touch shell pid 19813 (parent s22-touchd 2332)
+19:20:19 fastui-trial: restore: done

@@ -1,0 +1,42 @@
+19:10:31 fastui-trial: placeholder active: sway switched away
+fastui: card /dev/dri/card1 crtc 184 connector 191 mode 1080x2340@120hs 1080x2340
+19:10:31 fastui-trial: cmd pid=11728: /root/fastui/fastui sw --seconds 40
+fastui: first frame on panel 65.9 ms after setup start (render 5332 us copy 4190 us)
+fastui: touch /dev/input/event7 ranges ((0, 4095), (0, 4095)); running 40 s
+fastui: touch-down hl=Some(0) frame 15.44 ms (render 2.27 copy 7.02 gpu 0.00 flip 6.13) touch->flip 16.43 ms
+fastui: touch-up hl=None frame 10.00 ms (render 1.45 copy 1.07 gpu 0.00 flip 7.47) touch->flip 10.70 ms
+fastui: touch-down hl=Some(0) frame 13.63 ms (render 0.74 copy 0.34 gpu 0.00 flip 12.55) touch->flip 13.87 ms
+fastui: touch-up hl=None frame 10.62 ms (render 1.97 copy 1.39 gpu 0.00 flip 7.26) touch->flip 11.97 ms
+fastui: touch-down hl=Some(1) frame 14.36 ms (render 3.33 copy 3.22 gpu 0.00 flip 7.80) touch->flip 15.11 ms
+fastui: touch-up hl=None frame 17.57 ms (render 1.89 copy 2.06 gpu 0.00 flip 13.62) touch->flip 18.28 ms
+fastui: touch-down hl=Some(1) frame 16.78 ms (render 2.69 copy 1.71 gpu 0.00 flip 12.37) touch->flip 17.29 ms
+fastui: touch-up hl=None frame 11.09 ms (render 1.89 copy 1.78 gpu 0.00 flip 7.42) touch->flip 11.34 ms
+fastui: touch-down hl=Some(2) frame 13.22 ms (render 1.05 copy 0.79 gpu 0.00 flip 11.38) touch->flip 13.71 ms
+fastui: touch-up hl=None frame 14.13 ms (render 2.03 copy 1.70 gpu 0.00 flip 10.39) touch->flip 14.40 ms
+fastui: touch-down hl=Some(2) frame 14.97 ms (render 3.05 copy 1.78 gpu 0.00 flip 10.13) touch->flip 15.60 ms
+fastui: touch-up hl=None frame 10.19 ms (render 2.40 copy 1.90 gpu 0.00 flip 5.88) touch->flip 10.56 ms
+fastui: touch-down hl=Some(3) frame 15.58 ms (render 3.00 copy 1.99 gpu 0.00 flip 10.57) touch->flip 16.27 ms
+fastui: touch-up hl=None frame 8.25 ms (render 1.88 copy 1.68 gpu 0.00 flip 4.68) touch->flip 8.71 ms
+fastui: touch-down hl=Some(3) frame 17.90 ms (render 2.71 copy 1.82 gpu 0.00 flip 13.35) touch->flip 18.67 ms
+fastui: touch-up hl=None frame 12.45 ms (render 1.90 copy 1.75 gpu 0.00 flip 8.80) touch->flip 13.04 ms
+fastui: touch-down hl=Some(4) frame 11.20 ms (render 1.51 copy 1.58 gpu 0.00 flip 8.10) touch->flip 11.66 ms
+fastui: touch-up hl=None frame 11.83 ms (render 0.74 copy 0.53 gpu 0.00 flip 10.56) touch->flip 12.22 ms
+fastui: touch-down hl=Some(4) frame 6.60 ms (render 1.18 copy 0.64 gpu 0.00 flip 4.78) touch->flip 7.12 ms
+fastui: touch-up hl=None frame 9.81 ms (render 0.52 copy 0.31 gpu 0.00 flip 8.98) touch->flip 10.11 ms
+fastui: touch-down hl=Some(5) frame 15.08 ms (render 2.55 copy 1.86 gpu 0.00 flip 10.65) touch->flip 15.94 ms
+fastui: touch-up hl=None frame 8.06 ms (render 1.19 copy 0.96 gpu 0.00 flip 5.92) touch->flip 8.86 ms
+fastui: touch-down hl=Some(5) frame 12.66 ms (render 0.90 copy 0.37 gpu 0.00 flip 11.38) touch->flip 13.06 ms
+fastui: touch-up hl=None frame 4.64 ms (render 1.01 copy 0.26 gpu 0.00 flip 3.36) touch->flip 5.15 ms
+fastui: touch-down hl=Some(6) frame 14.43 ms (render 2.28 copy 2.76 gpu 0.00 flip 9.39) touch->flip 15.29 ms
+fastui: touch-up hl=None frame 8.49 ms (render 0.52 copy 0.30 gpu 0.00 flip 7.66) touch->flip 8.91 ms
+fastui: touch-down hl=Some(6) frame 12.57 ms (render 1.79 copy 1.08 gpu 0.00 flip 9.69) touch->flip 13.10 ms
+fastui: touch-up hl=None frame 11.73 ms (render 1.17 copy 1.01 gpu 0.00 flip 9.54) touch->flip 12.29 ms
+fastui: touch-down hl=Some(7) frame 18.20 ms (render 1.88 copy 1.87 gpu 0.00 flip 14.44) touch->flip 18.82 ms
+fastui: touch-up hl=None frame 11.24 ms (render 1.22 copy 1.01 gpu 0.00 flip 8.99) touch->flip 11.90 ms
+fastui: touch-down hl=Some(7) frame 13.89 ms (render 1.87 copy 1.10 gpu 0.00 flip 10.92) touch->flip 14.13 ms
+fastui: touch-up hl=None frame 13.64 ms (render 2.24 copy 1.65 gpu 0.00 flip 9.74) touch->flip 13.96 ms
+fastui: touch-down hl=Some(5) frame 12.93 ms (render 2.51 copy 1.41 gpu 0.00 flip 9.01) touch->flip 13.30 ms
+fastui: touch-up hl=None frame 16.72 ms (render 1.53 copy 1.17 gpu 0.00 flip 14.02) touch->flip 16.91 ms
+19:10:47 fastui-trial: stop requested
+19:10:47 fastui-trial: restore: begin
+19:10:48 fastui-trial: restore: sway owns the panel again (dpms cycles=0)

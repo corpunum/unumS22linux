@@ -1,0 +1,7 @@
+19:09:10 fastui-trial: placeholder active: sway switched away
+fastui: card /dev/dri/card1 crtc 184 connector 191 mode 1080x2340@120hs 1080x2340
+19:09:10 fastui-trial: cmd pid=10862: /root/fastui/fastui info
+{"crtc": 184, "connector": 191, "mode": "1080x2340@120hs", "w": 1080, "h": 2340, "dumb_pitch": 4320, "dumb_size": 10108928, "dumb_prime_export": true}
+19:09:10 fastui-trial: cmd exited
+19:09:10 fastui-trial: restore: begin
+19:09:11 fastui-trial: restore: sway owns the panel again (dpms cycles=0)
