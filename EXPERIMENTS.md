@@ -3099,3 +3099,47 @@ Live: `mobile-data up` → B3 + B20 + **n78 (NR-ARFCN 643334)** within 0.6 s. Pi
 afterwards and the routes were restored. phoned now decodes `(08,3C)` into `/status.radio` and `/data/status.nr_nsa`.
 It was deployed with a backup; only phoned was restarted. Test: `test_radio_nr.py`.
 Evidence: `evidence/modem-5g-20261021/`.
+
+### 2026-10-22 (night) — Camera software ISP `s22-develop`; shell Camera page shows processed photos
+
+- **Goal:** photos people can look at, without the Pablo ISP. The phone has no numpy, so the rawpy prototype could not run there.
+- **Tool:** a static Rust develop tool (`tools/hardware/camera/s22-develop`).
+  - **Stages:** black, defects, radial LSC, per-colour offset from block means, grey-world AWB, MHC demosaic, stock CCM, two-stage chroma denoise, AE, sRGB and an S-curve.
+  - **Speed:** about 0.35 s for a full-resolution frame on the phone.
+- **CCM:** a scan of `setfile_imx374.bin`/`setfile_gn3.bin` for Q8 3x3 matrices whose rows sum to 256 found four per-illuminant matrices plus a generic one.
+  The GN3 and IMX374 files hold identical tables. The least saturating one is used. Its illuminant mapping is not decoded.
+- **Capture changes:**
+  - `s22-camera capture --raw-burst` writes every kept frame after teardown. The 71 client tests still pass, and record-safe is unaffected.
+  - The burst frames had zero phase-correlation shift (phone at rest), so plain averaging works.
+- **Scene and results:** front IMX374, ceiling under one lamp.
+  - Meter frame at 10 ms/2x gave a mean of 0.005, so AE chose 30 ms/8x.
+  - A 6-frame stack cut flat-patch noise from σ 7.05 to 2.24.
+  - The first develop version looked hazy: the flare offset was missing. Then the rear frames showed blue shadows. Linear-light chroma smoothing and per-colour block-mean offsets helped the front camera; the rear camera's blue shadows remain, and they are unexplained (lens on a surface, signal near 0).
+- **Torch:** writing 1 to `/sys/class/camera/flash/rear_flash` did not light the rear scene (it read back 15). Not pursued.
+- **touchd `camera_capture`:** now takes `sensor`, runs meter → burst → develop, keeps raws on /srv (the run tmpfs is 64 MB), and saves the JPEG to the gallery. It falls back to the old quick PNG. 3 new tests, 27 pass in total.
+- **Shell:** unum-fastshell gained the Rear/Front toggle and the result line. The real injected-tap run took 2.1 s from tap to picture.
+- **Evidence:** `evidence/camera-develop-20261022/`.
+
+### 2026-10-22 (night) — Shell 5G/4G badge verified live; tap → page re-measured
+
+- **Badge logic:** unum-fastshell polls s22-phoned `/status` with the 20 s agent refresh. `net::radio_badge` gives:
+  - **5G** for an NR act, for `radio.nr_nsa`, or for an `nr_last_seen` under 120 s old;
+  - **4G** on LTE;
+  - nothing when not registered.
+- **Live test:** `mobile-data up` → nr_nsa after 2 s → badge 5G after another 4 s (scanout capture) → `mobile-data down` → 4G about 140 s later.
+- **Side effects:** routes and Tailscale were unchanged; no calls, no SMS.
+- **Re-measure:** tap → page on the rebuilt binary: p50 9.4 ms, max 13.5 (n 10, Settings tile).
+- **Tests:** 10 shell tests pass (2 new).
+
+### 2026-10-22 (night) — GNSS investigation (read-only): Kepler + S5520, plan written, no fix
+
+- **Hardware:** GNSS is the Exynos 2200's integrated Kepler core with a Samsung S5520 RF chip.
+- **Kernel:** `gnssif`/`gnss_mbox` are loaded and `/dev/gnss_ipc` exists. `gnss_status` is OFFLINE, and the IRQ counts are 0.
+- **Userspace:** the stock `gpsd` embeds the Kepler firmware, and the Samsung HAL is passthrough.
+- **Disassembly of gpsd found two dangerous paths:**
+  - a watchdog alarm that issues a full-phone reset ioctl;
+  - a modem status ioctl on `/dev/umts_boot0`, which also clears the kernel's SIM-changed flag.
+- Nothing was started on the phone, and no IPC was sent.
+- **Plan:** an ioctl-blocking shim, a minimal root without the modem nodes, a reset tool, a small HAL client, then one supervised power-on.
+  Details in `tools/hardware/gnss/GNSS.md`. Evidence: `evidence/gnss-20261022/`.
+
