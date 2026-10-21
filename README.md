@@ -37,7 +37,7 @@ and drive its own screen.
 - **Agent chat:** tap the field, the on-screen keyboard appears; type "hi", the agent replies.
 - **The agent drives the screen:** an OpenUnum tool shows a card and asks a question; a tap on
   *Yes* goes back to the agent.
-- **Phone, camera, files, settings**, edge swipes for home / back / switcher, and a Power-key
+- **Phone, camera, files, settings** (the camera screenshot predates the working capture path), edge swipes for home / back / switcher, and a Power-key
   lock cover.
 
 All screenshots: [evidence/touchui-20261009](evidence/touchui-20261009/README.md).
@@ -54,22 +54,22 @@ All screenshots: [evidence/touchui-20261009](evidence/touchui-20261009/README.md
 |---|---|
 | ✅ **Boot** | Native Linux from RECOVERY with our own `/init`; no Android services; reboots without touching the phone (`s22-reboot recovery`) |
 | ✅ **System** | Persistent Arch Linux ARM + Hyprland on internal storage; starts by itself after a reboot |
-| ✅ **Network** | Wi-Fi with autostart, Tailscale, USB SSH; mobile data over the modem (slow EGPRS), LTE attach |
+| ✅ **Network** | Wi-Fi with autostart, Tailscale, USB SSH; mobile data and LTE registration over the modem (4G, not 5G) |
 | ✅ **AI** | Local 2B model on the GPU (Samsung's Vulkan driver in an isolated runtime) and 4B on the CPU; OpenUnum agent with GPT Luna by default and the local model as offline fallback |
 | ✅ **Phone stack** | SIM and SMS ready through our own modem daemon (`s22-phoned`, outbound off by default) |
 | ✅ **Voice** | Speech output (incl. two Greek voices) and push-to-talk |
 | 🟡 **Touch UI** | Gestures, keyboard, lock and agent cards verified with injected touches on the real touchscreen; the desktop is software-rendered (about 3 frames/s) |
 | 🟡 **Bluetooth** | Controller up (41/41 commands answered); no pairing or audio yet |
 | 🟡 **Sensors** | Accelerometer, gyro, magnetometer and light frames read; no calibration or auto-rotate |
-| 🟡 **Camera** | Frames arrive without faults, but they are black |
+| ✅ **Camera** | Rear camera takes raw stills and short videos (under 1 frame/s) through our own capture path, no Android camera stack; no image processing (ISP) yet |
 | ❌ **Audio** | Card and controls work, but playback stalls (no DMA progress): no speaker or microphone yet |
 | ❌ **Calls, NPU, GPS, suspend** | Not working yet |
 
 Full hardware table and every earlier checkpoint: [docs/HISTORY.md](docs/HISTORY.md).
 Current details: [STATUS.md](STATUS.md).
 
-**Driver people: help is very welcome**, especially on audio DMA, the camera pipeline and the
-NPU. Open an issue, or read the [driver task board](docs/S22_LUNA_TASK_BOARD_2026-10-02.md) first.
+**Driver people: help is very welcome**, especially on audio DMA, camera image processing
+and the NPU. Open an issue, or read the [driver task board](docs/S22_LUNA_TASK_BOARD_2026-10-02.md) first.
 
 <details>
 <summary><b>🔧 How it boots, and the safety rules</b></summary>
