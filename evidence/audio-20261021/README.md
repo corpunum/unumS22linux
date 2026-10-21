@@ -118,3 +118,48 @@ tested via s22-ui/touchd plus plugin unit tests), level-4 playback
 acoustically (tests capped at level 2 by the owner's rule), and the
 earpiece/top/bottom routes over the graph. The failed first English take
 (#26) is unexplained; the repeat passed.
+
+## Regression fix (same evening): graph playback "Unable to install hw params"
+
+**Symptom (coordinator, ~18:52+):** every s22-say graph playback failed
+hw_params and fell back to RDMA6.
+
+**Root cause (my bug):** s22-say played the graph through the `s22graph`
+*plug* PCM. When the WAV is not already 48 kHz stereo S16 (all TTS renders are
+22.05/24/44.1 kHz), alsa-lib's plug/rate plugins open the slave `hw:0,102`
+with **MMAP access**. In `abox_vdma_mmap()` the ION-backed calliope buffer
+is mapped with `dma_buf_mmap()`, which replaces the VMA's `vm_ops`. The ALSA
+core had installed `snd_pcm_vm_ops_data` (its close callback decrements
+`substream->mmap_count`) and incremented `mmap_count` after the driver's
+mmap. munmap therefore never decrements it, and `mmap_count` leaks
+permanently. `snd_pcm_hw_params()` then returns **-EBADFD** for every later
+open of that substream (state OPEN with `mmap_count != 0`).
+- Proof: speaker-test on hw:0,102 → "File descriptor in bad state";
+  hw:0,100 (never mmapped) → OK. Nothing holds the device; the substream is
+  closed; the chroot device nodes are correct (197/197).
+- First trigger: the first Piper (22.05 kHz) playback in test #26 at ~18:56.
+  That is also the take whose recording was unrecognizable.
+- Tests #27/#28 reported played=true **only through the silent RDMA6
+  fallback**. My earlier verification did not check which path played.
+
+**Fix:**
+- s22-say converts the WAV offline to 48 kHz stereo S16 raw. It uses the new
+  `s22conv:FILE` PCM (plug → file → null; about 20 ms per 5 s of audio).
+- It then writes the raw stream to `hw:0,100` (calliope_0 → VPCMOUT_DAI0 →
+  bdmixer → RDMA3, the stock primary playback) with plain RW access, so
+  there is never an mmap on a calliope device.
+- `s22graph` is removed from alsa-s22.conf. `S22_GRAPH_PCM` selects the frontend.
+- `/run/s22-say.last` records `graph|direct|direct-fallback`.
+- s22-rec was already safe (arecord directly on hw:0,110, RW).
+
+**Not fixed:** the kernel bug itself, which remains for any client that
+mmaps a calliope device. **pcm102 stays leaked until the next reboot.** I did
+not reboot, to leave the UI worker's Hyprland/touchd/fastui session
+undisturbed; s22-say no longer uses pcm102.
+
+| # | Test | Result | File |
+|---|------|--------|------|
+| 30 | 6 consecutive silent s22-say runs, alternating the 48k tone and the 22.05k Piper render | 6/6 `graph pcm=100 rc=0`; pcm100 hw_params OK after each | fix-mmap-repeat-silent.txt |
+| 31 | 3 consecutive tone loopbacks (level 2, concurrent s22-rec on the graph) | 3/3 graph; tone 1000 Hz for the full 1.5 s (run 1 ratio 70–300 with a raised room noise floor, runs 2–3 ~620–870×) | fix-mmap-tone-loopback-x3.txt |
+| 32 | touchd `tts --play`, English Piper + Greek el-antonis, level 2, recorded | both `graph pcm=100 rc=0`. Whisper: EN "The phone can talk now. The sentence was spoken by the Piper voice on the Galaxy S22." (1 word off); EL exact. Phone Parakeet EN weaker | fix-mmap-speech.txt |
+| 33 | Coordinator repro `S22_SAY_LEVEL=0 s22-say "ok"` ×5 | 5/5 graph, no retry or fallback; pcm100 OK, pcm102 still EBADFD (leak until reboot); ABOX ONLINE; volume 0 | fix-mmap-repro-x5.txt |

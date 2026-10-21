@@ -1,0 +1,7 @@
+run1 s22-tone1k-20261021.wav -> graph pcm=100 rc=0 t=1792610784 | pcm100 hw_params OK
+run2 1792609059380-2332.wav -> graph pcm=100 rc=0 t=1792610794 | pcm100 hw_params OK
+run3 s22-tone1k-20261021.wav -> graph pcm=100 rc=0 t=1792610800 | pcm100 hw_params OK
+run4 1792609059380-2332.wav -> graph pcm=100 rc=0 t=1792610810 | pcm100 hw_params OK
+run5 s22-tone1k-20261021.wav -> graph pcm=100 rc=0 t=1792610816 | pcm100 hw_params OK
+run6 1792609059380-2332.wav -> graph pcm=100 rc=0 t=1792610826 | pcm100 hw_params OK
+abox=ONLINE

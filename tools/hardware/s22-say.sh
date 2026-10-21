@@ -33,7 +33,7 @@ set -u
 CHROOT=/mnt/omarchy-trial
 OPT=/opt/s22-audio
 MIX=$CHROOT$OPT/mixer
-PCM=102                    # calliope_2 firmware-graph frontend (S22_AUDIO_PATH=direct: RDMA6 = pcm 6)
+PCM=${S22_GRAPH_PCM:-100}  # calliope_0 firmware-graph frontend (S22_AUDIO_PATH=direct: RDMA6 = pcm 6)
 OUT=speaker
 AMP=60                     # espeak-ng amplitude (0-200, default 100)
 DIAG=
@@ -191,38 +191,56 @@ fi
 
 # s22spk (alsa-s22.conf) = plug -> hw:0,6 at 48 kHz stereo; RDMA6's own ASRC
 # garbles 22.05 kHz mono (espeak's native format).
-# Default (2026-10-21): play like the stock AudioProxy into the firmware-graph
-# frontend calliope_2 (s22graph = plug -> hw:0,102 -> VPCMOUT_DAI2 -> VDSP3 ->
-# RDMA2 -> SPUS; every media-* route sets VDSP3). HAL-sized periods are
-# required: 6000-frame periods lost audio and, with the SBLL pipeline, crashed
-# Calliope (data abort at 0x82800000). S22_AUDIO_PATH=direct uses RDMA6.
-# If Calliope faults (failsafe OFFLINE) it is reset the way the stock HAL does
-# and the playback is retried once; a second graph failure falls back to RDMA6.
-APDEV=s22graph; APOPTS="--period-size=480 --buffer-size=1920"
-[ "${S22_AUDIO_PATH:-graph}" = direct ] && { APDEV=s22spk; APOPTS=; PCM=6; }
+# Default (2026-10-21): play like the stock AudioProxy into a firmware-graph
+# frontend: calliope_0 (pcm 100 = stock primary playback) -> VPCMOUT_DAI0 ->
+# BD_MIXER (VDSP0 bdmixer-normal, set by every media-* route) -> RDMA3 -> SPUS.
+# S22_GRAPH_PCM=102 selects calliope_2 (-> VDSP3 -> RDMA2). HAL-sized periods
+# are required (6000-frame periods lost audio and could crash Calliope).
+# NEVER put an alsa plug in front of a calliope device: plug/rate drive the
+# slave through MMAP, and the vdma ION mmap leaks the substream's mmap_count
+# (every later open then fails HW_PARAMS with EBADFD until reboot). So the WAV
+# is converted offline to 48 kHz stereo S16 (s22conv) and written with RW access.
+# A faulted Calliope (failsafe OFFLINE) is reset like the stock HAL does and the
+# playback retried once; then RDMA6 (S22_AUDIO_PATH=direct) is the fallback.
+# /run/s22-say.last records which path actually played.
+GRAPH=1; [ "${S22_AUDIO_PATH:-graph}" = direct ] && { GRAPH=; PCM=6; }
+ALSACONF=$OPT/mixer/alsa-s22.conf
 abox_recover() {
   [ "$(cat /proc/abox/failsafe/online 2>/dev/null)" = OFFLINE ] || return 0
   echo "s22-say: ABOX OFFLINE, failsafe reset" >&2
   printf CALLIOPE > /proc/abox/failsafe/reset
   i=0; while [ $i -lt 20 ] && [ "$(cat /proc/abox/failsafe/online)" = OFFLINE ]; do sleep 0.25; i=$((i + 1)); done
 }
-play() { timeout 60 chroot "$CHROOT" /usr/bin/env LD_LIBRARY_PATH=$OPT/usr/lib \
-  ALSA_CONFIG_PATH=$OPT/mixer/alsa-s22.conf $OPT/usr/bin/aplay -q -D $APDEV $APOPTS "$@"; }
+aplay_c() { timeout 60 chroot "$CHROOT" /usr/bin/env LD_LIBRARY_PATH=$OPT/usr/lib \
+  ALSA_CONFIG_PATH=$ALSACONF $OPT/usr/bin/aplay -q "$@"; }
+play_direct() { aplay_c -D s22spk "$@"; }
+RAW=/tmp/s22-say-$$.48k.raw
+play_graph() {   # $1 = WAV inside the chroot
+  rm -f "$CHROOT$RAW"
+  aplay_c -D "s22conv:$RAW" "$1" >/dev/null 2>&1 && [ -s "$CHROOT$RAW" ] || { echo "s22-say: conversion failed" >&2; return 1; }
+  aplay_c -D hw:0,$PCM --period-size=480 --buffer-size=1920 -t raw -f S16_LE -r 48000 -c 2 "$RAW"
+}
+trap 'rm -f "$CHROOT$RAW"; restore_vol; batch "$ROUTE.reset"; [ -n "${CLEANWAV:-}" ] && rm -f "$CHROOT$WAV"' EXIT
 abox_recover
-# ABOX powers Calliope down ~0.5 s after the last close; a short silent
-# stream first makes sure the firmware is up before the real trigger.
-play -t raw -f S16_LE -r 48000 -c 2 -s 4800 /dev/zero >/dev/null 2>&1
-play "$WAV"
-rc=$?
-if [ $rc -ne 0 ] && [ "$APDEV" = s22graph ]; then
-  abox_recover; echo "s22-say: graph playback rc=$rc, retrying" >&2
-  play "$WAV"; rc=$?
+USED=direct
+if [ -n "$GRAPH" ]; then
+  # ABOX powers Calliope down ~0.5 s after the last close; a short silent
+  # stream first makes sure the firmware is up before the real trigger.
+  aplay_c -D hw:0,$PCM --period-size=480 --buffer-size=1920 -t raw -f S16_LE -r 48000 -c 2 -s 4800 /dev/zero >/dev/null 2>&1
+  play_graph "$WAV"; rc=$?; USED=graph
   if [ $rc -ne 0 ]; then
-    abox_recover; echo "s22-say: graph failed again, falling back to RDMA6" >&2
-    APDEV=s22spk; APOPTS=; play "$WAV"; rc=$?
+    abox_recover; echo "s22-say: graph playback rc=$rc, retrying" >&2
+    play_graph "$WAV"; rc=$?
+    if [ $rc -ne 0 ]; then
+      abox_recover; echo "s22-say: graph failed again, falling back to RDMA6" >&2
+      play_direct "$WAV"; rc=$?; USED=direct-fallback
+    fi
   fi
+else
+  play_direct -t raw -f S16_LE -r 48000 -c 2 -s 4800 /dev/zero >/dev/null 2>&1
+  play_direct "$WAV"; rc=$?
 fi
-rc=$?
+printf '%s pcm=%s rc=%s t=%s\n' "$USED" "$PCM" "$rc" "$(date +%s)" > /run/s22-say.last
 if [ -n "$DIAG" ]; then
   wait
   dmesg > "$DIAG/dmesg-after.txt" 2>&1

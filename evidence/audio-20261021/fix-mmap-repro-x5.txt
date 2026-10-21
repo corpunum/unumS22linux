@@ -1,0 +1,8 @@
+repro1 rc=0 last=graph pcm=100 rc=0 t=1792610932 msgs=[0]
+repro2 rc=0 last=graph pcm=100 rc=0 t=1792610935 msgs=[0]
+repro3 rc=0 last=graph pcm=100 rc=0 t=1792610938 msgs=[0]
+repro4 rc=0 last=graph pcm=100 rc=0 t=1792610941 msgs=[0]
+repro5 rc=0 last=graph pcm=100 rc=0 t=1792610944 msgs=[0]
+pcm100: hw_params OK
+pcm102: Unable to set hw params for playback: File descriptor in bad state
+abox=ONLINE vol=0

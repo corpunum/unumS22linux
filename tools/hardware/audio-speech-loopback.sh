@@ -18,4 +18,4 @@ R=$((817 - (10 - LEVEL) * 32))
 $A -q cset "name=Left Digital PCM Volume" $R; $A -q cset "name=Right Digital PCM Volume" $R
 chroot /mnt/omarchy-trial /usr/local/bin/s22-ui tts --engine "$ENGINE" --play "$TEXT"; echo
 wait $RP; echo "rec rc=$? $(cat /tmp/asl-rec.log)"
-echo "abox=$(cat /proc/abox/failsafe/online)"
+echo "abox=$(cat /proc/abox/failsafe/online) last=$(cat /run/s22-say.last 2>/dev/null)"

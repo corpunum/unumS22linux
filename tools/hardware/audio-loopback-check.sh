@@ -33,5 +33,5 @@ for i in 1 2 3 4 5 6 7; do
 done
 wait $SP; echo "play rc=$? $(grep -E 'aplay rc|abort' /tmp/alc-say.log; head -c 300 /tmp/alc-say.log | grep -v '^t' )"
 wait $RP; echo "rec rc=$? $(cat /tmp/alc-rec.log)"
-echo "bd after: $(bd)"
+echo "bd after: $(bd)"; echo "say.last: $(cat /run/s22-say.last 2>/dev/null)"
 ls -l "/mnt/omarchy-trial$REC"
