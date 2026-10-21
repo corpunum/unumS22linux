@@ -61,6 +61,10 @@ LOCK = Path('/run/s22-touchd.lock')
 # `echo quickshell > $UI_BACKEND_FILE` (or delete it); the Quickshell files are never touched.
 UI_BACKEND_FILE = Path('/srv/s22/state/touchui/ui-backend')
 UNUM_SHELL = '/usr/local/bin/unum-shell'                # inside the chroot
+# 'fastshell' (opt-in, 2026-10-21): tools/unum-fastshell, a native-root binary that draws straight
+# to KMS through its own seatd session on top of sway. Same shell.sock protocol as unum-shell.
+FASTSHELL = '/srv/s22/hardware/bin/unum-fastshell'      # native root
+BACKENDS = ('quickshell', 'unum-shell', 'fastshell')
 SHELL_SOCK = RUN / 'shell.sock'                         # unum-shell's control socket (same dir as ctl.sock)
 OPENUNUM_API = 'http://127.0.0.1:18880'
 PIN_FILE = Path('/srv/s22/state/keepalive/openunum.pinned.json')   # s22-keepalive pin_source
@@ -366,7 +370,14 @@ def ui_backend() -> str:
             want = UI_BACKEND_FILE.read_text().strip()
         except OSError:
             want = ''
-    return want if want in ('quickshell', 'unum-shell') else 'quickshell'
+    if want == 'fastshell' and not os.path.exists(FASTSHELL):
+        return 'quickshell'
+    if want == 'fastshell' and time.time() < FALLBACK_UNTIL[0]:
+        return 'quickshell'                  # fastshell kept crashing: classic shell for a while
+    return want if want in BACKENDS else 'quickshell'
+
+
+FALLBACK_UNTIL = [0.0]
 
 
 def shell_call(fn: str, *args: str, timeout: float = 8) -> dict:
@@ -397,7 +408,7 @@ def shell_call(fn: str, *args: str, timeout: float = 8) -> dict:
 
 
 def ui_call(fn: str, *args: str, timeout: float = 8) -> dict:
-    if ui_backend() == 'unum-shell':
+    if ui_backend() in ('unum-shell', 'fastshell'):
         return shell_call(fn, *args, timeout=timeout)
     return quickshell_call(fn, *args, timeout=timeout)
 
@@ -480,6 +491,12 @@ class Daemon:
         if now - self.last_gesture < 0.4:
             return
         self.last_gesture = now
+        if ui_backend() == 'fastshell':
+            # fastshell recognises edge swipes itself while it owns the panel; it only
+            # acts on these when sway is showing (e.g. foot), to take the panel back.
+            r = shell_call('gesture', name)
+            log(event='gesture', name=name, ok=r.get('ok'), result=r.get('result'))
+            return
         if display_state() == 'off':
             return
         r = ui_call(name)
@@ -498,6 +515,8 @@ class Daemon:
             if self.ui_proc is None or self.ui_proc.poll() is not None:
                 if self.ui_proc is not None:
                     log(event='ui_exit', code=self.ui_proc.returncode)
+                    if self.ui_proc.returncode == 0 and self.ui_starts and time.time() - self.ui_starts[-1] > 30:
+                        self.ui_starts.pop()        # a clean stop (SIGTERM, upgrade) is not a crash
                     self.ui_proc = None
                 env = session_env()
                 if env is None:
@@ -505,6 +524,11 @@ class Daemon:
                     continue
                 now = time.time()
                 self.ui_starts = [t for t in self.ui_starts if now - t < 600]
+                if len(self.ui_starts) >= 6 and ui_backend() == 'fastshell':
+                    log(event='fastshell_fallback_to_quickshell', starts=len(self.ui_starts))
+                    FALLBACK_UNTIL[0] = time.time() + 900
+                    self.ui_starts = []
+                    continue
                 if len(self.ui_starts) >= 6:
                     log(event='ui_giving_up_for_now', starts=len(self.ui_starts))
                     self.stopping.wait(300)
@@ -519,7 +543,20 @@ class Daemon:
                 log(event='ui_start', pid=self.ui_proc.pid)
                 self.stopping.wait(backoff)
                 backoff = min(backoff * 2, 60) if self.ui_proc.poll() is not None else 2.0
+                self.ping_fail = 0
             else:
+                if self.ui_running_backend == 'fastshell':
+                    # watchdog: a fastshell that holds the panel but stops answering is
+                    # stopped (exact PIDs); seatd then gives the panel back to sway
+                    self.ping_n = getattr(self, 'ping_n', 0) + 1
+                    if self.ping_n % 5 == 0:
+                        r = shell_call('ping', timeout=4)
+                        self.ping_fail = 0 if r.get('ok') else getattr(self, 'ping_fail', 0) + 1
+                        if self.ping_fail >= 3:
+                            log(event='fastshell_unresponsive_restart', pid=self.ui_proc.pid)
+                            self.ping_fail = 0
+                            self.stop_ui()
+                            continue
                 if ui_backend() != self.ui_running_backend:
                     log(event='ui_backend_switch', to=ui_backend())
                     self.stop_ui()
@@ -567,6 +604,12 @@ class Daemon:
         arg = req.get('arg', 'toggle')
         if arg not in ('on', 'off', 'toggle', 'status'):
             return {'ok': False, 'error': 'bad_arg'}
+        if ui_backend() == 'fastshell' and arg != 'status':
+            # fastshell owns the panel: it locks and powers it itself (DPMS on its
+            # DRM fd). When sway is showing it answers "delegate" -> s22-display.
+            r = shell_call('display', arg)
+            if r.get('ok') and r.get('result') in ('on', 'off'):
+                return {'ok': True, 'display': r['result'], 'via': 'fastshell'}
         if arg in ('off',) or (arg == 'toggle' and display_state() == 'on'):
             ui_call('lock')
         r = subprocess.run([DISPLAY, arg], capture_output=True, text=True, timeout=20)
@@ -761,6 +804,11 @@ def shell_command(env: dict, backend: str) -> list[str]:
     base = ['chroot', str(CHROOT), '/usr/bin/env', '-i'] + [f'{k}={v}' for k, v in env.items()]
     if backend == 'unum-shell':
         return base + [f'S22_TOUCH_RUN={RUN_IN}', 'nice', '-n', '5', UNUM_SHELL]
+    if backend == 'fastshell':
+        # native root, not the chroot: it needs card1 (through seatd) and the touch node
+        return ['/usr/bin/env', '-i', 'HOME=/root', 'PATH=/usr/sbin:/usr/bin:/sbin:/bin',
+                f'S22_TOUCH_RUN={RUN}', f'FASTSHELL_CHROOT={CHROOT}',
+                f"TZ={os.environ.get('TZ', 'Europe/Athens')}", FASTSHELL]
     return base + ['nice', '-n', '5', 'quickshell', '-n', '-p', f'{SHELL_DIR}/shell.qml']
 
 
@@ -774,6 +822,13 @@ def stale_shell_pids() -> list[int]:
         except OSError:
             continue
         if [a.decode(errors='replace') for a in argv] == want:
+            out.append(pid)
+    for pid in pids_by_comm('unum-fastshell'):
+        try:
+            argv = Path(f'/proc/{pid}/cmdline').read_bytes().rstrip(b'\0').split(b'\0')
+        except OSError:
+            continue
+        if [a.decode(errors='replace') for a in argv] == [FASTSHELL]:
             out.append(pid)
     for pid in pids_by_comm('unum-shell'):
         try:
@@ -812,7 +867,7 @@ COMMANDS = {
     'tts': Daemon.cmd_tts,
 }
 UI_FUNCS = {'home', 'hide', 'back', 'switcher', 'open', 'card', 'confirm', 'confirmResult',
-            'lock', 'unlock', 'keyboard', 'state', 'perf'}
+            'lock', 'unlock', 'keyboard', 'state', 'perf', 'send'}
 
 
 def request(req: dict, timeout: float = 30) -> dict:

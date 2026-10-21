@@ -114,3 +114,14 @@ On the phone, `remove-omarchy-pi.sh` moves everything into `/srv/s22/archive/oma
 ## Phase 2: renderer trial (2026-10-10)
 
 sway with the wlroots pixman renderer reached 62.6 panel fps at about 10% CPU on the touch-shell animation. Hyprland on llvmpipe reached 1.4 fps at 98% CPU on the same animation. The opt-in `/etc/s22-desktop = sway-pixman` profile is prepared but **not enabled**; Hyprland stays the default. Numbers, tools, known gaps and the switch/rollback steps are in [phase2/README.md](phase2/README.md).
+
+## fastshell backend (2026-10-21, now the default)
+
+`s22-touchd` has a third UI backend: `fastshell`. It runs `/srv/s22/hardware/bin/unum-fastshell` ([tools/unum-fastshell](../unum-fastshell/README.md)) on the native root, not in the chroot.
+
+- It forwards `ui` calls to `shell.sock`.
+- Edge swipes are sent as `gesture`. The shell handles its own swipes while it owns the panel, and uses these only to take the panel back from sway.
+- `display` and `power` go to the shell, which uses DPMS on its own DRM fd.
+- A ping watchdog stops the shell if it hangs. After 6 starts in 10 minutes, touchd falls back to Quickshell for 15 minutes.
+
+Select it with `s22-desktop-profile fastshell`. Go back with `s22-desktop-profile sway-pixman` or by holding Power for 1 s.

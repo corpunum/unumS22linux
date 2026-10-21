@@ -3007,3 +3007,46 @@ Real-finger latency, photon time and power were not measured. The phone was rest
 - Verified with no reboot: 6 silent runs, 3 tone loopbacks, EN/EL speech with
   whisper (EL exact, EN one word off), and the repro ×5. All went through the
   graph and none fell back. pcm102 heals at the next reboot.
+
+### 2026-10-21 (night) — unum-fastshell: the fast touch shell becomes the default
+
+**New: `tools/unum-fastshell`.** Phase 2 of the fastui spike: a 1.3 MB static Rust shell on the native root.
+
+- **Display:** card1 through its own **seatd session** (a native seatd protocol client), next to sway. Two dumb buffers, page flip.
+- **Renderer:** CPU with damage tracking and anti-aliased rounded rectangles. Noto Sans Latin+Greek (vendored, OFL) through `ab_glyph`. Kinetic scrolling that moves pixels in place and redraws only the exposed strip.
+- **Keyboard:** native, English and Greek with tonos. squeekboard cannot show while sway is inactive.
+- **Pages:**
+  - Home with live cards;
+  - Agent chat streaming from `/api/chat/stream`;
+  - Phone, Files, Camera, Settings, Apps, Lock.
+- **Terminal:** hands the seat to sway, with foot and squeekboard. An edge swipe takes the panel back.
+- **touchd protocol:** the `shell.sock` protocol is unchanged, so `s22-ui`, the plugin and s22d confirmations keep working.
+
+**Switch.** `s22-desktop-profile fastshell` or `sway-pixman`. The touch shell is chosen in `/srv/s22/state/touchui/ui-backend`; `/etc/s22-desktop` stays `sway-pixman`.
+
+**Ways back:**
+- hold Power 1 s (`hooks/power-long`);
+- touchd's ping watchdog;
+- after a crash loop, touchd falls back to Quickshell for 15 minutes;
+- seatd hands the panel to sway if the shell dies.
+
+**Measured (injected taps, same session):**
+
+| | fastshell | Quickshell |
+|---|---|---|
+| Touch-up → page, p50 | 12.1 ms | 63.2 ms |
+| Touch-down → highlight, p50 | 11.1 ms | 25.9 ms |
+
+- Internal touch → flip-complete for a page: p50 18.4 ms, p95 26.9 ms.
+- Idle 0.4 % CPU, RSS 10.9 MB. A fling runs at about 51 fps average, frame p50 10.7 ms.
+
+**All acceptance points held on the phone:** tap → page ≤ 25 ms, chat streaming (441 deltas drawn live), agent card and confirm, Power lock/unlock with real DPMS, recovery to sway, and one `s22-reboot recovery` (shell back on the panel about 20 s after boot). So fastshell is the default touch shell.
+
+**Found:**
+- An SSE stream opened before the POST replays the previous turn and closes. unum-shell has the same bug.
+- musl has no zoneinfo on the native root.
+- squeekboard can vanish around seat switches.
+- touchd counted clean restarts as crashes.
+
+**Not tested:** the Talk/voice button (audio tests by another worker), camera capture, real finger, photon time, power.
+[Evidence](evidence/fastshell-20261021/README.md).

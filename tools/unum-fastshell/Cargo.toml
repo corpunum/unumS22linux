@@ -1,0 +1,22 @@
+[package]
+name = "unum-fastshell"
+version = "0.1.0"
+edition = "2021"
+description = "S22 fast touch shell: KMS-direct CPU renderer with damage tracking, evdev touch, seatd session hand-over to sway"
+license = "Apache-2.0"
+
+[dependencies]
+libc = "0.2"
+ab_glyph = "0.2"
+serde_json = "1"
+png = "0.17"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+opt-level = 1
