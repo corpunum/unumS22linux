@@ -1,0 +1,146 @@
+# gpsd ELF
+/vendor/bin/hw/gpsd: ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /system/bin/linker64, BuildID[sha1]=6454ce58067114ba2053108523f99f22cb9dd959, stripped
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libandroid_net.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libssl.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcrypto.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libz.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+
+# HAL impl NEEDED
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libbase.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libhidlbase.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libvndksupport.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [vendor.samsung.hardware.gnss@2.0.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [vendor.samsung.hardware.gnss@2.1.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libz.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+# HAL impl exports
+0000000000034e60 T HIDL_FETCH_ISehAGnssRil
+0000000000035eac T HIDL_FETCH_ISehGnss
+0000000000036af4 T HIDL_FETCH_ISehGnssConfiguration
+0000000000036d88 T HIDL_FETCH_ISehGnssExtra
+# HAL service: uses registerPassthroughServiceImplementation (passthrough impl)
+1
+
+# libwrappergps NEEDED (CP aiding via RIL; libsecril-client)
+ 0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libutils.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libsecril-client.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libsqlite.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libhardware_legacy.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libbinder.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so]
+
+# gpsd path/device strings
+/data/vendor/
+/data/vendor/gps
+/data/vendor/gps/secgps.conf
+/dev/gnss_ipc
+/dev/umts_boot0
+/sys/devices/soc0/machine
+/sys/devices/soc0/revision
+/sys/devices/system/chip-id/evt_ver
+/sys/power/wake_lock
+/sys/power/wake_unlock
+/system/bin/linker64
+/system/etc/security/cacerts
+/vendor/bin/hw/alive_image.bin
+/vendor/etc/gnss/ca.pem
+/vendor/etc/gnss/gps.cfg
+/vendor/firmware/os.checked.bin
+/vendor/lib64/libwrappergps.so
+
+# gpsd Kepler/codeload strings (selection)
+BCMD ioctl failed : %d, errno:%d
+BCMD to codeload Kepler - IOCTL failed
+BCMD to start Kepler - IOCTL failed
+Changing baud for codeload state %d: %d, fc %d
+Closing Kepler driver XPORT: %s
+Codeload kepler failed BCMD ret : 0x%X
+Configured Kepler device:'%u' and ROM-SW-ID:'%u' mismatch!
+create_embedded_patch
+Creating Kepler driver XPORT: %s
+Destroying Kepler driver XPORT: %s
+%d: failed to enter codeload mode 
+enter codeload 0x%x
+ERROR: modem state, err=%d
+exit codeload request 0x%x
+failure reading Kepler firmware
+Firmware size %d firmware offset %d
+handle_exit_codeload: %02x
+KEP BAAW ADDRESS FAULT: "0x%08X,0x%08X,0x%08X,0x%08X,0x%08X".
+KEP Common interceptor : invalid COMMON msg %x
+KEP Common interceptor : Kepler interceptor inserted on a non compatible device driver!
+KEP critical fault : %d words available.
+KEP critical fault : No fault info avalible.
+KEP Factory Reset
+KEP FAULT: %s. %d:%d returned from xport_kepdrv_read_fault
+KEP FAULT: (UNHANDLED TYPE:%d).
+KEP FAULT: unknown data following generic fault info (fault_info_images_location %d fault_info_size %u)
+KEP FAULT: unknown data following generic fault info (size0 %u size1 %u fault_info_size %u)
+KEP interceptor : Kepler interceptor inserted on a non compatible device driver!
+KEP ISM: closed dump file
+KEP ISM: closed dump file %d
+KEP ISM: creating dump file %s
+KEP ISM: sample format changed %d %d -> %d %d, closing existing sample format file
+Kepler EXE Address: %08X
+Kepler HW version: %08X
+Kepler ROM 0: %08X
+Kepler ROM-SW version: %u
+Kepler Skipping Code Load
+Kepler startup failed BCMD ret : 0x%X
+Kepler version check failed
+KEP M0 HARDFAULT.
+KEP M7 HARDFAULT.
+KEP RAM ARB ADDRESS FAULT: "0x%08X".
+KEP soft_dog flush logs before %s
+KEP soft_dog HARD RESET
+KEP soft_dog idle...ignoring alarm
+KEP soft_dog pos req timeout
+KEP soft_dog reboot detected
+KEP soft_dog RESET
+KEP soft_dog SCANDUMP
+KEP soft_dog sw version timeout
+KEP SW FAULT: Dumping %s.
+KEP SW FAULT: Failed to read shared data at offset:0x%x.
+KEP SW FAULT: Image dump sizes does not match, no full RAM content dump avalible.
+KEP SW FAULT: Image dump sizes matches, fetching full RAM content.
+KEP SW FAULT: "%s".
+KEP SW FAULT: %s.
+KEP SW FAULT: sizes:[%x,%x,%x].
+KEP SW FAULT: Unable to open %s for writing.
+KEP WRTT BUS ERROR FAULT: "0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X".
+lal_codeload_add_file
+
+# gpsd ioctl numbers seen at call sites (llvm-objdump; 'K'=0x4b gnssif, 'o'=0x6f cpif, 0x54xx tty)
+      3 #0x4b00
+      2 #0x4b01
+      2 #0x4b02
+      1 #0x4b03
+      2 #0x4b04
+      1 #0x4b05
+      1 #0x4b07
+      1 #0x4b08
+      1 #0x4b10
+      1 #0x4b12
+      1 #0x4b13
+      1 #0x4b14
+      1 #0x4b15
+      1 #0x5409
+      1 #0x5415
+      3 #0x541b
+      1 #0x6f27
