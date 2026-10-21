@@ -62,14 +62,14 @@ All screenshots: [evidence/touchui-20261009](evidence/touchui-20261009/README.md
 | 🟡 **Bluetooth** | Controller up (41/41 commands answered); no pairing or audio yet |
 | 🟡 **Sensors** | Accelerometer, gyro, magnetometer and light frames read; no calibration or auto-rotate |
 | ✅ **Camera** | Rear camera takes raw stills and short videos (under 1 frame/s) through our own capture path, no Android camera stack; no image processing (ISP) yet |
-| ❌ **Audio** | Card and controls work, but playback stalls (no DMA progress): no speaker or microphone yet |
+| ✅ **Audio** | Speaker and microphone work, both directly and through Samsung's DSP graph (the phone's mic hears its own speaker: a 1 kHz test tone at ~1000× the noise floor); earpiece and calls not yet |
 | ❌ **Calls, NPU, GPS, suspend** | Not working yet |
 
 Full hardware table and every earlier checkpoint: [docs/HISTORY.md](docs/HISTORY.md).
 Current details: [STATUS.md](STATUS.md).
 
-**Driver people: help is very welcome**, especially on audio DMA, camera image processing
-and the NPU. Open an issue, or read the [driver task board](docs/S22_LUNA_TASK_BOARD_2026-10-02.md) first.
+**Driver people: help is very welcome**, especially on camera image processing, the
+NPU and calls. Open an issue, or read the [driver task board](docs/S22_LUNA_TASK_BOARD_2026-10-02.md) first.
 
 <details>
 <summary><b>🔧 How it boots, and the safety rules</b></summary>
