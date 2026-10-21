@@ -1,0 +1,281 @@
+{
+ "enhance": [
+  {
+   "in": "Sure. The capital of France is Paris.",
+   "out": "Sure. Well… The capital of France is Paris.",
+   "outEl": "Sure. Εμμ… The capital of France is Paris.",
+   "light": "Sure. Alright… The capital of France is Paris."
+  },
+  {
+   "in": "Here is what I found:\n\n- The battery is at 80%\n- Wi-Fi is connected to home\n- Bluetooth is off\n\nLet me know if you want more.",
+   "out": "Here is what I found. First, the battery is at 80 percent. Then, wi-Fi is connected to home. And finally, bluetooth is off. Hmm… Let me know if you want more.",
+   "outEl": "Here is what I found. Πρώτα, the battery is at 80 τοις εκατό. Μετά, wi-Fi is connected to home. Και τέλος, bluetooth is off. Χμμ… Let me know if you want more.",
+   "light": "Here is what I found. First, the battery is at 80 percent. Then, wi-Fi is connected to home. And finally, bluetooth is off. Alright… Let me know if you want more."
+  },
+  {
+   "in": "## Weather\nIt will be sunny today, with a high of 24 degrees and a light breeze from the north. Tomorrow looks cooler and cloudier, so take a jacket if you go out. The weekend should be dry overall, though rain is possible on Sunday evening.",
+   "out": "Now, about weather. Okay… It will be sunny today, with a high of 24 degrees and a light breeze from the north. Tomorrow looks cooler and cloudier, so take a jacket if you go out. Um… The weekend should be dry overall, though rain is possible on Sunday evening.",
+   "outEl": "Τώρα, για weather. Να δούμε… It will be sunny today, with a high of 24 degrees and a light breeze from the north. Tomorrow looks cooler and cloudier, so take a jacket if you go out. The weekend should be dry overall, though rain is possible on Sunday evening.",
+   "light": "Now, about weather. Alright… It will be sunny today, with a high of 24 degrees and a light breeze from the north. Tomorrow looks cooler and cloudier, so take a jacket if you go out. The weekend should be dry overall, though rain is possible on Sunday evening."
+  },
+  {
+   "in": "1. Open the settings\n2. Tap Wi-Fi\n3. Pick your network\n4. Enter the password\n5. Press connect",
+   "out": "First, open the settings. Then, tap Wi-Fi. Next, pick your network. After that, enter the password. And finally, press connect.",
+   "outEl": "Πρώτα, open the settings. Μετά, tap Wi-Fi. Έπειτα, pick your network. Στη συνέχεια, enter the password. Και τέλος, press connect.",
+   "light": "First, open the settings. Then, tap Wi-Fi. Next, pick your network. After that, enter the password. And finally, press connect."
+  },
+  {
+   "in": "The result is **42**, see [the docs](https://example.com/docs) or `config.json` in /home/user/project/config.json. It is ~15% faster & uses 3/4 of the memory => good.",
+   "out": "So… The result is 42, see the docs or config.json in config.json. It is about 15 percent faster and uses 3/4 of the memory = good.",
+   "outEl": "The result is 42, see the docs or config.json in config.json. Ωραία… It is περίπου 15 τοις εκατό faster και uses 3/4 of the memory = good.",
+   "light": "The result is 42, see the docs or config.json in config.json. Alright… It is about 15 percent faster and uses 3/4 of the memory = good."
+  },
+  {
+   "in": "Η πρωτεύουσα της Γαλλίας είναι το Παρίσι. Είναι μια πολύ όμορφη πόλη με πολλά μουσεία και πάρκα. Μπορείς να την επισκεφτείς οποιαδήποτε εποχή του χρόνου, αλλά η άνοιξη είναι ιδιαίτερα ευχάριστη.",
+   "out": "Για να δω… Η πρωτεύουσα της Γαλλίας είναι το Παρίσι. Είναι μια πολύ όμορφη πόλη με πολλά μουσεία και πάρκα. Να δούμε… Μπορείς να την επισκεφτείς οποιαδήποτε εποχή του χρόνου, αλλά η άνοιξη είναι ιδιαίτερα ευχάριστη.",
+   "outEl": "Για να δω… Η πρωτεύουσα της Γαλλίας είναι το Παρίσι. Είναι μια πολύ όμορφη πόλη με πολλά μουσεία και πάρκα. Να δούμε… Μπορείς να την επισκεφτείς οποιαδήποτε εποχή του χρόνου, αλλά η άνοιξη είναι ιδιαίτερα ευχάριστη.",
+   "light": "Η πρωτεύουσα της Γαλλίας είναι το Παρίσι. Χμμ… Είναι μια πολύ όμορφη πόλη με πολλά μουσεία και πάρκα. Μπορείς να την επισκεφτείς οποιαδήποτε εποχή του χρόνου, αλλά η άνοιξη είναι ιδιαίτερα ευχάριστη."
+  },
+  {
+   "in": "Βρήκα τα εξής:\n- Η μπαταρία είναι στο 80%\n- Το Wi-Fi είναι συνδεδεμένο\n- Το Bluetooth είναι κλειστό",
+   "out": "Βρήκα τα εξής. Πρώτα, η μπαταρία είναι στο 80 τοις εκατό. Μετά, το Wi-Fi είναι συνδεδεμένο. Και τέλος, το Bluetooth είναι κλειστό.",
+   "outEl": "Βρήκα τα εξής. Πρώτα, η μπαταρία είναι στο 80 τοις εκατό. Μετά, το Wi-Fi είναι συνδεδεμένο. Και τέλος, το Bluetooth είναι κλειστό.",
+   "light": "Βρήκα τα εξής. Πρώτα, η μπαταρία είναι στο 80 τοις εκατό. Μετά, το Wi-Fi είναι συνδεδεμένο. Και τέλος, το Bluetooth είναι κλειστό."
+  },
+  {
+   "in": "```js\nconsole.log(1)\n```\nThat snippet prints one. It is the simplest possible program and it does nothing else at all, which is why it is a good first test of anything.",
+   "out": "code. Um… That snippet prints one. It is the simplest possible program and it does nothing else at all, which is why it is a good first test of anything.",
+   "outEl": "code. Να σκεφτώ… That snippet prints one. It is the simplest possible program and it does nothing else at all, which is why it is a good first test of anything.",
+   "light": "code. Alright… That snippet prints one. It is the simplest possible program and it does nothing else at all, which is why it is a good first test of anything."
+  },
+  {
+   "in": "A very long single sentence that keeps going and going because there is a lot to say about this particular subject, and it never really stops until we reach the end of the line which is much too far away.",
+   "out": "A very long single sentence that keeps going and going because there is a lot to say about this particular subject, and it never really stops until we reach the end of the line which is much too far away.",
+   "outEl": "A very long single sentence that keeps going and going because there is a lot to say about this particular subject, and it never really stops until we reach the end of the line which is much too far away.",
+   "light": "A very long single sentence that keeps going and going because there is a lot to say about this particular subject, and it never really stops until we reach the end of the line which is much too far away."
+  },
+  {
+   "in": "Done.",
+   "out": "Done.",
+   "outEl": "Done.",
+   "light": "Done."
+  },
+  {
+   "in": "",
+   "out": "",
+   "outEl": "",
+   "light": ""
+  },
+  {
+   "in": "First thought. Second thought is a little longer than the first. Third thought is again fairly long to avoid being blocked. Fourth sentence here is also long enough. Fifth sentence goes on a bit as well, yes. Sixth sentence closes this paragraph off nicely.",
+   "out": "First thought. You know… Second thought is a little longer than the first. Third thought is again fairly long to avoid being blocked. Fourth sentence here is also long enough. Now… Fifth sentence goes on a bit as well, yes. Sixth sentence closes this paragraph off nicely.",
+   "outEl": "First thought. Να σκεφτώ… Second thought is a little longer than the first. Third thought is again fairly long to avoid being blocked. Fourth sentence here is also long enough. Εντάξει… Fifth sentence goes on a bit as well, yes. Sixth sentence closes this paragraph off nicely.",
+   "light": "First thought. Alright… Second thought is a little longer than the first. Third thought is again fairly long to avoid being blocked. Fourth sentence here is also long enough. Fifth sentence goes on a bit as well, yes. Sixth sentence closes this paragraph off nicely."
+  },
+  {
+   "in": "Temperature is 21 and humidity is 40 - that is fine — really fine. See #3 for details: it matters. Use and/or both options.",
+   "out": "Temperature is 21 and humidity is 40 - that is fine, really fine. Okay… See number 3 for details: it matters. Use and or or both options.",
+   "outEl": "Για να δω… Temperature is 21 and humidity is 40 - that is fine, really fine. See αριθμός 3 for details: it matters. Use and ή or both options.",
+   "light": "Temperature is 21 and humidity is 40 - that is fine, really fine. Alright… See number 3 for details: it matters. Use and or or both options."
+  }
+ ],
+ "strip": [
+  {
+   "in": "Sure. The capital of France is Paris.",
+   "out": "Sure. The capital of France is Paris."
+  },
+  {
+   "in": "Here is what I found:\n\n- The battery is at 80%\n- Wi-Fi is connected to home\n- Bluetooth is off\n\nLet me know if you want more.",
+   "out": "Here is what I found:. The battery is at 80%. Wi-Fi is connected to home. Bluetooth is off. Let me know if you want more."
+  },
+  {
+   "in": "## Weather\nIt will be sunny today, with a high of 24 degrees and a light breeze from the north. Tomorrow looks cooler and cloudier, so take a jacket if you go out. The weekend should be dry overall, though rain is possible on Sunday evening.",
+   "out": "Weather. It will be sunny today, with a high of 24 degrees and a light breeze from the north. Tomorrow looks cooler and cloudier, so take a jacket if you go out. The weekend should be dry overall, though rain is possible on Sunday evening."
+  },
+  {
+   "in": "1. Open the settings\n2. Tap Wi-Fi\n3. Pick your network\n4. Enter the password\n5. Press connect",
+   "out": "Open the settings. Tap Wi-Fi. Pick your network. Enter the password. Press connect"
+  },
+  {
+   "in": "The result is **42**, see [the docs](https://example.com/docs) or `config.json` in /home/user/project/config.json. It is ~15% faster & uses 3/4 of the memory => good.",
+   "out": "The result is 42, see the docs or config.json in config.json. It is ~15% faster & uses 3/4 of the memory => good."
+  },
+  {
+   "in": "Η πρωτεύουσα της Γαλλίας είναι το Παρίσι. Είναι μια πολύ όμορφη πόλη με πολλά μουσεία και πάρκα. Μπορείς να την επισκεφτείς οποιαδήποτε εποχή του χρόνου, αλλά η άνοιξη είναι ιδιαίτερα ευχάριστη.",
+   "out": "Η πρωτεύουσα της Γαλλίας είναι το Παρίσι. Είναι μια πολύ όμορφη πόλη με πολλά μουσεία και πάρκα. Μπορείς να την επισκεφτείς οποιαδήποτε εποχή του χρόνου, αλλά η άνοιξη είναι ιδιαίτερα ευχάριστη."
+  },
+  {
+   "in": "Βρήκα τα εξής:\n- Η μπαταρία είναι στο 80%\n- Το Wi-Fi είναι συνδεδεμένο\n- Το Bluetooth είναι κλειστό",
+   "out": "Βρήκα τα εξής:. Η μπαταρία είναι στο 80%. Το Wi-Fi είναι συνδεδεμένο. Το Bluetooth είναι κλειστό"
+  },
+  {
+   "in": "```js\nconsole.log(1)\n```\nThat snippet prints one. It is the simplest possible program and it does nothing else at all, which is why it is a good first test of anything.",
+   "out": "(code) . That snippet prints one. It is the simplest possible program and it does nothing else at all, which is why it is a good first test of anything."
+  },
+  {
+   "in": "A very long single sentence that keeps going and going because there is a lot to say about this particular subject, and it never really stops until we reach the end of the line which is much too far away.",
+   "out": "A very long single sentence that keeps going and going because there is a lot to say about this particular subject, and it never really stops until we reach the end of the line which is much too far away."
+  },
+  {
+   "in": "Done.",
+   "out": "Done."
+  },
+  {
+   "in": "",
+   "out": ""
+  },
+  {
+   "in": "First thought. Second thought is a little longer than the first. Third thought is again fairly long to avoid being blocked. Fourth sentence here is also long enough. Fifth sentence goes on a bit as well, yes. Sixth sentence closes this paragraph off nicely.",
+   "out": "First thought. Second thought is a little longer than the first. Third thought is again fairly long to avoid being blocked. Fourth sentence here is also long enough. Fifth sentence goes on a bit as well, yes. Sixth sentence closes this paragraph off nicely."
+  },
+  {
+   "in": "Temperature is 21 and humidity is 40 - that is fine — really fine. See #3 for details: it matters. Use and/or both options.",
+   "out": "Temperature is 21 and humidity is 40 - that is fine — really fine. See #3 for details: it matters. Use and/or both options."
+  }
+ ],
+ "classify": [
+  {
+   "in": "What is the weather in Athens?",
+   "category": "search",
+   "lang": "en"
+  },
+  {
+   "in": "hello",
+   "category": "greeting",
+   "lang": "en"
+  },
+  {
+   "in": "Hi there!",
+   "category": "greeting",
+   "lang": "en"
+  },
+  {
+   "in": "Send a text to Maria",
+   "category": "device",
+   "lang": "en"
+  },
+  {
+   "in": "write me a poem about the sea",
+   "category": "creative",
+   "lang": "en"
+  },
+  {
+   "in": "how much is 15% of 80",
+   "category": "analysis",
+   "lang": "en"
+  },
+  {
+   "in": "calculate 12 * 7",
+   "category": "analysis",
+   "lang": "en"
+  },
+  {
+   "in": "tell me a joke",
+   "category": "general",
+   "lang": "en"
+  },
+  {
+   "in": "What time is it",
+   "category": "general",
+   "lang": "en"
+  },
+  {
+   "in": "γεια σου",
+   "category": "greeting",
+   "lang": "el"
+  },
+  {
+   "in": "πες μου για την Αθήνα",
+   "category": "general",
+   "lang": "el"
+  },
+  {
+   "in": "τι καιρό κάνει;",
+   "category": "general",
+   "lang": "el"
+  },
+  {
+   "in": "στείλε μήνυμα στη Μαρία",
+   "category": "device",
+   "lang": "el"
+  },
+  {
+   "in": "γράψε ένα ποίημα",
+   "category": "creative",
+   "lang": "el"
+  },
+  {
+   "in": "πόσο κάνει 12 x 7",
+   "category": "analysis",
+   "lang": "el"
+  },
+  {
+   "in": "Καλημέρα",
+   "category": "greeting",
+   "lang": "el"
+  },
+  {
+   "in": "what is the battery level",
+   "category": "device",
+   "lang": "en"
+  },
+  {
+   "in": "",
+   "category": "general",
+   "lang": "en"
+  },
+  {
+   "in": "why does the sky look blue",
+   "category": "analysis",
+   "lang": "en"
+  },
+  {
+   "in": "set a timer for five minutes",
+   "category": "device",
+   "lang": "en"
+  },
+  {
+   "in": "Ποιος είναι ο πρωθυπουργός",
+   "category": "general",
+   "lang": "el"
+  }
+ ],
+ "thinking": [
+  {
+   "in": "Let me check the battery level first. Then I will report.",
+   "summary": "Let me check the battery level first.",
+   "spoken0": "Hmm, let me think… Let me check the battery level first.",
+   "spoken1": "Let me check the battery level first."
+  },
+  {
+   "in": "The user wants the weather in Athens so I should call the weather tool and read the result.",
+   "summary": "The user wants the weather in Athens so I should call the weather tool and read the result.",
+   "spoken0": "Hmm, let me think… The user wants the weather in Athens so I should call the weather tool and read the result.",
+   "spoken1": "The user wants the weather in Athens so I should call the weather tool and read the result."
+  },
+  {
+   "in": "{\"tool\":\"x\"}",
+   "summary": "",
+   "spoken0": "",
+   "spoken1": ""
+  },
+  {
+   "in": "ok",
+   "summary": "",
+   "spoken0": "",
+   "spoken1": ""
+  },
+  {
+   "in": "- first idea about the thing\n- second idea",
+   "summary": "first idea about the thing second idea",
+   "spoken0": "Hmm, let me think… first idea about the thing second idea",
+   "spoken1": "first idea about the thing second idea"
+  },
+  {
+   "in": "Πρέπει να ελέγξω τη μπαταρία του κινητού και μετά να απαντήσω στον χρήστη.",
+   "summary": "Πρέπει να ελέγξω τη μπαταρία του κινητού και μετά να απαντήσω στον χρήστη.",
+   "spoken0": "Χμμ, για να σκεφτώ… Πρέπει να ελέγξω τη μπαταρία του κινητού και μετά να απαντήσω στον χρήστη.",
+   "spoken1": "Πρέπει να ελέγξω τη μπαταρία του κινητού και μετά να απαντήσω στον χρήστη."
+  }
+ ]
+}

@@ -37,6 +37,12 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+try:                                   # natural-voice helpers installed next to this script
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import s22_voice as V
+except ImportError:                    # old install: plain markdown stripping, no fillers
+    V = None
+
 CHROOT = Path('/mnt/omarchy-trial')
 ASR_DIR = '/opt/s22-asr'                       # inside the chroot
 WORK = '/tmp/s22-assistant'                    # inside the chroot
@@ -56,7 +62,17 @@ DEFAULTS = {
     'tail_s': 0.3,             # keep recording briefly after release
     'reply_timeout_s': 240.0,
     'max_spoken_chars': 450,
-    'still_working_s': 15.0,
+    'still_working_s': 15.0,     # spoken "One moment." when the filler clips are unavailable
+    'poll_s': 0.4,               # reply polling interval
+    # natural voice (s22_voice.py, from OpenUnum 89ac48de)
+    'enhance': 'chatty',         # chatty | light | off: lists -> "First... Then...", pauses, fillers
+    'fillers': True,             # pre-rendered "hmm, let me think" clip while the agent works
+    'filler_delay_s': 1.2,       # no answer audio by now -> first filler clip
+    'filler_second_s': 6.0,      # still no answer -> a second "still thinking" clip
+    'filler_repeat_s': 25.0,     # ... and another this often (max 3 more)
+    'filler_dir': '/root/.openunum/assets/voice-fillers',   # inside the chroot
+    'split_chars': 120,          # answers longer than this: first sentence is spoken while the rest renders
+    'speak_thinking': True,      # speak short reasoning chunks if the agent streams any
 }
 
 VOICE_CONTEXT = (
@@ -177,6 +193,28 @@ def summarize(text: str, limit: int) -> tuple[str, bool]:
     return out + ' The full answer is in the voice chat.', True
 
 
+def split_first_chunk(text: str, min_total: int = 120, first_max: int = 110, first_min: int = 40) -> tuple[str, str]:
+    """(first, rest): a short opening for a long answer, so playback can start while the rest renders.
+
+    The first sentence if it is at most `first_max` characters, else the first clause (comma, semicolon
+    or colon) that ends between `first_min` and `first_max`. Short answers are returned whole.
+    """
+    if len(text) <= min_total:
+        return text, ''
+    m = re.search(r'[.!?…](?=\s)', text)
+    if m and first_min <= m.end() <= first_max:
+        return text[:m.end()], text[m.end():].strip()
+    for m in re.finditer(r'[,;:](?=\s)', text):
+        if first_min <= m.end() <= first_max:
+            return text[:m.end()], text[m.end():].strip()
+        if m.end() > first_max:
+            break
+    if m := re.search(r'[.!?…](?=\s)', text):
+        if m.end() >= 25 and m.end() < len(text) - 10:
+            return text[:m.end()], text[m.end():].strip()
+    return text, ''
+
+
 # ---------------------------------------------------------------- side effects
 
 class Assistant:
@@ -189,7 +227,7 @@ class Assistant:
         self.agent_ready: dict = {}
 
     # -- audio
-    def say(self, text: str = '', wav: str | None = None, wait: bool = True):
+    def say(self, text: str = '', wav: str | None = None, wait: bool = True, filler: bool = False):
         if not self.speak_enabled:
             if text:
                 print(f'[say] {text}', flush=True)
@@ -283,7 +321,7 @@ class Assistant:
             ok = self.healthy()
         self.agent_ready.update(ok=ok, ms=int((time.time() - t) * 1000))
 
-    def ask(self, text: str) -> str:
+    def ask(self, text: str, still_working: bool = True) -> str:
         session = self.cfg['session']
         since = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(time.time() - 2))
         status, out = self._http('POST', '/api/chat', {
@@ -294,10 +332,10 @@ class Assistant:
         while out.get('pending') and not out.get('reply'):
             if time.time() - start > self.cfg['reply_timeout_s']:
                 raise TimeoutError('assistant reply timed out')
-            if not warned and time.time() - start > self.cfg['still_working_s']:
+            if still_working and not warned and time.time() - start > self.cfg['still_working_s']:
                 warned = True
                 self.say('One moment.', wait=False)
-            time.sleep(1.0)
+            time.sleep(float(self.cfg.get('poll_s', 1.0)))
             _, out = self._http('GET', f'/api/chat/pending?sessionId={session}', timeout=15)
             if not out.get('pending') and not out.get('reply'):
                 # completed but consumed elsewhere (e.g. the WebUI): read history
@@ -309,6 +347,174 @@ class Assistant:
         model = out.get('model') or {}
         self.rec['model'] = model.get('activeModel') or model.get('model') if isinstance(model, dict) else model
         return str(out.get('reply') or '').strip()
+
+    # -- natural voice: speakable text, filler clips, spoken thinking
+    prerender = True      # synthesize the answer while a filler plays (off for --silent-verify)
+    filler_proc = None    # a filler/thinking clip still playing when the reply arrived
+
+    def finish_filler(self) -> None:
+        """Let the clip that is playing finish (never cut off) before the real answer starts."""
+        proc, self.filler_proc = self.filler_proc, None
+        if proc is not None:
+            try:
+                proc.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                pass
+
+    def speakable(self, reply: str) -> tuple[str, bool]:
+        """Reply -> (text to speak, truncated). Bullets and markdown are never spoken."""
+        style = self.cfg.get('enhance', 'chatty')
+        if V is not None and style != 'off':
+            text = V.reply_to_speech(reply, style=style)
+        else:
+            text = clean_for_speech(reply)
+        return summarize(text, int(self.cfg['max_spoken_chars']))
+
+    def filler_bank(self):
+        if V is None or not self.cfg.get('fillers', True):
+            return None
+        root = CHROOT / str(self.cfg['filler_dir']).lstrip('/')
+        if not (root / 'manifest.json').is_file():
+            return None
+        return V.FillerBank(root, chroot_prefix=str(CHROOT), state_file=Path('/srv/s22/state/voice-filler-last.json'))
+
+    def _thinking_listener(self, stop: threading.Event, out: list, speaker) -> None:
+        """Follow /api/chat/stream; reasoning_delta tokens become short spoken chunks (out)."""
+        try:
+            req = urllib.request.Request(f"{API}/api/chat/stream?sessionId={self.cfg['session']}")
+            with urllib.request.urlopen(req, timeout=15) as r:
+                event = ''
+                while not stop.is_set():
+                    line = r.readline()
+                    if not line:
+                        return
+                    line = line.decode('utf-8', 'replace').strip()
+                    if line.startswith('event:'):
+                        event = line[6:].strip()
+                    elif line.startswith('data:') and event in ('reasoning_delta', 'content_delta'):
+                        try:
+                            token = json.loads(line[5:]).get('token', '')
+                        except ValueError:
+                            continue
+                        counter = 'reasoning_events' if event == 'reasoning_delta' else 'content_events'
+                        self.rec[counter] = self.rec.get(counter, 0) + 1
+                        if event == 'content_delta':
+                            speaker.answer_started()
+                            continue
+                        chunk = speaker.push(token)
+                        if chunk:
+                            out.append(chunk)
+        except (OSError, ValueError, urllib.error.URLError):
+            return
+
+    def ask_with_fillers(self, text: str) -> str:
+        """self.ask() with filler clips while it runs.
+
+        No answer 1.2 s after the question: a category-matched clip (never the
+        same one twice in a row); 6 s: a second "still thinking" clip, then one
+        every 25 s; spoken reasoning chunks when the agent streams any. Clips are
+        finished (not cut) before this returns, so the real answer never overlaps.
+        """
+        cfg = self.cfg
+        bank = self.filler_bank() if self.speak_enabled else None
+        result: dict = {}
+
+        def work():
+            try:
+                result['reply'] = self.ask(text, still_working=bank is None)
+            except BaseException as error:        # re-raised in the caller
+                result['error'] = error
+
+        t0 = time.time()
+        self.rec['ask_t0'] = round(t0, 3)
+        worker = threading.Thread(target=work, daemon=True)
+        worker.start()
+        events: list = []
+        stop = threading.Event()
+        chunks: list = []
+        if V is not None and cfg.get('speak_thinking', True) and self.speak_enabled:
+            threading.Thread(target=self._thinking_listener, args=(stop, chunks, V.ThinkingSpeaker()),
+                             daemon=True).start()
+        playing = None
+        next_filler = float(cfg['filler_delay_s'])
+        played = 0
+        try:
+            while worker.is_alive():
+                worker.join(0.05)
+                now = time.time() - t0
+                if playing is not None and playing.poll() is not None:
+                    playing = None
+                if not worker.is_alive():
+                    break
+                if playing is not None:
+                    continue
+                if chunks:
+                    chunk = chunks.pop(0)
+                    playing = self.say(chunk, wait=False, filler=True)
+                    events.append({'kind': 'thinking', 'at_s': round(now, 2), 'text': chunk})
+                elif bank is not None and now >= next_filler and played <= 4:
+                    wav, info = bank.pick(text, second=played > 0)
+                    if wav:
+                        playing = self.say(wav=wav, wait=False, filler=True)
+                        events.append({'kind': 'filler', 'at_s': round(now, 2), **info})
+                    played += 1
+                    next_filler = now + (float(cfg['filler_second_s']) - float(cfg['filler_delay_s'])
+                                         if played == 1 else float(cfg['filler_repeat_s']))
+            self.rec['reply_wait_ms'] = int((time.time() - t0) * 1000)
+            self.rec['reply_t'] = round(time.time(), 3)
+            self.filler_proc = playing                 # speak_answer() lets it finish before the answer
+        finally:
+            stop.set()
+            self.rec['fillers'] = events
+        if 'error' in result:
+            raise result['error']
+        return result.get('reply', '')
+
+    def _render(self, text: str, name: str) -> str | None:
+        """Synthesize `text` with s22-say in render-only mode; the chroot path of the WAV, or None."""
+        out = CHROOT / WORK.lstrip('/') / name
+        out.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            out.unlink(missing_ok=True)
+            subprocess.run([str(BIN / 's22-say'), text], env={**os.environ, 'S22_SAY_OUT': str(out)},
+                           stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+            if out.is_file() and out.stat().st_size > 1000:
+                return f'{WORK}/{name}'
+        except (OSError, subprocess.SubprocessError):
+            pass
+        return None
+
+    def speak_answer(self, spoken: str) -> None:
+        """Speak the answer, synthesizing before playing so a long answer starts sooner.
+
+        A longer answer is split after its first sentence: sentence one is rendered and starts
+        playing while the rest renders (each s22-say call loads the TTS model, ~2 s, so rendering
+        the whole answer first left several silent seconds after the filler). Playback calls
+        queue on s22-say's own lock, so the order is kept.
+        """
+        if not (self.speak_enabled and self.prerender):
+            self.finish_filler()
+            self.say(spoken)
+            return
+        t = time.time()
+        first, rest = split_first_chunk(spoken, int(self.cfg.get('split_chars', 120)))
+        w1 = self._render(first, 'answer1.wav')   # synthesized while any filler is still playing
+        self.finish_filler()
+        if not w1:
+            self.say(spoken)
+            return
+        self.rec['render_ms'] = int((time.time() - t) * 1000)
+        self.rec['answer_launch_t'] = round(time.time(), 3)
+        p1 = self.say(wav=w1, wait=False)
+        w2 = self._render(rest, 'answer2.wav') if rest else None
+        if p1 is not None:
+            p1.wait(timeout=180)
+        if rest:
+            if w2:
+                self.say(wav=w2)
+            else:
+                self.say(rest)
+        self.rec['render_total_ms'] = int((time.time() - t) * 1000)
 
     def log(self) -> None:
         try:
@@ -344,17 +550,18 @@ class Assistant:
             if not self.agent_ready.get('ok'):
                 raise ConnectionError('OpenUnum not reachable')
             t = time.time()
-            reply = self.ask(text)
+            reply = self.ask_with_fillers(text)
             self.rec['agent_ms'] = int((time.time() - t) * 1000)
             self.rec['reply_chars'] = len(reply)
-            spoken, cut = summarize(clean_for_speech(reply), int(self.cfg['max_spoken_chars']))
+            spoken, cut = self.speakable(reply)
             if not spoken:
                 spoken = 'The assistant returned an empty answer.'
             self.rec.update(spoken_chars=len(spoken), truncated=cut, reply=reply[:2000],
                             result='ok')
             self.rec['to_speech_ms'] = int((time.time() - t0) * 1000)
+            self.rec['spoken'] = spoken[:2000]
             t = time.time()
-            self.say(spoken)
+            self.speak_answer(spoken)
             self.rec['speak_ms'] = int((time.time() - t) * 1000)
             return 0
         except Exception as error:   # every failure is spoken, then logged

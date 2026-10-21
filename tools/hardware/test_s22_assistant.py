@@ -75,7 +75,7 @@ class RunTests(unittest.TestCase):
         self.a = MOD.Assistant(dict(CFG), speak=False, base=self.base)
         self.a.ensure_agent = lambda: self.a.agent_ready.update(ok=True, ms=1)
         self.said = []
-        self.a.say = lambda text='', wav=None, wait=True: self.said.append(text or wav)
+        self.a.say = lambda text='', wav=None, wait=True, filler=False: self.said.append(text or wav)
 
     def tearDown(self):
         self.chroot.stop(); self.td.cleanup()
@@ -84,13 +84,77 @@ class RunTests(unittest.TestCase):
         return [json.loads(l) for l in (self.base / 'assistant.jsonl').read_text().splitlines()]
 
     def test_text_round_trip_is_spoken_and_logged(self):
-        self.a.ask = lambda text: '**Four.** Two plus two is four.'
+        self.a.ask = lambda text, still_working=True: '**Four.** Two plus two is four.'
         self.assertEqual(self.a.run(text='what is two plus two'), 0)
-        self.assertEqual(self.said, ['Four. Two plus two is four.'])
+        self.assertEqual(self.said, ['Four. Right… Two plus two is four.'])   # chatty filler (seeded)
         rec = self.log()[-1]
         self.assertEqual((rec['result'], rec['transcript'], rec['reply_chars']),
                          ('ok', 'what is two plus two', 31))
         self.assertIn('total_ms', rec)
+
+    def test_list_answer_is_spoken_as_prose(self):
+        self.a.ask = lambda text, still_working=True: 'You have:\n- 80% battery\n- Wi-Fi on\n- Bluetooth off'
+        self.assertEqual(self.a.run(text='status'), 0)
+        spoken = self.said[0]
+        self.assertTrue(spoken.startswith('You have. First, 80 percent battery.'), spoken)
+        self.assertIn('And finally, bluetooth off.', spoken)
+        self.assertNotIn('- ', spoken)
+
+    def test_filler_plays_while_waiting_and_finishes_before_answer(self):
+        import time as _t
+        order = []
+
+        class Proc:
+            def __init__(s, label): s.label = label; s.t = _t.time()
+            def poll(s): return None if _t.time() - s.t < 0.25 else 0
+            def wait(s, timeout=None):
+                _t.sleep(max(0, 0.25 - (_t.time() - s.t))); order.append(('done', s.label))
+
+        def say(text='', wav=None, wait=True, filler=False):
+            order.append(('say', wav or text)); return Proc(wav or text) if not wait else None
+        class Bank:
+            n = 0
+            def pick(s, q, second=False):
+                s.n += 1; return f'/f{s.n}.wav', {'category': 'search', 'second': second}
+        def slow_ask(text, still_working=True):
+            _t.sleep(1.3); return 'Answer.'
+        cfg = dict(CFG, filler_delay_s=0.2, filler_second_s=0.5, filler_repeat_s=10, speak_thinking=False)
+        a = MOD.Assistant(cfg, speak=True, base=self.base)
+        a.say = say; a.ask = slow_ask; a.filler_bank = lambda: Bank()
+        self.assertEqual(a.ask_with_fillers('what is the weather'), 'Answer.')
+        kinds = [e['kind'] for e in a.rec['fillers']]
+        self.assertEqual(kinds[:2], ['filler', 'filler'])
+        self.assertTrue(a.rec['fillers'][0]['at_s'] >= 0.2)
+        self.assertEqual(order[0], ('say', '/f1.wav'))
+        self.assertEqual([o for o in order if o[0] == 'say'], [('say', '/f1.wav'), ('say', '/f2.wav')][:len([o for o in order if o[0] == 'say'])])
+        self.assertGreaterEqual(len([o for o in order if o[0] == 'say']), 2)
+
+    def test_long_answer_is_split_and_ordered(self):
+        calls = []
+        class Proc:
+            def wait(s, timeout=None): calls.append('first-done')
+        a = MOD.Assistant(dict(CFG), speak=True, base=self.base)
+        a._render = lambda text, name: (calls.append(('render', name)) or f'/tmp/{name}')
+        a.say = lambda text='', wav=None, wait=True, filler=False: (calls.append(('say', wav or text)), Proc() if not wait else None)[1]
+        long_text = 'This is the first sentence of the answer. ' + 'And the rest goes on for a good while longer. ' * 4
+        a.speak_answer(long_text.strip())
+        self.assertEqual(calls, [('render', 'answer1.wav'), ('say', '/tmp/answer1.wav'), ('render', 'answer2.wav'),
+                                 'first-done', ('say', '/tmp/answer2.wav')])
+        calls.clear()
+        a.speak_answer('Short answer.')
+        self.assertEqual(calls, [('render', 'answer1.wav'), ('say', '/tmp/answer1.wav'), 'first-done'])
+
+    def test_split_first_chunk(self):
+        f = MOD.split_first_chunk
+        self.assertEqual(f('Short answer here.'), ('Short answer here.', ''))
+        long_a = 'For a good night of sleep, keep your room cool and dark, put screens away before bed, and try a calming routine. What time are you going to bed tonight?'
+        first, rest = f(long_a)
+        self.assertEqual(first, 'For a good night of sleep, keep your room cool and dark,')
+        self.assertTrue(rest.startswith('put screens'))
+        s = 'One short sentence that is long enough to count. ' + 'And a second one that goes on and on for a while. ' * 3
+        self.assertEqual(f(s.strip())[0], 'One short sentence that is long enough to count.')
+        no_break = 'word ' * 60
+        self.assertEqual(f(no_break.strip()), (no_break.strip(), ''))
 
     def test_empty_transcript(self):
         self.a.transcribe = lambda wav: ''
