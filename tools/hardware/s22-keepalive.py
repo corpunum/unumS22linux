@@ -23,13 +23,18 @@ A service whose process is missing is restarted at once. A service whose
 process exists but does not answer is restarted only after it has been
 unhealthy for UNHEALTHY_S (busy OpenUnum turns can stall /health briefly).
 Restarts back off (30 s doubling to 10 min) and at most MAX_RESTARTS happen
-per WINDOW_S per service; after that it only logs.
+per WINDOW_S per service; after that it only logs. A service def may override
+"max_restarts", "window_s" and "backoff_max_s" (2026-10-21: bluetooth retries
+with backoff until hci0 is up, because its gate depends on Wi-Fi/CNSS being
+ready, which can take minutes after boot).
 
 Mute guard (owner instruction 2026-10-08: keep the phone muted): after every
 restart, and on every check, the saved level (/srv/s22/buttons/volume) and the
 CS35L41 amp gain are read. With "enforce_mute" (default true) anything above
 0 is set back to 0 and logged. Turn it off in config.json if the owner wants
-sound again. While s22-say holds /run/s22-say.lock (a playback is running;
+sound again. Root guard: below "root_min_free_mb" (40) free on / the logs on /
+are capped at 1 MiB and regenerable caches emptied (logged as root_low).
+While s22-say holds /run/s22-say.lock (a playback is running;
 s22-say raises a muted amp to a speech level and restores it on exit) the
 check is skipped, so the guard never cuts a sentence off (2026-10-21).
 
@@ -83,6 +88,7 @@ DEFAULTS = {
     'max_restarts': 5,
     'window_s': 1800,
     'enforce_mute': True,
+    'root_min_free_mb': 40,
     'services': ['openunum', 'unumsearch'],
     'service_defs': {},
     'pin_model': False,
@@ -377,6 +383,51 @@ def playback_active(lock: Path = SAY_LOCK) -> bool:
         os.close(fd)
 
 
+# ------------------------------------------------------------------ root guard
+# The native root is an overlay whose upper dir sits on the 583 MB CACHE
+# partition (2026-10-21: it reached 96 %). Below root_min_free_mb free the
+# guard caps logs on / and empties regenerable caches only; it never touches
+# binaries, configs or /root work files. Bulk data belongs on /srv/s22.
+ROOT_LOG_GLOBS = ('/var/log/*.log', '/var/log/*/*.log', '/root/*.log')
+ROOT_LOG_CAP = 1 << 20                     # truncate a log on / to its last 1 MiB
+ROOT_CACHE_DIRS = ('/root/.cache/mesa_shader_cache', '/var/cache/apk', '/root/.cache/pip')
+
+
+def free_mb(path: str = '/') -> float:
+    st = os.statvfs(path)
+    return st.f_bavail * st.f_frsize / (1 << 20)
+
+
+def prune_root(root: Path = Path('/')) -> list[str]:
+    """Cap logs and empty regenerable caches under ROOT; return what was done."""
+    import glob
+    import shutil
+    done = []
+    for pattern in ROOT_LOG_GLOBS:
+        for f in glob.glob(str(root) + pattern):
+            try:
+                size = os.path.getsize(f)
+                if size > ROOT_LOG_CAP:
+                    with open(f, 'rb') as fh:
+                        fh.seek(size - ROOT_LOG_CAP)
+                        tail = fh.read()
+                    with open(f, 'wb') as fh:
+                        fh.write(tail)
+                    done.append(f'capped {f} {size}->{len(tail)}')
+            except OSError:
+                pass
+    for d in ROOT_CACHE_DIRS:
+        p = Path(str(root) + d)
+        if p.is_dir() and any(p.iterdir()):
+            for child in p.iterdir():
+                try:
+                    shutil.rmtree(child) if child.is_dir() and not child.is_symlink() else child.unlink()
+                except OSError:
+                    pass
+            done.append(f'emptied {d}')
+    return done
+
+
 def apply_mute(buttons: Path = BUTTONS, runner=amp_run) -> None:
     (buttons / 'volume').write_text('0\n')
     if Path('/sys/class/sound/card0').exists():
@@ -503,11 +554,16 @@ class Keepalive:
             return 'wait'                      # alive but slow: give it time
         if now < self.next_try[name]:
             return 'wait'
-        window = [t for t in self.history[name] if now - t < self.cfg['window_s']]
+        window = [t for t in self.history[name] if now - t < self.limit(name, 'window_s')]
         self.history[name] = window
-        if len(window) >= self.cfg['max_restarts']:
+        if len(window) >= self.limit(name, 'max_restarts'):
             return 'limited'
         return 'restart'
+
+    def limit(self, name: str, key: str) -> float:
+        """Per-service override from its service def, else the global config."""
+        spec = getattr(self.services.get(name), 'spec', None) or {}
+        return float(spec.get(key, self.cfg[key]))
 
     def restart(self, name: str, running: bool, now: float) -> bool:
         svc = self.services[name]
@@ -519,9 +575,21 @@ class Keepalive:
         ok, detail = svc.start()
         self.history[name].append(now)
         self.next_try[name] = now + self.backoff[name]
-        self.backoff[name] = min(self.backoff[name] * 2, float(self.cfg['backoff_max_s']))
+        self.backoff[name] = min(self.backoff[name] * 2, self.limit(name, 'backoff_max_s'))
         self.log(event='restart', service=name, was_running=running, ok=ok, detail=detail)
         return ok
+
+    def root_guard(self, root: str = '/') -> dict:
+        try:
+            before = free_mb(root)
+        except OSError:
+            return {}
+        if before >= float(self.cfg.get('root_min_free_mb', 40)):
+            return {'free_mb': round(before, 1)}
+        done = prune_root(Path(root))
+        after = free_mb(root)
+        self.log(event='root_low', free_mb_before=round(before, 1), free_mb_after=round(after, 1), actions=done)
+        return {'free_mb': round(after, 1), 'pruned': done}
 
     def mute_check(self, reason: str) -> dict:
         if playback_active():
@@ -612,6 +680,7 @@ class Keepalive:
             result['model_pin'] = self.pin_via_api(now)
         result['mute'] = self.mute_check('after_restart' if restarted else 'periodic')
         if fix:
+            result['root'] = self.root_guard()
             try:
                 staged = stage_firmware()
             except OSError as e:

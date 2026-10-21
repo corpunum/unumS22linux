@@ -218,8 +218,10 @@ static bool votes_match(const char *summary, unsigned expected_bt)
 		cursor = *end ? end + 1 : end;
 	}
 	/* The exact observed baseline: one CNSS vote, no BT vote, no other user.
-	 * Do not accept arbitrary shared-rail states or substrings of names. */
-	return rails == 1 && bts == 1 && cnsss == 2 &&
+	 * Do not accept arbitrary shared-rail states or substrings of names.
+	 * CNSS may hold the rail through one or two consumer handles (2026-10-21:
+	 * one after some boots); the votes must still sum to exactly 1. */
+	return rails == 1 && bts == 1 && cnsss >= 1 &&
 		rail == 1 + expected_bt && bt == expected_bt && cnss == 1;
 }
 

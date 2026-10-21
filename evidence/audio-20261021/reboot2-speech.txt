@@ -1,0 +1,13 @@
+{"ok": true, "path": "/run/s22-touch/tts/1792614310876-2278.wav", "engine": "piper", "ms": 1209, "played": true, "play_rc": 0, "out": "speaker", "play_ms": 5363}
+
+rec rc=0 
+abox=ONLINE last=graph pcm=100 rc=0 t=1792614317
+restored L=0 R=0
+=====
+{"ok": true, "path": "/run/s22-touch/tts/1792614323205-2278.wav", "engine": "el-antonis", "ms": 1647, "played": true, "play_rc": 0, "out": "speaker", "play_ms": 4339}
+
+rec rc=0 
+abox=ONLINE last=graph pcm=100 rc=0 t=1792614329
+restored L=0 R=0
+== whisper large-v3-turbo (en) r2-en:  The phone can talk now. This sentence was spoken by the Piper voice of the Galaxy S22.
+== whisper large-v3-turbo (el) r2-el:  Καλησπέρα, το τηλέφωνο μιλάει τώρα ελληνικά με τη φωνή του Ατώνη.

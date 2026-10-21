@@ -1,0 +1,15 @@
+pcm100: hw_params OK
+pcm102: hw_params OK
+== S22_GRAPH_PCM=102 s22-say (level 0)
+rc=0 last=graph pcm=102 rc=0 t=1792614282
+== crash -> s22-say
+  induce 1 -> ONLINE
+  induce 2 -> OFFLINE
+s22-say: ABOX OFFLINE, failsafe reset
+say rc=0 last=graph pcm=100 rc=0 t=1792614290 abox=ONLINE
+== crash -> s22-rec
+  induce 1 -> OFFLINE
+s22-rec: ABOX OFFLINE, failsafe reset
+rec rc=0 size=96044 abox=ONLINE
+== pcm102 after crashes
+pcm102: hw_params OK
