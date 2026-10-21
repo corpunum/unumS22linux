@@ -1,0 +1,21 @@
+=== run 1
+play rc=0 
+rec rc=0 
+say.last: graph pcm=100 rc=0 t=1792610851
+restored L=0 R=0
+tone windows (ratio>100): 0 ->
+t=4.25 rms=0.0018 peak=  7724Hz target/noise=     1.2
+=== run 2
+play rc=0 
+rec rc=0 
+say.last: graph pcm=100 rc=0 t=1792610857
+restored L=0 R=0
+tone windows (ratio>100): 0 ->
+t=3.00 rms=0.0013 peak=  1000Hz target/noise=   621.4
+=== run 3
+play rc=0 
+rec rc=0 
+say.last: graph pcm=100 rc=0 t=1792610863
+restored L=0 R=0
+tone windows (ratio>100): 0 ->
+t=3.00 rms=0.0013 peak=  1000Hz target/noise=   829.3

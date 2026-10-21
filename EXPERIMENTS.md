@@ -2991,3 +2991,19 @@ For this UI the CPU path is faster. EGL-on-GBM was not tested: the vendor image 
 
 Real-finger latency, photon time and power were not measured. The phone was restored: same sway, seatd and touchd PIDs, shell respawned and the home screen visible. Nothing was flashed or installed, there was no reboot, and audio and voice were untouched.
 [Evidence](evidence/fastui-20261021/README.md).
+
+### 2026-10-21 (evening) — Graph playback EBADFD regression: root cause and fix
+
+- The regression came from my s22-say graph default. The `s22graph` plug made
+  alsa-lib mmap `hw:0,102` whenever rate/format conversion was needed (TTS
+  WAVs). The ABOX vdma ION mmap (`dma_buf_mmap` replaces the vm_ops) leaks
+  `substream->mmap_count`, so every later HW_PARAMS on calliope_2 returns
+  EBADFD until reboot (speaker-test shows the errno; pcm100 is unaffected).
+- My earlier speech "pass" (#27/#28) had silently used the RDMA6 fallback.
+  s22-say now writes `/run/s22-say.last` so the path that played is visible.
+- Fix: offline conversion (`s22conv:FILE`, plug → file → null), then RW
+  playback straight into `hw:0,100` (calliope_0 → bdmixer → RDMA3). No plug
+  ever fronts a calliope device again.
+- Verified with no reboot: 6 silent runs, 3 tone loopbacks, EN/EL speech with
+  whisper (EL exact, EN one word off), and the repro ×5. All went through the
+  graph and none fell back. pcm102 heals at the next reboot.

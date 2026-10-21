@@ -1,0 +1,14 @@
+{"ok": true, "path": "/run/s22-touch/tts/1792610887706-2332.wav", "engine": "piper", "ms": 1072, "played": true, "play_rc": 0, "out": "speaker", "play_ms": 5755}
+
+rec rc=0 
+abox=ONLINE last=graph pcm=100 rc=0 t=1792610894
+restored L=0 R=0
+=====
+{"ok": true, "path": "/run/s22-touch/tts/1792610899944-2332.wav", "engine": "el-antonis", "ms": 1434, "played": true, "play_rc": 0, "out": "speaker", "play_ms": 4476}
+
+rec rc=0 
+abox=ONLINE last=graph pcm=100 rc=0 t=1792610905
+restored L=0 R=0
+== whisper large-v3-turbo (en) fs-en:  The phone can talk now. The sentence was spoken by the Piper voice on the Galaxy S22.
+== whisper large-v3-turbo (el) fs-el:  Καλησπέρα, το τηλέφωνο μιλάει τώρα ελληνικά με τη φωνή του Αντώνη.
+== phone parakeet fs-en: "text": "The phone can talk now, the sentence was spoken by the piper voice on the galaxy asked what he do."
