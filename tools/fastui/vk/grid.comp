@@ -1,0 +1,45 @@
+#version 450
+// fastui GPU frame: the same 2x4 tile grid as the CPU renderer (no text),
+// written straight into a linear XRGB8888 buffer that the display scans out.
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(std430, binding = 0) buffer Out { uint px[]; };
+layout(push_constant) uniform P { uint w; uint h; uint stride_px; uint hl; uint frame; } pc;
+
+const uint BG = 0x0b0e13u, TILE = 0x1a2029u, TILE_HI = 0x2f6fd8u, BORDER_HI = 0x9cc3ffu, BAR = 0x12161du, TEXT = 0xf2f4f7u;
+const uint ACC[8] = uint[8](0x4a9df8u, 0x3fbf6fu, 0xe0b030u, 0x9b6cf0u, 0xa0a8b4u, 0xe08a30u, 0x30c0c0u, 0xe05a7au);
+const int STATUS_H = 110, M = 28;
+
+bool in_rrect(ivec2 p, ivec2 o, ivec2 s, int r) {
+    if (p.x < o.x || p.y < o.y || p.x >= o.x + s.x || p.y >= o.y + s.y) return false;
+    ivec2 c = clamp(p, o + ivec2(r), o + s - ivec2(r + 1));
+    ivec2 d = p - c;
+    return d.x * d.x + d.y * d.y <= r * r;
+}
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    int W = int(pc.w), H = int(pc.h);
+    if (p.x >= W || p.y >= H) return;
+    uint col = BG;
+    if (p.y < STATUS_H) {
+        col = BAR;
+        // moving frame marker so every GPU frame is visibly different
+        int fx = 30 + int(pc.frame % 60u) * 16;
+        if (p.y >= 40 && p.y < 70 && p.x >= fx && p.x < fx + 12) col = TEXT;
+    } else {
+        int top = STATUS_H + M;
+        int tw = (W - M * 3) / 2;
+        int th = (H - top - M * 5) / 4;
+        for (int i = 0; i < 8; i++) {
+            ivec2 o = ivec2(M + (i % 2) * (tw + M), top + M + (i / 2) * (th + M));
+            ivec2 s = ivec2(tw, th);
+            if (!in_rrect(p, o, s, 36)) continue;
+            bool hi = uint(i) == pc.hl;
+            col = hi ? BORDER_HI : TILE;
+            if (hi && in_rrect(p, o + ivec2(6), s - ivec2(12), 30)) col = TILE_HI;
+            if (in_rrect(p, o + ivec2(44, 60), ivec2(70), 16)) col = hi ? TEXT : ACC[i];
+            break;
+        }
+    }
+    px[uint(p.y) * pc.stride_px + uint(p.x)] = col;
+}

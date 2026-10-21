@@ -1,0 +1,8 @@
+{"x": 0.25, "y": 0.2, "latency_ms": [12.2, 4.8], "second_flip_ms": [85.7, 91.1], "second_p50_ms": 88.4, "p50_ms": 8.5, "max_ms": 12.2, "missed": 0}
+{"x": 0.75, "y": 0.2, "latency_ms": [7.8, 10.7], "second_flip_ms": [89.1, 85.8], "second_p50_ms": 87.4, "p50_ms": 9.2, "max_ms": 10.7, "missed": 0}
+{"x": 0.25, "y": 0.45, "latency_ms": [2.6, 9.8], "second_flip_ms": [88.2, 86.8], "second_p50_ms": 87.5, "p50_ms": 6.2, "max_ms": 9.8, "missed": 0}
+{"x": 0.75, "y": 0.45, "latency_ms": [7.2, 8.2], "second_flip_ms": [87.6, 87.7], "second_p50_ms": 87.7, "p50_ms": 7.7, "max_ms": 8.2, "missed": 0}
+{"x": 0.25, "y": 0.7, "latency_ms": [5.0, 4.6], "second_flip_ms": [86.2, 84.7], "second_p50_ms": 85.5, "p50_ms": 4.8, "max_ms": 5.0, "missed": 0}
+{"x": 0.75, "y": 0.7, "latency_ms": [7.3, 4.1], "second_flip_ms": [85.8, 86.3], "second_p50_ms": 86.0, "p50_ms": 5.7, "max_ms": 7.3, "missed": 0}
+{"x": 0.25, "y": 0.92, "latency_ms": [7.5, 4.2], "second_flip_ms": [84.5, 87.5], "second_p50_ms": 86.0, "p50_ms": 5.8, "max_ms": 7.5, "missed": 0}
+{"x": 0.75, "y": 0.92, "latency_ms": [5.0, 5.4], "second_flip_ms": [86.1, 90.6], "second_p50_ms": 88.3, "p50_ms": 5.2, "max_ms": 5.4, "missed": 0}

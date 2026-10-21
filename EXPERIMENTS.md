@@ -2953,3 +2953,41 @@ the phone's voice loop. Code: `tools/hardware/s22_voice.py`, `voice/`, edits to 
   another worker at 18:48): not touched, worth a look.
 - Phone files: backups `s22-assistant.bak-voice-20261021`, `s22-converse.bak-voice-20261021` next to the
   scripts. Install/redo: `tools/hardware/voice/install-voice.sh`.
+
+### 2026-10-21 — Fast touch UI spike: KMS-direct CPU renderer, Samsung Vulkan zero-copy scanout
+
+**Display:** card1 `exynos-drmdpu` drives DSI-1, a 1080x2340@120 command-mode panel on CRTC 184. It has 16 DPP planes, and only plane-0 is used. Scanout is XR24 linear, pitch 4320.
+
+**Desktop:** the production desktop is already **sway-pixman + Quickshell** (`/etc/s22-desktop`). The 680 ms/frame Hyprland/llvmpipe figure is stale. Today's baseline, measured with injected taps:
+- tap → first flip: p50 13.8 ms;
+- tap → page shown: p50 120 ms (94–292 ms).
+
+The remaining lag is in Quickshell's QML.
+
+**New: `tools/fastui`.** A 413 KB static musl Rust binary using raw KMS ioctls and evdev, with a damage-clipped CPU renderer. It takes the panel through a seatd session switch, with no compositor stopped.
+
+| Measure | Value |
+|---|---|
+| Changed-tile frame | render 1.7 ms + copy 1.7 ms. Frames at ~111 fps back-to-back. |
+| Full redraw | ~84 fps |
+| Touch event → flip-complete | p50 12.5 ms, p95 16.5 ms |
+| Injection → fb change | p50 ~6.5 ms |
+| Idle | 0.4 % CPU, 9.9 MB RSS |
+
+**GPU path.** Samsung Vulkan (Xclipse 920, isolated Bionic runtime, bridge-v4, needs `--proc --sys`) renders frames with a compute shader into `VK_EXT_external_memory_dma_buf` memory. The memory is passed over `SCM_RIGHTS` and imported into card1 with PRIME, then page-flipped: **zero-copy scanout, proven both ways** (export and import). Real scanout captures show the GPU-drawn grid.
+
+| Measure | Value |
+|---|---|
+| GPU frame | 6 ms submit→fence (1 ms fixed cost) |
+| Touch → flip | p50 17 ms |
+| Readback-copy variant | ~50 fps |
+| First frame | 1.1 s start-up |
+
+For this UI the CPU path is faster. EGL-on-GBM was not tested: the vendor image has only Android `libEGL_samsung`/`libGLES_mali` and no libgbm.
+
+**Gotcha:** the seat switch leaves Quickshell with no layer surfaces, so the panel stays black. Restarting the shell by exact PID fixes it, and the trial script now does so.
+
+**Recommendation:** a single Rust shell with a CPU damage renderer. It presents KMS-direct by default, uses `wl_shm` layer-shell under sway while foreign apps run, and has native apps. Samsung Vulkan is used only for camera, video and heavy animation, as a dma-buf producer.
+
+Real-finger latency, photon time and power were not measured. The phone was restored: same sway, seatd and touchd PIDs, shell respawned and the home screen visible. Nothing was flashed or installed, there was no reboot, and audio and voice were untouched.
+[Evidence](evidence/fastui-20261021/README.md).
