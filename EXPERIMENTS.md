@@ -3050,3 +3050,19 @@ Real-finger latency, photon time and power were not measured. The phone was rest
 
 **Not tested:** the Talk/voice button (audio tests by another worker), camera capture, real finger, photon time, power.
 [Evidence](evidence/fastshell-20261021/README.md).
+
+### 2026-10-21 (night) — BT gate fix, root disk reclaim, Talk button, post-reboot audio
+
+- Bluetooth: the holder's rail gate required two CNSS consumer lines, but
+  this boot had one, so it failed with -EBUSY (shown as -5). Fix: a 2-byte
+  patch to the deployed holder (only the line-count term), a 45 s
+  prerequisite wait in s22-bt up, and keepalive per-service retry limits.
+  Verified by one more reboot: hci0 came up automatically (first try -110,
+  retry OK). Bluetooth still needs the USB ECM link by design.
+- Root overlay 96 % → 55 % by verified moves and symlinks to /srv (libLLVM
+  172 MB); keepalive root guard at 40 MB.
+- Audio after reboot: hw:0,102 healed; the crash → auto-recovery test passed
+  on the new s22-say/s22-rec; EN/EL speech on the graph path (whisper ~exact).
+- fastshell Talk: an injected tap started the full voice loop (question
+  injected through the speaker, filler, answer). All plays were on the graph
+  path; whisper heard the answer.
