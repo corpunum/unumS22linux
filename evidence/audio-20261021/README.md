@@ -79,3 +79,42 @@ ABOX ended ONLINE after every run from #10 on.
 * Not tested: calliope_5 (105), voice-call/VTS paths, haptics PCM,
   earpiece over the graph, and behavior after a reboot (nothing boot-time
   changed).
+
+## Follow-up (same day): graph path default, the phone speaks, reboot check
+
+Changes (commit 49910cb and the commit after it):
+* `s22-say`/`s22-rec` use the firmware-graph path by default (calliope_2 /
+  calliope_10, 480-frame periods). `S22_AUDIO_PATH=direct` keeps RDMA6/WDMA4.
+  s22-rec records 4 channels, so the raw 4-slot format and slot 0 = main mic
+  are unchanged for s22-converse/s22-assistant.
+* `s22-say` raises a muted amp to `S22_SAY_LEVEL` (default 4/10) for the
+  playback only and restores the previous raw value on exit. `s22-keepalive`
+  skips its mute check while `/run/s22-say.lock` is held.
+* An OFFLINE ABOX is reset automatically (`/proc/abox/failsafe/reset`).
+  s22-say retries once, then falls back to RDMA6. s22-rec resets before and
+  after a failed capture.
+* `s22-touchd`/`s22-ui tts --play [--out O]` render and then speak. The
+  OpenUnum `tts-s22` plugin 0.2.0 speaks by default (`play=false` renders
+  only) and adds the Greek engines.
+* `bluetooth` keepalive service (`s22-bt up`, needle = HCI holder, health =
+  `/sys/class/bluetooth/hci0`).
+
+| # | Test | Result | File |
+|---|------|--------|------|
+| 19 | Default s22-rec + s22-say (`S22_SAY_LEVEL=2`), pre-reboot | amp 0 → 561 during playback → 0; pcm102/pcm110 real-time; slot-0 tone 1000 Hz ~620–750× noise for 1.5 s | default-graph-loopback.txt |
+| 20 | `S22_AUDIO_PATH=direct` s22-say (level 0) / s22-rec | rc 0 / rc 0 | fallback-and-auto-recovery.txt |
+| 21 | Induced Calliope fault (6000-frame periods + SBLL), then s22-say | OFFLINE → "failsafe reset" → rc 0, ONLINE | same |
+| 22 | Induced fault again, then s22-rec | 2nd induction did not fault; 3rd did → s22-rec reset → rc 0, ONLINE | same |
+| 23 | `s22-reboot recovery` (boot_id 4d4db876… → f7fe0035…) | back on SSH after ~30 s | — |
+| 24 | After boot, no manual steps | ABOX ONLINE/suspended; sectiongraph staged; keepalive (new), touchd, OpenUnum running; **hci0 up** via keepalive (1st attempt holder exit rc 1, retry OK, pid 2501) | post-reboot-state.txt |
+| 25 | Post-boot default loopback (level 2 tone) | rc 0/0, volume restored 0; tone 1000 Hz ~480–710× noise for 1.5 s | post-reboot-loopback.txt |
+| 26 | `s22-ui tts --play` (touchd → s22-say, graph), English Piper (lessac), level 2, mic recording | played rc 0; speech energy 0.0015–0.0034 for ~5.5 s, **but ASR failed** (Parakeet empty, whisper "foreign"). The render itself transcribes exactly. | speech-loopback-plugin-path.txt, speech-asr.txt |
+| 27 | Greek el-antonis, same path | played rc 0; whisper large-v3-turbo (rig, el): **"Καλησπέρα, το τηλέφωνο μιλάει τώρα ελληνικά με τη φωνή του Αντώνη."** (exact) | same |
+| 28 | English repeat | played rc 0; whisper (rig): **"The phone can talk now. This sentence was spoken by the Piper voice on the Galaxy S22."** (exact); on-phone Parakeet: "…the piper voice on the Galaxy S twenty two." | same |
+| 29 | OpenUnum plugin registry; keepalive log | tts-s22 0.2.0 running; no mute event during any playback (one mute after a playback, on my test preset, as intended) | post-reboot-keepalive-openunum.txt |
+
+Not verified: an OpenUnum agent turn that calls `text_to_speech` (tool path
+tested via s22-ui/touchd plus plugin unit tests), level-4 playback
+acoustically (tests capped at level 2 by the owner's rule), and the
+earpiece/top/bottom routes over the graph. The failed first English take
+(#26) is unexplained; the repeat passed.

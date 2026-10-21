@@ -14,7 +14,12 @@ audio, and with the SBLL pipeline they crashed Calliope (recover with
 `audio-abox-recover.sh`). Verified with the phone's own mic: graph playback
 → graph capture gives the 1 kHz test tone at ~1000× noise. `s22-say` has an
 opt-in `S22_AUDIO_PATH=graph`, and the default stays on the owner-accepted
-RDMA6/WDMA4 path. Also fixed: a s22-say/s22-rec race on the once-per-boot mixer
+RDMA6/WDMA4 path. **Update (later the same day):** the graph path is now the
+default (`S22_AUDIO_PATH=direct` = fallback), with automatic ABOX failsafe
+recovery. The phone speaks through OpenUnum's `tts-s22` (play by default, at a
+speech level of 4/10, then back to mute). English and Greek were verified by
+whisper on the phone's own mic recording, and everything was re-verified after
+one reboot. Bluetooth (hci0) now starts at boot through s22-keepalive. Also fixed: a s22-say/s22-rec race on the once-per-boot mixer
 defaults that made concurrent recording fail with EIO.
 [Evidence](evidence/audio-20261021/README.md).
 

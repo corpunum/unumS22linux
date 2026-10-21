@@ -1,0 +1,9 @@
+muted-after-boot t=1792609005.641
+mute events since boot checked
+/api/plugins -> {"ok":true,"plugins":[{"name":"animation-generator","version":"1.0.0","type":"media_generator","state":"running","capabilities":["animation","motion_graphics","text_to_animation"],"error":null},{"name":"tts-kokoro","version":"1.0.0","type":"tts","state":"running","capabilities":["text_to_speech","au
+/api/plugins/list -> {"ok":false,"error":"not_found","message":"Unknown API route","contract_version":"2026-04-02.api-errors.v1"}
+/api/media/backends -> {"ok":false,"error":"not_found","message":"Unknown API route","contract_version":"2026-04-02.api-errors.v1"}
+{"after": {"amp": [0, 0], "level": 0}, "before": {"amp": [561, 561], "level": 0}, "event": "muted", "reason": "periodic", "t": 1792609005.641}
+tts-kokoro 1.0.0 running None
+tts-orpheus 1.0.0 running None
+tts-s22 0.2.0 running None

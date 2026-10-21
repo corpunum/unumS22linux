@@ -2893,3 +2893,22 @@ table and raw logs: `evidence/audio-20261021/README.md`.
 - Backups: all 25 ABOX firmware images on the phone are byte-identical to
   stock vendor (re-extracted from `s22-private-backups/.../super.img`).
   The vendor init rc starts only HAL services; no extra ABOX daemon exists.
+
+### 2026-10-21 (later) — Graph audio default, the phone speaks, reboot check
+
+Details: `evidence/audio-20261021/README.md` (follow-up section, tests 19–29).
+- The firmware-graph path is now the default for s22-say/s22-rec
+  (`S22_AUDIO_PATH=direct` = old path). Pre-reboot default loopback: tone at
+  ~700× noise. The amp went 0 → speech level → 0.
+- Automatic ABOX recovery verified for both scripts against a deliberately
+  induced Calliope data abort (one of three inductions did not fault).
+- One `s22-reboot recovery`: ABOX online, graph loopback passed with no
+  manual step, and hci0 came up through the new keepalive `bluetooth`
+  service (first holder attempt exited rc 1; the retry succeeded).
+- The phone speaks through OpenUnum's TTS path (`s22-ui tts --play` → touchd
+  → s22-say). Greek el-antonis: whisper on the phone-mic recording gave the
+  exact sentence. English Piper: the first take was unrecognizable (energy
+  present; cause unknown). The repeat was exact in whisper, and nearly exact
+  in on-phone Parakeet ("Galaxy S twenty two").
+- s22-keepalive no longer mutes during a playback (it skips while the say
+  lock is held). No mute event occurred during the test playbacks.
