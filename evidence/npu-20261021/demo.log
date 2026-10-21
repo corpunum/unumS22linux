@@ -1,0 +1,63 @@
+## face256 rgb (PhotoParsing6)
+stage=initialize rc=0 t=0.004
+stage=open_model rc=0 t=0.022
+stage=allocate rc=0 inputs=1 outputs=1 t=0.022
+buffer[0] in0 size=196608 nwhc=1x256x256x3 bytes=196608 type=3 label=IFM
+buffer[1] out0 size=98304 nwhc=1x64x64x6 bytes=98304 type=0 label=logits/semantic/BiasAdd_DQ
+input[0] file=/data/local/tmp/face256.rgb bytes=196608
+stage=execute n=100 first_ms=3.69 mean_ms=3.645 p50_ms=3.71 p99_ms=3.97 min_ms=3.20 max_ms=3.97 per_s=274.3
+output[0] checksum=a485af359b2fa722 nonzero_bytes=97761
+stage=release rc=0
+stage=close rc=0
+stage=deinit rc=0
+## face256 bgr (PhotoParsing6)
+stage=initialize rc=0 t=0.007
+stage=open_model rc=0 t=0.038
+stage=allocate rc=0 inputs=1 outputs=1 t=0.039
+buffer[0] in0 size=196608 nwhc=1x256x256x3 bytes=196608 type=3 label=IFM
+buffer[1] out0 size=98304 nwhc=1x64x64x6 bytes=98304 type=0 label=logits/semantic/BiasAdd_DQ
+input[0] file=/data/local/tmp/face256.bgr bytes=196608
+stage=execute n=5 first_ms=3.49 mean_ms=3.223 p50_ms=3.12 p99_ms=3.49 min_ms=3.05 max_ms=3.49 per_s=310.3
+output[0] checksum=984b213dd0de5f61 nonzero_bytes=97768
+stage=release rc=0
+stage=close rc=0
+stage=deinit rc=0
+## face256 rgb (PhotoParsing5 AWB)
+stage=initialize rc=0 t=0.007
+stage=open_model rc=0 t=0.036
+stage=allocate rc=0 inputs=1 outputs=1 t=0.037
+buffer[0] in0 size=196608 nwhc=1x256x256x3 bytes=196608 type=3 label=IFM
+buffer[1] out0 size=81920 nwhc=1x64x64x5 bytes=81920 type=0 label=logits/semantic/BiasAdd_DQ
+input[0] file=/data/local/tmp/face256.rgb bytes=196608
+stage=execute n=5 first_ms=3.46 mean_ms=3.496 p50_ms=3.46 p99_ms=3.69 min_ms=3.38 max_ms=3.69 per_s=286.1
+output[0] checksum=3fc0befaca91e9b6 nonzero_bytes=81659
+stage=release rc=0
+stage=close rc=0
+stage=deinit rc=0
+## face128 rgb (PhotoParsing5 AF)
+stage=initialize rc=0 t=0.008
+stage=open_model rc=0 t=0.039
+stage=allocate rc=0 inputs=1 outputs=1 t=0.039
+buffer[0] in0 size=49152 nwhc=1x128x128x3 bytes=49152 type=3 label=IFM
+buffer[1] out0 size=20480 nwhc=1x32x32x5 bytes=20480 type=0 label=logits/semantic/BiasAdd_DQ
+input[0] file=/data/local/tmp/face128.rgb bytes=49152
+stage=execute n=5 first_ms=1.77 mean_ms=1.684 p50_ms=1.67 p99_ms=1.83 min_ms=1.49 max_ms=1.83 per_s=593.9
+output[0] checksum=8e9540c5c9263684 nonzero_bytes=20439
+stage=release rc=0
+stage=close rc=0
+stage=deinit rc=0
+## astronaut VGA BGRA (OD 3.5.2)
+stage=initialize rc=0 t=0.007
+stage=open_model rc=0 t=0.024
+stage=allocate rc=0 inputs=1 outputs=2 t=0.024
+buffer[0] in0 size=1228800 nwhc=1x4x640x480 bytes=1228800 type=3 label=IFM
+buffer[1] out0 size=307200 nwhc=1x80x60x16 bytes=307200 type=0 label=145
+buffer[2] out1 size=153600 nwhc=1x80x60x8 bytes=153600 type=0 label=151
+input[0] file=/data/local/tmp/astro640x480.bgra bytes=1228800
+stage=execute n=5 first_ms=3.18 mean_ms=3.074 p50_ms=3.18 p99_ms=3.28 min_ms=2.74 max_ms=3.28 per_s=325.3
+output[0] checksum=217abcb5f9ca8cd0 nonzero_bytes=142351
+output[1] checksum=e180fcf10fa9b340 nonzero_bytes=76800
+stage=release rc=0
+stage=close rc=0
+stage=deinit rc=0
+DEMO-DONE

@@ -1,0 +1,12 @@
+#!/bin/sh
+# enn-chroot-run MODEL_IN_ROOT [args...]: run enn-run-once (or another bionic bin via ENN_BIN)
+# inside /srv/s22/enn-rt in a private mount namespace with /dev,/proc,/sys bound.
+# NPU firmware must be staged (AIE.bin in PID1 /vendor/firmware).
+R=${ENN_ROOT:-/srv/s22/enn-rt}
+BIN=${ENN_BIN:-/bin/enn-run-once}
+exec unshare -m sh -c '
+  R=$0; BIN=$1; shift 1
+  mount --make-rprivate / 2>/dev/null
+  mount --rbind /dev "$R/dev" && mount --bind /proc "$R/proc" && mount --bind /sys "$R/sys" || exit 9
+  exec chroot "$R" "$BIN" "$@"
+' "$R" "$BIN" "$@"

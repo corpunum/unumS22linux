@@ -1,0 +1,390 @@
+[
+ {
+  "t": 1792616792.7,
+  "src": "ipc-window.jsonl",
+  "msg": "08/3c",
+  "nr_nsa": false,
+  "cells": [
+   {
+    "act": "lte",
+    "band": 3,
+    "conn": "primary",
+    "dl_khz": 20000,
+    "ul_khz": 20000,
+    "arfcn": 1451
+   }
+  ]
+ },
+ {
+  "t": 1792616793.2,
+  "src": "ipc-window.jsonl",
+  "msg": "0d/19",
+  "json": {
+   "scell_status": 0
+  }
+ },
+ {
+  "t": 1792616793.5,
+  "src": "ipc-window.jsonl",
+  "msg": "0d/10",
+  "json": {
+   "cid": 1,
+   "data_call_state": 1,
+   "data_callstate_rsn": 0,
+   "external_ps_call": 0,
+   "qci": 6,
+   "throttle_timer": 0
+  }
+ },
+ {
+  "t": 1792616793.5,
+  "src": "ipc-window.jsonl",
+  "msg": "08/3c",
+  "nr_nsa": false,
+  "cells": [
+   {
+    "act": "lte",
+    "band": 3,
+    "conn": "primary",
+    "dl_khz": 20000,
+    "ul_khz": 20000,
+    "arfcn": 1451
+   }
+  ]
+ },
+ {
+  "t": 1792616793.6,
+  "src": "ipc-window.jsonl",
+  "msg": "08/3c",
+  "nr_nsa": false,
+  "cells": [
+   {
+    "act": "lte",
+    "band": 3,
+    "conn": "primary",
+    "dl_khz": 20000,
+    "ul_khz": 20000,
+    "arfcn": 1451
+   },
+   {
+    "act": "lte",
+    "band": 20,
+    "conn": "secondary",
+    "dl_khz": 10000,
+    "ul_khz": 10000,
+    "arfcn": 6300
+   }
+  ]
+ },
+ {
+  "t": 1792616794.0,
+  "src": "ipc-window.jsonl",
+  "msg": "08/3c",
+  "nr_nsa": false,
+  "cells": [
+   {
+    "act": "lte",
+    "band": 3,
+    "conn": "primary",
+    "dl_khz": 20000,
+    "ul_khz": 20000,
+    "arfcn": 1451
+   },
+   {
+    "act": "lte",
+    "band": 20,
+    "conn": "secondary",
+    "dl_khz": 10000,
+    "ul_khz": 1400,
+    "arfcn": 6300
+   }
+  ]
+ },
+ {
+  "t": 1792616794.1,
+  "src": "ipc-window.jsonl",
+  "msg": "08/3c",
+  "nr_nsa": true,
+  "cells": [
+   {
+    "act": "lte",
+    "band": 3,
+    "conn": "primary",
+    "dl_khz": 20000,
+    "ul_khz": 20000,
+    "arfcn": 1451
+   },
+   {
+    "act": "lte",
+    "band": 20,
+    "conn": "secondary",
+    "dl_khz": 10000,
+    "ul_khz": 1400,
+    "arfcn": 6300
+   },
+   {
+    "act": "nr",
+    "band": 78,
+    "conn": "secondary",
+    "dl_khz": 100000,
+    "ul_khz": 100,
+    "arfcn": 643334
+   }
+  ]
+ },
+ {
+  "t": 1792616794.6,
+  "src": "ipc-window.jsonl",
+  "msg": "0d/19",
+  "json": {
+   "cell_info": [
+    {
+     "band": 0,
+     "bw": 0
+    },
+    {
+     "band": 0,
+     "bw": 0
+    }
+   ],
+   "scell_status": 1,
+   "total_bw": 30,
+   "total_cell": 2
+  }
+ },
+ {
+  "t": 1792616800.1,
+  "src": "ipc-window.jsonl",
+  "msg": "0d/10",
+  "json": {
+   "cid": 1,
+   "data_call_state": 3,
+   "data_callstate_rsn": 0,
+   "external_ps_call": 0,
+   "qci": 6,
+   "throttle_timer": 0
+  }
+ },
+ {
+  "t": 1792616800.1,
+  "src": "ipc-window.jsonl",
+  "msg": "08/3c",
+  "nr_nsa": true,
+  "cells": [
+   {
+    "act": "lte",
+    "band": 3,
+    "conn": "primary",
+    "dl_khz": 20000,
+    "ul_khz": 20000,
+    "arfcn": 1451
+   },
+   {
+    "act": "lte",
+    "band": 20,
+    "conn": "secondary",
+    "dl_khz": 10000,
+    "ul_khz": 1400,
+    "arfcn": 6300
+   },
+   {
+    "act": "nr",
+    "band": 78,
+    "conn": "secondary",
+    "dl_khz": 100000,
+    "ul_khz": 100,
+    "arfcn": 643334
+   }
+  ]
+ },
+ {
+  "t": 1792617127.2,
+  "src": "speed2/ipc-window.jsonl",
+  "msg": "0d/10",
+  "json": {
+   "cid": 1,
+   "data_call_state": 1,
+   "data_callstate_rsn": 0,
+   "external_ps_call": 0,
+   "qci": 6,
+   "throttle_timer": 0
+  }
+ },
+ {
+  "t": 1792617127.2,
+  "src": "speed2/ipc-window.jsonl",
+  "msg": "08/3c",
+  "nr_nsa": false,
+  "cells": [
+   {
+    "act": "lte",
+    "band": 3,
+    "conn": "primary",
+    "dl_khz": 20000,
+    "ul_khz": 20000,
+    "arfcn": 1451
+   }
+  ]
+ },
+ {
+  "t": 1792617127.3,
+  "src": "speed2/ipc-window.jsonl",
+  "msg": "08/3c",
+  "nr_nsa": false,
+  "cells": [
+   {
+    "act": "lte",
+    "band": 3,
+    "conn": "primary",
+    "dl_khz": 20000,
+    "ul_khz": 20000,
+    "arfcn": 1451
+   },
+   {
+    "act": "lte",
+    "band": 28,
+    "conn": "secondary",
+    "dl_khz": 10000,
+    "ul_khz": 10000,
+    "arfcn": 9360
+   }
+  ]
+ },
+ {
+  "t": 1792617127.7,
+  "src": "speed2/ipc-window.jsonl",
+  "msg": "08/3c",
+  "nr_nsa": false,
+  "cells": [
+   {
+    "act": "lte",
+    "band": 3,
+    "conn": "primary",
+    "dl_khz": 20000,
+    "ul_khz": 20000,
+    "arfcn": 1451
+   }
+  ]
+ },
+ {
+  "t": 1792617127.8,
+  "src": "speed2/ipc-window.jsonl",
+  "msg": "08/3c",
+  "nr_nsa": false,
+  "cells": [
+   {
+    "act": "lte",
+    "band": 3,
+    "conn": "primary",
+    "dl_khz": 20000,
+    "ul_khz": 20000,
+    "arfcn": 1451
+   },
+   {
+    "act": "lte",
+    "band": 20,
+    "conn": "secondary",
+    "dl_khz": 10000,
+    "ul_khz": 1400,
+    "arfcn": 6300
+   }
+  ]
+ },
+ {
+  "t": 1792617127.8,
+  "src": "speed2/ipc-window.jsonl",
+  "msg": "08/3c",
+  "nr_nsa": true,
+  "cells": [
+   {
+    "act": "lte",
+    "band": 3,
+    "conn": "primary",
+    "dl_khz": 20000,
+    "ul_khz": 20000,
+    "arfcn": 1451
+   },
+   {
+    "act": "lte",
+    "band": 20,
+    "conn": "secondary",
+    "dl_khz": 10000,
+    "ul_khz": 1400,
+    "arfcn": 6300
+   },
+   {
+    "act": "nr",
+    "band": 78,
+    "conn": "secondary",
+    "dl_khz": 100000,
+    "ul_khz": 100,
+    "arfcn": 643334
+   }
+  ]
+ },
+ {
+  "t": 1792617128.3,
+  "src": "speed2/ipc-window.jsonl",
+  "msg": "0d/19",
+  "json": {
+   "cell_info": [
+    {
+     "band": 0,
+     "bw": 0
+    },
+    {
+     "band": 0,
+     "bw": 0
+    }
+   ],
+   "scell_status": 1,
+   "total_bw": 30,
+   "total_cell": 2
+  }
+ },
+ {
+  "t": 1792617133.0,
+  "src": "speed2/ipc-window.jsonl",
+  "msg": "0d/10",
+  "json": {
+   "cid": 1,
+   "data_call_state": 3,
+   "data_callstate_rsn": 0,
+   "external_ps_call": 0,
+   "qci": 6,
+   "throttle_timer": 0
+  }
+ },
+ {
+  "t": 1792617133.0,
+  "src": "speed2/ipc-window.jsonl",
+  "msg": "08/3c",
+  "nr_nsa": true,
+  "cells": [
+   {
+    "act": "lte",
+    "band": 3,
+    "conn": "primary",
+    "dl_khz": 20000,
+    "ul_khz": 20000,
+    "arfcn": 1451
+   },
+   {
+    "act": "lte",
+    "band": 20,
+    "conn": "secondary",
+    "dl_khz": 10000,
+    "ul_khz": 1400,
+    "arfcn": 6300
+   },
+   {
+    "act": "nr",
+    "band": 78,
+    "conn": "secondary",
+    "dl_khz": 100000,
+    "ul_khz": 100,
+    "arfcn": 643334
+   }
+  ]
+ }
+]

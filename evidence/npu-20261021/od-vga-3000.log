@@ -1,0 +1,12 @@
+stage=initialize rc=0 t=0.012
+stage=open_model rc=0 model=0x199401000000 t=0.045
+stage=allocate rc=0 inputs=1 outputs=2
+buffer[0] in size=1228800
+buffer[1] out size=307200
+buffer[2] out size=153600
+output[0] checksum=492a7bbdb0f209ba nonzero_bytes=119062
+output[1] checksum=b16c339288e58000 nonzero_bytes=76800
+stage=release rc=0
+stage=close rc=0
+stage=deinit rc=0
+n=3000 mean_ms=3.13753 p50_ms=3.23 p99_ms=3.66 max_ms=5.14

@@ -1,0 +1,15 @@
+PING 1.1.1.1 (1.1.1.1): 56 data bytes
+64 bytes from 1.1.1.1: seq=0 ttl=57 time=118.502 ms
+64 bytes from 1.1.1.1: seq=1 ttl=57 time=32.928 ms
+64 bytes from 1.1.1.1: seq=2 ttl=57 time=26.266 ms
+64 bytes from 1.1.1.1: seq=3 ttl=57 time=26.031 ms
+64 bytes from 1.1.1.1: seq=4 ttl=57 time=24.803 ms
+64 bytes from 1.1.1.1: seq=5 ttl=57 time=22.470 ms
+64 bytes from 1.1.1.1: seq=6 ttl=57 time=22.501 ms
+64 bytes from 1.1.1.1: seq=7 ttl=57 time=22.489 ms
+64 bytes from 1.1.1.1: seq=8 ttl=57 time=20.825 ms
+64 bytes from 1.1.1.1: seq=9 ttl=57 time=18.355 ms
+
+--- 1.1.1.1 ping statistics ---
+10 packets transmitted, 10 packets received, 0% packet loss
+round-trip min/avg/max = 18.355/33.517/118.502 ms

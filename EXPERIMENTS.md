@@ -3066,3 +3066,36 @@ Real-finger latency, photon time and power were not measured. The phone was rest
 - fastshell Talk: an injected tap started the full voice loop (question
   injected through the speaker, filler, answer). All plays were on the graph
   path; whisper heard the answer.
+
+### 2026-10-21/22 (night) — NPU: 16/17 stock models run via ENN; DSP-section model crashes the phone
+
+Re-staged `AIE.bin` in PID 1's `/vendor/firmware`; `npu-bootup-once` rc 0 with S2MPU "DNC FW[0] is verified".
+`enn-run-once` on the stock VGA object detector: 3000 runs, mean 3.14 ms, output checksums byte-identical
+to 2026-10-07. That reproduces the earlier result on a fresh boot. A new runner `tools/hardware/npu/enn-run.c` adds file inputs,
+output dumps (`ENN_OUT`) and buffer shapes via `EnnGetBufferInfoByIndex`.
+`tools/hardware/npu/enn-chroot-run` runs it in a private mount namespace inside `/srv/s22/enn-rt`.
+(The first version of this wrapper had a `shift 2` bug that dropped the model path, giving open_model rc 3.)
+
+The first all-model sweep ran OD, then loaded `SRIB_HumanSegVideo_INT8`. Its `DSP_BINARY` section started an
+NPU-firmware DSP task, then `SMU: IP_DNC (DRAM) READ PAGE FAULT at 0x33500000` →
+`npu_util_dump_handle_error_k` → WDT reset. The phone rebooted by itself (reset_reason DPON) and all services came back.
+Files written by scp just before the crash were zero-filled: delayed allocation was lost in the crash.
+They were re-sent with tar over ssh and verified by sha256.
+After the reboot and before the re-stage, `open_model` blocked 61 s in `firmware_fallback_sysfs` and returned rc 1. That is harmless.
+The second sweep skipped `DSP_BINARY` models: **all 16 others open, allocate, execute and release with rc 0**,
+2–200 ms per inference, and the phone stayed up. Demo: PhotoParsing6 face parsing of a public-domain portrait.
+The input must be planar RGB uint8 (HWC interleaved gives stripes, int8 gives all-background). Hair and skin maps
+are clean; 3.65 ms mean. No audio models exist in the stock image. Evidence: `evidence/npu-20261021/`.
+
+### 2026-10-21/22 (night) — 5G: NSA already active; phoned now reports it; 97 Mbit/s over rmnet0
+
+Stock libsec-ril disassembly: `IpcTxNetSetPreferredNetType` sends `(08,0A)` SET `{"mode_select":N}`, and
+`ConvertPreferredNetTypeToIpcWithBitmask` gives the bit map GSM 1, WCDMA 2, CDMA 4, LTE 8, TDSCDMA 0x10, EVDO 0x20, NR 0x40.
+A live GET gives 75 = NR_LTE_GSM_WCDMA, so the preference already includes NR, and no SET or NV write was made.
+`(08,3A)` is the NR disable-mode config (binary, one byte); it was not sent.
+The phoned IPC logs already contained `(08,3C)` physical-channel-config notifications with an NR n78 100 MHz secondary cell.
+Live: `mobile-data up` → B3 + B20 + **n78 (NR-ARFCN 643334)** within 0.6 s. Ping avg 33.5 ms. Upload 4 MB at
+24.6 Mbit/s. Download 15 MB at 97 Mbit/s, and 53 Mbit/s on the second run. About 35 MB used in total. Data was taken down
+afterwards and the routes were restored. phoned now decodes `(08,3C)` into `/status.radio` and `/data/status.nr_nsa`.
+It was deployed with a backup; only phoned was restarted. Test: `test_radio_nr.py`.
+Evidence: `evidence/modem-5g-20261021/`.

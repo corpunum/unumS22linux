@@ -1,0 +1,3 @@
+down bytes=1 s=0.129425 Bps=7 ttfb=0.129376
+down bytes=1 s=0.085541 Bps=11 ttfb=0.085408
+up bytes=4000000 s=1.303199 Bps=3069419

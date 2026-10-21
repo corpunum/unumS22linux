@@ -63,6 +63,12 @@ SIM_SLOT_MAX = 255
 SEC_PIN_STATUS = (5, 1)                 # a.k.a. SEC_SIM_STATUS
 DISP_ICON_INFO, DISP_RSSI_INFO = (7, 1), (7, 6)
 NET_CURRENT_PLMN, NET_REGIST, NET_SERVING_NETWORK = (8, 3), (8, 5), (8, 8)
+NET_MODE_SELECT = (8, 0x0A)             # JSON {"mode_select": bitmask}; see NR_MODE_BITS
+NET_PHYS_CHANNEL_CONFIG = (8, 0x3C)     # JSON {"num_pch", "pch": [...]}; stock IpcRxPhysicalChannelConfig
+# Stock libsec-ril IpcProtocol41Net::ConvertPreferredNetTypeToIpcWithBitmask (@0x3dd05c, FYI3):
+# mode_select bits. 75 = 0x4B = NR|LTE|WCDMA|GSM = Android NETWORK_MODE_NR_LTE_GSM_WCDMA (26).
+NR_MODE_BITS = {0x01: "gsm", 0x02: "wcdma", 0x04: "cdma", 0x08: "lte", 0x10: "tdscdma", 0x20: "evdo", 0x40: "nr"}
+PCH_CONN_STATE = {0: "none", 1: "primary", 2: "secondary"}
 GEN_PHONE_RES = (0x80, 1)
 GEN_OK = 0x8000
 GPRS_DEFINE_PDP_CONTEXT, GPRS_PS, GPRS_PDP_CONTEXT = (0x0D, 0x01), (0x0D, 0x03), (0x0D, 0x04)
@@ -93,6 +99,7 @@ NAMES = {
     (5, 2): "SEC_PHONE_LOCK", DISP_ICON_INFO: "DISP_ICON_INFO", DISP_RSSI_INFO: "DISP_RSSI_INFO",
     NET_CURRENT_PLMN: "NET_CURRENT_PLMN", NET_REGIST: "NET_REGIST",
     NET_SERVING_NETWORK: "NET_SERVING_NETWORK", (0x0A, 1): "MISC_ME_VERSION",
+    NET_MODE_SELECT: "NET_MODE_SELECT", NET_PHYS_CHANNEL_CONFIG: "NET_PHYS_CHANNEL_CONFIG",
     (0x0A, 3): "MISC_ME_SN", GEN_PHONE_RES: "GEN_PHONE_RES",
     GPRS_DEFINE_PDP_CONTEXT: "GPRS_DEFINE_PDP_CONTEXT", GPRS_PS: "GPRS_PS",
     GPRS_PDP_CONTEXT: "GPRS_PDP_CONTEXT", GPRS_IP_CONFIGURATION: "GPRS_IP_CONFIGURATION",
@@ -683,7 +690,41 @@ def dec_svc_center(d):
     return {"smsc_raw": d[1:1 + n].hex()} if n else {"smsc_raw": ""}
 
 
-DECODERS = {GEN_PHONE_RES: dec_gen, SEC_PIN_STATUS: dec_sim, NET_REGIST: dec_regist,
+def mode_select_rats(value):
+    """Decode the CP's mode_select bitmask (stock RIL bit layout) into RAT names."""
+    if not isinstance(value, int):
+        return None
+    return [name for bit, name in sorted(NR_MODE_BITS.items()) if value & bit]
+
+
+def dec_mode_select(d):
+    j = _json(d)
+    if isinstance(j, dict):
+        return dict(j, rats=mode_select_rats(j.get("mode_select")))
+    return {"preferred_net_type_byte": d[0]} if d else {}
+
+
+def dec_phys_channels(d):
+    """Physical channel config (08/3C). In EN-DC (5G NSA) an `nr` secondary cell appears
+    next to the LTE anchor while the radio is connected; registration `act` stays `lte`."""
+    j = _json(d)
+    if not isinstance(j, dict):
+        return {}
+    cells = []
+    for c in j.get("pch") or []:
+        if not isinstance(c, dict):
+            continue
+        band = c.get("band") if isinstance(c.get("band"), dict) else {}
+        cells.append({"act": c.get("act"), "band": band.get("band"), "conn": PCH_CONN_STATE.get(c.get("conn_state"), c.get("conn_state")),
+                      "dl_khz": c.get("dlbw"), "ul_khz": c.get("ulbw"), "arfcn": c.get("dlch_num"), "pci": c.get("pcid")})
+    nr = [c for c in cells if c["act"] == "nr"]
+    return {"cells": cells, "nr_nsa": bool(nr) and any(c["act"] == "lte" for c in cells),
+            "nr_bands": sorted({c["band"] for c in nr if c["band"] is not None}),
+            "total_dl_khz": sum(c["dl_khz"] or 0 for c in cells if c["conn"] in ("primary", "secondary")),
+            "json": j}
+
+
+DECODERS = {GEN_PHONE_RES: dec_gen, NET_MODE_SELECT: dec_mode_select, NET_PHYS_CHANNEL_CONFIG: dec_phys_channels, SEC_PIN_STATUS: dec_sim, NET_REGIST: dec_regist,
             NET_CURRENT_PLMN: dec_plmn, NET_SERVING_NETWORK: dec_plmn,
             DISP_RSSI_INFO: dec_rssi, DISP_ICON_INFO: dec_icon,
             CALL_INCOMING: dec_call_incoming, CALL_STATUS: dec_call_status,
@@ -1097,6 +1138,8 @@ class Phone:
         self.ipc_send_lock = threading.Lock()
         self.last_ipc_send = None
         self.data_notifications = collections.deque(maxlen=64)
+        self.radio = None                       # last physical channel config (08/3C)
+        self.nr_last_seen = None
         self.link = None
         self.sim, self.sim_raw = "UNKNOWN", None
         self.pin_attempted = False
@@ -1303,7 +1346,7 @@ class Phone:
              DISP_RSSI_INFO: self._on_signal, DISP_ICON_INFO: self._on_icon,
              CALL_INCOMING: self._on_call_incoming, CALL_STATUS: self._on_call_status,
              CALL_LIST: self._on_call_list, SMS_INCOMING_MSG: self._on_sms_incoming,
-             SMS_SVC_CENTER_ADDR: self._on_smsc}.get(fr.cmd)
+             SMS_SVC_CENTER_ADDR: self._on_smsc, NET_PHYS_CHANNEL_CONFIG: self._on_phys}.get(fr.cmd)
         if fr.cmd == SMS_DEVICE_READY and fr.type in (NOTI, INDI):
             self.defer(self.sms_device_ready)
         if h is not None and fr.cmd != GEN_PHONE_RES:
@@ -1331,6 +1374,19 @@ class Phone:
             self.registration = dict(d, by_domain=dict(self.reg_by_domain))
         if changed:
             self.events.emit("registration", registration=d)
+
+    def _on_phys(self, fr, d):
+        if not d.get("cells") and "json" not in d:
+            return
+        rec = {k: d.get(k) for k in ("cells", "nr_nsa", "nr_bands", "total_dl_khz")}
+        rec["ts"] = now()
+        with self.lock:
+            prev = (self.radio or {}).get("nr_nsa")
+            self.radio = rec
+            if rec["nr_nsa"]:
+                self.nr_last_seen = rec["ts"]
+        if prev != rec["nr_nsa"]:
+            self.events.emit("radio", nr_nsa=rec["nr_nsa"], nr_bands=rec["nr_bands"])
 
     def _on_plmn(self, fr, d):
         if d.get("operator"):
@@ -1854,6 +1910,8 @@ class Phone:
         payload_json = _json(data) if data else None
         if isinstance(payload_json, dict):
             decoded.update(payload_json)
+            if cmd == NET_MODE_SELECT:
+                decoded["rats"] = mode_select_rats(payload_json.get("mode_select"))
         elif cmd == (0x08, 0x0A):
             decoded["preferred_net_type_byte"] = data[0] if data else None
         else:
@@ -2070,6 +2128,7 @@ class Phone:
         with self.lock:
             reg = dict(self.registration or {})
             sig = dict(self.signal or {})
+            radio = dict(self.radio or {})
         try:
             oper = Path(self.net_sys, dev, "operstate").read_text().strip()
         except OSError:
@@ -2079,6 +2138,7 @@ class Phone:
                 "mtu": d.get("mtu"), "call_state": d.get("call_state"), "route_metric": MOBILE_ROUTE_METRIC,
                 "rx_bytes": self._counter(dev, "rx_bytes"), "tx_bytes": self._counter(dev, "tx_bytes"),
                 "act": reg.get("act"), "band": reg.get("band"), "reg_status": reg.get("reg_status"),
+                "nr_nsa": (radio or {}).get("nr_nsa"), "phys_channels": (radio or {}).get("cells"),
                 "signal": sig, "modem_state": self.modem_state(), "error": d.get("error"),
                 "since": d.get("up_ts")}
 
@@ -2091,6 +2151,7 @@ class Phone:
                     "operator": self.operator, "signal": self.signal, "sms_ready": self.sms_ready,
                     "tx_enabled": self.tx_enabled(), "calls": self.current_calls(),
                     "sim_sweep": self.sweep_result, "lte_attach": self.lte_attach_status,
+                    "radio": self.radio, "nr_last_seen": self.nr_last_seen,
                     "data_notifications": list(self.data_notifications),
                     "simulated": self.simulate}
 

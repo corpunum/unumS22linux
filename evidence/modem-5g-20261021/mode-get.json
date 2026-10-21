@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "request_hex": "07000000080a02",
+  "response_hex": "19001232080a027b226d6f64655f73656c656374223a37357d",
+  "response": {
+    "type": 2,
+    "payload_hex": "7b226d6f64655f73656c656374223a37357d",
+    "mode_select": 75,
+    "rats": [
+      "gsm",
+      "wcdma",
+      "lte",
+      "nr"
+    ]
+  },
+  "gen_phone_res": null,
+  "timed_out": false
+}

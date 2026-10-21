@@ -54,8 +54,8 @@ All screenshots: [evidence/touchui-20261009](evidence/touchui-20261009/README.md
 |---|---|
 | ✅ **Boot** | Native Linux from RECOVERY with our own `/init`; no Android services; reboots without touching the phone (`s22-reboot recovery`) |
 | ✅ **System** | Persistent Arch Linux ARM + Hyprland on internal storage; starts by itself after a reboot |
-| ✅ **Network** | Wi-Fi with autostart, Tailscale, USB SSH; mobile data and LTE registration over the modem (4G, not 5G) |
-| ✅ **AI** | Local 2B model on the GPU (Samsung's Vulkan driver in an isolated runtime) and 4B on the CPU; OpenUnum agent with GPT Luna by default and the local model as offline fallback |
+| ✅ **Network** | Wi-Fi with autostart, Tailscale, USB SSH; mobile data over the modem with 5G NSA (LTE + NR n78, ~97 Mbit/s down measured) |
+| ✅ **AI** | Stock Samsung NPU models (`.nnc`) run on the NPU through ENN (16/17 stock models, e.g. face parsing in 3.7 ms); local 2B model on the GPU (Samsung's Vulkan driver in an isolated runtime) and 4B on the CPU; OpenUnum agent with GPT Luna by default and the local model as offline fallback |
 | ✅ **Phone stack** | SIM and SMS ready through our own modem daemon (`s22-phoned`, outbound off by default) |
 | ✅ **Voice** | Speech output (incl. two Greek voices) and push-to-talk |
 | 🟡 **Touch UI** | Gestures, keyboard, lock and agent cards verified with injected touches on the real touchscreen; the desktop is software-rendered (about 3 frames/s) |
@@ -63,7 +63,7 @@ All screenshots: [evidence/touchui-20261009](evidence/touchui-20261009/README.md
 | 🟡 **Sensors** | Accelerometer, gyro, magnetometer and light frames read; no calibration or auto-rotate |
 | ✅ **Camera** | Rear camera takes raw stills and short videos (under 1 frame/s) through our own capture path, no Android camera stack; no image processing (ISP) yet |
 | ✅ **Audio** | Speaker and microphone work, both directly and through Samsung's DSP graph (the phone's mic hears its own speaker: a 1 kHz test tone at ~1000× the noise floor); earpiece and calls not yet |
-| ❌ **Calls, NPU, GPS, suspend** | Not working yet |
+| ❌ **Calls, custom NPU models, GPS, suspend** | Not working yet |
 
 Full hardware table and every earlier checkpoint: [docs/HISTORY.md](docs/HISTORY.md).
 Current details: [STATUS.md](STATUS.md).

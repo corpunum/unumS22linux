@@ -3,6 +3,26 @@
 Updated 2026-10-21 (fast touch shell); earlier sections updated 2026-10-06 by the Claude lead session.
 The 2026-10-02 task board and earlier checkpoints below are historical.
 
+## NPU re-verified + 5G NSA confirmed — 2026-10-22
+
+**NPU:** after the AIE.bin re-stage, the stock object detector reproduces the 10-07 run with
+byte-identical outputs: 3000 runs, 3.14 ms mean. **16 of 17 stock vendor `.nnc` models run** on the NPU via ENN
+in `/srv/s22/enn-rt`. The models are object detection, face parsing, HDR, denoise and camera fusion (2–200 ms).
+**Demo:** face parsing (hair/skin maps) of a real photo in 3.7 ms. Input format: RGB uint8 *planar*.
+**Danger:** a model with a `DSP_BINARY` section (SRIB HumanSeg) made the DNC page-fault and the
+watchdog **rebooted the phone** (it recovered alone). The sweep tool now skips such models.
+No stock audio/ASR/TTS models exist; custom models need Samsung's compiler (the on-device
+Eden/NNAPI compiler is untested).
+Run: `ENN_BIN=/bin/enn-run /srv/s22/npu-trial/enn-chroot-run /data/models/stock/<m>.nnc N in0.bin`.
+[Evidence](evidence/npu-20261021/README.md).
+
+**5G:** the modem was already doing **5G NSA**. The preferred mode is `mode_select 75` = NR|LTE|WCDMA|GSM
+(bit map from the stock RIL). With a data call up, the CP adds an **NR n78 100 MHz** leg to LTE B3+B20
+within 0.6 s. Measured over rmnet0: **97 Mbit/s down**, 24.6 Mbit/s up, 33 ms ping (35 MB used).
+Registration `act` stays `lte` in NSA, so `s22-phoned` now decodes the physical channel config
+(`/status.radio.nr_nsa`, `/data/status.nr_nsa`). No mode SET or NV write was needed. SA untested.
+[Evidence](evidence/modem-5g-20261021/README.md).
+
 ## Fast touch shell is the default — 2026-10-21
 
 The desktop is **sway-pixman** (wlroots pixman renderer) with a touch shell on top. It is not Hyprland: Hyprland is only the supervisor's fallback compositor, and the old "Hyprland on llvmpipe, ~680 ms/frame" lag is history.
