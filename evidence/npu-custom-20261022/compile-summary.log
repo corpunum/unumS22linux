@@ -1,0 +1,24 @@
+=== ds_cnn_l_body
+      1 VERBOSE: Replacing 12 out of 12 node(s) with delegate (TfLiteNnapiDelegate) node, yielding 1 partitions for subgraph 0.
+      1 benchmark_model rc=1
+      2 graphgen_intermediate_process.cpp:230] CPU/GPU subnetwork doesn't need compilation
+      1 model_util.cpp:206] NNC size = 579184
+      1 nnc_export.cpp:280] store nnc to .//ann.nnc
+=== kws_micronet_l
+      1 VERBOSE: Replacing 18 out of 18 node(s) with delegate (TfLiteNnapiDelegate) node, yielding 1 partitions for subgraph 0.
+      1 benchmark_model rc=1
+      2 graphgen_intermediate_process.cpp:230] CPU/GPU subnetwork doesn't need compilation
+      1 model_util.cpp:206] NNC size = 721704
+      1 nnc_export.cpp:280] store nnc to .//ann.nnc
+=== tiny_wav2letter_int8
+      1 VERBOSE: Replacing 10 out of 18 node(s) with delegate (TfLiteNnapiDelegate) node, yielding 17 partitions for subgraph 0.
+      1 VERBOSE: Replacing 8 out of 17 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 17 partitions for subgraph 0.
+      1 benchmark_model rc=1
+     18 graphgen_intermediate_process.cpp:230] CPU/GPU subnetwork doesn't need compilation
+      4 model_util.cpp:206] NNC size = 109176
+      1 model_util.cpp:206] NNC size = 240248
+      1 model_util.cpp:206] NNC size = 2495096
+      1 model_util.cpp:206] NNC size = 40568
+      1 model_util.cpp:206] NNC size = 510584
+      1 model_util.cpp:206] NNC size = 627320
+      9 nnc_export.cpp:280] store nnc to .//ann.nnc

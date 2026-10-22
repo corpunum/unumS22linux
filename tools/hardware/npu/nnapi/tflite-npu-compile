@@ -1,0 +1,43 @@
+#!/bin/sh
+# tflite-npu-compile MODEL.tflite OUT.nnc [extra benchmark_model args]
+# Compile a TFLite model for the Exynos 2200 NPU ON THE PHONE with Samsung's own
+# compiler: TFLite benchmark_model (Android aarch64 nightly) + NNAPI delegate with
+# the vendor NNAPI support library. The SL compiles each delegated partition through
+# GraphGen -> NPU compiler and (re)creates .//ann.nnc (chroot cwd = /). busybox
+# inotifyd copies every finished write to ann_00.nnc, ann_01.nnc, ... (compile order).
+# One partition -> OUT; several -> OUT.partNN.nnc (CPU ops sit between them).
+# Run the .nnc with enn-run. The SL's own execute path segfaults after the NPU run
+# (output copy-back), so benchmark_model's exit code is only logged.
+# Refuses outputs containing a DSP_BINARY section (those crashed the phone).
+# NN_PATCHED=1 (default) puts /data/nn/patched first in the library path: private
+# copies of two GraphGen libs with the architecture-whitelist gates disabled
+# (patch-graphgen-gates.py). NN_PATCHED=0 uses the stock vendor libs.
+set -u
+R=${ENN_ROOT:-/srv/s22/enn-rt}; H=$(cd "$(dirname "$0")" && pwd)
+if [ "${INOTIFYD_HOOK:-}" = 1 ] || [ "$(basename "$0")" = nnc-capture-hook ]; then  # inotifyd: EVENT DIR FILE
+  [ "$3" = ann.nnc ] || exit 0
+  n=$(cat "$R/.ann_count" 2>/dev/null || echo 0)
+  cp "$R/ann.nnc" "$(printf '%s/ann_%02d.nnc' "$R" "$n")"; echo $((n + 1)) > "$R/.ann_count"; exit 0
+fi
+M=$1; OUT=$2; shift 2
+rm -f "$R"/ann.nnc "$R"/ann_*.nnc "$R/frontend.ir" "$R/ncp_buffer.bin"; echo 0 > "$R/.ann_count"
+ln -sf tflite-npu-compile "$H/nnc-capture-hook"
+inotifyd "$H/nnc-capture-hook" "$R:w" & IW=$!
+LP=/data/nn/lib; [ "${NN_PATCHED:-1}" = 1 ] && LP=/data/nn/patched:/data/nn/lib
+LD_LIBRARY_PATH=$LP timeout -s KILL 300 "$H/nnapi-chroot-run" /bin/benchmark_model --graph="$M" \
+  --use_nnapi=true --nnapi_support_library_path=/vendor/lib64/neuralnetworks_npu_sl_driver_prebuilt.so \
+  --nnapi_accelerator_name=npu_sl --disable_nnapi_cpu=true --num_runs=1 --warmup_runs=0 --max_secs=1 \
+  --warmup_min_secs=0 --min_secs=0 "$@" > "$OUT.compile.log" 2>&1
+echo "benchmark_model rc=$?" >> "$OUT.compile.log"
+sleep 1; kill $IW
+rm -f "$R/ann.nnc" "$R/.ann_count"
+set -- "$R"/ann_*.nnc
+[ -e "$1" ] || { echo "no ann.nnc produced (see $OUT.compile.log)"; exit 1; }
+for f in "$@"; do
+  if grep -q DSP_BINARY "$f"; then echo "REFUSED: $f has DSP_BINARY"; mv "$f" "$OUT.DSP-UNSAFE"; exit 2; fi
+done
+rm -f "$OUT" "$OUT".part*.nnc
+if [ $# = 1 ]; then mv "$1" "$OUT"; echo "ok $OUT $(stat -c %s "$OUT") bytes"
+else for f in "$@"; do n=${f##*ann_}; mv "$f" "$OUT.part${n%.nnc}.nnc"; done; echo "ok $# partitions"; fi
+grep -E "Replacing .* node" "$OUT.compile.log"
+sync
