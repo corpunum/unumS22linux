@@ -11,7 +11,10 @@ MOD = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(MOD)
 class ButtonTests(unittest.TestCase):
     def setUp(self):
         self.td = tempfile.TemporaryDirectory(); self.base = Path(self.td.name)
-        self.b = MOD.Buttons(self.base, dry_run=True)
+        self.say = self.base / 'say.level'; self.marker = self.base / 'fastshell.buttons'
+        self.proc = self.base / 'proc'
+        (self.say).write_text('7\n')
+        self.b = MOD.Buttons(self.base, dry_run=True, say_level=self.say, marker=self.marker, proc=self.proc)
 
     def tearDown(self):
         self.td.cleanup()
@@ -114,6 +117,65 @@ class ButtonTests(unittest.TestCase):
             self.b.handle(116, 1, now=1.0); self.b.handle(116, 0, now=3.0)
             self.assertEqual(len(self.b.actions), 1)
         self.assertEqual(self.events()[-1]['key'], 'power')
+
+    def _shell(self, comm='unum-fastshell'):
+        d = self.proc / '4242'; d.mkdir(parents=True, exist_ok=True); (d / 'comm').write_text(comm + '\n')
+        self.marker.write_text('4242\n')
+
+    def _power_long_hook(self):
+        hooks = self.base / 'hooks'; hooks.mkdir(exist_ok=True)
+        h = hooks / 'power-long'; h.write_text('#!/bin/sh\n'); h.chmod(0o755)
+        return h
+
+    def test_level_is_read_fresh_from_say_level_and_written_back(self):
+        # s22-keepalive's mute guard reset the saved level; the speech level file decides
+        (self.base / 'volume').write_text('0\n'); self.say.write_text('2\n')
+        self.b.handle(115, 1, now=0.0); self.b.handle(115, 0, now=0.1)
+        self.assertEqual(self.b.level, 3)
+        self.assertEqual(self.say.read_text(), '3\n')
+        self.say.unlink()
+        self.b.handle(114, 1, now=1.0); self.b.handle(114, 0, now=1.1)
+        self.assertEqual(self.b.level, MOD.DEFAULT_LEVEL - 1)
+
+    def test_shell_owns_keys_only_power_long_left(self):
+        self._shell(); h = self._power_long_hook()
+        self.assertTrue(self.b.shell_owns())
+        with mock.patch.object(MOD.os.path, 'exists', return_value=True):
+            self.b.handle(115, 1, now=0.0); self.b.handle(115, 0, now=0.1)
+            self.b.handle(116, 1, now=1.0); self.b.handle(116, 0, now=1.1)
+            self._hook(); (self.base / 'ptt-hold').write_text('')
+            self.b.handle(115, 1, now=2.0); self.b.tick(now=3.5); self.b.handle(115, 0, now=3.6)
+            self.assertEqual(self.b.actions, [], 'shell handles volume, power tap and PTT')
+            self.b.handle(116, 1, now=5.0); self.b.handle(116, 0, now=6.2)
+        self.assertEqual(self.b.actions, [(str(h),)], 'Power held 1 s alone: safety hook')
+        self.assertEqual(self.say.read_text(), '7\n')
+        self.assertEqual(self.events()[1].get('by'), 'fastshell')
+
+    def test_stale_marker_or_other_process_means_fallback(self):
+        self._shell(comm='python3')
+        self.assertFalse(self.b.shell_owns())
+        self.marker.write_text('999999\n')
+        self.assertFalse(self.b.shell_owns())
+        self.b.handle(115, 1, now=0.0); self.b.handle(115, 0, now=0.1)
+        self.assertEqual(self.b.level, 8)
+
+    def test_power_chord_never_runs_power_long(self):
+        h = self._power_long_hook()
+        for owned in (False, True):
+            if owned:
+                self._shell()
+            self.b.actions.clear()
+            with mock.patch.object(MOD.os.path, 'exists', return_value=True):
+                # Power first, then volume down, both held past 1 s (screenshot chord)
+                self.b.handle(116, 1, now=0.0); self.b.handle(114, 1, now=0.15)
+                self.b.handle(116, 0, now=1.6); self.b.handle(114, 0, now=1.7)
+                # volume down first, then Power
+                self.b.handle(114, 1, now=3.0); self.b.handle(116, 1, now=3.2)
+                self.b.handle(116, 0, now=4.5); self.b.handle(114, 0, now=4.6)
+            self.assertNotIn((str(h),), self.b.actions, f'owned={owned}')
+        # and a plain hold right after still works
+        self.b.handle(116, 1, now=10.0); self.b.handle(116, 0, now=11.1)
+        self.assertEqual(self.b.actions[-1], (str(h),))
 
     def test_unknown_codes_and_repeats_ignored(self):
         self.b.handle(30, 1); self.b.handle(115, 2)

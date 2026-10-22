@@ -12,6 +12,7 @@
 //!   unum-fastshell bench [N]       offscreen full-frame render timings per page
 //! env: S22_TOUCH_RUN (touchd run dir, native path), FASTSHELL_CHROOT,
 //!      S22_SHELL_API, S22_SHELL_S22D, S22_SHELL_PHONED, S22_SHELL_SESSION.
+mod buttons;
 mod ctl;
 mod drm;
 mod font;
@@ -232,6 +233,18 @@ fn run() -> std::io::Result<()> {
     let mut opened_device = false;
     let mut handing: Option<Instant> = None;
     let mut lat_log = std::fs::OpenOptions::new().create(true).append(true).open(format!("{state_dir}/latency.jsonl")).ok();
+    // physical buttons: read the key nodes directly (see buttons.rs for the hand-over with s22-buttons)
+    let key_nodes = buttons::find_key_nodes("/sys/class/input");
+    let mut keys: Vec<buttons::KeyDev> = key_nodes.iter().filter_map(|p| buttons::KeyDev::open(p).map_err(|e| log(&format!("key node {p}: {e}"))).ok()).collect();
+    let mut kevs: Vec<(buttons::Key, bool, u64)> = Vec::new();
+    let mut machine = buttons::Machine::new(buttons::Timing::default());
+    app.buttons_cfg = env("FASTSHELL_BUTTONS_CFG", &format!("{state_dir}/buttons.json"));
+    app.buttons_enabled = buttons::load_enabled(&app.buttons_cfg);
+    app.level = buttons::read_level(buttons::SAY_LEVEL);
+    let mut claimed = app.buttons_enabled && !keys.is_empty();
+    buttons::claim(claimed);
+    log(&format!("buttons: nodes {:?}, handled by the shell: {claimed}, level {}", key_nodes, app.level));
+    let mut shot_due = false;
     log(&format!("started pid {} run_dir {run_dir}", std::process::id()));
 
     while !STOP.load(Ordering::SeqCst) {
@@ -242,9 +255,18 @@ fn run() -> std::io::Result<()> {
             libc::pollfd { fd: tdev.as_ref().map(|t| t.fd).unwrap_or(-1), events: libc::POLLIN, revents: 0 },
             libc::pollfd { fd: pres.as_ref().map(|p| p.card.fd).unwrap_or(-1), events: libc::POLLIN, revents: 0 },
         ];
+        for k in &keys {
+            fds.push(libc::pollfd { fd: k.fd, events: libc::POLLIN, revents: 0 });
+        }
         let mut timeout = next_tick.saturating_duration_since(Instant::now()).as_millis().min(1000) as i32;
         if app.animating || app.repeat_at.is_some() || app.hold.is_some() {
             timeout = timeout.min(16);
+        }
+        if let Some(dl) = machine.next_deadline() {
+            timeout = timeout.min((dl.saturating_sub(now_us()) / 1000) as i32 + 1);
+        }
+        if let Some(dl) = app.overlay_deadline() {
+            timeout = timeout.min(dl.saturating_duration_since(Instant::now()).as_millis() as i32 + 1);
         }
         let r = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as _, timeout) };
         if r < 0 {
@@ -343,6 +365,45 @@ fn run() -> std::io::Result<()> {
                 }
             }
         }
+        // ---- physical buttons
+        let key_ctx = |app: &App| buttons::Ctx {
+            display_on: if app.active { app.display_on } else { std::fs::read_to_string("/run/s22-display-state").map(|s| s.trim() != "off").unwrap_or(true) },
+            ptt_hold: buttons::ptt_hold_mode(buttons::BUTTONS_BASE),
+        };
+        if fds[4..].iter().any(|f| f.revents & libc::POLLIN != 0) {
+            kevs.clear();
+            for k in keys.iter_mut() {
+                k.read(&mut kevs);
+            }
+            kevs.sort_by_key(|e| e.2);
+            if app.buttons_enabled {
+                for &(k, down, t) in &kevs {
+                    let ctx = key_ctx(&app);
+                    let acts = if down { machine.press(k, t, ctx) } else { machine.release(k, t, ctx) };
+                    if !acts.is_empty() {
+                        log(&format!("key {} {} -> {:?}", k.name(), if down { "down" } else { "up" }, acts));
+                    }
+                    app.button_actions(&acts, t);
+                }
+            }
+        }
+        if machine.next_deadline().is_some_and(|dl| now_us() >= dl) {
+            let acts = machine.tick(now_us(), key_ctx(&app));
+            if !acts.is_empty() {
+                log(&format!("key hold -> {acts:?}"));
+            }
+            app.button_actions(&acts, now_us());
+        }
+        if fds.iter().skip(4).any(|f| f.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) != 0) {
+            log("a key node went away: reopening");
+            keys = buttons::find_key_nodes("/sys/class/input").iter().filter_map(|p| buttons::KeyDev::open(p).ok()).collect();
+        }
+        if claimed != (app.buttons_enabled && !keys.is_empty()) {
+            claimed = !claimed;
+            buttons::claim(claimed);
+            log(&format!("buttons handled by the shell: {claimed}"));
+        }
+        app.expire_overlays(Instant::now());
         // ---- messages and calls
         if fds[0].revents & libc::POLLIN != 0 {
             let mut b = [0u8; 256];
@@ -443,24 +504,45 @@ fn run() -> std::io::Result<()> {
                         }
                     }
                 }
+                Effect::Assistant(cmd, envs) => {
+                    if envs.iter().any(|(k, _)| k == "S22_PTT") {
+                        let _ = std::fs::remove_file(format!("{}/ptt-release", buttons::BUTTONS_BASE));
+                    }
+                    netw.spawn(move |n| {
+                        let mut parts = cmd.split_whitespace();
+                        let prog = parts.next().unwrap_or("true").to_string();
+                        let st = std::process::Command::new(&prog)
+                            .args(parts)
+                            .envs(envs)
+                            .stdin(std::process::Stdio::null())
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::null())
+                            .status();
+                        log(&format!("assistant exited: {st:?}"));
+                        let last = std::fs::read_to_string("/srv/s22/buttons/assistant.jsonl").ok().and_then(|s| s.lines().last().map(String::from)).unwrap_or_default();
+                        n.send(Msg::Assistant(serde_json::from_str(&last).unwrap_or(serde_json::Value::Null)));
+                    });
+                }
+                Effect::PttRelease(held) => {
+                    if let Err(e) = buttons::write_ptt_release(buttons::BUTTONS_BASE, held) {
+                        log(&format!("ptt release: {e}"));
+                    }
+                }
+                Effect::Level(l) => {
+                    let playing = idle::flock_held(&env("FASTSHELL_SAY_LOCK", "/run/s22-say.lock")) || buttons::playback_running();
+                    if let Err(e) = buttons::apply_level(l, playing) {
+                        log(&format!("level {l}: {e}"));
+                    }
+                }
+                Effect::Native(argv) => {
+                    std::thread::spawn(move || {
+                        let st = std::process::Command::new(&argv[0]).args(&argv[1..]).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+                        log(&format!("{argv:?}: {st:?}"));
+                    });
+                }
+                Effect::Screenshot => shot_due = true,
                 Effect::Spawn(argv) => {
-                    if argv.first().map(String::as_str) == Some("@assistant") {
-                        let cmd = argv.get(1).cloned().unwrap_or_default();
-                        netw.spawn(move |n| {
-                            let mut parts = cmd.split_whitespace();
-                            let prog = parts.next().unwrap_or("true").to_string();
-                            let st = std::process::Command::new(&prog)
-                                .args(parts)
-                                .env("S22_BUTTON", "fastshell")
-                                .stdin(std::process::Stdio::null())
-                                .stdout(std::process::Stdio::null())
-                                .stderr(std::process::Stdio::null())
-                                .status();
-                            log(&format!("assistant exited: {st:?}"));
-                            let last = std::fs::read_to_string("/srv/s22/buttons/assistant.jsonl").ok().and_then(|s| s.lines().last().map(String::from)).unwrap_or_default();
-                            n.send(Msg::Assistant(serde_json::from_str(&last).unwrap_or(serde_json::Value::Null)));
-                        });
-                    } else {
+                    {
                         let sw = sway.clone();
                         std::thread::spawn(move || {
                             let mut a: Vec<&str> = argv.iter().map(String::as_str).collect();
@@ -495,8 +577,43 @@ fn run() -> std::io::Result<()> {
                 }
             }
         }
+        for (kind, ms) in std::mem::take(&mut app.lat_unlogged) {
+            if let Some(f) = lat_log.as_mut() {
+                let _ = writeln!(f, "{{\"t\":{},\"kind\":\"{kind}\",\"touch_to_flip_ms\":{ms:.2},\"page\":\"{}\",\"modeset\":true}}", now_us(), app.page.name());
+            }
+        }
+        // ---- screenshot: once the frame without the level overlay is on the canvas
+        if shot_due {
+            let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+            let name = format!("screenshot-{stamp}.png");
+            let rel = format!("{}/{name}", ui::GALLERY);
+            if app.active && pres.is_some() && app.display_on {
+                if app.damage.is_empty() && !app.relayout {
+                    shot_due = false;
+                    let px = cv.px.clone();
+                    let host = format!("{chroot}{rel}");
+                    std::thread::spawn(move || {
+                        let t = Instant::now();
+                        let r = save_png_px(&px, W, H, &host);
+                        log(&format!("screenshot {host}: {r:?} in {} ms", t.elapsed().as_millis()));
+                    });
+                    app.screenshot_taken(&name);
+                }
+            } else {
+                // sway has the panel: grim under sway
+                shot_due = false;
+                let sw = sway.clone();
+                let rel2 = rel.clone();
+                std::thread::spawn(move || {
+                    let ok = sw.run(&["sh", "-c", &format!("mkdir -p {} && grim {rel2}", ui::GALLERY)]);
+                    log(&format!("screenshot (grim) {rel2}: {ok}"));
+                });
+                app.screenshot_taken(&name);
+            }
+        }
     }
     log("stopping");
+    buttons::claim(false);
     let _ = seat.close_seat();
     let _ = std::fs::remove_file("/run/s22-fastshell.pid");
     Ok(())
@@ -533,7 +650,14 @@ fn frame(app: &mut App, cv: &mut Canvas, p: &mut Presenter) -> std::io::Result<(
         p.need_modeset = false;
         p.back ^= 1;
         p.pending = false;
-        app.mark = None;
+        if let Some((t_in, kind)) = app.mark.take() {
+            // a wake: the modeset is synchronous, so the frame is up now
+            let ms = now_us().saturating_sub(t_in) as f64 / 1000.0;
+            if ms < 2000.0 {
+                app.stats.lat.push((kind, ms));
+                app.lat_unlogged.push((kind, ms));
+            }
+        }
     } else {
         p.card.page_flip(fb, 1)?;
         p.pending = true;
@@ -574,6 +698,27 @@ fn demo_app() -> App {
         (ui::Who::Agent, "The CPU path drew a highlight 12.5 ms after touch at 0.4 % idle CPU and 9.9 MB, while Samsung Vulkan worked zero-copy but was slower end to end. The real shell therefore uses a damage-tracked CPU renderer straight into KMS dumb buffers.".into()),
     ];
     a
+}
+
+/// PNG of a canvas pixel copy (screenshots), written to `path.tmp` then renamed.
+fn save_png_px(px: &[u32], w: i32, h: i32, path: &str) -> std::io::Result<()> {
+    if let Some(d) = std::path::Path::new(path).parent() {
+        std::fs::create_dir_all(d)?;
+    }
+    let tmp = format!("{path}.tmp");
+    let f = std::fs::File::create(&tmp)?;
+    let mut e = png::Encoder::new(std::io::BufWriter::new(f), w as u32, h as u32);
+    e.set_color(png::ColorType::Rgb);
+    e.set_depth(png::BitDepth::Eight);
+    e.set_compression(png::Compression::Fast);
+    let mut wr = e.write_header().map_err(std::io::Error::other)?;
+    let mut data = Vec::with_capacity(px.len() * 3);
+    for p in px {
+        data.extend_from_slice(&[(p >> 16) as u8, (p >> 8) as u8, *p as u8]);
+    }
+    wr.write_image_data(&data).map_err(std::io::Error::other)?;
+    drop(wr);
+    std::fs::rename(&tmp, path)
 }
 
 fn save_png(cv: &Canvas, path: &str) {
@@ -639,6 +784,15 @@ fn states() -> Vec<(&'static str, Box<dyn Fn(&mut App)>)> {
             a.locked = true;
         })),
         ("settings", Box::new(|a: &mut App| a.goto(Page::Settings))),
+        ("volume-osd", Box::new(|a: &mut App| {
+            a.level = 5;
+            a.button_actions(&[buttons::Action::Step(1)], 0);
+        })),
+        ("volume-osd-locked", Box::new(|a: &mut App| {
+            a.locked = true;
+            a.level = 1;
+            a.button_actions(&[buttons::Action::Revert, buttons::Action::Mute], 0);
+        })),
         ("switcher", Box::new(|a: &mut App| a.goto(Page::Switcher))),
         ("files", Box::new(|a: &mut App| {
             a.files_dir = "/".into();
