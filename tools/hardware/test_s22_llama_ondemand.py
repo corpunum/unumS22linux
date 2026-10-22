@@ -5,6 +5,7 @@ import importlib.machinery
 import importlib.util
 import json
 import socket
+import subprocess
 import sys
 import tempfile
 import threading
@@ -390,6 +391,194 @@ class LeanTest(unittest.TestCase):
         self.request(controller_body())
         sent = json.loads((self.slots / 'last-body.json').read_text())
         self.assertTrue(sent['messages'][0]['content'].startswith('You are OpenUnum S'))
+
+
+FAKE_HANG = r"""
+import http.server, json, os, select, sys, time
+port = int(sys.argv[sys.argv.index('--port') + 1])
+d = sys.argv[sys.argv.index('--dir') + 1]
+def note(x):
+    open(os.path.join(d, 'calls.log'), 'a').write(x + '\n')
+class H(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_GET(self):
+        self.send_response(200); self.send_header('Content-Length', '15'); self.end_headers()
+        self.wfile.write(b'{"status":"ok"}')
+    def do_POST(self):
+        n = int(self.headers.get('Content-Length', 0)); self.rfile.read(n)
+        mode = open(os.path.join(d, 'mode')).read().strip() if os.path.exists(os.path.join(d, 'mode')) else 'hang'
+        note('post ' + mode)
+        if mode == 'ok':
+            body = b'{"choices":[{"message":{"content":"fine"}}]}'
+            self.send_response(200); self.send_header('Content-Length', str(len(body))); self.end_headers()
+            self.wfile.write(body); return
+        # a hung prefill: burn CPU until the client goes away (llama.cpp cancels on disconnect);
+        # 'stubborn' keeps burning even after that (a backend that does not cancel)
+        t0 = time.time(); closed = None
+        while time.time() - t0 < 30:
+            x = 0
+            for i in range(20000): x += i
+            if closed is None:
+                r, _, _ = select.select([self.connection], [], [], 0)
+                if r and not self.connection.recv(1, 2):    # MSG_PEEK: b'' = client closed
+                    closed = time.time() - t0
+                    note('client_closed %.1f' % closed)
+                    if mode != 'stubborn':
+                        return
+http.server.ThreadingHTTPServer(('127.0.0.1', port), H).serve_forever()
+"""
+
+
+class LimitsTest(unittest.TestCase):
+    """Issue #75: per-request wall clock, retry budget, restart-safe state, stuck backend."""
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = Path(self.tmp.name)
+        (self.d / 'fake.py').write_text(FAKE_HANG)
+        self.bport = free_port()
+        self.argv = [sys.executable, str(self.d / 'fake.py'), '--port', str(self.bport), '--dir', str(self.d)]
+        self.od = self.make()
+
+    def make(self, **kw):
+        return mod.OnDemand(idle_s=60, argv=self.argv, backend_port=self.bport, hold=self.d / 'hold',
+                            state=self.d / 'state', start_timeout_s=10, mid_cap=None, preexec=None, lean=True,
+                            first_s=kw.get('first_s', 1.0), max_s=kw.get('max_s', 3.0), retry_max=2,
+                            retry_window_s=600)
+
+    def tearDown(self):
+        self.od.unload('test')
+        self.tmp.cleanup()
+
+    def calls(self):
+        f = self.d / 'calls.log'
+        return f.read_text().splitlines() if f.exists() else []
+
+    def request(self, body, od=None, path='/v1/chat/completions'):
+        od = od or self.od
+        a, b = socket.socketpair()
+        data = json.dumps(body).encode()
+        a.sendall(b'POST %s HTTP/1.1\r\nHost: x\r\nContent-Length: %d\r\n\r\n' % (path.encode(), len(data)) + data)
+        t0 = time.monotonic()
+        t = threading.Thread(target=od.handle, args=(b,))
+        t.start()
+        resp = b''
+        a.settimeout(20)
+        try:
+            while True:
+                x = a.recv(65536)
+                if not x:
+                    break
+                resp += x
+        except OSError:
+            pass
+        el = time.monotonic() - t0
+        t.join(10)
+        a.close()
+        return resp, el
+
+    def log(self):
+        f = self.d / 'state' / 'ondemand.jsonl'
+        return [json.loads(x) for x in f.read_text().splitlines()] if f.exists() else []
+
+    def wait(self, pred, secs=10):
+        for _ in range(int(secs / 0.1)):
+            if pred():
+                return True
+            time.sleep(0.1)
+        return False
+
+    BODY = {'model': 'm', 'stream': True, 'messages': [{'role': 'user', 'content': 'hang please'}]}
+
+    def test_stream_without_output_is_cut_and_backend_cancels(self):
+        resp, el = self.request(self.BODY)
+        self.assertIn(b'504 Gateway Timeout', resp)
+        self.assertIn(b'no_first_output', resp)
+        self.assertLess(el, 4)
+        self.assertTrue(self.wait(lambda: any(c.startswith('client_closed') for c in self.calls())))
+        ab = [r for r in self.log() if r['event'] == 'request_abort']
+        self.assertEqual(ab[0]['reason'], 'no_first_output')
+        self.assertEqual(json.loads((self.d / 'state' / 'active.json').read_text()), {})
+
+    def test_non_stream_gets_the_max_wall_clock(self):
+        resp, el = self.request(dict(self.BODY, stream=False))
+        self.assertIn(b'max_wall', resp)
+        self.assertTrue(2.5 < el < 6, el)
+
+    def test_retry_budget_refuses_third_attempt_without_backend_and_survives_restart(self):
+        self.request(self.BODY)
+        self.request(self.BODY)
+        n = len([c for c in self.calls() if c.startswith('post')])
+        self.assertEqual(n, 2)
+        resp, el = self.request(self.BODY)
+        self.assertIn(b'503', resp)
+        self.assertIn(b'retry_budget', resp)
+        self.assertLess(el, 1)
+        self.assertEqual(len([c for c in self.calls() if c.startswith('post')]), 2)
+        od2 = self.make()                       # proxy restart: the budget is persisted
+        resp, _ = self.request(self.BODY, od=od2)
+        self.assertIn(b'retry_budget', resp)
+        other = {'model': 'm', 'stream': True, 'messages': [{'role': 'user', 'content': 'something else'}]}
+        (self.d / 'mode').write_text('ok')
+        resp, _ = self.request(dict(other, stream=False), od=od2)
+        self.assertIn(b'fine', resp)
+        od2.unload('test')
+
+    def test_success_clears_the_budget(self):
+        k = mod.retry_key(b'x\r\n\r\n' + json.dumps(self.BODY).encode())
+        self.request(self.BODY)
+        self.assertEqual(self.od.budget_count(k), 1)
+        (self.d / 'mode').write_text('ok')
+        resp, _ = self.request(dict(self.BODY, stream=False))     # same messages: same key
+        self.assertIn(b'fine', resp)
+        self.assertEqual(self.od.budget_count(k), 0)
+        self.assertEqual(json.loads((self.d / 'state' / 'budget.json').read_text()), {})
+
+    def test_restart_kills_orphan_backend_and_counts_interrupted_requests(self):
+        self.assertTrue(self.od.ensure_backend())
+        pid = self.od.proc.pid
+        st = self.d / 'state'
+        (st / 'active.json').write_text(json.dumps({'1-1': {'t0': time.time() - 5, 'key': 'abc'}}))
+        od2 = self.make()                       # new proxy: does not own the running backend
+        out = od2.reap_previous()
+        self.assertEqual(out, {'orphan': pid, 'interrupted': 1})
+        self.assertTrue(self.wait(lambda: self.od.proc.poll() is not None, 5))
+        self.assertEqual(od2.budget_count('abc'), 1)
+        self.assertFalse((st / 'backend.json').exists())
+        self.assertEqual(od2.reap_previous(), {'orphan': None, 'interrupted': 0})
+
+    def test_reap_ignores_unrelated_pid(self):
+        p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], start_new_session=True)
+        try:
+            (self.d / 'state' / 'backend.json').write_text(json.dumps({'pid': p.pid}))
+            self.assertEqual(self.od.reap_previous()['orphan'], None)
+            self.assertIsNone(p.poll())
+        finally:
+            p.kill(); p.wait()
+
+    def test_stubborn_backend_is_unloaded_after_abort(self):
+        (self.d / 'mode').write_text('stubborn')
+        resp, _ = self.request(self.BODY)
+        self.assertIn(b'504', resp)
+        pid = self.od.proc.pid
+        self.assertTrue(self.wait(lambda: any(r['event'] == 'stuck_backend' for r in self.log()), 15))
+        self.assertTrue(self.wait(lambda: self.od.proc is None or self.od.proc.poll() is not None, 5))
+        self.assertTrue(any(r['event'] == 'unload' and r['reason'] == 'stuck_after_abort' and r['pid'] == pid
+                            for r in self.log()))
+
+    def test_abort_endpoint_stops_inflight(self):
+        od = self.make(first_s=0, max_s=0)      # no limits: only the external abort can stop it
+        out = {}
+        th = threading.Thread(target=lambda: out.update(r=self.request(self.BODY, od=od)))
+        th.start()
+        self.assertTrue(self.wait(lambda: len(od.inflight) == 1, 10))
+        a, b = socket.socketpair()
+        a.sendall(b'POST /_s22/abort HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n')
+        od.handle(b)
+        self.assertIn(b'"aborted": 1', a.recv(4096))
+        a.close()
+        th.join(10)
+        self.assertIn(b'external', out['r'][0])
+        od.unload('test')
 
 
 if __name__ == '__main__':

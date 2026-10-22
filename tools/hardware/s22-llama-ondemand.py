@@ -43,6 +43,21 @@ on the CPU), and runs the real llama-server on 127.0.0.1:8091.
     model, since the lean prompt never uses that prefix. Off: S22_LLAMA_LEAN=0 or the file
     STATE/lean-off (checked per request).
 
+  * Hard per-request limits (2026-10-22, issue #75). A stuck local turn once kept the CPU busy for
+    ~45 min (900 s first-token cap x retries). Now every relayed generation request has a wall
+    clock: a streamed request must produce model output within FIRST_S (150 s), any request ends
+    after MAX_S (420 s). Over the limit the proxy answers 504 (or cuts the stream), closes the
+    backend connection (llama-server cancels the task), and 3 s later measures the backend's CPU:
+    still busy (> 30 % of a core) with no other request -> unloaded by its exact process group.
+    Retry budget: the same request (hash of its messages/prompt) aborted RETRY_MAX (2) times
+    within RETRY_WINDOW_S (30 min) is refused at once with 503, without loading the model.
+    Survives restarts: the budget, the in-flight requests and the backend pid are kept in
+    STATE (budget.json, active.json, backend.json). A new proxy kills a backend left by the old
+    one (exact pid, checked cmdline) and counts the requests it was serving as failures.
+    POST /_s22/abort stops all in-flight requests (s22-turnguard uses it); GET /_s22/status.
+    Env knobs: S22_LLAMA_FIRST_S, S22_LLAMA_MAX_S, S22_LLAMA_RETRY_MAX, S22_LLAMA_RETRY_WINDOW_S
+    (0 disables a limit).
+
 Measured 2026-10-10 (sway, idle): unloading frees ~860 MB of MemAvailable and
 ~0.5-1 % of a core; temperature unchanged (31-32 C).
 
@@ -104,6 +119,14 @@ LEAN_MAX_TOKENS = 768
 LEAN_MIN_SYSTEM = 4000              # a request without tools is only rewritten if it carries a controller-size prompt
 WARM_PATHS = ('/completion', '/completions')
 DIRECTIVE = '[OPENUNUM INTERNAL TURN DIRECTIVE]'
+# -- hard per-request limits (issue #75)
+REQ_FIRST_S = float(os.environ.get('S22_LLAMA_FIRST_S', '150'))
+REQ_MAX_S = float(os.environ.get('S22_LLAMA_MAX_S', '420'))
+RETRY_MAX = int(os.environ.get('S22_LLAMA_RETRY_MAX', '2'))
+RETRY_WINDOW_S = float(os.environ.get('S22_LLAMA_RETRY_WINDOW_S', '1800'))
+STUCK_CPU_PCT = 30.0
+STREAM_RE = re.compile(rb'"stream"\s*:\s*true')
+GEN_PATHS = CHAT_PATHS + WARM_PATHS
 LEAN_SYSTEM = (
     "You are OpenUnum, the owner's personal assistant, running on the owner's Samsung Galaxy S22 "
     "(native Linux) on a small local model with no cloud access to other models. "
@@ -300,6 +323,45 @@ def pin_cool_cpus() -> None:   # Popen preexec_fn: runs in the child before exec
         pass
 
 
+def retry_key(head: bytes) -> str | None:
+    """Identity of a generation request for the retry budget: hash of its messages (or prompt)."""
+    body = head.partition(b'\r\n\r\n')[2]
+    try:
+        j = json.loads(body)
+    except ValueError:
+        return None
+    if not isinstance(j, dict):
+        return None
+    what = j['messages'] if 'messages' in j else j.get('prompt')
+    if what is None:
+        return None
+    return hashlib.sha256(json.dumps(what, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
+
+
+def pgroup_cpu_ticks(pgid: int) -> int:
+    """utime+stime (clock ticks) of every live process in process group pgid."""
+    total = 0
+    for p in os.listdir('/proc'):
+        if not p.isdigit():
+            continue
+        try:
+            with open(f'/proc/{p}/stat') as f:
+                fields = f.read().rsplit(')', 1)[1].split()
+            if int(fields[2]) == pgid:
+                total += int(fields[11]) + int(fields[12])
+        except (OSError, IndexError, ValueError):
+            pass
+    return total
+
+
+def cmdline(pid: int) -> str:
+    try:
+        with open(f'/proc/{pid}/cmdline', 'rb') as f:
+            return f.read().replace(b'\0', b' ').decode('utf-8', 'replace')
+    except OSError:
+        return ''
+
+
 def http_response(status: str, body: bytes, ctype: str = 'application/json') -> bytes:
     return (f'HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\nContent-Length: {len(body)}\r\n'
             'Connection: close\r\n\r\n').encode() + body
@@ -309,8 +371,18 @@ class OnDemand:
     def __init__(self, idle_s: float = 600, argv: list[str] | None = None, backend_port: int = BACKEND_PORT,
                  hold: Path = HOLD, state: Path = STATE, start_timeout_s: float = 120, clock=time.monotonic,
                  mid_cap: tuple[Path, int] | None = (MID_MAX_FREQ, MID_CAP_KHZ), preexec=pin_cool_cpus,
-                 lean: bool | None = None):
+                 lean: bool | None = None, first_s: float | None = None, max_s: float | None = None,
+                 retry_max: int | None = None, retry_window_s: float | None = None):
         self.preexec = preexec
+        self.first_s = REQ_FIRST_S if first_s is None else first_s
+        self.max_s = REQ_MAX_S if max_s is None else max_s
+        self.retry_max = RETRY_MAX if retry_max is None else retry_max
+        self.retry_window_s = RETRY_WINDOW_S if retry_window_s is None else retry_window_s
+        self.budget: dict[str, list[float]] = {}
+        self.budget_lock = threading.Lock()
+        self.inflight: dict[str, dict] = {}          # rid -> {t0, key, path, abort}
+        self.inflight_lock = threading.Lock()
+        self.rid_seq = 0
         self.lean_default = LEAN_DEFAULT if lean is None else lean
         self.idle_s, self.backend_port, self.hold, self.state = idle_s, backend_port, hold, state
         self.argv = argv or backend_argv()
@@ -349,6 +421,111 @@ class OnDemand:
             self.index = json.loads((self.prefix_dir / 'index.json').read_text())
         except (OSError, ValueError):
             pass
+        try:
+            self.budget = {k: [float(t) for t in v] for k, v in
+                           json.loads((state / 'budget.json').read_text()).items()}
+        except (OSError, ValueError, AttributeError, TypeError):
+            self.budget = {}
+
+    # -- restart-safe limits: retry budget, in-flight requests, backend pid
+    def save_json(self, name: str, obj) -> None:
+        try:
+            tmp = self.state / (name + '.tmp')
+            tmp.write_text(json.dumps(obj))
+            os.replace(tmp, self.state / name)
+        except OSError:
+            pass
+
+    def budget_count(self, key: str | None) -> int:
+        if not key or not self.retry_max:
+            return 0
+        now = time.time()
+        with self.budget_lock:
+            return len([t for t in self.budget.get(key, []) if now - t < self.retry_window_s])
+
+    def budget_record(self, key: str | None, failed: bool) -> None:
+        if not key:
+            return
+        now = time.time()
+        with self.budget_lock:
+            if failed:
+                self.budget[key] = [t for t in self.budget.get(key, []) if now - t < self.retry_window_s] + [now]
+            elif key not in self.budget:
+                return
+            else:
+                self.budget.pop(key, None)
+            self.budget = {k: v for k, v in self.budget.items() if v and now - v[-1] < self.retry_window_s}
+            snap = dict(self.budget)
+        self.save_json('budget.json', snap)
+
+    def save_inflight(self) -> None:
+        with self.inflight_lock:
+            snap = {rid: {k: v for k, v in r.items() if k != 'abort'} for rid, r in self.inflight.items()}
+        self.save_json('active.json', snap)
+
+    def reap_previous(self) -> dict:
+        """Proxy start: kill a backend the previous proxy left running (exact pid, cmdline checked) and
+        count the requests it was serving as failures (their retry budget survives the restart)."""
+        out = {'orphan': None, 'interrupted': 0}
+        try:
+            d = json.loads((self.state / 'backend.json').read_text())
+        except (OSError, ValueError):
+            d = None
+        if isinstance(d, dict) and d.get('pid'):
+            pid = int(d['pid'])
+            mine = self.proc is not None and self.proc.pid == pid
+            marker = os.path.basename(self.argv[1] if len(self.argv) > 1 else self.argv[0])
+            c = cmdline(pid)
+            if not mine and c and (marker in c or 'llama-server' in c):
+                try:
+                    os.killpg(pid, signal.SIGTERM)
+                    for _ in range(50):
+                        time.sleep(0.1)
+                        if not cmdline(pid):
+                            break
+                    else:
+                        os.killpg(pid, signal.SIGKILL)
+                    out['orphan'] = pid
+                    self.log(event='orphan_killed', pid=pid, cmd=c[:120])
+                except (ProcessLookupError, PermissionError) as e:
+                    self.log(event='orphan_kill_failed', pid=pid, error=str(e))
+            try:
+                (self.state / 'backend.json').unlink()
+            except OSError:
+                pass
+        try:
+            act = json.loads((self.state / 'active.json').read_text())
+        except (OSError, ValueError):
+            act = {}
+        for rid, r in (act.items() if isinstance(act, dict) else []):
+            self.budget_record(r.get('key'), failed=True)
+            out['interrupted'] += 1
+            self.log(event='interrupted', rid=rid, key=r.get('key'), age_s=round(time.time() - float(r.get('t0', 0)), 1))
+        self.save_json('active.json', {})
+        return out
+
+    def abort_all(self, reason: str) -> int:
+        with self.inflight_lock:
+            fns = [r['abort'] for r in self.inflight.values() if r.get('abort')]
+        for fn in fns:
+            fn(reason)
+        return len(fns)
+
+    def check_stuck(self, wait_s: float = 3.0, window_s: float = 4.0) -> float | None:
+        """After an abort: the backend must go idle. Still burning CPU with nothing in flight -> unload."""
+        time.sleep(wait_s)
+        proc = self.proc
+        if proc is None or proc.poll() is not None:
+            return None
+        a = pgroup_cpu_ticks(proc.pid)
+        time.sleep(window_s)
+        b = pgroup_cpu_ticks(proc.pid)
+        pct = 100.0 * (b - a) / (os.sysconf('SC_CLK_TCK') * window_s)
+        self.log(event='after_abort_cpu', pid=proc.pid, pct=round(pct, 1), active=self.active)
+        if pct > STUCK_CPU_PCT and self.active == 0:
+            self.log(event='stuck_backend', pid=proc.pid, pct=round(pct, 1))
+            self.unload('stuck_after_abort')
+        return pct
 
     # -- log / status
     def log(self, **rec) -> None:
@@ -365,7 +542,10 @@ class OnDemand:
                 'idle_s': self.idle_s, 'loads': self.loads, 'held': self.hold.exists(),
                 'cached': sorted(self.cache), 'precache': self.precache,
                 'prefixes': {k[:12]: v for k, v in self.index.get('keys', {}).items()},
-                'current': (self.index.get('current') or '')[:12], 'warming': bool(self.warming)}
+                'current': (self.index.get('current') or '')[:12], 'warming': bool(self.warming),
+                'limits': {'first_s': self.first_s, 'max_s': self.max_s, 'retry_max': self.retry_max,
+                           'retry_window_s': self.retry_window_s},
+                'inflight': len(self.inflight), 'budget_keys': len(self.budget)}
 
     # -- cool profile: cap the mid cluster while the model is loaded
     def cap_clock(self) -> None:
@@ -416,6 +596,7 @@ class OnDemand:
                 log.close()
                 self.loads += 1
                 self.log(event='load', pid=self.proc.pid)
+                self.save_json('backend.json', {'pid': self.proc.pid, 't': time.time()})
             deadline = self.clock() + self.start_timeout_s
             while self.clock() < deadline:
                 if self.backend_healthy():
@@ -465,6 +646,10 @@ class OnDemand:
                 self.proc.wait(5)
             self.log(event='unload', pid=pid, reason=reason)
             self.restore_clock()
+            try:
+                (self.state / 'backend.json').unlink()
+            except OSError:
+                pass
 
     # -- prompt precache
     def slot_name(self, key: str) -> str:
@@ -678,6 +863,16 @@ class OnDemand:
             line = head.split(b'\r\n', 1)[0].decode('latin-1', 'replace').split(' ')
             method, path = (line + ['', ''])[:2]
             path = path.split('?', 1)[0]
+            if path.startswith('/_s22/'):
+                if method == 'POST' and path == '/_s22/abort':
+                    n = self.abort_all('external')
+                    self.log(event='abort_all', n=n)
+                    conn.sendall(http_response('200 OK', json.dumps({'ok': True, 'aborted': n}).encode()))
+                elif path == '/_s22/status':
+                    conn.sendall(http_response('200 OK', json.dumps(self.status()).encode()))
+                else:
+                    conn.sendall(http_response('404 Not Found', b'{"error":"unknown"}'))
+                return
             probe = method == 'GET' and path in CACHED
             if probe and not (self.running() and self.backend_healthy(0.5)):
                 body = self.cache.get(path) or (b'{"status":"ok"}' if path == '/health' else None)
@@ -713,10 +908,21 @@ class OnDemand:
                 if spec is not None:
                     key = prefix_key(spec, self.tag)
                     self.cancel_warm(except_key=key)
+            gen = method == 'POST' and path in GEN_PATHS
+            rkey = retry_key(head) if gen else None
+            n_fail = self.budget_count(rkey)
+            if n_fail >= self.retry_max > 0:
+                self.log(event='retry_budget', key=rkey, failures=n_fail, user=self.last_user)
+                conn.sendall(http_response('503 Service Unavailable', json.dumps({'error': {
+                    'type': 'retry_budget', 'message': 's22-llama-ondemand: this request already failed %d times in '
+                    'the last %d min on the phone CPU model (time limit); not retrying it' % (
+                        n_fail, self.retry_window_s // 60)}}).encode()))
+                return
             with self.count_lock:
                 self.active += 1
             self.last_use = self.clock()
             t_req = self.clock()
+            info: dict = {}
             try:
                 if not self.ensure_backend(key):
                     msg = b'{"error":"local model held by s22-guardian (thermal/memory)"}' if self.hold.exists() \
@@ -732,7 +938,18 @@ class OnDemand:
                     self.dirty = True         # any generation request (chat or not) replaces the slot's cache
                     if not key:
                         self.log(event='other_post', path=path, bytes=len(head))
-                first = self.relay(conn, head)
+                limits = None
+                if gen:
+                    limits = (self.first_s if STREAM_RE.search(head.partition(b'\r\n\r\n')[2][:65536] + head[-4096:])
+                              else 0, self.max_s)
+                first = self.relay(conn, head, limits=limits, info=info, rkey=rkey)
+                if info.get('aborted'):
+                    self.budget_record(rkey, failed=True)
+                    self.log(event='request_abort', reason=info['aborted'], after_s=info.get('after_s'), key=rkey,
+                             user=self.last_user, sent=info.get('sent'), failures=self.budget_count(rkey))
+                    threading.Thread(target=self.check_stuck, daemon=True).start()
+                elif gen and first is not None:
+                    self.budget_record(rkey, failed=False)
                 if key:
                     self.log(event='request', key=key[:12], slot=self.has_slot(key), n_tools=len(spec['tools']),
                              user=self.last_user, 
@@ -855,14 +1072,61 @@ class OnDemand:
         except (ValueError, OSError, AttributeError, TypeError):
             return head, None, ''
 
-    def relay(self, client: socket.socket, head: bytes, count: bool = True) -> float | None:
+    def relay(self, client: socket.socket, head: bytes, count: bool = True, limits: tuple | None = None,
+              info: dict | None = None, rkey: str | None = None) -> float | None:
+        """Relay one request. limits = (first_output_s or 0, max_wall_s or 0): over a limit the client gets
+        a 504 (or, mid-stream, a cut connection) and the backend connection is closed (llama.cpp cancels)."""
         up = socket.create_connection(('127.0.0.1', self.backend_port), timeout=10)
         up.settimeout(None)
         client.settimeout(None)
         up.sendall(force_close(head))
+        info = {} if info is None else info
 
         first: list[float] = []
         content_first: list[float] = []
+        send_lock = threading.Lock()
+        done = threading.Event()
+        t0 = self.clock()
+
+        def abort(reason: str) -> None:
+            with send_lock:
+                if info.get('aborted') or done.is_set():
+                    return
+                el = self.clock() - t0
+                info.update(aborted=reason, after_s=round(el, 1), sent=bool(info.get('sent')))
+                if not info.get('sent'):
+                    msg = ('s22-llama-ondemand: local model request stopped after %.0f s (%s); the phone CPU model '
+                           'is too slow for this request' % (el, reason))
+                    try:
+                        client.sendall(http_response('504 Gateway Timeout', json.dumps(
+                            {'error': {'type': 'timeout', 'message': msg}}).encode()))
+                    except OSError:
+                        pass
+                for sock in (up, client):
+                    try:
+                        sock.shutdown(socket.SHUT_RDWR)
+                    except OSError:
+                        pass
+
+        rid = None
+        if limits:
+            with self.inflight_lock:
+                self.rid_seq += 1
+                rid = '%d-%d' % (os.getpid(), self.rid_seq)
+                self.inflight[rid] = {'t0': time.time(), 'key': rkey, 'limits': list(limits), 'abort': abort}
+            self.save_inflight()
+            first_s, max_s = limits
+
+            def watchdog():
+                while not done.wait(0.5):
+                    el = self.clock() - t0
+                    if max_s and el > max_s:
+                        abort('max_wall')
+                        return
+                    if first_s and not content_first and el > first_s:
+                        abort('no_first_output')
+                        return
+            threading.Thread(target=watchdog, daemon=True).start()
 
         def pump(src, dst):
             try:
@@ -875,8 +1139,13 @@ class OnDemand:
                             first.append(self.clock())
                         if len(content_first) < 1 and CONTENT_RE.search(data):
                             content_first.append(self.clock())
-
-                    dst.sendall(data)
+                        with send_lock:
+                            if info.get('aborted'):
+                                break
+                            info['sent'] = True
+                            dst.sendall(data)
+                    else:
+                        dst.sendall(data)
                     if count:
                         self.last_use = self.clock()
             except OSError:
@@ -893,8 +1162,13 @@ class OnDemand:
         t = threading.Thread(target=pump, args=(client, up), daemon=True)
         t.start()
         pump(up, client)
+        done.set()
         t.join(5)
         up.close()
+        if rid:
+            with self.inflight_lock:
+                self.inflight.pop(rid, None)
+            self.save_inflight()
         return (content_first[0] if content_first else (first[0] if first else None))
 
     def warm_on_start(self) -> None:
@@ -914,8 +1188,10 @@ class OnDemand:
         srv.bind(listen)
         srv.listen(32)
         stop = threading.Event()
+        reaped = self.reap_previous()
         threading.Thread(target=self.idle_loop, args=(stop,), daemon=True).start()
-        self.log(event='start', pid=os.getpid(), idle_s=self.idle_s, argv=self.argv, precache=self.precache)
+        self.log(event='start', pid=os.getpid(), idle_s=self.idle_s, argv=self.argv, precache=self.precache,
+                 limits=self.status()['limits'], reaped=reaped)
         if warm_start:
             threading.Thread(target=self.warm_on_start, daemon=True).start()
 
@@ -937,6 +1213,13 @@ def main(argv=None) -> int:
                     default=os.environ.get('S22_LLAMA_WARM_ON_START') == '1',
                     help='after boot restore (or build) the current prefix slot; the idle unload still applies')
     ap.add_argument('--idle-s', type=float, default=float(os.environ.get('S22_LLAMA_IDLE_S', 600)))
+    # test instance (fault injection on other ports; never touches the real :8090/:8091 or the CPU clock cap)
+    ap.add_argument('--port', type=int, default=LISTEN[1])
+    ap.add_argument('--backend-port', type=int, default=BACKEND_PORT)
+    ap.add_argument('--backend-argv', help='JSON list: backend command (default: keepalive llama_backend)')
+    ap.add_argument('--state', default=str(STATE))
+    ap.add_argument('--first-s', type=float)
+    ap.add_argument('--max-s', type=float)
     a = ap.parse_args(argv)
     if a.cmd == 'status':
         try:
@@ -946,14 +1229,24 @@ def main(argv=None) -> int:
             loaded = False
         print(json.dumps({'loaded': loaded, 'held': HOLD.exists()}))
         return 0
-    LOCK.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(LOCK, os.O_CREAT | os.O_RDWR, 0o600)
+    test = a.port != LISTEN[1]
+    lock = LOCK if not test else Path(a.state) / 'proxy.lock'
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(lock, os.O_CREAT | os.O_RDWR, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         print('already running', file=sys.stderr)
         return 1
-    OnDemand(idle_s=a.idle_s).serve(warm_start=a.warm_on_start)
+    if test and (a.backend_port == BACKEND_PORT or not a.backend_argv or Path(a.state) == STATE):
+        print('a test instance needs its own --backend-port, --backend-argv and --state', file=sys.stderr)
+        return 2
+    kw = {}
+    if test:
+        kw = dict(argv=[str(x) for x in json.loads(a.backend_argv)], backend_port=a.backend_port,
+                  state=Path(a.state), mid_cap=None, preexec=None)
+    OnDemand(idle_s=a.idle_s, first_s=a.first_s, max_s=a.max_s, **kw).serve(
+        listen=(LISTEN[0], a.port), warm_start=a.warm_on_start and not test)
     return 0
 
 

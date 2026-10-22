@@ -82,6 +82,117 @@ def test_wifi_route_repair(monkeypatch):
     check(N.wifi_route_repair(l) is None)
 
 
+# ---- Wi-Fi saver (#71)
+
+class _Rec:
+    def __init__(self, scan=""):
+        self.cmds = []
+        self.scan = scan
+
+    def wpa(self, *args, timeout=8):
+        self.cmds.append(("wpa",) + args)
+        if args[0] == "list_networks":
+            return True, "network id / ssid / bssid / flags\n0\thomenet\tany\t[DISABLED]"
+        if args[0] == "scan_results":
+            return True, "bssid / frequency / signal level / flags / ssid\n" + self.scan
+        return True, "OK"
+
+    def ip(self, *args):
+        self.cmds.append(("ip",) + args)
+        return True, ""
+
+
+SCFG = dict(CFG, wifi_saver_grace_s=60, wifi_saver_discover_every_s=900, wifi_saver_discover_s=15)
+
+
+def _saver(tmp_state, scan=""):
+    r = _Rec(scan)
+    return N.WifiSaver(run_wpa=r.wpa, run_ip=r.ip, state_file=tmp_state), r
+
+
+def _tmp():
+    import tempfile, os
+    return os.path.join(tempfile.mkdtemp(), "saver.json")
+
+
+def test_saver_eligibility():
+    e = lambda **kw: N.saver_eligible(SCFG, kw.get("display", "off"), kw.get("up", "mobile"), kw.get("wifi", False),
+                                      kw.get("paused", False), kw.get("killed", False), kw.get("hold", False))
+    check(e() == (True, ""))
+    check(e(display="on") == (False, "screen_on"))
+    check(e(up="wifi")[0] is False and e(up=None)[0] is False)
+    check(e(wifi=True) == (False, "wifi_up"))
+    check(e(killed=True) == (False, "disabled") and e(hold=True) == (False, "deadman_hold"))
+    check(N.saver_eligible(dict(SCFG, wifi_saver=False), "off", "mobile", False, False, False, False)[0] is False)
+
+
+def test_saver_parks_after_grace_and_unparks_on_screen_on(monkeypatch):
+    monkeypatch.setattr(N, "log", lambda **kw: None)
+    s, r = _saver(_tmp())
+    s.step(1000, SCFG, True, "", False)
+    check(not s.parked and r.cmds == [])
+    s.step(1059, SCFG, True, "", False)
+    check(not s.parked)
+    s.step(1060, SCFG, True, "", False)
+    check(s.parked and r.cmds == [("wpa", "disconnect")])
+    s.step(1100, SCFG, False, "screen_on", False)
+    check(not s.parked and r.cmds[-2:] == [("ip", "link", "set", "wlan0", "up"), ("wpa", "reconnect")])
+    # the grace period starts again after an unpark
+    s.step(1101, SCFG, True, "", False)
+    check(not s.parked)
+
+
+def test_saver_down_method(monkeypatch):
+    monkeypatch.setattr(N, "log", lambda **kw: None)
+    monkeypatch.setattr(N, "rd", lambda p, d="": "0")
+    s, r = _saver(_tmp())
+    cfg = dict(SCFG, wifi_saver_method="down", wifi_saver_grace_s=0)
+    s.step(0, cfg, True, "", False)
+    check(s.parked and s.method == "down" and r.cmds == [("ip", "link", "set", "wlan0", "down")])
+    s.step(900, cfg, True, "", False)                    # discovery: link up for 15 s
+    check(r.cmds[-1] == ("ip", "link", "set", "wlan0", "up") and s.discover_until == 915)
+    s.step(915, cfg, True, "", False)                    # nothing associated -> down again
+    check(s.parked and r.cmds[-1] == ("ip", "link", "set", "wlan0", "down") and s.next_discover == 1815)
+
+
+def test_saver_discovery_finds_known_network(monkeypatch):
+    monkeypatch.setattr(N, "log", lambda **kw: None)
+    s, r = _saver(_tmp(), scan="aa:bb\t2412\t-60\t[WPA2-PSK-CCMP][ESS]\tcafe\n")
+    cfg = dict(SCFG, wifi_saver_grace_s=0)
+    s.step(0, cfg, True, "", False)
+    s.step(900, cfg, True, "", False)
+    check(r.cmds[-1] == ("wpa", "scan"))
+    s.step(916, cfg, True, "", False)                    # only an unknown SSID: stay parked
+    check(s.parked and s.next_discover == 1816 and r.cmds[-1] == ("wpa", "disconnect"))
+    r.scan = "aa:bb\t2412\t-60\t[WPA2-PSK-CCMP][ESS]\thomenet\n"
+    s.step(1816, cfg, True, "", False)
+    s.step(1832, cfg, True, "", False)
+    check(not s.parked and s.reason == "discovered" and r.cmds[-1] == ("wpa", "reconnect"))
+
+
+def test_saver_method_change_and_restart_recovery(monkeypatch):
+    monkeypatch.setattr(N, "log", lambda **kw: None)
+    st = _tmp()
+    s, r = _saver(st)
+    s.step(0, dict(SCFG, wifi_saver_grace_s=0), True, "", False)
+    check(s.parked)
+    s.step(5, dict(SCFG, wifi_saver_grace_s=0, wifi_saver_method="down"), True, "", False)
+    check(not s.parked and s.reason == "method_change")
+    s.step(10, dict(SCFG, wifi_saver_grace_s=0, wifi_saver_method="down"), True, "", False)
+    check(s.parked and s.method == "down")
+    r2 = _Rec()
+    check(N.saver_recover_at_start(r2.wpa, r2.ip, st) is True)          # daemon died while parked
+    check(("wpa", "reconnect") in r2.cmds and ("ip", "link", "set", "wlan0", "up") in r2.cmds)
+    check(N.saver_recover_at_start(r2.wpa, r2.ip, st) is False)         # already restored
+
+
+def test_saver_ssid_parsers():
+    check(N.known_ssids("network id / ssid / bssid / flags\n0\thome net\tany\t\n1\tx\tany\t[CURRENT]")
+          == {"home net", "x"})
+    check(N.seen_ssids("bssid / frequency / signal level / flags / ssid\naa\t1\t-1\t[ESS]\t\nbb\t1\t-1\t[ESS]\tz")
+          == {"z"})
+
+
 class _MonkeyPatch:
     """Minimal stand-in so the host runner can execute this file without pytest."""
     def __init__(self):

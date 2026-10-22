@@ -14,7 +14,9 @@
     "lightpanda_proxy",
     "bluetooth",
     "autosleep",
-    "netpolicy"
+    "netpolicy",
+    "trace",
+    "turnguard"
   ],
   "pin_model": true,
   "pin": {
@@ -231,6 +233,29 @@
       "needle": "/srv/s22/hardware/bin/s22-netpolicy run",
       "requires": "/srv/s22/hardware/bin/s22-netpolicy",
       "log": "/srv/s22/state/netpolicy/daemon.out",
+      "start_wait_s": 5
+    },
+    "trace": {
+      "argv": [
+        "/usr/bin/python3",
+        "/srv/s22/hardware/bin/s22-trace",
+        "run"
+      ],
+      "needle": "/srv/s22/hardware/bin/s22-trace run",
+      "requires": "/srv/s22/hardware/bin/s22-trace",
+      "log": "/srv/s22/state/trace/daemon.out",
+      "start_wait_s": 5,
+      "nice": 10
+    },
+    "turnguard": {
+      "argv": [
+        "/usr/bin/python3",
+        "/srv/s22/hardware/bin/s22-turnguard",
+        "run"
+      ],
+      "needle": "/srv/s22/hardware/bin/s22-turnguard run",
+      "requires": "/srv/s22/hardware/bin/s22-turnguard",
+      "log": "/srv/s22/state/turnguard/daemon.out",
       "start_wait_s": 5
     }
   },
