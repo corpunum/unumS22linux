@@ -80,7 +80,8 @@ NNAPI or TFLite graphs into ordinary `.nnc` files that ENN runs
 - Multi-op graphs are only accepted if they look like known benchmark models; we patch three
   function entries in **private copies** of two compiler libraries to lift that check. Vendor files
   stay unchanged.
-- Kernels wider than 15 give **silently wrong** results, and 32 fails to compile. Always compare
+- In a kernel-size sweep, 15 was correct, 17 gave **silently wrong** results (16 untested) and 32
+  failed to compile. Always compare
   NPU output with a CPU reference; the compiler can be wrong without an error.
 - The library's own execute path crashes, so it is used only to compile.
 

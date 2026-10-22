@@ -8,8 +8,9 @@ partition, what failed first, and how we kept a way back at every step.
 Samsung phones have a separate RECOVERY partition (96 MiB on the S22) that the bootloader starts
 on a key combination or a software "reboot to recovery". We put our own boot image there: the
 **LineageOS kernel, DTB and recovery DTBO unchanged**, the AOSP first-stage init unchanged, plus a
-small wrapper and our own PID 1. The normal BOOT partition and Android stay as they were, so the
-phone can still be re-flashed from Download Mode if our image fails
+small wrapper and our own PID 1. The normal BOOT partition keeps the stock image (after one BOOT
+experiment that was rolled back), so the phone can still be re-flashed from Download Mode if our
+image fails. Android's userdata is gone: it became the Linux disk
 ([NATIVE_LINUX.md](../NATIVE_LINUX.md), [RECOVERY_COMPARISON.md](../RECOVERY_COMPARISON.md)).
 
 Before you copy this: phones with **A/B slots** or **boot-as-recovery** (no separate RECOVERY)
@@ -35,10 +36,13 @@ What we had to match exactly (read from Lineage's `BoardConfigCommon.mk` and the
 
 ## Step 2: don't replace first-stage init (what failed)
 
-Our first plan was to make `/init` our own program. Every variant crash-looped with no output: a
-busybox script, a tiny static C binary, with 324, 12 or zero modules
-([EXPERIMENTS.md](../../EXPERIMENTS.md), "Isolation results"). Independent reviews later found why
-our logging could never have worked, which is worth knowing for any phone:
+Our first plan was to make `/init` our own program. Every variant *appeared* to crash-loop with no
+output: a busybox script, a tiny static C binary, with 324, 12 or zero modules
+([EXPERIMENTS.md](../../EXPERIMENTS.md), "Isolation results"). That conclusion was later weakened:
+the bootloader's own log showed one "reboot" was really a normal Android boot, and builds V19–V24 had
+wrong boot-image headers ([EXPERIMENTS.md](../../EXPERIMENTS.md), "First real flash of a diagnostic
+build (V24)"). So the real cause was never proven. Independent reviews also found why our logging
+could never have worked, which is worth knowing for any phone:
 
 - this kernel has **no devtmpfs** (`CONFIG_DEVTMPFS is not set` in the embedded config), so
   `mount devtmpfs` fails and nothing creates device nodes; AOSP first-stage init mounts tmpfs on
@@ -138,5 +142,6 @@ flashed ([tools/native-boot/README.md](../../tools/native-boot/README.md),
 [PERSISTENCE.md](../PERSISTENCE.md#cold-boot-is-a-separate-gate)). If you try this, validate the
 *whole concatenated ramdisk stream*, not each piece, and keep RECOVERY as your rescue.
 
-`kexec` is not enabled in this kernel's config, so "boot Linux from Linux" is not available out of
-the box either ([KEXEC_FEASIBILITY.md](../KEXEC_FEASIBILITY.md)).
+`CONFIG_KEXEC` is not set in the kernel source's defconfig (the embedded config of the running
+kernel was not checked for it), so "boot Linux from Linux" is not available out of the box either;
+it would need a kernel rebuild ([KEXEC_FEASIBILITY.md](../KEXEC_FEASIBILITY.md)).

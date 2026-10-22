@@ -46,15 +46,20 @@ other refuted from the kernel config. Nothing was flashed during the loop
 ([EXPERIMENTS.md](../../EXPERIMENTS.md), "Opus 5 independent review" and "3-round Opus<->Astra
 adversarial review loop"). The same pattern was used later for the camera client
 ("GO-WITH-CHANGES", [CAMERA.md](../../tools/hardware/camera/CAMERA.md#independent-review-2026-10-08-go-with-changes-applied))
-and every kernel patch in [docs/reviews/](../reviews/).
+and the 46 written reviews in [docs/reviews/](../reviews/) (audio, Bluetooth, NPU, camera and host
+tooling).
 
 Tips from doing this:
 
-- Use **different model families** for author and reviewer; they make different mistakes.
+- Our recommendation (not what every later round did): use **different model families** for
+  author and reviewer; they make different mistakes. The early boot loop paired Opus with Astra;
+  the later driver waves deliberately used Luna for all roles
+  ([S22_LUNA_DRIVER_COMPLETION_MISSION.md](../S22_LUNA_DRIVER_COMPLETION_MISSION.md#11-mandatory-luna-only-parallel-execution)).
 - Give reviewers access to the real thing (live read-only commands, the actual binaries and the
   exact kernel source), not just your summary.
-- A local model asked an open-ended architecture question with a big token budget got stuck in
-  loops and produced nothing; bounded, specific questions worked better
+- A local model prompted directly with an open-ended architecture question and a big token
+  budget got stuck in reasoning loops and produced nothing; the same question run through
+  OpenUnum's multi-turn orchestration converged on an answer
   ([EXPERIMENTS.md](../../EXPERIMENTS.md), "cross-model consultation round 2").
 
 ## Evidence rules
@@ -75,7 +80,8 @@ These are what keep a project run by agents honest:
 - **Correct earlier claims in place** when they turn out wrong, and keep the correction visible
   ([EXPERIMENTS.md](../../EXPERIMENTS.md), "Provenance correction").
 - **Hardware-free tests run in CI** from a fixed allowlist, with no secrets, no network to the phone,
-  and no vendor files: `python3 -I -B tools/hardware/test-host-regression-runner.py`
+  and no vendor files: `python3 -I -B tools/hardware/run-host-regressions.py --mode both` (and
+  `tools/hardware/test-host-regression-runner.py`, which tests the runner itself)
   ([tools/hardware/README.md](../../tools/hardware/README.md)).
 
 ## Making device tests safe
