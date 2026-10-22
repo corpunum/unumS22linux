@@ -51,8 +51,8 @@ frame in about 0.35 s on the phone
 [evidence/camera-develop-20261022](../../evidence/camera-develop-20261022/README.md)).
 
 The colour matrix came from the stock sensor **setfiles** in the vendor partition: a scan for
-3×3 fixed-point matrices whose rows sum to 1.0 found four candidates at the same offsets in both
-sensors' files. Which illuminant each belongs to is not decoded, and colour accuracy was not
+3×3 fixed-point matrices whose rows sum to 1.0 found four per-illuminant matrices and one generic
+saturation matrix, at the same offsets in both sensors' files. Which illuminant each belongs to is not decoded, and colour accuracy was not
 measured.
 
 ## For your phone

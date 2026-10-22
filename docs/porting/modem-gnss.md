@@ -46,7 +46,9 @@ from live captures ([RECON.md](../../RECON.md)). Its safety gates are worth copy
 - sending SMS or dialling is refused unless a `tx_enabled` file and an exact-number allowlist exist;
 - emergency numbers and short numbers are always refused; rate limits per hour;
 - a SIM PIN is tried at most once per run, never for PUK, and never logged;
-- no automatic attach or network-mode change; experimental frames only from a short allowlist.
+- no automatic network-mode change; experimental frames only from a short allowlist. (One
+  exception, on by default since it moved the radio to LTE: phoned resends the stock initial-attach
+  APN frame at every modem start; `--no-lte-attach` turns it off, [HISTORY.md](../HISTORY.md).)
 
 Results: SIM ready and SMS ready ([HISTORY.md](../HISTORY.md)); mobile data on LTE and 5G NSA,
 97 Mbit/s down measured ([evidence/modem-5g-20261021](../../evidence/modem-5g-20261021/README.md));

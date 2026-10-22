@@ -43,10 +43,12 @@ phone that doesn't boot" is.
 These come from things that happened here or that this project refused to do. Please read all of
 them before you unlock anything.
 
-1. **Unlocking the bootloader is permanent on Samsung.** Our phone reports
-   `ro.boot.warranty_bit = 1` and `verifiedbootstate = orange` after unlocking
-   ([DEVICE.md](../DEVICE.md)). That is the Knox warranty fuse: it does not reset. Expect lost
-   warranty and Samsung Pay/Knox-dependent features. Unlocking can also wipe the phone.
+1. **Unlocking the bootloader changes the phone for good.** Our phone reports
+   `ro.boot.warranty_bit = 1` and `verifiedbootstate = orange` after unlocking and flashing
+   ([DEVICE.md](../DEVICE.md), [evidence/previous_failed_boot](../evidence/previous_failed_boot/README.md)).
+   On Samsung that warranty bit is the Knox flag (general knowledge, not something this repo
+   tested): expect lost warranty and Knox-dependent features. Unlocking can also erase the phone
+   ([PHONE_PORTABILITY.md](PHONE_PORTABILITY.md#practical-selection-and-acceptance)).
 2. **You will lose the Android data.** Android's userdata is encrypted (F2FS, file-based and
    metadata encryption, wrapped keys). It is not a spare Linux disk, and a raw copy of it is
    ciphertext, not a usable backup of your photos ([PERSISTENCE.md](PERSISTENCE.md),
@@ -63,8 +65,8 @@ them before you unlock anything.
    factory MISC was flashed back ([FLASH_LOG.md](../FLASH_LOG.md)). Don't write boot-control
    records by hand.
 5. **A failed boot image can leave you with no USB at all.** Our one attempt at a Linux BOOT image
-   gave no SSH, no ADB and no Download Mode connection; getting back needed a physical key combo
-   into Download Mode and a re-flash of the original BOOT
+   gave no SSH, no ADB and no Download Mode connection; getting back needed the phone to be in
+   Download Mode (seen on its screen by the owner) and a re-flash of the original BOOT
    ([tools/native-boot/README.md](../tools/native-boot/README.md),
    [STATUS.md](../STATUS.md#earlier-boot-attempt-history-superseded-snapshots)). Have a recovery
    path that does not depend on your new image.
@@ -138,7 +140,9 @@ boot, recovery, dtbo …), copied off the phone. See
 ### 2. Boot your own userspace from RECOVERY, with a rescue
 
 The important lesson from the first two days (builds V2 to V24 in the log): **don't replace
-Android's first-stage init.** Every build that replaced `/init` crash-looped with no log; what finally worked keeps the real AOSP
+Android's first-stage init.** The builds that replaced `/init` appeared to crash-loop, but we never
+got a log to prove why, and later found our own logging and some image headers were broken. What
+finally worked keeps the real AOSP
 first-stage init (it loads the ~324 vendor modules and sets up `/dev`) and intercepts only the
 next step, `selinux_setup`, to start our own PID 1 ([EXPERIMENTS.md](../EXPERIMENTS.md),
 [tools/native-handoff/README.md](../tools/native-handoff/README.md)). Our PID 1 owns the watchdog,
@@ -238,7 +242,7 @@ back: userdata was reformatted.
 **Do I need a second computer?** Yes, for flashing from Download Mode, building, and SSH over
 USB. We used an Ubuntu x86-64 host with an ARM64 cross toolchain, QEMU for testing ARM binaries,
 and the Android NDK for Bionic programs ([tools/linux-rootfs/README.md](../tools/linux-rootfs/README.md),
-[GNSS.md](../tools/hardware/gnss/GNSS.md)).
+[GNSS.md](../tools/hardware/gnss/GNSS.md), [initramfs/nativev5_notes_for_sol.md](../initramfs/nativev5_notes_for_sol.md)).
 
 **How long did this take?** Roughly five weeks of agent work, 2026-09-18 to 2026-10-22, with the
 first working native boot on day two ([EXPERIMENTS.md](../EXPERIMENTS.md),

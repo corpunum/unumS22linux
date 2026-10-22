@@ -75,7 +75,7 @@ verified on your phone. Don't delete the check to make it run.
   battery and thermal sensors, and a guide for other Linux phones:
   [tools/unum-fastshell/PORTING.md](../../tools/unum-fastshell/PORTING.md).
 - The **host regression tests** run on any Linux host with no phone:
-  `python3 -I -B tools/hardware/test-host-regression-runner.py` ([tools/hardware/README.md](../../tools/hardware/README.md)).
+  `python3 -I -B tools/hardware/run-host-regressions.py --mode both` ([tools/hardware/README.md](../../tools/hardware/README.md)).
 - The **methods**: [`gen-mixer-batches.py`](../../tools/hardware/audio/gen-mixer-batches.py) for any
   `mixer_paths.xml`, the dead-man switch pattern, the trial guard, and the GNSS seccomp-sandbox
   pattern.
