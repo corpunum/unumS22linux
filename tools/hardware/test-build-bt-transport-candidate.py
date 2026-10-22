@@ -204,7 +204,7 @@ class CandidateBuilderPortableTests(unittest.TestCase):
     def test_current_legacy_runner_and_consumed_receipt_pins_are_exact(self):
         receipt = BUILDER.verify_legacy_trial_guards()
         self.assertEqual(receipt["legacy_runner_sha256"],
-                         "7696d15fcdd7af33d130cb4cdfa78c823553d84a3eb2d830142c5bbd0a09198a")
+                         "a1f3a74045f42a081377f124db77f969f32ed17817c39d4a674836df28ce5078")
         self.assertEqual(receipt["legacy_source_pin_sha256"],
                          "476f148246dfac8330f7ade2790627b64a38ee7b1cb4f713934b6d438864a7a4")
         self.assertEqual(receipt["legacy_artifact_sha256"],
