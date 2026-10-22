@@ -1,0 +1,72 @@
+{
+  "model": {
+    "name": "k32_rules_on",
+    "file": "k32.tflite",
+    "sha256": "ebf822b08362f0c764e05fc75473bf5b6230987d63794bcd34cdd5eafe238a92",
+    "bytes": 205800
+  },
+  "started": "2026-10-22T16:42:03Z",
+  "graph_rules": "on",
+  "settings": {
+    "n_random": 20,
+    "seed": 1234,
+    "iters": 200,
+    "tol": [
+      "default int8=1"
+    ]
+  },
+  "graph": {
+    "errors": [
+      {
+        "rule": "kernel-1d-max-15",
+        "detail": "op 0 CONV_2D has a 1-D kernel 1x32 (width 32 > 15): silently miscompiles on the NPU (K=17 wrong output, K=32 compile fails; issue #64)"
+      }
+    ],
+    "warnings": [],
+    "op_histogram": {
+      "CONV_2D": 1
+    },
+    "inputs": [
+      {
+        "name": "input",
+        "shape": [
+          1,
+          1,
+          148,
+          100
+        ],
+        "dtype": "INT8",
+        "scale": [
+          0.05000000074505806
+        ],
+        "zero_point": [
+          0
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "output",
+        "shape": [
+          1,
+          1,
+          148,
+          64
+        ],
+        "dtype": "INT8",
+        "scale": [
+          0.7483083009719849
+        ],
+        "zero_point": [
+          -128
+        ]
+      }
+    ]
+  },
+  "compile": null,
+  "not_run": "compile and later steps skipped because the graph rules rejected the model",
+  "reasons": [
+    "graph rule kernel-1d-max-15: op 0 CONV_2D has a 1-D kernel 1x32 (width 32 > 15): silently miscompiles on the NPU (K=17 wrong output, K=32 compile fails; issue #64)"
+  ],
+  "accepted": false
+}
