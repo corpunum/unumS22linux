@@ -259,6 +259,21 @@ def wake_reason(since_mark):
     return rs[:6]
 
 
+def net_counters():
+    """rx/tx packets of rmnet0 and tailscale0 (diagnosis: which traffic ends a sleep)."""
+    out = {}
+    try:
+        for line in open("/proc/net/dev").read().splitlines()[2:]:
+            n, _, v = line.partition(":")
+            n = n.strip()
+            if n in ("rmnet0", "tailscale0", "wlan0"):
+                f = v.split()
+                out[n] = (int(f[1]), int(f[9]))
+    except (OSError, ValueError, IndexError):
+        pass
+    return out
+
+
 def net_only_wake(reasons):
     """True when every wake reason is a modem/Wi-Fi/mailbox IRQ (an incoming packet, not RTC/power key)."""
     rs = [x for x in reasons if not x.startswith("ABORT")]
@@ -272,6 +287,7 @@ def suspend_once(seconds, state="mem"):
     except OSError:
         pass
     soc0 = rd(B + "batt_read_raw_soc")
+    n0 = net_counters()
     wr(RTC, "0")
     wr(RTC, "+%d" % int(seconds))
     w0, m0 = time.time(), time.monotonic()
@@ -286,7 +302,9 @@ def suspend_once(seconds, state="mem"):
     except OSError:
         pass
     slept = max(0.0, (w1 - w0) - (m1 - m0))
-    return {"slept_s": round(slept, 1), "wall_s": round(w1 - w0, 1), "err": err,
+    n1 = net_counters()
+    nd = {k: [n1[k][0] - n0[k][0], n1[k][1] - n0[k][1]] for k in n1 if k in n0}
+    return {"net_pk": nd, "slept_s": round(slept, 1), "wall_s": round(w1 - w0, 1), "err": err,
             "why_wake": wake_reason(mark), "soc0": soc0, "soc1": rd(B + "batt_read_raw_soc")}
 
 
