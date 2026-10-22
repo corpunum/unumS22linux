@@ -172,10 +172,12 @@ have to arrange it yourself.
 - XRGB8888 dumb buffers and the legacy (non-atomic) KMS API. DPMS for screen
   off uses the connector's legacy `DPMS` property.
 - Only the first finger is used; a second finger cancels the gesture.
-- Hardware keys (Power, volume) are not read by the shell itself on the S22;
-  s22-buttons/s22-touchd forward them. On another phone you need your own key
-  daemon to send `display`/`lock` to `shell.sock` (a button-handling change was
-  in progress when this was written).
+- Hardware keys: the shell reads Power and volume itself (`src/buttons.rs`),
+  finding the key devices by their key capabilities, so a phone whose kernel
+  exposes `KEY_POWER`/`KEY_VOLUMEUP`/`KEY_VOLUMEDOWN` through evdev should work
+  as is. Volume changes the S22's speech level (`/run/s22-say.level`) and
+  push-to-talk runs the configured `assistant`; on another phone point those at
+  your own audio and voice tools. Bindings are listed in Settings -> Buttons.
 - The font is Latin + Greek only (no emoji, CJK, Arabic...).
 - Tested only on the S22. Everything in this file about other phones is what
   the code is written to do, not something we have seen working on them.
