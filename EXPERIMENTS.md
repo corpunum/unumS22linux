@@ -3414,3 +3414,20 @@ Details: `evidence/npu-custom-20261022/README.md`. Tools: `tools/hardware/npu/nn
 - Rules kept: exact-PID kills only (keepalive 1679 → restarted detached, proxy 2279, gst 3636 attempted), dead-man
   armed for each network change, backups `*.bak-*` next to every replaced binary, no reboot, no calls/SMS/audio.
   Details: `evidence/phase0-20261022/README.md`.
+
+### 2026-10-22 (afternoon) — unum-fastshell phase 2: live camera, key feedback, device-API Settings, Agent card
+- **Camera page:** live viewfinder from `s22-campreview` in a new service mode (child of the shell while the page
+  shows; SIGUSR1 = 4-raw burst written while streaming, SIGUSR2 = MJPEG AVI recording). On the phone: 29.9 fps on the
+  panel, publish → flip p50 26 ms, first frame 0.13 s after the tap, shutter → thumbnail 0.82–0.89 s (develop on the
+  X2), video 382x510 MJPEG at 29.7 fps (no H.264 encoder on the phone). Rear 90°, front 270° + mirror; looks upright
+  on real scenes, mirroring not proven (Settings flip added).
+- **Keyboard:** popup on every key + haptic tick (daemon counter +1 per key); ticks on the physical buttons too.
+- **Settings:** Wi-Fi, Bluetooth, mobile data, calls gate, volume (+mute), brightness, vibration, auto-sleep, screen
+  timeout through s22d `/v1/device` (read-back state). Vibration, calls, Wi-Fi, volume, brightness toggled on the
+  phone; Bluetooth, mobile data, auto-sleep, mute only rendered.
+- **Agent card:** hold to talk (`s22-assistant --card listen`), turn states / reply (`--card turn`), queue, STOP (group
+  kill + `/api/chat/cancel`): queue and STOP verified (STOP stops a playing filler within 0.4 s); a real spoken
+  sentence not tested. Tap → page p50 10.5 ms (Apps), 15.8 ms (Settings).
+- **Incident:** my read-only `gst-inspect-1.0 x264enc` probe (12:27) is stuck unkillable in the kernel (CMA) and is
+  what keeps the phone hot with load ~15; a reboot is needed. Details: `evidence/shell-phase2-20261022/README.md`.
+

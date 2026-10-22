@@ -12,14 +12,18 @@
 //!   unum-fastshell bench [N]       offscreen full-frame render timings per page
 //! env: S22_TOUCH_RUN (touchd run dir, native path), FASTSHELL_CHROOT,
 //!      S22_SHELL_API, S22_SHELL_S22D, S22_SHELL_PHONED, S22_SHELL_SESSION.
+mod agent;
 mod buttons;
+mod camera;
 // config: FASTSHELL_CONFIG (JSON; see config.rs and PORTING.md). The
 //      built-in defaults are the S22's, so the S22 needs no config file.
 mod config;
+mod device;
 mod ctl;
 mod drm;
 mod font;
 mod gfx;
+mod haptic;
 mod idle;
 mod kbd;
 mod net;
@@ -60,6 +64,8 @@ struct Presenter {
     prev: Vec<Rect>,
     pending: bool,
     pending_mark: Option<(u64, &'static str)>,
+    /// publish ns of the camera frame in the pending flip
+    pending_cam: Option<u64>,
     need_modeset: bool,
     /// canvas offset on the panel; None when the panel is 1080x2340 (S22)
     off: Option<(i32, i32)>,
@@ -195,6 +201,11 @@ fn run() -> std::io::Result<()> {
     let mut app = App::new(Some(netw.clone()), &run_dir, &chroot);
     app.idle_path = env("FASTSHELL_IDLE_CFG", &format!("{state_dir}/screen-timeout.json"));
     app.load_idle();
+    app.cam_orient_path = format!("{state_dir}/camera.json");
+    app.load_orient();
+    app.load_haptics();
+    let mut haptic = haptic::Haptic::new(haptic::SOCK);
+    let mut cam_child: Option<i32> = None;
     log(&format!("screen timeout: unlocked {} s, locked {} s (0 = never)", app.idle_cfg.unlocked_s, app.idle_cfg.locked_s));
     net::refresh_agent(&netw);
     net::fetch_history(&netw);
@@ -291,6 +302,10 @@ fn run() -> std::io::Result<()> {
         if app.animating || app.repeat_at.is_some() || app.hold.is_some() {
             timeout = timeout.min(16);
         }
+        if app.vf.is_some() && app.page == Page::Camera && app.display_on && app.active {
+            // viewfinder: look for the next published frame every 4 ms (30 fps source)
+            timeout = timeout.min(4);
+        }
         if let Some(dl) = machine.next_deadline() {
             timeout = timeout.min((dl.saturating_sub(now_us()) / 1000) as i32 + 1);
         }
@@ -309,9 +324,19 @@ fn run() -> std::io::Result<()> {
                         p.pending = false;
                         p.back ^= 1;
                         let tdone = now_us();
+                        if let Some(pubns) = p.pending_cam.take() {
+                            let age = (tdone as f64 - pubns as f64 / 1000.0) / 1000.0;
+                            app.cam_shown.push((tdone, age));
+                            if app.cam_shown.len() > 3000 {
+                                app.cam_shown.drain(..1000);
+                            }
+                        }
                         if let Some((t_in, kind)) = p.pending_mark.take() {
                             let ms = tdone.saturating_sub(t_in) as f64 / 1000.0;
                             if ms < 2000.0 {
+                                if kind == "shutter" {
+                                    log(&format!("camera: shutter -> thumbnail on the panel {ms:.0} ms"));
+                                }
                                 app.stats.lat.push((kind, ms));
                                 if app.stats.lat.len() > 4000 {
                                     app.stats.lat.drain(..1000);
@@ -377,7 +402,7 @@ fn run() -> std::io::Result<()> {
                             Some((tmap.ox, tmap.oy))
                         };
                         let bufs = vec![card.create_dumb()?, card.create_dumb()?];
-                        pres = Some(Presenter { card, bufs, back: 0, prev: vec![Rect::new(0, 0, W, H)], pending: false, pending_mark: None, need_modeset: true, off });
+                        pres = Some(Presenter { card, bufs, back: 0, prev: vec![Rect::new(0, 0, W, H)], pending: false, pending_mark: None, pending_cam: None, need_modeset: true, off });
                         write_state(display_state, "on");
                         app.dirty_all();
                     }
@@ -456,6 +481,28 @@ fn run() -> std::io::Result<()> {
                     let r = app.call(&call);
                     let _ = reply.send(r);
                 }
+                Msg::Camera(gen, v) => {
+                    if v["event"] != "first_frame" || gen != app.cam.gen {
+                        log(&format!("camera[{gen}]: {}", v.to_string().chars().take(300).collect::<String>()));
+                    } else {
+                        log(&format!("camera[{gen}]: first frame {} ms", v["ms"]));
+                    }
+                    if v["event"] == "exit" && cam_child == v["pid"].as_i64().map(|p| p as i32) {
+                        cam_child = None;
+                    }
+                    app.camera_event(gen, v);
+                }
+                Msg::CamThumb(px, w, h) => app.camera_thumb(px, w, h),
+                Msg::Card(turn, gen, v) => {
+                    log(&format!("card {}[{gen}]: {}", if turn { "turn" } else { "listen" }, v.to_string().chars().take(200).collect::<String>()));
+                    app.card_event(turn, gen, v);
+                }
+                Msg::DeviceCap(id, st, v) => {
+                    if v["ok"] != true || id.ends_with(".set") {
+                        log(&format!("device {id}: {st} {}", v.to_string().chars().take(240).collect::<String>()));
+                    }
+                    app.dev_answer(id, st, v);
+                }
                 other => app.on_msg(other),
             }
         }
@@ -475,6 +522,7 @@ fn run() -> std::io::Result<()> {
                 next_sys = now + Duration::from_secs(10);
                 if app.display_on {
                     app.load_idle();
+                    app.load_haptics();
                     app.read_sys();
                 }
             }
@@ -584,6 +632,9 @@ fn run() -> std::io::Result<()> {
                     });
                 }
                 Effect::Screenshot => shot_due = true,
+                Effect::Haptic(what) => {
+                    haptic.send(what);
+                }
                 Effect::Spawn(argv) => {
                     {
                         let sw = sway.clone();
@@ -600,6 +651,15 @@ fn run() -> std::io::Result<()> {
                     }
                 }
             }
+        }
+        // ---- camera: stream only while its page shows; run the state machine's commands
+        app.sync_camera();
+        for c in std::mem::take(&mut app.cam_cmds) {
+            run_cam(c, &netw, &mut app, &mut cam_child);
+        }
+        app.camera_frame_due();
+        for c in std::mem::take(&mut app.card_cmds) {
+            run_card(c, &netw, &mut app);
         }
         // ---- animation
         let dt = last_anim.elapsed().as_secs_f32().min(0.05);
@@ -633,11 +693,11 @@ fn run() -> std::io::Result<()> {
             if app.active && pres.is_some() && app.display_on {
                 if app.damage.is_empty() && !app.relayout {
                     shot_due = false;
-                    let px = cv.px.clone();
+                    let (px, sw, sh) = if std::mem::take(&mut app.shot_half) { (half(&cv.px, W, H), W / 2, H / 2) } else { (cv.px.clone(), W, H) };
                     let host = format!("{chroot}{rel}");
                     std::thread::spawn(move || {
                         let t = Instant::now();
-                        let r = save_png_px(&px, W, H, &host);
+                        let r = save_png_px(&px, sw, sh, &host);
                         log(&format!("screenshot {host}: {r:?} in {} ms", t.elapsed().as_millis()));
                     });
                     app.screenshot_taken(&name);
@@ -656,6 +716,10 @@ fn run() -> std::io::Result<()> {
         }
     }
     log("stopping");
+    if let Some(pid) = cam_child {
+        unsafe { libc::kill(pid, libc::SIGTERM) };
+    }
+    let _ = std::fs::remove_file(camera::INHIBIT);
     buttons::claim(false);
     let _ = seat.close_seat();
     let _ = std::fs::remove_file(&cfg.pid_file);
@@ -664,6 +728,173 @@ fn run() -> std::io::Result<()> {
 
 extern "C" {
     fn tzset();
+}
+
+/// Run one Agent-card command: s22-assistant's card modes in their own process groups,
+/// the release note, STOP (group SIGTERM + the OpenUnum cancel API).
+fn run_card(c: agent::CardCmd, netw: &Net, app: &mut App) {
+    use agent::CardCmd;
+    let assistant = std::env::var("FASTSHELL_ASSISTANT").unwrap_or_else(|_| config::get().assistant.clone());
+    let spawn = |turn: bool, gen: u64, args: Vec<String>, app: &mut App| {
+        use std::os::unix::process::CommandExt;
+        let mut cmd = std::process::Command::new(&assistant);
+        cmd.args(&args).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null()).process_group(0);
+        match cmd.spawn() {
+            Ok(mut ch) => {
+                let pid = ch.id() as i32;
+                app.card.spawned(turn, gen, pid);
+                let out = ch.stdout.take();
+                netw.spawn(move |n| {
+                    use std::io::BufRead;
+                    if let Some(o) = out {
+                        for line in std::io::BufReader::new(o).lines().map_while(Result::ok) {
+                            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) {
+                                n.send(Msg::Card(turn, gen, v));
+                            }
+                        }
+                    }
+                    let code = ch.wait().ok().and_then(|s| s.code()).unwrap_or(-1);
+                    n.send(Msg::Card(turn, gen, serde_json::json!({"event": "exit", "code": code})));
+                });
+            }
+            Err(e) => {
+                log(&format!("card: spawn {assistant}: {e}"));
+                app.card_event(turn, gen, serde_json::json!({"state": "error", "error": e.to_string()}));
+                app.card_event(turn, gen, serde_json::json!({"event": "exit", "code": -1}));
+            }
+        }
+    };
+    match c {
+        CardCmd::Listen { gen } => {
+            let _ = std::fs::remove_file(agent::RELEASE_FILE);
+            spawn(false, gen, vec!["--card".into(), "listen".into(), "--stop-file".into(), agent::RELEASE_FILE.into()], app);
+        }
+        CardCmd::Release => {
+            let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+            let tmp = format!("{}.tmp", agent::RELEASE_FILE);
+            if std::fs::write(&tmp, format!("{{\"t\": {t:.3}}}\n")).is_ok() {
+                let _ = std::fs::rename(&tmp, agent::RELEASE_FILE);
+            }
+        }
+        CardCmd::Turn { gen, text } => spawn(true, gen, vec!["--card".into(), "turn".into(), "--text".into(), text], app),
+        CardCmd::Kill { pid } => {
+            // the whole group: s22-assistant, its fillers, s22-say and the player
+            let r = unsafe { libc::kill(-pid, libc::SIGTERM) };
+            log(&format!("card: stop group {pid}: {r}"));
+        }
+        CardCmd::CancelApi => {
+            let api = netw.api.clone();
+            netw.spawn(move |_| {
+                let r = net::http("POST", &format!("{api}/api/chat/cancel"), Some(&serde_json::json!({"sessionId": "voice"})), Duration::from_secs(10));
+                log(&format!("card: cancel the voice turn: {:?}", r.map(|x| x.0)));
+            });
+        }
+    }
+}
+
+/// Run one camera command: the s22-campreview child, its signals, a background develop,
+/// the autosleep inhibit file.
+fn run_cam(c: camera::CamCmd, netw: &Net, app: &mut App, child: &mut Option<i32>) {
+    use camera::CamCmd;
+    match c {
+        CamCmd::Spawn { gen, argv } => {
+            // a fresh shm inode per child: the old mapping can never see a truncate (SIGBUS)
+            let _ = std::fs::remove_file(camera::SHM);
+            let _ = std::fs::create_dir_all(camera::WORK);
+            let err = std::fs::File::create(format!("{}/campreview.err", camera::WORK)).map(std::process::Stdio::from).unwrap_or(std::process::Stdio::null());
+            let r = std::process::Command::new(&argv[0]).args(&argv[1..]).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(err).spawn();
+            match r {
+                Ok(mut ch) => {
+                    let pid = ch.id() as i32;
+                    log(&format!("camera[{gen}]: started pid {pid}: {}", argv.join(" ")));
+                    *child = Some(pid);
+                    let more = app.cam.spawned(gen, pid);
+                    app.cam_cmds.extend(more);
+                    let out = ch.stdout.take();
+                    netw.spawn(move |n| {
+                        use std::io::BufRead;
+                        if let Some(o) = out {
+                            for line in std::io::BufReader::new(o).lines().map_while(Result::ok) {
+                                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) {
+                                    if v.get("event").is_some() {
+                                        n.send(Msg::Camera(gen, v));
+                                    } else {
+                                        // the final report line
+                                        log(&format!("camera[{gen}]: report {}", line.chars().take(400).collect::<String>()));
+                                    }
+                                }
+                            }
+                        }
+                        let code = ch.wait().ok().and_then(|s| s.code()).unwrap_or(-1);
+                        let tail = std::fs::read_to_string(format!("{}/campreview.err", camera::WORK)).unwrap_or_default();
+                        let tail: String = tail.chars().rev().take(200).collect::<Vec<_>>().into_iter().rev().collect();
+                        n.send(Msg::Camera(gen, serde_json::json!({"event": "exit", "code": code, "pid": pid, "tail": tail.trim()})));
+                    });
+                }
+                Err(e) => {
+                    log(&format!("camera[{gen}]: spawn {}: {e}", argv[0]));
+                    app.camera_event(gen, serde_json::json!({"event": "spawn_failed", "error": e.to_string()}));
+                }
+            }
+        }
+        CamCmd::Signal { pid, sig } => {
+            // exact PID of our own child only
+            if *child == Some(pid) || sig == libc::SIGTERM {
+                unsafe { libc::kill(pid, sig) };
+            }
+        }
+        CamCmd::Develop { gen, argv, preview, jpeg, raw } => {
+            netw.spawn(move |n| {
+                let t = Instant::now();
+                if let Some(d) = std::path::Path::new(&jpeg).parent() {
+                    let _ = std::fs::create_dir_all(d);
+                }
+                use std::os::unix::process::CommandExt;
+                let mut cmd = std::process::Command::new(&argv[0]);
+                cmd.args(&argv[1..]).stdin(std::process::Stdio::null());
+                // the X2 core (cpu 7): the develop is single-threaded and is the shutter's critical path
+                unsafe {
+                    cmd.pre_exec(|| {
+                        let mut set: libc::cpu_set_t = std::mem::zeroed();
+                        libc::CPU_SET(7, &mut set);
+                        libc::sched_setaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &set);
+                        Ok(())
+                    });
+                }
+                let out = cmd.output();
+                if let Ok(o) = &out {
+                    if !o.status.success() {
+                        log(&format!("camera: develop failed: {}", String::from_utf8_lossy(&o.stderr).chars().take(300).collect::<String>()));
+                    }
+                } else if let Err(e) = &out {
+                    log(&format!("camera: develop spawn: {e}"));
+                }
+                let ms = t.elapsed().as_millis() as u64;
+                let last: serde_json::Value = out.as_ref().ok().and_then(|o| String::from_utf8_lossy(&o.stdout).lines().last().and_then(|l| serde_json::from_str(l).ok())).unwrap_or(serde_json::Value::Null);
+                let ok = last["ok"] == true;
+                // raws are 6 MB each on a 256 MB tmpfs: delete them at once
+                for f in [raw.clone(), format!("{raw}.json"), format!("{raw}.0"), format!("{raw}.1"), format!("{raw}.2"), format!("{raw}.3")] {
+                    let _ = std::fs::remove_file(f);
+                }
+                if ok {
+                    if let Some((px, w, h)) = ui::load_png(&preview, 170, 170) {
+                        n.send(Msg::CamThumb(px, w, h));
+                    }
+                }
+                log(&format!("camera: develop {ms} ms ok {ok} (s22-develop {} ms, stacked {})", last["ms"], last["stacked"]));
+                n.send(Msg::Camera(gen, serde_json::json!({"event": "developed", "ok": ok, "jpeg": jpeg, "preview": preview, "ms": ms,
+                    "error": if ok { serde_json::Value::Null } else { last["error"].clone() }})));
+            });
+        }
+        CamCmd::Inhibit(on) => {
+            if on {
+                let _ = std::fs::create_dir_all("/run/s22-autosleep/inhibit.d");
+                let _ = std::fs::write(camera::INHIBIT, "");
+            } else {
+                let _ = std::fs::remove_file(camera::INHIBIT);
+            }
+        }
+    }
 }
 
 fn frame(app: &mut App, cv: &mut Canvas, p: &mut Presenter) -> std::io::Result<()> {
@@ -694,6 +925,7 @@ fn frame(app: &mut App, cv: &mut Canvas, p: &mut Presenter) -> std::io::Result<(
     let t2 = now_us();
     gfx::merge_rects(&mut all);
     p.prev = all;
+    let cam_frame = app.cam_drawn.take();
     let fb = p.bufs[p.back].fb_id;
     if p.need_modeset {
         p.card.set_crtc(fb)?;
@@ -712,6 +944,7 @@ fn frame(app: &mut App, cv: &mut Canvas, p: &mut Presenter) -> std::io::Result<(
         p.card.page_flip(fb, 1)?;
         p.pending = true;
         p.pending_mark = app.mark.take();
+        p.pending_cam = cam_frame;
     }
     app.stats.frames += 1;
     app.stats.render.push((t1 - t0) as f64 / 1000.0);
@@ -771,6 +1004,20 @@ fn save_png_px(px: &[u32], w: i32, h: i32, path: &str) -> std::io::Result<()> {
     std::fs::rename(&tmp, path)
 }
 
+/// 2x2 box downscale of an XRGB canvas copy (half-size screenshots).
+fn half(px: &[u32], w: i32, h: i32) -> Vec<u32> {
+    let (w, h) = (w as usize, h as usize);
+    let mut out = Vec::with_capacity(w / 2 * (h / 2));
+    for y in 0..h / 2 {
+        for x in 0..w / 2 {
+            let p = [px[2 * y * w + 2 * x], px[2 * y * w + 2 * x + 1], px[(2 * y + 1) * w + 2 * x], px[(2 * y + 1) * w + 2 * x + 1]];
+            let c = |s: u32| p.iter().map(|v| (v >> s) & 255).sum::<u32>() / 4;
+            out.push(c(16) << 16 | c(8) << 8 | c(0));
+        }
+    }
+    out
+}
+
 fn save_png(cv: &Canvas, path: &str) {
     let f = std::fs::File::create(path).expect("create png");
     let mut e = png::Encoder::new(std::io::BufWriter::new(f), cv.w as u32, cv.h as u32);
@@ -798,6 +1045,15 @@ fn states() -> Vec<(&'static str, Box<dyn Fn(&mut App)>)> {
         ("home", Box::new(|_a: &mut App| {})),
         ("home-card", Box::new(|a: &mut App| {
             a.add_card("Agent card", "Mission finished: the paper desk review is ready (3 trades, no action needed).", 30.0);
+        })),
+        ("home-agent-busy", Box::new(|a: &mut App| {
+            let _ = a.card.press();
+            a.card_event(false, 1, serde_json::json!({"transcript": "Is the paper desk review ready?"}));
+            a.card_event(true, 2, serde_json::json!({"state": "tool", "name": "worklog_read"}));
+            a.card_event(true, 2, serde_json::json!({"state": "reply", "text": "Yes. The review finished at 21:30: three trades, no action needed."}));
+            let _ = a.card.press();
+            a.card_event(false, 3, serde_json::json!({"transcript": "and the battery?"}));
+            a.card_cmds.clear();
         })),
         ("chat", Box::new(|a: &mut App| {
             a.goto(Page::Chat);
@@ -833,7 +1089,15 @@ fn states() -> Vec<(&'static str, Box<dyn Fn(&mut App)>)> {
             a.add_card("Reminder", "Call your mother", 60.0);
             a.locked = true;
         })),
-        ("settings", Box::new(|a: &mut App| a.goto(Page::Settings))),
+        ("settings", Box::new(|a: &mut App| {
+            a.goto(Page::Settings);
+            a.dev.pending.clear();
+            a.dev.answer("device.status", 200, &serde_json::json!({"ok": true, "state": {"bluetooth": false, "vibration": true, "autosleep": true, "calls_enabled": true,
+                "volume": 4, "brightness_pct": 30, "network": {"uplink": "mobile", "operator": "Operator", "radio": "5G",
+                "wifi": {"enabled": true, "on": false, "connected": false}, "mobile_data": {"on": true, "state": "up"}}}}));
+            a.dev.begin("bluetooth.set");
+            a.dev.answer("wifi.set", 409, &serde_json::json!({"ok": false, "code": "would_strand"}));
+        })),
         ("volume-osd", Box::new(|a: &mut App| {
             a.level = 5;
             a.button_actions(&[buttons::Action::Step(1)], 0);
@@ -859,12 +1123,20 @@ fn states() -> Vec<(&'static str, Box<dyn Fn(&mut App)>)> {
         })),
         ("camera", Box::new(|a: &mut App| {
             a.goto(Page::Camera);
-            a.camera_sensor = "front";
-            if let Ok(p) = std::env::var("FS_DUMP_CAMERA") {
-                a.camera_img = ui::load_png(&p, 1016, 1400);
-            }
-            a.camera_state = ui::camera_summary(&serde_json::json!({"rc": 0, "sensor": "front", "exposure_us": 30000, "gain": 8.0,
-                "develop_ok": true, "stacked": 4, "jpeg": "/x/cam-1792620000-front.jpg"}));
+            a.cam.status = "starting the rear camera…".into();
+            a.cam_thumb = Some((vec![0x506070; 170 * 128], 170, 128));
+        })),
+        ("camera-video", Box::new(|a: &mut App| {
+            a.goto(Page::Camera);
+            a.cam.mode = camera::Mode::Video;
+            a.cam.recording = Some(Instant::now() - Duration::from_secs(12));
+        })),
+        ("chat-key-popup", Box::new(|a: &mut App| {
+            a.goto(Page::Chat);
+            a.input = "Hel".into();
+            a.layout();
+            let h = a.hits.iter().find(|h| matches!(h.act, ui::Act::Key(1, 8))).cloned();
+            a.pressed = h;
         })),
     ]
 }

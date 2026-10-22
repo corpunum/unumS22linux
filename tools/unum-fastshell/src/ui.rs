@@ -3,7 +3,10 @@
 //! every primitive is clipped to the current damage rectangle, so a frame
 //! costs roughly the damaged area. `layout` runs the same code with an empty
 //! clip to collect the hit regions.
+use crate::agent::{self, CardCmd};
+use crate::camera::{self, Cam, CamCmd, Mode as CamMode, Viewfinder};
 use crate::config;
+use crate::device::{self, Dev, Toggle};
 use crate::ctl::{write_confirm, Call};
 use crate::font::{Face, Fonts};
 use crate::gfx::{Canvas, Rect};
@@ -103,15 +106,25 @@ pub enum Act {
     PromptOpt(usize),
     FilesUp,
     File(usize),
-    Bright,
+    /// Settings sliders: 0 brightness (1-100 %), 1 volume (0-10).
+    Slide(u8),
+    DevToggle(Toggle),
+    Mute,
     Model(&'static str),
     Classic,
     ScreenOff,
     IdleCycle(bool),
     ButtonsToggle,
-    Capture,
-    CamSensor(&'static str),
+    /// Home's Agent card: hold to speak (press/release handled in touch()).
+    AgentHold,
+    AgentStop,
+    CamShutter,
+    CamFlip,
+    CamMode(CamMode),
+    CamThumb,
+    CamRotate,
     Refresh,
+    #[allow(dead_code)]
     Nothing,
 }
 
@@ -161,6 +174,8 @@ pub enum Effect {
     Level(i32),
     /// Save the screen to the gallery (after the next frame), then flash.
     Screenshot,
+    /// One datagram to the haptics daemon ("tick", "buzz"); skipped when vibration is off.
+    Haptic(&'static str),
 }
 
 /// The on-screen level / notice overlay (volume keys, keep-awake).
@@ -261,12 +276,32 @@ pub struct App {
     pub files: Vec<FileEntry>,
     pub viewer: Option<Viewer>,
     pub phone: Option<(Value, Value, Value)>,
-    pub camera_state: String,
-    pub camera_img: Option<(Vec<u32>, i32, i32)>,
-    pub camera_poll: Option<Instant>,
-    pub camera_sensor: &'static str,
+    // ---- camera page (camera.rs)
+    pub cam: Cam,
+    pub vf: Option<Viewfinder>,
+    /// Commands for the main loop (spawn / signal / develop / inhibit).
+    pub cam_cmds: Vec<CamCmd>,
+    pub cam_thumb: Option<(Vec<u32>, i32, i32)>,
+    pub cam_review: Option<(Vec<u32>, i32, i32)>,
+    pub cam_flash_until: Option<Instant>,
+    /// publish time (CLOCK_MONOTONIC ns) of the frame drawn in the frame being built
+    pub cam_drawn: Option<u64>,
+    /// viewfinder frames on screen: (flip µs, publish -> flip ms)
+    pub cam_shown: Vec<(u64, f64)>,
+    pub cam_orient_path: String,
+    // ---- Home's Agent card (agent.rs)
+    pub card: agent::Card,
+    pub card_cmds: Vec<CardCmd>,
+    /// Vibration enabled (haptics config), re-read with the sysfs status.
+    pub haptics: bool,
+    /// The next screenshot is saved at half size (ctl "screenshot half").
+    pub shot_half: bool,
     pub brightness: (i32, i32),
     bright_sent: Instant,
+    /// Settings through s22d's device API (device.rs).
+    pub dev: Dev,
+    /// The slider under the finger (its answers do not move it while dragging).
+    sliding: Option<u8>,
     pub note: String,
     scroll: [f32; 7],
     content_h: [i32; 7],
@@ -358,12 +393,23 @@ impl App {
             files: vec![],
             viewer: None,
             phone: None,
-            camera_state: String::new(),
-            camera_img: None,
-            camera_poll: None,
-            camera_sensor: "rear",
+            cam: Cam::new(&format!("{chroot}{GALLERY}")),
+            vf: None,
+            cam_cmds: vec![],
+            cam_thumb: None,
+            cam_review: None,
+            cam_flash_until: None,
+            cam_drawn: None,
+            cam_shown: vec![],
+            cam_orient_path: String::new(),
+            haptics: true,
+            shot_half: false,
+            card: agent::Card::default(),
+            card_cmds: vec![],
             brightness: (128, 255),
             bright_sent: Instant::now(),
+            dev: Dev::default(),
+            sliding: None,
             note: String::new(),
             scroll: [0.0; 7],
             content_h: [0; 7],
@@ -573,14 +619,6 @@ impl App {
 
     fn on_touchd(&mut self, tag: &str, v: Value) {
         match tag {
-            "camera" => {
-                if v["ok"] == true {
-                    self.camera_state = format!("{} camera: metering, then a burst…", v["sensor"].as_str().unwrap_or("rear"));
-                    self.camera_poll = Some(Instant::now());
-                } else {
-                    self.camera_state = format!("camera: {}", v["error"].as_str().unwrap_or("failed"));
-                }
-            }
             "model" => {
                 self.note = if v["ok"] == true {
                     format!("Model: {}", net::model_label(v["current"]["model"].as_str().unwrap_or("?")))
@@ -603,39 +641,142 @@ impl App {
         }
     }
 
-    pub fn poll_camera(&mut self) {
-        let Some(t) = self.camera_poll else { return };
-        let p = format!("{}/camera.json", self.run_dir);
-        let v: Value = std::fs::read_to_string(&p).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
-        match v["state"].as_str() {
-            Some("done") => {
-                self.camera_poll = None;
-                if v["rc"] == 0 {
-                    self.camera_state = camera_summary(&v);
-                    self.load_camera_image();
-                } else {
-                    self.camera_state = format!("capture failed (rc {})", v["rc"]);
+    // ------------------------------------------------------------ camera
+
+    /// Start or stop the stream to match what is on screen (the Camera page, unlocked, panel on, ours).
+    pub fn sync_camera(&mut self) {
+        let want = self.page == Page::Camera && !self.locked && self.display_on && self.active;
+        if want != self.cam.want {
+            let c = if want { self.cam.open() } else { self.cam.close() };
+            self.cam_cmds.extend(c);
+            if !want {
+                self.vf = None;
+                self.cam_review = None;
+            }
+            if self.page == Page::Camera {
+                self.dirty_content();
+            }
+        }
+    }
+
+    /// An event line from s22-campreview (or main's exit / develop results) for process `gen`.
+    pub fn camera_event(&mut self, gen: u64, v: Value) {
+        let c = self.cam.event(gen, &v);
+        self.cam_cmds.extend(c);
+        match v["event"].as_str() {
+            Some("first_frame") if gen == self.cam.gen => {
+                self.vf = Viewfinder::open(camera::SHM);
+                if self.vf.is_none() {
+                    eprintln!("fastshell: camera: cannot map {}", camera::SHM);
                 }
             }
-            Some("failed") => {
-                self.camera_poll = None;
-                self.camera_state = format!("capture failed: {}", v["error"].as_str().unwrap_or("?"));
-            }
-            _ => {
-                if t.elapsed().as_secs() > 200 {
-                    self.camera_poll = None;
-                    self.camera_state = "capture timed out".into();
+            Some("exit") | Some("spawn_failed") if gen == self.cam.gen || self.cam.phase == camera::Phase::Off => {
+                if !self.cam.live() {
+                    self.vf = None;
                 }
             }
+            _ => {}
         }
         if self.page == Page::Camera {
             self.dirty_content();
         }
     }
 
-    pub fn load_camera_image(&mut self) {
-        let p = format!("{}/camera-latest.png", self.run_dir);
-        self.camera_img = load_png(&p, 1016, 1400);
+    /// An event line from s22-assistant's card modes (turn = `--card turn`, else `--card listen`).
+    pub fn card_event(&mut self, turn: bool, gen: u64, v: Value) {
+        let c = if turn { self.card.turn_event(gen, &v) } else { self.card.listen_event(gen, &v) };
+        if v["state"] == "listening" {
+            self.haptic("tick");
+        }
+        self.card_cmds.extend(c);
+        if self.page == Page::Home && !self.locked {
+            self.dirty_content();
+        }
+    }
+
+    fn card_press(&mut self) {
+        let c = self.card.press();
+        self.card_cmds.extend(c);
+        self.dirty_content();
+    }
+
+    fn card_release(&mut self) {
+        let c = self.card.release();
+        self.card_cmds.extend(c);
+        self.dirty_content();
+    }
+
+    /// The develop thread decoded the photo's thumbnail.
+    pub fn camera_thumb(&mut self, px: Vec<u32>, w: i32, h: i32) {
+        self.cam_thumb = Some((px, w, h));
+        if let Some((_, t_us)) = self.cam.shutter_t.take() {
+            // shutter tap -> thumbnail on the panel (logged as "shutter")
+            self.mark = Some((t_us, "shutter"));
+        }
+        if self.page == Page::Camera {
+            self.dirty_content();
+        }
+    }
+
+    /// The viewfinder rectangle (rotated frame fitted under the status bar).
+    pub fn vf_rect(&self) -> Rect {
+        let max = Rect::new(0, STATUS_H, W, 1440);
+        let rot = self.cam.orient.get(self.cam.sensor).rotate;
+        match &self.vf {
+            Some(v) => v.fit(rot, max),
+            None => camera::fit(1020, 766, rot, max),
+        }
+    }
+
+    /// A newer preview frame is published: damage the viewfinder.
+    pub fn camera_frame_due(&mut self) -> bool {
+        if self.page != Page::Camera || self.cam_review.is_some() {
+            return false;
+        }
+        let Some(v) = &self.vf else { return false };
+        let (seq, _) = v.latest();
+        if seq != v.seq {
+            let r = self.vf_rect();
+            self.dirty(r);
+            return true;
+        }
+        false
+    }
+
+    /// Viewfinder frames on the panel over the last 3 s, their age (publish -> flip) and shutter -> thumbnail.
+    pub fn camera_perf(&self) -> Value {
+        let now = crate::drm::now_us();
+        let recent: Vec<&(u64, f64)> = self.cam_shown.iter().filter(|(t, _)| now.saturating_sub(*t) < 3_000_000).collect();
+        let fps = if recent.len() > 1 {
+            let span = (recent[recent.len() - 1].0 - recent[0].0) as f64 / 1e6;
+            if span > 0.0 { ((recent.len() - 1) as f64 / span * 10.0).round() / 10.0 } else { 0.0 }
+        } else {
+            0.0
+        };
+        let ages: Vec<f64> = self.cam_shown.iter().rev().take(300).map(|x| x.1).collect();
+        json!({"phase": format!("{:?}", self.cam.phase), "sensor": self.cam.sensor, "fps_on_panel_3s": fps, "frames_shown": self.cam_shown.len(),
+               "publish_to_flip_ms": {"p50": (pct(&ages, 0.5) * 10.0).round() / 10.0, "p95": (pct(&ages, 0.95) * 10.0).round() / 10.0},
+               "shutter_to_thumbnail_ms": self.cam.shot_ms.iter().map(|m| m.round()).collect::<Vec<_>>()})
+    }
+
+    pub fn load_orient(&mut self) {
+        if let Ok(t) = std::fs::read_to_string(&self.cam_orient_path) {
+            self.cam.orient = camera::Orients::parse(&t);
+        }
+    }
+
+    pub fn load_haptics(&mut self) {
+        // s22-haptic's own switch: {"enabled": false} (or unreadable) = off; a missing file = on
+        self.haptics = match std::fs::read_to_string(crate::haptic::CONFIG) {
+            Ok(t) => serde_json::from_str::<Value>(&t).map(|v| v["enabled"] != false).unwrap_or(false),
+            Err(e) => e.kind() == std::io::ErrorKind::NotFound,
+        };
+    }
+
+    fn haptic(&mut self, what: &'static str) {
+        if self.haptics {
+            self.effects.push(Effect::Haptic(what));
+        }
     }
 
     // ------------------------------------------------------------ chat
@@ -789,9 +930,9 @@ impl App {
             Some("chat streaming")
         } else if self.confirm.is_some() || self.prompt.is_some() {
             Some("agent question")
-        } else if self.page == Page::Camera || self.camera_poll.is_some() {
+        } else if self.page == Page::Camera || self.cam.shots > 0 || self.cam.recording.is_some() {
             Some("camera")
-        } else if self.voice_running {
+        } else if self.voice_running || self.card.active() {
             Some("voice turn")
         } else if self.keep_awake {
             Some("keep screen on (Power + Volume up)")
@@ -828,6 +969,9 @@ impl App {
             return;
         }
         self.last_touch = Instant::now();
+        if acts.iter().any(|a| matches!(a, Action::Step(_) | Action::Mute | Action::Lock | Action::Camera | Action::Screenshot | Action::KeepAwake | Action::PttStart(_) | Action::Assistant(_))) {
+            self.haptic("tick");
+        }
         for a in acts {
             match *a {
                 Action::Wake => {
@@ -947,7 +1091,7 @@ impl App {
 
     /// When an overlay must change next (OSD timeout, end of the flash).
     pub fn overlay_deadline(&self) -> Option<Instant> {
-        [self.osd.as_ref().map(|o| o.until), self.flash_until].into_iter().flatten().min()
+        [self.osd.as_ref().map(|o| o.until), self.flash_until, self.cam_flash_until].into_iter().flatten().min()
     }
 
     pub fn expire_overlays(&mut self, now: Instant) {
@@ -957,6 +1101,11 @@ impl App {
         if self.flash_until.is_some_and(|t| t <= now) {
             self.flash_until = None;
             self.dirty_all();
+        }
+        if self.cam_flash_until.is_some_and(|t| t <= now) {
+            self.cam_flash_until = None;
+            let r = self.vf_rect();
+            self.dirty(r);
         }
     }
 
@@ -1015,14 +1164,14 @@ impl App {
             self.dirty_content();
         }
         self.update_clock();
-        if self.camera_poll.is_some() {
-            self.poll_camera();
+        if self.page == Page::Camera && self.cam.recording.is_some() {
+            self.dirty(self.vf_rect());
         }
     }
 
     #[allow(dead_code)]
     pub fn needs_ticks(&self) -> bool {
-        !self.cards.is_empty() || self.confirm.is_some() || self.camera_poll.is_some()
+        !self.cards.is_empty() || self.confirm.is_some()
     }
 
     pub fn goto(&mut self, p: Page) {
@@ -1049,12 +1198,9 @@ impl App {
                 net::fetch_phone(n);
             }
         }
-        if p == Page::Camera && self.camera_img.is_none() {
-            self.load_camera_image();
-        }
         if p == Page::Settings {
-            if let Some(n) = &self.net {
-                net::touchd_async(n, "brightness", json!({"cmd": "brightness", "arg": "get"}), 8);
+            for id in Dev::refresh_ids() {
+                self.dev_call(id, json!({}));
             }
         }
         self.dirty_all();
@@ -1089,6 +1235,7 @@ impl App {
             "frames": self.stats.frames,
             "touch_to_flip": {"press": s(by("press")), "page": s(by("page")), "key": s(by("key")), "action": s(by("action")), "scroll": s(by("scroll")), "button": s(by("button"))},
             "render_ms": s(self.stats.render.clone()),
+            "camera": self.camera_perf(),
             "copy_ms": s(self.stats.copy.clone()),
         })
     }
@@ -1263,6 +1410,22 @@ impl App {
             }
             "state" => self.state_json().to_string(),
             "perf" => self.perf_json().to_string(),
+            "agent_say" => {
+                // tests and agents: an utterance for the Home Agent card as if spoken (queued when busy)
+                let t = c.args.join(" ");
+                let cmds = self.card.say(&t);
+                self.card_cmds.extend(cmds);
+                if self.page == Page::Home {
+                    self.dirty_content();
+                }
+                format!("{}", self.card.status_line())
+            }
+            "screenshot" => {
+                // tests / evidence: the shell's own canvas; "half" saves 540x1170
+                self.shot_half = a0 == "half";
+                self.effects.push(Effect::Screenshot);
+                "ok".into()
+            }
             other => format!("unknown function: {other}"),
         }
     }
@@ -1410,7 +1573,20 @@ impl App {
                 }
             }
             Act::File(i) => self.open_file(i),
-            Act::Bright => {}
+            Act::Slide(_) => {}
+            Act::DevToggle(t) => {
+                if !self.dev.busy(t) {
+                    let (id, args) = self.dev.toggle_request(t);
+                    self.dev_call(id, args);
+                    self.haptic("tick");
+                }
+                self.dirty_content();
+            }
+            Act::Mute => {
+                let m = !self.dev.muted;
+                self.dev_call("volume.set", json!({"muted": m}));
+                self.dirty_content();
+            }
             Act::Model(m) => {
                 self.note = format!("Switching model to {m}…");
                 if let Some(n) = &self.net {
@@ -1436,7 +1612,14 @@ impl App {
                 } else {
                     self.idle_cfg.unlocked_s = idle::next_preset(self.idle_cfg.unlocked_s);
                 }
-                self.save_idle();
+                if self.net.is_some() && self.dev.available != Some(false) {
+                    // through the device API (the same file; s22d reads it back)
+                    let args = if locked { json!({"locked": self.idle_cfg.locked_s}) } else { json!({"value": self.idle_cfg.unlocked_s}) };
+                    self.dev_call("screen_timeout.set", args);
+                } else {
+                    // no s22d (another phone): the shell's own file
+                    self.save_idle();
+                }
                 self.dirty_content();
             }
             Act::ButtonsToggle => {
@@ -1447,15 +1630,59 @@ impl App {
                 self.note = if self.buttons_enabled { "Buttons: handled by the shell".into() } else { "Buttons: handed to s22-buttons".into() };
                 self.dirty_content();
             }
-            Act::Capture => {
-                self.camera_state = "starting the camera…".into();
-                if let Some(n) = &self.net {
-                    net::touchd_async(n, "camera", json!({"cmd": "camera_capture", "sensor": self.camera_sensor}), 10);
+            Act::AgentHold => {}
+            Act::AgentStop => {
+                let c = self.card.stop();
+                self.card_cmds.extend(c);
+                self.haptic("buzz");
+                self.dirty_content();
+            }
+            Act::CamShutter => {
+                if self.cam_review.take().is_some() {
+                    self.dirty_content();
+                }
+                let c = self.cam.shutter(t_in);
+                eprintln!("fastshell: camera: shutter ({:?}, {:?}, pid {:?}) -> {:?}", self.cam.phase, self.cam.mode, self.cam.pid, c);
+                if !c.is_empty() {
+                    self.haptic("tick");
+                    if self.cam.mode == CamMode::Photo {
+                        self.cam_flash_until = Some(Instant::now() + std::time::Duration::from_millis(120));
+                    }
+                }
+                self.cam_cmds.extend(c);
+                self.dirty_content();
+            }
+            Act::CamFlip => {
+                let c = self.cam.switch_sensor();
+                self.cam_cmds.extend(c);
+                self.vf = None;
+                self.cam_review = None;
+                self.dirty_content();
+            }
+            Act::CamMode(m) => {
+                let c = self.cam.set_mode(m);
+                self.cam_cmds.extend(c);
+                self.dirty_content();
+            }
+            Act::CamThumb => {
+                if self.cam_review.is_some() {
+                    self.cam_review = None;
+                } else if let Some(p) = self.cam.thumb_due.clone() {
+                    self.cam_review = load_png(&p, W, 1440);
                 }
                 self.dirty_content();
             }
-            Act::CamSensor(s) => {
-                self.camera_sensor = s;
+            Act::CamRotate => {
+                let s = self.cam.sensor;
+                self.cam.orient.turn(s);
+                if !self.cam_orient_path.is_empty() {
+                    let tmp = format!("{}.tmp", self.cam_orient_path);
+                    if std::fs::write(&tmp, self.cam.orient.to_json()).is_ok() {
+                        let _ = std::fs::rename(&tmp, &self.cam_orient_path);
+                    }
+                }
+                let o = self.cam.orient.get(s);
+                self.note = format!("Camera {s}: preview rotated {}°{}", o.rotate, if o.mirror { ", mirrored" } else { "" });
                 self.dirty_content();
             }
             Act::Refresh => {
@@ -1516,14 +1743,22 @@ impl App {
 
     fn set_pressed(&mut self, h: Option<Hit>) {
         if let Some(p) = &self.pressed {
-            let r = p.r;
+            let r = Self::press_area(p);
             self.dirty(r);
         }
         if let Some(p) = &h {
-            let r = p.r;
+            let r = Self::press_area(p);
             self.dirty(r);
         }
         self.pressed = h;
+    }
+
+    /// What a press redraws: the hit, plus the key popup above a keyboard key.
+    fn press_area(h: &Hit) -> Rect {
+        match h.act {
+            Act::Key(..) => key_popup_rect(h.r).union(&h.r),
+            _ => h.r,
+        }
     }
 
     pub fn touch(&mut self, ev: crate::touch::Touch) {
@@ -1558,9 +1793,14 @@ impl App {
                         if rows[r][c] == kbd::BKSP {
                             self.repeat_at = Some((Instant::now() + std::time::Duration::from_millis(450), r, c));
                         }
+                        self.haptic("tick");
                     }
-                    if h.act == Act::Bright {
-                        self.slide(x, true);
+                    if let Act::Slide(id) = h.act {
+                        self.sliding = Some(id);
+                        self.slide(id, h.r, x, false);
+                    }
+                    if h.act == Act::AgentHold {
+                        self.card_press();
                     }
                 }
                 self.set_pressed(hit.clone());
@@ -1572,8 +1812,15 @@ impl App {
             Touch::Move(x, y, t) => {
                 let Some(mut tc) = self.touch.take() else { return };
                 let (dx, dy) = (x - tc.x0, y - tc.y0);
-                if tc.hit.as_ref().is_some_and(|h| h.act == Act::Bright) {
-                    self.slide(x, false);
+                if tc.hit.as_ref().is_some_and(|h| h.act == Act::AgentHold) {
+                    // holding to talk: moving the finger does not cancel it
+                    tc.x = x;
+                    tc.y = y;
+                    self.touch = Some(tc);
+                    return;
+                }
+                if let Some(Hit { act: Act::Slide(id), r, .. }) = tc.hit.clone() {
+                    self.slide(id, r, x, false);
                     tc.x = x;
                     tc.y = y;
                     self.touch = Some(tc);
@@ -1622,6 +1869,11 @@ impl App {
                 };
                 let pressed = self.pressed.clone();
                 self.set_pressed(None);
+                if tc.hit.as_ref().is_some_and(|h| h.act == Act::AgentHold) {
+                    self.card_release();
+                    self.mark = Some((t, "action"));
+                    return;
+                }
                 if let Some(g) = gesture {
                     if self.confirm.is_some() {
                         return;
@@ -1676,8 +1928,9 @@ impl App {
                     return;
                 }
                 if let Some(h) = pressed {
-                    if h.act == Act::Bright {
-                        self.slide(x, true);
+                    if let Act::Slide(id) = h.act {
+                        self.slide(id, h.r, x, true);
+                        self.sliding = None;
                         return;
                     }
                     if h.hold_ms > 0 {
@@ -1694,7 +1947,11 @@ impl App {
                 }
             }
             Touch::Cancel(_) => {
+                if self.touch.as_ref().and_then(|t| t.hit.as_ref()).is_some_and(|h| h.act == Act::AgentHold) {
+                    self.card_release();
+                }
                 self.touch = None;
+                self.sliding = None;
                 self.repeat_at = None;
                 self.hold = None;
                 self.set_pressed(None);
@@ -1726,23 +1983,74 @@ impl App {
         }
     }
 
-    fn slider_rect(&self) -> Rect {
-        Rect::new(M + 40, STATUS_H + 130 + 20 + 190 + M + 130, W - 2 * M - 80, 110)
+    /// A slider moved to x inside its hit rect `r` (track inset 40 px each side).
+    fn slide(&mut self, id: u8, r: Rect, x: i32, commit: bool) {
+        let f = ((x - r.x - 40) as f32 / (r.w - 80).max(1) as f32).clamp(0.0, 1.0);
+        let (cap, v, changed) = if id == 0 {
+            let v = ((f * 100.0).round() as i32).max(1);
+            let ch = self.dev.brightness != Some(v);
+            self.dev.brightness = Some(v);
+            ("brightness.set", v, ch)
+        } else {
+            let v = (f * crate::buttons::LEVELS as f32).round() as i32;
+            let ch = self.dev.volume != Some(v);
+            self.dev.volume = Some(v);
+            ("volume.set", v, ch)
+        };
+        if changed {
+            self.dirty(Rect::new(0, r.y - 90, W, r.h + 100));
+        }
+        if commit || (changed && self.bright_sent.elapsed().as_millis() > 150) {
+            self.bright_sent = Instant::now();
+            self.dev_call(cap, json!({"value": v}));
+        }
     }
 
-    fn slide(&mut self, x: i32, commit: bool) {
-        let r = self.slider_rect();
-        let f = ((x - r.x) as f32 / r.w as f32).clamp(0.02, 1.0);
-        let v = ((f * self.brightness.1 as f32).round() as i32).max(1);
-        if v != self.brightness.0 {
-            self.brightness.0 = v;
-            self.dirty(Rect::new(0, r.y - 80, W, r.h + 100));
+    /// One device-API request off the UI thread; the answer comes back as Msg::DeviceCap.
+    pub fn dev_call(&mut self, id: &'static str, args: Value) {
+        self.dev.begin(id);
+        if let Some(n) = &self.net {
+            n.spawn(move |n| {
+                let (st, v) = device::call(device::SOCK, id, &args, device::timeout_for(id));
+                n.send(net::Msg::DeviceCap(id, st, v));
+            });
         }
-        if commit || self.bright_sent.elapsed().as_millis() > 150 {
-            self.bright_sent = Instant::now();
-            if let Some(n) = &self.net {
-                net::touchd_async(n, "brightness", json!({"cmd": "brightness", "arg": v.to_string()}), 8);
+    }
+
+    /// A device-API answer: the read-back state goes into the Settings rows and the shell's own copies.
+    pub fn dev_answer(&mut self, id: &'static str, status: u16, v: Value) {
+        let keep = match (self.sliding, id) {
+            (Some(0), "brightness.set") => Some((0, self.dev.brightness)),
+            (Some(1), "volume.set") => Some((1, self.dev.volume)),
+            _ => None,
+        };
+        self.dev.answer(id, status, &v);
+        if let Some((k, val)) = keep {
+            // the finger is still on it: the slider follows the finger, not a late answer
+            if k == 0 { self.dev.brightness = val } else { self.dev.volume = val }
+        }
+        if v["ok"] == true {
+            match id {
+                "volume.set" | "volume.get" => {
+                    if let Some(l) = self.dev.volume {
+                        self.level = l;
+                    }
+                }
+                "vibration.set" => self.haptics = self.dev.on.get(&Toggle::Vibration).copied().unwrap_or(self.haptics),
+                "screen_timeout.set" | "screen_timeout.get" => {
+                    if let Some((u, l)) = self.dev.timeout {
+                        self.idle_cfg = idle::Cfg { unlocked_s: u, locked_s: l };
+                    }
+                }
+                _ => {}
             }
+            // after a change: read everything back (other rows can move: uplink, Wi-Fi saver)
+            if id.ends_with(".set") && self.sliding.is_none() && self.page == Page::Settings && !self.dev.pending.iter().any(|p| p == "device.status") {
+                self.dev_call("device.status", json!({}));
+            }
+        }
+        if self.page == Page::Settings {
+            self.dirty_content();
         }
     }
 
@@ -1861,7 +2169,10 @@ impl App {
 
     pub fn scene(&mut self, cv: &mut Canvas) {
         let clip = cv.clip;
-        if !self.layout_pass {
+        // the live viewfinder covers its rectangle: no background pass under it (30 fps, 6 MB)
+        let vf_only = !self.locked && self.page == Page::Camera && self.cam.live() && self.vf.is_some() && self.cam_review.is_none()
+            && self.vf_rect().intersect(&clip) == Some(clip);
+        if !self.layout_pass && !vf_only {
             cv.fill(&Rect::new(0, 0, W, H), BG);
         }
         self.scroll_rect = None;
@@ -1944,60 +2255,44 @@ impl App {
     }
 
     fn draw_home(&mut self, cv: &mut Canvas) {
-        let mut y = STATUS_H + 30;
+        let mut y = STATUS_H + 20;
         // title
-        if !self.layout_pass && Rect::new(0, y, W, 150).hits(&cv.clip) {
+        if !self.layout_pass && Rect::new(0, y, W, 130).hits(&cv.clip) {
             let date = self.date.clone();
-            self.txt(cv, Face::Bold, 64, M, y + 70, "OpenUnum", TEXT);
-            self.txt(cv, Face::Regular, 34, M, y + 122, &date, DIM);
+            self.txt(cv, Face::Bold, 60, M, y + 64, "OpenUnum", TEXT);
+            self.txt(cv, Face::Regular, 32, M, y + 112, &date, DIM);
         }
-        y += 160;
-        // live cards 2x2
-        let cw = (W - 3 * M) / 2;
-        let ch = 210;
+        y += 140;
+        // live status chips
         let st = self.st.clone();
         let health = st.health.clone().unwrap_or_else(|| "connecting".into());
-        let cards: [(&str, String, String, u32); 4] = [
-            ("Agent", st.model.clone().unwrap_or_else(|| "—".into()), health.clone(), match health.as_str() { "healthy" => GOOD, "down" => BAD, "connecting" => DIM, _ => WARN }),
-            (
-                "Sessions",
-                st.sessions.map(|(a, _)| format!("{a} active")).unwrap_or_else(|| "—".into()),
-                format!("of {} · {} missions running", st.sessions.map(|s| s.1).unwrap_or(0), st.running.unwrap_or(0)),
-                ACCENT,
-            ),
-            (
-                "Battery",
-                st.battery.map(|b| format!("{b}%")).unwrap_or_else(|| "—".into()),
-                format!("{}{}", st.bat_state, st.bat_temp.map(|t| format!(" · {t:.1}°C")).unwrap_or_default()),
-                match st.battery { Some(b) if b < 15 => BAD, Some(b) if b < 30 => WARN, _ => GOOD },
-            ),
-            (
-                "Thermal",
-                st.thermal.map(|t| format!("{t:.0}°C")).unwrap_or_else(|| "—".into()),
-                st.thermal_detail.clone(),
-                match st.thermal { Some(t) if t >= 60.0 => BAD, Some(t) if t >= 48.0 => WARN, _ => GOOD },
-            ),
+        let chips: [(String, u32, Act); 4] = [
+            (st.model.clone().map(|m| net::model_label(&m)).unwrap_or_else(|| "agent —".into()), match health.as_str() { "healthy" => GOOD, "down" => BAD, "connecting" => DIM, _ => WARN }, Act::Open(Page::Chat)),
+            (format!("{} sessions · {} running", st.sessions.map(|s| s.0).unwrap_or(0), st.running.unwrap_or(0)), ACCENT, Act::Open(Page::Switcher)),
+            (st.battery.map(|b| format!("{b}%{}", st.bat_temp.map(|t| format!(" · {t:.0}°C")).unwrap_or_default())).unwrap_or_else(|| "—".into()), match st.battery { Some(b) if b < 15 => BAD, Some(b) if b < 30 => WARN, _ => GOOD }, Act::Refresh),
+            (st.thermal.map(|t| format!("{t:.0}°C")).unwrap_or_else(|| "—".into()), match st.thermal { Some(t) if t >= 60.0 => BAD, Some(t) if t >= 48.0 => WARN, _ => GOOD }, Act::Refresh),
         ];
-        for (i, (label, value, detail, color)) in cards.iter().enumerate() {
-            let r = Rect::new(M + (i as i32 % 2) * (cw + M), y + (i as i32 / 2) * (ch + M), cw, ch);
-            let act = if i == 0 { Act::Open(Page::Chat) } else if i == 1 { Act::Open(Page::Switcher) } else { Act::Refresh };
+        let cw = (W - 3 * M) / 2;
+        for (i, (label, color, act)) in chips.iter().enumerate() {
+            let r = Rect::new(M + (i as i32 % 2) * (cw + M), y + (i as i32 / 2) * 96, cw, 80);
             if !self.layout_pass && r.hits(&cv.clip) {
-                cv.rrect(&r, 32, if self.is_pressed(&act) && i < 2 { PRESS } else { SURF });
-                cv.circle(r.x + 40, r.y + 52, 10, *color);
-                self.txt(cv, Face::Regular, 30, r.x + 62, r.y + 63, label, DIM);
-                let v = self.fonts.ellipsize(Face::Bold, 46, value, r.w - 56);
-                self.txt(cv, Face::Bold, 46, r.x + 28, r.y + 130, &v, TEXT);
-                let d = self.fonts.ellipsize(Face::Regular, 28, detail, r.w - 56);
-                self.txt(cv, Face::Regular, 28, r.x + 28, r.y + 180, &d, DIM);
+                cv.rrect(&r, 26, if self.is_pressed(act) && i < 2 { PRESS } else { SURF });
+                cv.circle(r.x + 34, r.y + 40, 9, *color);
+                let l = self.fonts.ellipsize(Face::Regular, 30, label, r.w - 80);
+                self.txt(cv, Face::Regular, 30, r.x + 58, r.y + 51, &l, TEXT);
             }
             if i < 2 {
-                self.hit(r, act);
+                self.hit(r, act.clone());
             }
         }
-        y += 2 * ch + 2 * M + 10;
+        y += 2 * 96 + 14;
+        // the Agent card: hold to talk
+        let card = Rect::new(M, y, W - 2 * M, 900);
+        self.draw_agent_card(cv, card);
+        y += card.h + M;
         // app tiles 3x2
         let tw = (W - 4 * M) / 3;
-        let th = 250;
+        let th = 210;
         let tiles: [(&str, Act, u32, &str); 6] = [
             ("Agent", Act::Open(Page::Chat), 0x3b82f6, "A"),
             ("Phone", Act::Open(Page::Phone), 0x3fb950, "P"),
@@ -2011,44 +2306,71 @@ impl App {
             if !self.layout_pass && r.hits(&cv.clip) {
                 let p = self.is_pressed(act);
                 cv.rrect(&r, 36, if p { PRESS } else { SURF });
-                let ic = Rect::new(r.x + (r.w - 110) / 2, r.y + 34, 110, 110);
-                cv.rrect(&ic, 30, *color);
-                self.txt_center(cv, Face::Bold, 48, ic, glyph, 0x0b0f14);
-                self.txt_center(cv, Face::Bold, 36, Rect::new(r.x, r.y + 160, r.w, 64), label, TEXT);
+                let ic = Rect::new(r.x + (r.w - 96) / 2, r.y + 26, 96, 96);
+                cv.rrect(&ic, 28, *color);
+                self.txt_center(cv, Face::Bold, 44, ic, glyph, 0x0b0f14);
+                self.txt_center(cv, Face::Bold, 34, Rect::new(r.x, r.y + 132, r.w, 60), label, TEXT);
             }
             self.hit(r, act.clone());
         }
-        y += 2 * th + 2 * M + 10;
-        // action row
-        let bw = (W - 4 * M) / 3;
-        let bh = 150;
-        let row: [(&str, Act, u32, u32); 3] = [("Talk", Act::Voice, ACCENT, ACCENT_P), ("Apps", Act::Open(Page::Switcher), SURF2, PRESS), ("Lock", Act::Lock, SURF2, PRESS)];
-        for (i, (label, act, f, fp)) in row.iter().enumerate() {
-            let r = Rect::new(M + i as i32 * (bw + M), y, bw, bh);
-            self.button(cv, r, label, act.clone(), *f, *fp, 40);
-            if i == 0 && !self.layout_pass && r.hits(&cv.clip) {
-                mic(cv, r.x + 60, r.y + bh / 2, TEXT, if self.is_pressed(act) { ACCENT_P } else { ACCENT });
-            }
-        }
-        y += bh + M;
-        // last reply preview
-        let last = self.chat.iter().rev().find(|(w, _)| *w == Who::Agent).map(|(_, t)| t.clone()).unwrap_or_default();
-        let r = Rect::new(M, y, W - 2 * M, (H - EDGE_B - 70 - y).max(120));
-        if !self.layout_pass && r.hits(&cv.clip) {
-            cv.rrect(&r, 32, if self.is_pressed(&Act::Open(Page::Chat)) { PRESS } else { SURF });
-            self.txt(cv, Face::Regular, 30, r.x + 28, r.y + 52, "Last reply", DIM);
-            let lines = self.fonts.wrap(Face::Regular, 34, &last, r.w - 56);
-            let maxl = ((r.h - 80) / 48).max(1) as usize;
-            for (k, l) in lines.iter().take(maxl).enumerate() {
-                let l = if k + 1 == maxl && lines.len() > maxl { format!("{l}…") } else { l.clone() };
-                self.txt(cv, Face::Regular, 34, r.x + 28, r.y + 104 + k as i32 * 48, &l, TEXT);
-            }
-        }
-        self.hit(r, Act::Open(Page::Chat));
+        y += 2 * th + M + 16;
+        // Apps · Lock
+        let bw = (W - 3 * M) / 2;
+        self.button(cv, Rect::new(M, y, bw, 120), "Apps", Act::Open(Page::Switcher), SURF2, PRESS, 38);
+        self.button(cv, Rect::new(2 * M + bw, y, bw, 120), "Lock", Act::Lock, SURF2, PRESS, 38);
         if !self.layout_pass {
             let hint = "Swipe up from the bottom: home  ·  from a side: back  ·  from the top: apps";
             let w = self.fonts.measure(Face::Regular, 25, hint);
             self.txt(cv, Face::Regular, 25, (W - w) / 2, H - EDGE_B - 22, hint, 0x5d6875);
+        }
+    }
+
+    /// The Agent card: status line, what you said, the reply; a big mic while idle; STOP while busy.
+    fn draw_agent_card(&mut self, cv: &mut Canvas, r: Rect) {
+        let active = self.card.active();
+        let held = self.is_pressed(&Act::AgentHold) || self.card.held;
+        let listening = matches!(self.card.listen, Some((_, agent::Listen::Listening)) | Some((_, agent::Listen::Starting)));
+        if !self.layout_pass && r.hits(&cv.clip) {
+            let border = if listening { 0xf85149 } else if active { ACCENT } else { 0x2a3442 };
+            cv.rrect(&Rect::new(r.x - 3, r.y - 3, r.w + 6, r.h + 6), 43, border);
+            cv.rrect(&r, 40, if held { 0x1d2a3a } else { SURF });
+            let status = self.card.status_line();
+            let col = if listening { 0xff9b94 } else if active { 0x9ecbff } else { DIM };
+            let s = self.fonts.ellipsize(Face::Bold, 36, &status, r.w - 300);
+            self.txt(cv, Face::Bold, 36, r.x + 40, r.y + 70, &s, col);
+            let mut ty = r.y + 130;
+            if !self.card.you.is_empty() {
+                let you = format!("You: {}", self.card.you);
+                for l in self.fonts.wrap(Face::Regular, 32, &you, r.w - 80).iter().take(2) {
+                    self.fonts.draw(cv, Face::Regular, 32, r.x + 40, ty, l, 0xc9d1d9);
+                    ty += 44;
+                }
+                ty += 16;
+            }
+            let reply = if self.card.reply.is_empty() && self.card.you.is_empty() {
+                self.chat.iter().rev().find(|(w, _)| *w == Who::Agent).map(|(_, t)| t.clone()).unwrap_or_default()
+            } else {
+                self.card.reply.clone()
+            };
+            let maxl = ((r.bottom() - 250 - ty) / 50).max(1) as usize;
+            let lines = self.fonts.wrap(Face::Regular, 38, &reply, r.w - 80);
+            for (k, l) in lines.iter().take(maxl).enumerate() {
+                let l = if k + 1 == maxl && lines.len() > maxl { format!("{l}…") } else { l.clone() };
+                self.fonts.draw(cv, Face::Regular, 38, r.x + 40, ty + 10 + k as i32 * 50, &l, TEXT);
+            }
+            // the mic: big, at the bottom of the card
+            let (cx, cy) = (r.x + r.w / 2, r.bottom() - 150);
+            let ring = if listening { BAD } else if held { ACCENT_P } else { ACCENT };
+            cv.circle(cx, cy, 86, ring);
+            mic(cv, cx, cy, TEXT, ring);
+            let hint = if listening { "release to send" } else if active { "hold to queue the next" } else { "hold to talk · tap for a 6 s window" };
+            let w = self.fonts.measure(Face::Regular, 26, hint);
+            self.txt(cv, Face::Regular, 26, r.x + (r.w - w) / 2, r.bottom() - 14, hint, DIM);
+        }
+        self.hit(r, Act::AgentHold);
+        if active {
+            let stop = Rect::new(r.right() - 240, r.y + 22, 210, 96);
+            self.button(cv, stop, "STOP", Act::AgentStop, 0x8a1c1c, 0xb02a2a, 40);
         }
     }
 
@@ -2345,79 +2667,156 @@ impl App {
     }
 
     fn draw_camera(&mut self, cv: &mut Canvas) {
-        let sub = format!("{} · processed by s22-develop", self.camera_sensor);
-        let top = self.header(cv, "Camera", &sub);
-        let area = Rect::new(M, top + 10, W - 2 * M, 1400);
+        let vr = self.vf_rect();
+        let area = Rect::new(0, STATUS_H, W, 1440);
+        // viewfinder (or the last photo, or a status box)
         if !self.layout_pass && area.hits(&cv.clip) {
-            cv.rrect(&area, 28, SURF);
-            match &self.camera_img {
-                Some((px, w, h)) => {
-                    let r = Rect::new(area.x + (area.w - w) / 2, area.y + (area.h - h) / 2, *w, *h);
-                    let (px, w, h) = (px.clone(), *w, *h);
-                    cv.image(&r, &px, w, h);
+            let live = self.cam.live() && self.vf.is_some() && self.cam_review.is_none();
+            if live {
+                // only the bands the frame does not cover
+                cv.fill(&Rect::new(area.x, area.y, area.w, vr.y - area.y), 0x000000);
+                cv.fill(&Rect::new(area.x, vr.bottom(), area.w, area.bottom() - vr.bottom()), 0x000000);
+                cv.fill(&Rect::new(area.x, vr.y, vr.x - area.x, vr.h), 0x000000);
+                cv.fill(&Rect::new(vr.right(), vr.y, area.right() - vr.right(), vr.h), 0x000000);
+            } else {
+                cv.fill(&area, 0x000000);
+            }
+            if let Some((px, w, h)) = &self.cam_review {
+                let r = Rect::new((W - w) / 2, area.y + (area.h - h) / 2, *w, *h);
+                let (px, w, h) = (px.clone(), *w, *h);
+                cv.image(&r, &px, w, h);
+                self.txt(cv, Face::Bold, 34, M + 8, area.y + 64, "Last photo · tap to go back", TEXT);
+            } else if let (true, Some(v)) = (self.cam.live(), self.vf.as_mut()) {
+                let o = self.cam.orient.get(self.cam.sensor);
+                if vr.hits(&cv.clip) {
+                    let (seq, pubns) = v.latest();
+                    v.blit(cv, vr, o.rotate, o.mirror);
+                    v.seq = seq;
+                    self.cam_drawn = Some(pubns);
                 }
-                None => self.txt_center(cv, Face::Regular, 34, area, "No picture yet", DIM),
+            } else {
+                let st = if self.cam.status.is_empty() { "camera off".to_string() } else { self.cam.status.clone() };
+                self.txt_center(cv, Face::Regular, 36, area, &st, DIM);
+            }
+            if self.cam_flash_until.is_some() {
+                cv.fill_alpha(&vr, 0xffffff, 170);
+            }
+            if let Some(t) = self.cam.recording {
+                let s = t.elapsed().as_secs();
+                let pill = Rect::new(W / 2 - 110, area.y + 24, 220, 70);
+                cv.rrect(&pill, 35, 0x000000);
+                cv.circle(pill.x + 42, pill.y + 35, 14, BAD);
+                self.txt(cv, Face::Bold, 36, pill.x + 72, pill.y + 49, &format!("{:02}:{:02}", s / 60, s % 60), TEXT);
             }
         }
-        let st = if self.camera_state.is_empty() { "Hold the button for 1 s to take a picture".to_string() } else { self.camera_state.clone() };
-        if !self.layout_pass {
-            self.txt(cv, Face::Regular, 32, M, area.bottom() + 60, &st, DIM);
+        // a back chip over the viewfinder's corner
+        let back = Rect::new(M, area.y + 20, 100, 84);
+        if !self.layout_pass && back.hits(&cv.clip) {
+            cv.rrect(&back, 30, if self.is_pressed(&Act::Back) { PRESS } else { 0x10151b });
+            self.txt_center(cv, Face::Regular, 56, back, "‹", TEXT);
         }
-        let b = Rect::new(M, area.bottom() + 100, W - 2 * M, 150);
-        let busy = self.camera_poll.is_some();
-        self.button(cv, b, if busy { "Capturing…" } else { "Hold to capture" }, if busy { Act::Nothing } else { Act::Capture }, ACCENT, ACCENT_P, 40);
-        if !busy {
-            if let Some(h) = self.hits.last_mut().filter(|_| self.layout_pass) {
-                h.hold_ms = 1000;
+        self.hit(back, Act::Back);
+        // status line
+        let y0 = area.bottom() + 10;
+        let line = Rect::new(0, y0, W, 60);
+        if !self.layout_pass && line.hits(&cv.clip) {
+            let st = if self.cam.status.is_empty() {
+                format!("{} camera · {}", self.cam.sensor, if self.cam.mode == CamMode::Photo { "tap the shutter for a photo" } else { "tap to start / stop recording" })
+            } else {
+                self.cam.status.clone()
+            };
+            let st = self.fonts.ellipsize(Face::Regular, 30, &st, W - 2 * M);
+            let w = self.fonts.measure(Face::Regular, 30, &st);
+            self.txt(cv, Face::Regular, 30, (W - w) / 2, y0 + 42, &st, DIM);
+        }
+        // photo / video
+        let my = y0 + 70;
+        for (i, (m, label)) in [(CamMode::Photo, "PHOTO"), (CamMode::Video, "VIDEO")].into_iter().enumerate() {
+            let r = Rect::new(W / 2 - 230 + i as i32 * 240, my, 220, 90);
+            let on = self.cam.mode == m;
+            if !self.layout_pass && r.hits(&cv.clip) {
+                cv.rrect(&r, 45, if self.is_pressed(&Act::CamMode(m)) { PRESS } else if on { SURF2 } else { BG });
+                self.txt_center(cv, Face::Bold, 32, r, label, if on { 0xf2cc60 } else { DIM });
+            }
+            self.hit(r, Act::CamMode(m));
+        }
+        // thumbnail · shutter · flip
+        let cy = my + 90 + 170;
+        let shutter = Rect::new(W / 2 - 115, cy - 115, 230, 230);
+        if !self.layout_pass && shutter.hits(&cv.clip) {
+            let p = self.is_pressed(&Act::CamShutter);
+            cv.circle(W / 2, cy, 115, if p { 0xc9d1d9 } else { 0xffffff });
+            cv.circle(W / 2, cy, 100, BG);
+            match (self.cam.mode, self.cam.recording.is_some()) {
+                (CamMode::Photo, _) => cv.circle(W / 2, cy, 88, if p { 0xc9d1d9 } else { 0xffffff }),
+                (CamMode::Video, false) => cv.circle(W / 2, cy, 80, if p { 0xa33 } else { BAD }),
+                (CamMode::Video, true) => cv.rrect(&Rect::new(W / 2 - 45, cy - 45, 90, 90), 16, BAD),
             }
         }
-        // sensor choice: two half-width toggles under the shutter button
-        let half = (W - 3 * M) / 2;
-        for (i, (s, label)) in [("rear", "Rear"), ("front", "Front")].into_iter().enumerate() {
-            let r = Rect::new(M + i as i32 * (half + M), b.bottom() + 30, half, 110);
-            let on = self.camera_sensor == s;
-            let act = if busy { Act::Nothing } else { Act::CamSensor(s) };
-            self.button(cv, r, label, act, if on { SURF2 } else { SURF }, PRESS, 34);
-            if on && !self.layout_pass && r.hits(&cv.clip) {
-                cv.rrect(&Rect::new(r.x + r.w / 2 - 40, r.bottom() - 14, 80, 6), 3, ACCENT);
+        self.hit(shutter, Act::CamShutter);
+        let thumb = Rect::new(M + 40, cy - 85, 170, 170);
+        if !self.layout_pass && thumb.hits(&cv.clip) {
+            cv.rrect(&thumb, 24, if self.is_pressed(&Act::CamThumb) { PRESS } else { SURF2 });
+            if let Some((px, w, h)) = &self.cam_thumb {
+                let r = Rect::new(thumb.x + (thumb.w - w) / 2, thumb.y + (thumb.h - h) / 2, *w, *h);
+                let (px, w, h) = (px.clone(), *w, *h);
+                cv.image(&r, &px, w, h);
+            } else if self.cam.shots > 0 {
+                self.txt_center(cv, Face::Regular, 28, thumb, "…", DIM);
             }
         }
+        self.hit(thumb, Act::CamThumb);
+        let flip = Rect::new(W - M - 40 - 170, cy - 85, 170, 170);
+        if !self.layout_pass && flip.hits(&cv.clip) {
+            cv.circle(flip.x + 85, cy, 85, if self.is_pressed(&Act::CamFlip) { PRESS } else { SURF2 });
+            self.txt_center(cv, Face::Bold, 30, flip, if self.cam.sensor == "rear" { "Front" } else { "Rear" }, TEXT);
+        }
+        self.hit(flip, Act::CamFlip);
     }
 
     fn draw_settings(&mut self, cv: &mut Canvas) {
-        let top = self.header(cv, "Settings", "");
-        let mut y = top + 20;
-        let dev = self.st.device.clone().unwrap_or(Value::Null);
-        let netw = &dev["network"];
-        let row = |a: &str| -> String { netw[a].as_str().unwrap_or("absent").to_string() };
-        let wifi = format!("wlan0 {}  ·  usb {}  ·  tailscale {}", row("wlan0"), row("ecm0"), row("tailscale0"));
-        // network card
-        let r = Rect::new(M, y, W - 2 * M, 190);
-        if !self.layout_pass && r.hits(&cv.clip) {
-            cv.rrect(&r, 28, SURF);
-            self.txt(cv, Face::Regular, 30, r.x + 28, r.y + 54, "Network", DIM);
-            self.txt(cv, Face::Bold, 40, r.x + 28, r.y + 112, &self.st.net.clone(), TEXT);
-            let w = self.fonts.ellipsize(Face::Regular, 28, &wifi, r.w - 56);
-            self.txt(cv, Face::Regular, 28, r.x + 28, r.y + 160, &w, DIM);
+        let sub = match (self.dev.available, self.dev.uplink.as_str()) {
+            (Some(false), _) => "device API (s22d) not reachable".to_string(),
+            (_, "") => "device API".to_string(),
+            (_, u) => format!("online via {u} · device API"),
+        };
+        let top = self.header(cv, "Settings", &sub);
+        let list = Rect::new(0, top, W, H - EDGE_B - top);
+        self.scroll_rect = Some(list);
+        let idx = Page::Settings.idx();
+        let off = self.scroll[idx] as i32;
+        let saved = cv.clip;
+        let hits0 = self.hits.len();
+        let clip = if self.layout_pass { Some(saved) } else { saved.intersect(&list) };
+        let Some(c) = clip else {
+            return;
+        };
+        cv.clip = c;
+        let mut y = top + 20 - off;
+        y = self.section_title(cv, y, "Connections");
+        for t in [Toggle::Wifi, Toggle::Bluetooth, Toggle::Mobile, Toggle::Calls] {
+            y = self.toggle_row(cv, y, t);
         }
-        y += 190 + M;
-        // brightness
-        let r = Rect::new(M, y, W - 2 * M, 270);
-        let sl = self.slider_rect();
-        debug_assert!(sl.y > y);
-        if !self.layout_pass && r.hits(&cv.clip) {
-            cv.rrect(&r, 28, SURF);
-            let (b, m) = self.brightness;
-            self.txt(cv, Face::Regular, 30, r.x + 28, r.y + 54, "Brightness", DIM);
-            self.txt(cv, Face::Bold, 40, r.x + 28, r.y + 108, &format!("{}%", (b * 100 + m / 2) / m), TEXT);
-            let track = Rect::new(sl.x, sl.y + sl.h / 2 - 12, sl.w, 24);
-            cv.rrect(&track, 12, SURF2);
-            let fw = (sl.w as f32 * b as f32 / m as f32) as i32;
-            cv.rrect(&Rect::new(sl.x, track.y, fw.max(24), 24), 12, ACCENT);
-            cv.circle(sl.x + fw, sl.y + sl.h / 2, if self.is_pressed(&Act::Bright) { 40 } else { 32 }, TEXT);
+        y = self.section_title(cv, y, "Sound and feedback");
+        y = self.slider_row(cv, y, 1);
+        y = self.toggle_row(cv, y, Toggle::Vibration);
+        y = self.section_title(cv, y, "Display and power");
+        y = self.slider_row(cv, y, 0);
+        y = self.toggle_row(cv, y, Toggle::Autosleep);
+        let bw = (W - 3 * M) / 2;
+        let fmt = |n: u64| if n == 0 { "never".to_string() } else { format!("{n} s") };
+        let (l1, l2) = (format!("Screen off: {}", fmt(self.idle_cfg.unlocked_s)), format!("Locked off: {}", fmt(self.idle_cfg.locked_s)));
+        self.button(cv, Rect::new(M, y, bw, 130), &l1, Act::IdleCycle(false), SURF2, PRESS, 34);
+        self.button(cv, Rect::new(2 * M + bw, y, bw, 130), &l2, Act::IdleCycle(true), SURF2, PRESS, 34);
+        y += 130 + M;
+        if let Some(e) = self.dev.error.get("Screen timeout").cloned() {
+            self.txt(cv, Face::Regular, 28, M, y - 4, &e, BAD);
+            y += 40;
         }
-        self.hit(Rect::new(sl.x - 30, sl.y, sl.w + 60, sl.h), Act::Bright);
-        y += 270 + M;
+        self.button(cv, Rect::new(M, y, bw, 130), "Screen off", Act::ScreenOff, SURF2, PRESS, 34);
+        self.button(cv, Rect::new(2 * M + bw, y, bw, 130), "Sway desktop", Act::Sway, SURF2, PRESS, 34);
+        y += 130 + M;
+        y = self.section_title(cv, y, "Agent");
         // model
         let r = Rect::new(M, y, W - 2 * M, 300);
         let cur = self.st.model.clone().unwrap_or_else(|| "?".into());
@@ -2427,29 +2826,23 @@ impl App {
             let c = self.fonts.ellipsize(Face::Bold, 40, &cur, r.w - 56);
             self.txt(cv, Face::Bold, 40, r.x + 28, r.y + 108, &c, TEXT);
         }
-        let bw = (r.w - 3 * 28) / 2;
-        let b1 = Rect::new(r.x + 28, r.y + 150, bw, 120);
-        let b2 = Rect::new(r.x + 56 + bw, r.y + 150, bw, 120);
-        self.button(cv, b1, "Luna", Act::Model("luna"), SURF2, PRESS, 36);
+        let bw2 = (r.w - 3 * 28) / 2;
+        self.button(cv, Rect::new(r.x + 28, r.y + 150, bw2, 120), "Luna", Act::Model("luna"), SURF2, PRESS, 36);
         self.hold_last(800);
-        self.button(cv, b2, "Local (Gemma E2B)", Act::Model("local"), SURF2, PRESS, 36);
+        self.button(cv, Rect::new(r.x + 56 + bw2, r.y + 150, bw2, 120), "Local (Gemma E2B)", Act::Model("local"), SURF2, PRESS, 36);
         self.hold_last(800);
         y += 300 + M;
-        // screen + desktop
-        let bw = (W - 3 * M) / 2;
-        self.button(cv, Rect::new(M, y, bw, 140), "Screen off", Act::ScreenOff, SURF2, PRESS, 36);
-        self.button(cv, Rect::new(2 * M + bw, y, bw, 140), "Sway desktop", Act::Sway, SURF2, PRESS, 36);
-        y += 140 + M;
-        let fmt = |n: u64| if n == 0 { "never".to_string() } else { format!("{n} s") };
-        let (l1, l2) = (format!("Idle off: {}", fmt(self.idle_cfg.unlocked_s)), format!("Lock off: {}", fmt(self.idle_cfg.locked_s)));
-        self.button(cv, Rect::new(M, y, bw, 140), &l1, Act::IdleCycle(false), SURF2, PRESS, 36);
-        self.button(cv, Rect::new(2 * M + bw, y, bw, 140), &l2, Act::IdleCycle(true), SURF2, PRESS, 36);
-        y += 140 + M;
-        self.button(cv, Rect::new(M, y, W - 2 * M, 140), "Classic shell (Quickshell) — hold", Act::Classic, 0x3a2a14, 0x55401e, 36);
+        y = self.section_title(cv, y, "Shell");
+        let o = self.cam.orient.get(self.cam.sensor);
+        let cl = format!("Camera {} preview {}°{} — hold to rotate", self.cam.sensor, o.rotate, if o.mirror { " mirrored" } else { "" });
+        self.button(cv, Rect::new(M, y, W - 2 * M, 130), &cl, Act::CamRotate, SURF2, PRESS, 32);
+        self.hold_last(800);
+        y += 130 + M;
+        self.button(cv, Rect::new(M, y, W - 2 * M, 130), "Classic shell (Quickshell) — hold", Act::Classic, 0x3a2a14, 0x55401e, 34);
         self.hold_last(1200);
-        y += 140 + M;
+        y += 130 + M;
         y = self.draw_buttons_section(cv, y);
-        if !self.layout_pass && Rect::new(0, y, W, 400).hits(&cv.clip) {
+        if !self.layout_pass && Rect::new(0, y, W, 200).hits(&cv.clip) {
             let note = self.note.clone();
             if !note.is_empty() {
                 self.txt(cv, Face::Bold, 32, M, y + 40, &note, 0xf2cc60);
@@ -2464,6 +2857,100 @@ impl App {
                 self.txt(cv, Face::Regular, 28, M, y + 80 + k as i32 * 36, l, DIM);
             }
         }
+        y += 200;
+        self.content_h[idx] = y + off - top;
+        let maxs = (self.content_h[idx] - list.h).max(0) as f32;
+        self.scroll[idx] = self.scroll[idx].clamp(0.0, maxs);
+        cv.clip = saved;
+        if self.layout_pass {
+            // rows scrolled out of the list are not tappable; the visible part of a row is
+            let mut kept = Vec::with_capacity(self.hits.len());
+            for (k, h) in self.hits.drain(..).enumerate() {
+                if k < hits0 {
+                    kept.push(h);
+                } else if let Some(v) = h.r.intersect(&list) {
+                    // sliders keep their full rect (the value maps over it)
+                    kept.push(Hit { r: if matches!(h.act, Act::Slide(_)) { h.r } else { v }, ..h });
+                }
+            }
+            self.hits = kept;
+        }
+    }
+
+    fn section_title(&mut self, cv: &mut Canvas, y: i32, t: &str) -> i32 {
+        if !self.layout_pass && Rect::new(0, y, W, 70).hits(&cv.clip) {
+            self.txt(cv, Face::Bold, 30, M + 8, y + 46, t, 0x9ecbff);
+        }
+        y + 66
+    }
+
+    /// One switch row; the whole row toggles. The detail line shows s22d's read-back or the error.
+    fn toggle_row(&mut self, cv: &mut Canvas, y: i32, t: Toggle) -> i32 {
+        let r = Rect::new(M, y, W - 2 * M, 128);
+        let act = Act::DevToggle(t);
+        if !self.layout_pass && r.hits(&cv.clip) {
+            cv.rrect(&r, 28, if self.is_pressed(&act) { PRESS } else { SURF });
+            self.txt(cv, Face::Bold, 38, r.x + 28, r.y + 56, t.label(), TEXT);
+            let busy = self.dev.busy(t);
+            let on = self.dev.on.get(&t).copied();
+            let (d, col) = match self.dev.error.get(t.label()) {
+                Some(e) => (e.clone(), BAD),
+                None if busy => ("changing…".to_string(), 0xf2cc60),
+                None => (self.dev.detail.get(&t).cloned().unwrap_or_else(|| match on {
+                    Some(true) => "on".into(),
+                    Some(false) => "off".into(),
+                    None => "…".into(),
+                }), DIM),
+            };
+            let d = self.fonts.ellipsize(Face::Regular, 28, &d, r.w - 230);
+            self.txt(cv, Face::Regular, 28, r.x + 28, r.y + 100, &d, col);
+            let sw = Rect::new(r.right() - 28 - 124, r.y + 32, 124, 64);
+            let fill = match on {
+                Some(true) => if busy { ACCENT_P } else { ACCENT },
+                _ => 0x34404f,
+            };
+            cv.rrect(&sw, 32, fill);
+            if on.is_some() {
+                let kx = if on == Some(true) { sw.right() - 32 } else { sw.x + 32 };
+                cv.circle(kx, sw.y + 32, 26, if busy { DIM } else { TEXT });
+            }
+        }
+        self.hit(r, act);
+        y + 128 + 18
+    }
+
+    /// Brightness (id 0) or volume (id 1): drag anywhere on the track row.
+    fn slider_row(&mut self, cv: &mut Canvas, y: i32, id: u8) -> i32 {
+        let r = Rect::new(M, y, W - 2 * M, 200);
+        let (label, frac, val, err) = if id == 0 {
+            let b = self.dev.brightness;
+            ("Brightness", b.map(|b| b as f32 / 100.0), b.map(|b| format!("{b}%")), self.dev.error.get("Brightness").cloned())
+        } else {
+            let v = self.dev.volume;
+            let lv = crate::buttons::LEVELS as f32;
+            ("Volume", v.map(|v| v as f32 / lv), v.map(|v| if self.dev.muted || v == 0 { "muted".to_string() } else { format!("{v} of {}", lv as i32) }), self.dev.error.get("Volume").cloned())
+        };
+        let track_hit = Rect::new(r.x, r.y + 90, if id == 1 { r.w - 220 } else { r.w }, 110);
+        if !self.layout_pass && r.hits(&cv.clip) {
+            cv.rrect(&r, 28, SURF);
+            self.txt(cv, Face::Regular, 30, r.x + 28, r.y + 50, label, DIM);
+            let v = err.unwrap_or_else(|| val.unwrap_or_else(|| "…".into()));
+            self.txt(cv, Face::Bold, 36, r.x + 200, r.y + 52, &v, TEXT);
+            let tr = Rect::new(track_hit.x + 40, track_hit.y + track_hit.h / 2 - 12, track_hit.w - 80, 24);
+            cv.rrect(&tr, 12, SURF2);
+            if let Some(f) = frac {
+                let fw = (tr.w as f32 * f.clamp(0.0, 1.0)) as i32;
+                cv.rrect(&Rect::new(tr.x, tr.y, fw.max(24), 24), 12, ACCENT);
+                cv.circle(tr.x + fw, tr.y + 12, if self.is_pressed(&Act::Slide(id)) { 40 } else { 32 }, TEXT);
+            }
+        }
+        self.hit(track_hit, Act::Slide(id));
+        if id == 1 {
+            let m = Rect::new(r.right() - 200, r.y + 100, 172, 84);
+            let muted = self.dev.muted || self.dev.volume == Some(0);
+            self.button(cv, m, if muted { "Unmute" } else { "Mute" }, Act::Mute, if muted { ACCENT_P } else { SURF2 }, PRESS, 32);
+        }
+        y + 200 + 18
     }
 
     /// Settings → Buttons: every physical-button binding (buttons::BINDINGS) and
@@ -2507,7 +2994,7 @@ impl App {
             ("Home", "cards and tiles", Act::Open(Page::Home)),
             ("Agent", "chat with OpenUnum", Act::Open(Page::Chat)),
             ("Phone", "modem, SMS, calls (read-only)", Act::Open(Page::Phone)),
-            ("Camera", "rear still", Act::Open(Page::Camera)),
+            ("Camera", "live viewfinder, photo, video", Act::Open(Page::Camera)),
             ("Files", "browse /root", Act::Open(Page::Files)),
             ("Settings", "brightness, network, model", Act::Open(Page::Settings)),
             ("Terminal", "foot under sway", Act::Terminal),
@@ -2657,7 +3144,27 @@ impl App {
                 x += w;
             }
         }
+        // the pressed key pops up above the finger (always on), like a phone keyboard
+        if let Some(Hit { act: Act::Key(ri, ci), r, .. }) = self.pressed.clone() {
+            let k = rows.get(ri).and_then(|row| row.get(ci)).copied().unwrap_or("");
+            if !self.layout_pass && !kbd::is_special(k) && !k.is_empty() {
+                let pr = key_popup_rect(r);
+                if pr.hits(&cv.clip) {
+                    cv.rrect(&Rect::new(pr.x - 2, pr.y - 2, pr.w + 4, pr.h + 4), 22, 0x6b7a90);
+                    cv.rrect(&pr, 20, 0x3a4658);
+                    let lbl = self.kb.label(k);
+                    self.txt_center(cv, Face::Regular, 72, pr, &lbl, TEXT);
+                }
+            }
+        }
     }
+}
+
+/// The popup bubble above a keyboard key cell (same centre, wider, above the row).
+pub fn key_popup_rect(cell: Rect) -> Rect {
+    let w = cell.w.max(96) + 24;
+    let x = (cell.x + cell.w / 2 - w / 2).clamp(0, W - w);
+    Rect::new(x, cell.y - 150, w, 150)
 }
 
 /// A microphone icon centred at (cx, cy).
@@ -2683,22 +3190,6 @@ pub fn human(n: u64) -> String {
 }
 
 /// Decode a PNG and scale it (nearest) to fit max_w x max_h. XRGB out.
-/// One line for the Camera page from touchd's camera.json.
-pub fn camera_summary(v: &Value) -> String {
-    let s = v["sensor"].as_str().unwrap_or("rear");
-    let ms = v["exposure_us"].as_f64().map(|e| format!("{:.0} ms", e / 1000.0)).unwrap_or_default();
-    let g = v["gain"].as_f64().map(|g| format!("{g:.1}x")).unwrap_or_default();
-    if v["develop_ok"] == true {
-        let n = v["stacked"].as_u64().unwrap_or(1);
-        let f = v["jpeg"].as_str().and_then(|p| p.rsplit('/').next()).unwrap_or("");
-        format!("{s} · {ms} · {g} · {n} frames stacked · {f}")
-    } else if v["develop_ok"] == false {
-        format!("{s} · raw preview only ({})", v["develop_error"].as_str().unwrap_or("develop failed"))
-    } else {
-        "captured".into()
-    }
-}
-
 pub fn load_png(path: &str, max_w: i32, max_h: i32) -> Option<(Vec<u32>, i32, i32)> {
     let f = std::fs::File::open(path).ok()?;
     let mut dec = png::Decoder::new(f);
@@ -2745,7 +3236,75 @@ mod tests {
     fn app(dir: &str) -> App {
         let mut a = App::new(None, dir, "");
         a.active = true;
+        a.haptics = false;
         a
+    }
+
+    #[test]
+    fn haptic_ticks_on_keys_and_buttons_only_when_enabled() {
+        use crate::buttons::Action as B;
+        let mut a = app("/nonexistent");
+        a.goto(Page::Chat);
+        a.layout();
+        let k = a.hits.iter().find(|h| matches!(h.act, Act::Key(1, 3))).cloned().expect("key");
+        a.touch(crate::touch::Touch::Down(k.r.x + 20, k.r.y + 20, 1));
+        assert!(a.effects.is_empty(), "vibration off: no datagram");
+        // the popup shows while the key is held, and its area is damaged
+        assert!(a.damage.iter().any(|d| d.y < k.r.y - 100));
+        a.touch(crate::touch::Touch::Up(k.r.x + 20, k.r.y + 20, 2));
+        assert_eq!(a.input, "f");
+        a.haptics = true;
+        a.touch(crate::touch::Touch::Down(k.r.x + 20, k.r.y + 20, 3));
+        assert_eq!(a.effects, vec![Effect::Haptic("tick")], "tick on key-down");
+        a.touch(crate::touch::Touch::Up(k.r.x + 20, k.r.y + 20, 4));
+        a.effects.clear();
+        a.button_actions(&[B::Step(1)], 5);
+        assert!(a.effects.contains(&Effect::Haptic("tick")));
+        a.effects.clear();
+        a.button_actions(&[B::Wake], 6);
+        assert!(!a.effects.contains(&Effect::Haptic("tick")), "a wake alone does not buzz");
+        let p = key_popup_rect(Rect::new(0, 1800, 100, 148));
+        assert!(p.x >= 0 && p.bottom() == 1800);
+    }
+
+    #[test]
+    fn camera_page_starts_and_stops_the_stream() {
+        let mut a = app("/nonexistent");
+        a.goto(Page::Camera);
+        a.sync_camera();
+        assert!(matches!(&a.cam_cmds[..], [CamCmd::Inhibit(true), CamCmd::Spawn { .. }]));
+        a.cam_cmds.clear();
+        let g = a.cam.gen;
+        a.cam.spawned(g, 77);
+        a.camera_event(g, json!({"event": "first_frame", "ms": 180}));
+        assert!(a.cam.live());
+        assert_eq!(a.idle_inhibitor(), Some("camera"));
+        // the shutter is on the page and works
+        a.layout();
+        let sh = a.hits.iter().find(|h| h.act == Act::CamShutter).expect("shutter").r;
+        assert!(sh.bottom() < H - EDGE_B);
+        a.activate(Act::CamShutter, 10);
+        assert_eq!(a.cam_cmds, vec![CamCmd::Signal { pid: 77, sig: libc::SIGUSR1 }]);
+        assert!(a.cam_flash_until.is_some());
+        a.cam_cmds.clear();
+        // locking (Power) stops it; so does leaving the page
+        a.locked = true;
+        a.sync_camera();
+        assert_eq!(a.cam_cmds[0], CamCmd::Signal { pid: 77, sig: libc::SIGTERM });
+        a.cam_cmds.clear();
+        a.locked = false;
+        a.sync_camera();
+        assert!(a.cam_cmds.is_empty(), "restart waits for the exit");
+        a.camera_event(g, json!({"event": "exit", "code": 0}));
+        assert!(matches!(&a.cam_cmds[..], [CamCmd::Inhibit(true), CamCmd::Spawn { .. }]), "{:?}", a.cam_cmds);
+        a.cam_cmds.clear();
+        a.goto(Page::Home);
+        a.sync_camera();
+        assert!(!a.cam.want);
+        // thumbnail: the shutter time becomes the latency mark
+        a.cam.shutter_t = Some((Instant::now(), 1234));
+        a.camera_thumb(vec![0; 4], 2, 2);
+        assert_eq!(a.mark, Some((1234, "shutter")));
     }
 
     #[test]
@@ -2836,16 +3395,6 @@ mod tests {
         assert_eq!(net::radio_badge(&v, 1000.0), None);
         assert_eq!(net::radio_badge(&json!({"ok": false}), 1000.0), None);
         assert_eq!(net::radio_badge(&Value::Null, 1000.0), None);
-    }
-
-    #[test]
-    fn camera_summary_lines() {
-        let v = json!({"rc": 0, "sensor": "front", "exposure_us": 30000, "gain": 5.5, "develop_ok": true, "stacked": 4,
-                       "jpeg": "/mnt/omarchy-trial/root/.openunum/assets/generated/cam-1-front.jpg"});
-        assert_eq!(camera_summary(&v), "front · 30 ms · 5.5x · 4 frames stacked · cam-1-front.jpg");
-        let v = json!({"rc": 0, "sensor": "rear", "exposure_us": 20000, "gain": 8.0, "develop_ok": false, "develop_error": "no s22-develop"});
-        assert!(camera_summary(&v).contains("raw preview only (no s22-develop)"));
-        assert_eq!(camera_summary(&json!({"rc": 0})), "captured");
     }
 
     #[test]
@@ -2941,6 +3490,9 @@ mod tests {
         let mut a = app("/nonexistent");
         a.goto(Page::Settings);
         a.layout();
+        assert!(a.hits.iter().all(|h| h.act != Act::ButtonsToggle), "below the fold until scrolled");
+        a.scroll_by(100_000.0);
+        a.layout();
         let tog = a.hits.iter().find(|h| h.act == Act::ButtonsToggle).expect("toggle").clone();
         assert_eq!(tog.hold_ms, 800);
         assert!(tog.r.bottom() < H - EDGE_B, "fits above the bottom edge");
@@ -3010,6 +3562,79 @@ mod tests {
         a.last_touch = old;
         call(&mut a, "display", &["on"]);
         assert!(a.last_touch > old);
+    }
+
+    #[test]
+    fn settings_rows_follow_the_device_api() {
+        let mut a = app("/nonexistent");
+        a.goto(Page::Settings);
+        assert_eq!(a.dev.pending, vec!["device.status", "volume.get", "screen_timeout.get"], "refreshed on open");
+        a.dev_answer("device.status", 200, json!({"ok": true, "state": {"bluetooth": false, "vibration": true, "autosleep": true, "calls_enabled": true,
+            "volume": 4, "brightness_pct": 30, "network": {"uplink": "mobile", "wifi": {"enabled": true, "on": true, "connected": false}, "mobile_data": {"on": true, "state": "up"}}}}));
+        a.dev_answer("volume.get", 200, json!({"ok": true, "state": {"level": 4, "muted": false}}));
+        a.dev_answer("screen_timeout.get", 200, json!({"ok": true, "state": {"unlocked_s": 120, "locked_s": 15}}));
+        assert_eq!(a.idle_cfg.unlocked_s, 120, "the shell's timeout follows s22d's read-back");
+        a.layout();
+        let ids: Vec<Act> = a.hits.iter().map(|h| h.act.clone()).collect();
+        for t in [Toggle::Wifi, Toggle::Bluetooth, Toggle::Mobile, Toggle::Calls] {
+            assert!(ids.contains(&Act::DevToggle(t)), "{t:?} visible without scrolling");
+        }
+        // a toggle asks for the opposite of the read-back state, then refreshes after the answer
+        a.activate(Act::DevToggle(Toggle::Bluetooth), 0);
+        assert!(a.dev.busy(Toggle::Bluetooth));
+        a.activate(Act::DevToggle(Toggle::Bluetooth), 0);
+        assert_eq!(a.dev.pending.iter().filter(|p| *p == "bluetooth.set").count(), 1, "no second request while one runs");
+        a.dev.pending.clear();
+        a.dev_answer("bluetooth.set", 200, json!({"ok": true, "state": {"on": true}}));
+        assert_eq!(a.dev.on[&Toggle::Bluetooth], true);
+        assert_eq!(a.dev.pending, vec!["device.status"], "read everything back after a change");
+        // vibration off stops the shell's own ticks; volume answers move the shell's level
+        a.dev_answer("vibration.set", 200, json!({"ok": true, "state": {"enabled": false}}));
+        assert!(!a.haptics);
+        a.dev_answer("volume.set", 200, json!({"ok": true, "state": {"level": 7, "muted": false}}));
+        assert_eq!(a.level, 7);
+        // the volume slider: drag sets locally, a late answer does not pull it back while held
+        a.scroll_by(-100_000.0);
+        a.layout();
+        let sl = a.hits.iter().find(|h| h.act == Act::Slide(1)).expect("volume slider").clone();
+        a.touch(crate::touch::Touch::Down(sl.r.x + 40, sl.r.y + 50, 0));
+        assert_eq!(a.dev.volume, Some(0));
+        a.touch(crate::touch::Touch::Move(sl.r.right() - 40, sl.r.y + 50, 300_000));
+        assert_eq!(a.dev.volume, Some(10));
+        a.dev_answer("volume.set", 200, json!({"ok": true, "state": {"level": 3}}));
+        assert_eq!(a.dev.volume, Some(10), "finger wins while dragging");
+        a.touch(crate::touch::Touch::Up(sl.r.right() - 40, sl.r.y + 50, 400_000));
+        assert!(a.dev.pending.contains(&"volume.set".to_string()), "committed on release");
+    }
+
+    #[test]
+    fn home_agent_card_hold_release_queue_and_stop() {
+        let mut a = app("/nonexistent");
+        a.layout();
+        let card = a.hits.iter().find(|h| h.act == Act::AgentHold).expect("agent card").r;
+        assert!(card.h >= 600 && card.y > 300 && card.bottom() < H / 2 + 400, "big, in the middle");
+        let (x, y) = (card.x + card.w / 2, card.y + card.h / 2);
+        a.touch(crate::touch::Touch::Down(x, y, 0));
+        assert_eq!(a.card_cmds, vec![CardCmd::Listen { gen: 1 }], "listening starts on touch-down");
+        assert_eq!(a.idle_inhibitor(), Some("voice turn"));
+        a.touch(crate::touch::Touch::Move(x + 80, y + 60, 400_000));
+        assert!(a.card.held, "moving the finger does not cancel");
+        a.touch(crate::touch::Touch::Up(x + 80, y + 60, 2_000_000));
+        assert_eq!(a.card_cmds.last(), Some(&CardCmd::Release));
+        a.card_cmds.clear();
+        a.card_event(false, 1, json!({"transcript": "what is the battery"}));
+        assert!(matches!(&a.card_cmds[..], [CardCmd::Turn { gen: 2, .. }]));
+        a.card.spawned(true, 2, 4242);
+        a.card_cmds.clear();
+        // STOP shows while busy and cancels everything
+        a.layout();
+        let stop = a.hits.iter().find(|h| h.act == Act::AgentStop).expect("stop").r;
+        assert!(card.contains(stop.x, stop.y));
+        a.touch(crate::touch::Touch::Down(stop.x + 10, stop.y + 10, 3_000_000));
+        assert!(a.card_cmds.is_empty(), "STOP is not a hold-to-talk");
+        a.touch(crate::touch::Touch::Up(stop.x + 10, stop.y + 10, 3_050_000));
+        assert_eq!(a.card_cmds, vec![CardCmd::Kill { pid: 4242 }, CardCmd::CancelApi]);
+        assert!(!a.card.active());
     }
 
     #[test]

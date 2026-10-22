@@ -48,6 +48,14 @@ pub enum Msg {
     Ctl(crate::ctl::Call, Sender<String>),
     Assistant(Value),
     Radio(Value),
+    /// s22-campreview event line (or exit / develop result) for camera process generation n.
+    Camera(u64, Value),
+    /// The photo thumbnail, decoded off the UI thread.
+    CamThumb(Vec<u32>, i32, i32),
+    /// A device-API answer: capability id, HTTP status (0 = s22d not reachable), body.
+    DeviceCap(&'static str, u16, Value),
+    /// s22-assistant card mode line: (turn?, generation, event).
+    Card(bool, u64, Value),
 }
 
 #[derive(Clone)]
