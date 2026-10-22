@@ -3247,3 +3247,22 @@ Details: `evidence/npu-custom-20261022/README.md`. Tools: `tools/hardware/npu/nn
   The kernel sweep shows K≤15 correct, K=17 silently wrong, K=32 compile fail. The model's 48/32-wide
   kernels exceed the limit, so ASR on the NPU is **not working**.
 - No DSP sections. The DSP is "not allowed" in GraphGen's config. No crash or watchdog reset; the NPU recovered after every timeout.
+
+## 2026-10-22 - Phone OpenUnum updated to rig main 512541d0
+
+- Phone tree `/mnt/omarchy-trial/opt/openunum` was a clean git checkout: upstream a33f329 + one phone commit
+  (4723a12, `tools/lightpanda-ondemand.mjs`). Phone overlay plugins (s22-device, s22-phone, s22-ui, tts-s22) live in
+  `~/.openunum/plugins` (user data), so they were untouched by the swap.
+- Procedure: `git archive 512541d0` + a git bundle (a33f329..main) staged under `/srv/s22/stage-oun`, sha256 verified
+  after transfer over ssh. Extracted to `openunum-new`, old `.git` copied in, bundle fetched, `git reset 512541d0`,
+  lightpanda-ondemand.mjs re-committed on top (new HEAD 9ce20bd). package.json prod deps unchanged except patch bumps
+  (dotenv, marked, sanitize-html), so the old `node_modules` was moved across with no new packages.
+- Backup of `~/.openunum` (60 MB): `/srv/s22/stage-oun/dotopenunum-backup-20261022.tgz`. Old tree kept as
+  `/mnt/omarchy-trial/opt/openunum-prev-20261022` (rollback: stop, swap dirs back incl. node_modules, start).
+- Restart with `s22-openunum stop` / `start` (up after 3 s). Verified: runtime revision 9ce20bd (on 512541d);
+  only failing health check `systemd_units_valid` (expected); plugins running: s22-device 0.2.0, s22-phone 0.1.0,
+  s22-ui 0.1.0, tts-s22 0.2.0; `GET /api/tts/fillers` and `POST /api/tts/enhance` exist; `s22-assistant --text hello`
+  (in /srv/s22/hardware/bin) got the reply "Hello! How can I help?" in session voice; POST /api/chat with the
+  `/api/chat/stream?sessionId=` SSE open (the shell's mechanism) streamed turn_stage events and returned a reply.
+- Note: `/api/system/version` reports current "unknown" (no release marker on a git-tree install) and
+  updateAvailable true; ignore, do not use the in-app updater on the phone.
