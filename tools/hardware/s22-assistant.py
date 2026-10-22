@@ -21,6 +21,15 @@ interaction is appended to /srv/s22/buttons/assistant.jsonl.
   s22-assistant --wav FILE      skip recording: transcribe FILE (test mode)
   s22-assistant --text TEXT     skip recording and ASR (test mode)
   s22-assistant --no-speak ...  print instead of speaking (test mode)
+
+Agent card modes (unum-fastshell's Home card; JSON event lines on stdout):
+  s22-assistant --card listen --stop-file F   record until F appears (hold) -> ASR ->
+                                              {"transcript": ...}; never waits for a running answer
+                                              (the cue is a haptic buzz plus the earcon only if nothing plays)
+  s22-assistant --card turn --text T          one agent turn with fillers, spoken thinking and the
+                                              -16 LUFS voice; {"state": "thinking" | "tool" (name) |
+                                              "reply" (text) | "speaking" | "done" | "error"}.
+                                              Turns queue on the same lock as the button hook.
 """
 from __future__ import annotations
 
@@ -51,6 +60,11 @@ BASE = Path('/srv/s22/buttons')
 LOCK = Path('/run/s22-assistant.lock')
 REC_STOP = Path('/run/s22-assistant.rec-stop')
 REC_READY = Path('/run/s22-assistant.rec-ready')
+CARD_REC_STOP = Path('/run/s22-assistant.card-rec-stop')
+CARD_REC_READY = Path('/run/s22-assistant.card-rec-ready')
+CARD_LISTEN_LOCK = Path('/run/s22-assistant.card-listen.lock')
+SAY_LOCK = Path('/run/s22-say.lock')
+HAPTIC_SOCK = '/run/s22-haptic.sock'
 API = 'http://127.0.0.1:18880'
 
 DEFAULTS = {
@@ -239,22 +253,37 @@ class Assistant:
             p.wait(timeout=180)
         return p
 
+    card = False          # Agent card mode: own stop/ready files, cue never waits for playback
+
+    def cue(self) -> None:
+        """The mic is open. Card mode: a haptic buzz, and the earcon only if nothing is playing
+        (a running answer must not delay the next recording)."""
+        if not self.card:
+            self.say(wav=f'{ASR_DIR}/listen.wav')
+            return
+        haptic('buzz')
+        if not say_busy():
+            self.say(wav=f'{ASR_DIR}/listen.wav', wait=False)
+
     def record(self, out_chroot: str) -> float:
         """Record into the chroot path; returns the recorded seconds."""
-        for f in (REC_STOP, REC_READY):
+        rec_stop, rec_ready = (CARD_REC_STOP, CARD_REC_READY) if self.card else (REC_STOP, REC_READY)
+        for f in (rec_stop, rec_ready):
             f.unlink(missing_ok=True)
         ptt_stop = os.environ.get('S22_PTT_STOP')
         hold = os.environ.get('S22_PTT') == 'hold' and ptt_stop
         max_s = self.cfg['max_s'] if hold else self.cfg['fixed_s']
-        argv = [str(BIN / 's22-rec'), '--stop-file', str(REC_STOP),
+        argv = [str(BIN / 's22-rec'), '--stop-file', str(rec_stop),
                 str(int(max_s + 0.999)), str(CHROOT) + out_chroot]
-        proc = subprocess.Popen(argv, env={**os.environ, 'S22_REC_READY': str(REC_READY)},
+        proc = subprocess.Popen(argv, env={**os.environ, 'S22_REC_READY': str(rec_ready)},
                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL)
         t0 = time.time()
-        while not REC_READY.exists() and proc.poll() is None and time.time() - t0 < 5:
+        while not rec_ready.exists() and proc.poll() is None and time.time() - t0 < 5:
             time.sleep(0.02)
-        self.say(wav=f'{ASR_DIR}/listen.wav')           # mic is open: cue
+        self.cue()                                       # mic is open: cue
+        if self.card:
+            emit(state='listening')
         cue = time.time()
         self.rec['cue_ms'] = int((cue - t0) * 1000)
         deadline = None
@@ -271,11 +300,11 @@ class Assistant:
                     rel = cue                             # fixed window
                 deadline = stop_deadline(cue, rel, now, self.cfg)
             if deadline is not None and now >= deadline:
-                REC_STOP.touch()
+                rec_stop.touch()
                 break
             time.sleep(0.03)
         proc.wait(timeout=30)
-        REC_STOP.unlink(missing_ok=True)
+        rec_stop.unlink(missing_ok=True)
         if proc.returncode != 0:
             raise RuntimeError(f's22-rec failed rc={proc.returncode}')
         return round(time.time() - cue, 2)
@@ -575,12 +604,156 @@ class Assistant:
             self.log()
 
 
+def emit(**kw) -> None:
+    """One JSON event line for the shell's Agent card."""
+    print(json.dumps(kw, ensure_ascii=False), flush=True)
+
+
+def haptic(what: str) -> None:
+    try:
+        import socket
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        s.setblocking(False)
+        s.sendto(what.encode(), HAPTIC_SOCK)
+        s.close()
+    except OSError:
+        pass
+
+
+def say_busy() -> bool:
+    """True while s22-say holds its lock (something is speaking)."""
+    try:
+        with open(SAY_LOCK, 'a') as f:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(f, fcntl.LOCK_UN)
+        return False
+    except BlockingIOError:
+        return True
+    except OSError:
+        return False
+
+
+def tool_events(session: str, stop: threading.Event, out=None, api: str = API) -> None:
+    """Follow the session's /api/chat/stream and emit tool start/finish as card states."""
+    out = out or emit
+    try:
+        with urllib.request.urlopen(f'{api}/api/chat/stream?sessionId={session}', timeout=30) as r:
+            event = ''
+            while not stop.is_set():
+                line = r.readline()
+                if not line:
+                    return
+                line = line.decode('utf-8', 'replace').strip()
+                if line.startswith('event:'):
+                    event = line[6:].strip()
+                elif line.startswith('data:') and event.startswith('tool_call_'):
+                    try:
+                        d = json.loads(line[5:])
+                    except ValueError:
+                        continue
+                    if event == 'tool_call_started':
+                        out(state='tool', name=str(d.get('tool') or '?'))
+                    else:
+                        out(state='thinking')
+    except (OSError, ValueError, urllib.error.URLError):
+        return
+
+
+def card_listen(cfg: dict, stop_file: str) -> int:
+    """Record while the card is held (stop file = release), transcribe, print the transcript."""
+    lock = open(CARD_LISTEN_LOCK, 'w')
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        emit(state='error', error='already listening')
+        return 1
+    os.environ['S22_PTT'] = 'hold'
+    os.environ['S22_PTT_STOP'] = stop_file
+    a = Assistant(cfg, speak=True, base=BASE)
+    a.card = True
+    a.rec['mode'] = 'card-listen'
+    try:
+        work = CHROOT / WORK.lstrip('/')
+        work.mkdir(parents=True, exist_ok=True)
+        wav = f'{WORK}/card-{os.getpid()}.wav'
+        a.rec['record_s'] = a.record(wav)
+        haptic('tick')
+        emit(state='transcribing', record_s=a.rec['record_s'])
+        text = a.transcribe(wav)
+        try:
+            (CHROOT / wav.lstrip('/')).unlink()
+        except OSError:
+            pass
+        a.rec['transcript'] = text
+        a.rec['result'] = 'ok' if re.search(r'\w', text) else 'empty'
+        emit(transcript=text, record_s=a.rec['record_s'], asr_ms=a.rec.get('asr_ms'))
+        return 0
+    except Exception as error:
+        a.rec.update(result='error', error=f'{type(error).__name__}: {error}'[:500])
+        emit(state='error', error=a.rec['error'])
+        return 1
+    finally:
+        a.log()
+
+
+def card_turn(cfg: dict, text: str) -> int:
+    """One agent turn for the card: thinking / tool / reply / speaking / done on stdout."""
+    lock = open(LOCK, 'w')
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        emit(state='waiting')                 # a button push-to-talk turn is running: queue behind it
+        fcntl.flock(lock, fcntl.LOCK_EX)
+    a = Assistant(cfg, speak=True, base=BASE)
+    a.card = True
+    a.rec['mode'] = 'card-turn'
+    a.rec['transcript'] = text
+    t0 = time.time()
+    stop = threading.Event()
+    emit(state='thinking')
+    threading.Thread(target=tool_events, args=(cfg['session'], stop), daemon=True).start()
+    try:
+        a.ensure_agent()
+        if not a.agent_ready.get('ok'):
+            raise ConnectionError('OpenUnum not reachable')
+        reply = a.ask_with_fillers(text)
+        a.rec['agent_ms'] = int((time.time() - t0) * 1000)
+        spoken, cut = a.speakable(reply)
+        if not spoken:
+            spoken = 'The assistant returned an empty answer.'
+        a.rec.update(reply=reply[:2000], spoken=spoken[:2000], truncated=cut, result='ok')
+        stop.set()
+        emit(state='reply', text=reply[:4000])
+        emit(state='speaking')
+        a.speak_answer(spoken)
+        emit(state='done', ms=int((time.time() - t0) * 1000))
+        return 0
+    except Exception as error:
+        a.rec.update(result='error', error=f'{type(error).__name__}: {error}'[:500])
+        emit(state='error', error=a.rec['error'])
+        reach = isinstance(error, (ConnectionError, urllib.error.URLError, TimeoutError, OSError))
+        a.say("Sorry, I couldn't reach the assistant." if reach else 'Sorry, something went wrong with the assistant.')
+        return 1
+    finally:
+        stop.set()
+        a.rec['total_ms'] = int((time.time() - t0) * 1000)
+        a.log()
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--wav', help='WAV path inside the chroot to transcribe instead of recording')
     ap.add_argument('--text', help='transcript to send instead of recording')
     ap.add_argument('--no-speak', action='store_true')
+    ap.add_argument('--card', choices=['listen', 'turn'], help="unum-fastshell's Agent card (JSON lines on stdout)")
+    ap.add_argument('--stop-file', help='card listen: the release note (JSON {"t": unix seconds})')
     args = ap.parse_args(argv)
+    if args.card == 'listen':
+        return card_listen(load_config(), args.stop_file or str(CARD_REC_STOP) + '.release')
+    if args.card == 'turn':
+        if not args.text:
+            ap.error('--card turn needs --text')
+        return card_turn(load_config(), args.text)
     lock = open(LOCK, 'w')
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)

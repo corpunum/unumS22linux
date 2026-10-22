@@ -191,5 +191,94 @@ class RunTests(unittest.TestCase):
             self.assertEqual(self.a.ask('hi'), 'From history.')
 
 
+
+class CardTests(unittest.TestCase):
+    """The Agent card modes (--card listen / --card turn): JSON event lines, no waiting on playback."""
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory(); self.base = Path(self.td.name)
+        self.patches = [mock.patch.object(MOD, k, v) for k, v in {
+            'CHROOT': self.base / 'chroot', 'BASE': self.base, 'LOCK': self.base / 'a.lock',
+            'CARD_LISTEN_LOCK': self.base / 'l.lock', 'SAY_LOCK': self.base / 'say.lock',
+            'CARD_REC_STOP': self.base / 'stop', 'CARD_REC_READY': self.base / 'ready'}.items()]
+        for p in self.patches:
+            p.start()
+        self.events = []
+        self.emit = mock.patch.object(MOD, 'emit', lambda **kw: self.events.append(kw)); self.emit.start()
+        self.hap = mock.patch.object(MOD, 'haptic', lambda w: self.events.append({'haptic': w})); self.hap.start()
+
+    def tearDown(self):
+        for p in self.patches + [self.emit, self.hap]:
+            p.stop()
+        self.td.cleanup()
+
+    def test_card_cue_never_waits_for_a_running_answer(self):
+        a = MOD.Assistant(dict(CFG), speak=True, base=self.base); a.card = True
+        said = []
+        a.say = lambda text='', wav=None, wait=True, filler=False: said.append((wav, wait))
+        with mock.patch.object(MOD, 'say_busy', lambda: True):
+            a.cue()
+        self.assertEqual(said, [])
+        self.assertEqual(self.events, [{'haptic': 'buzz'}])
+        with mock.patch.object(MOD, 'say_busy', lambda: False):
+            a.cue()
+        self.assertEqual(said, [(f'{MOD.ASR_DIR}/listen.wav', False)])
+
+    def test_say_busy_reads_the_s22_say_lock(self):
+        import fcntl
+        self.assertFalse(MOD.say_busy())
+        with open(MOD.SAY_LOCK, 'w') as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            import subprocess, sys
+            code = ('import importlib.util,sys;from pathlib import Path;'
+                    f'S=importlib.util.spec_from_file_location("m",{str(Path(MOD.__file__))!r});M=importlib.util.module_from_spec(S);'
+                    f'S.loader.exec_module(M);M.SAY_LOCK=Path({str(MOD.SAY_LOCK)!r});print(M.say_busy())')
+            out = subprocess.run([sys.executable, '-I', '-c', code], capture_output=True, text=True).stdout.strip()
+        self.assertEqual(out, 'True')
+
+    def test_card_listen_prints_the_transcript(self):
+        with mock.patch.dict(MOD.os.environ, {}), mock.patch.object(MOD.Assistant, 'record', lambda self, wav: 2.5), \
+             mock.patch.object(MOD.Assistant, 'transcribe', lambda self, wav: 'turn on the wifi'):
+            self.assertEqual(MOD.card_listen(dict(CFG), str(self.base / 'rel')), 0)
+        self.assertEqual(self.events[-1]['transcript'], 'turn on the wifi')
+        self.assertIn({'state': 'transcribing', 'record_s': 2.5}, self.events)
+        rec = json.loads((self.base / 'assistant.jsonl').read_text().splitlines()[-1])
+        self.assertEqual((rec['mode'], rec['result']), ('card-listen', 'ok'))
+
+    def test_card_turn_states_in_order(self):
+        def fake_tools(session, stop, out=None, api=None):
+            MOD.emit(state='tool', name='phone_device')
+        spoken = []
+        with mock.patch.object(MOD, 'tool_events', fake_tools), \
+             mock.patch.object(MOD.Assistant, 'ensure_agent', lambda self: self.agent_ready.update(ok=True)), \
+             mock.patch.object(MOD.Assistant, 'ask_with_fillers', lambda self, t: 'Wi-Fi is on now.'), \
+             mock.patch.object(MOD.Assistant, 'speak_answer', lambda self, s: spoken.append(s)):
+            self.assertEqual(MOD.card_turn(dict(CFG), 'turn on the wifi'), 0)
+        states = [e.get('state') for e in self.events]
+        self.assertEqual(states[0], 'thinking')
+        self.assertIn('tool', states)
+        self.assertEqual(states[-3:], ['reply', 'speaking', 'done'])
+        self.assertEqual([e for e in self.events if e.get('state') == 'reply'][0]['text'], 'Wi-Fi is on now.')
+        self.assertEqual(len(spoken), 1)
+
+    def test_card_turn_error_is_reported(self):
+        said = []
+        with mock.patch.object(MOD, 'tool_events', lambda *a, **k: None), \
+             mock.patch.object(MOD.Assistant, 'ensure_agent', lambda self: self.agent_ready.update(ok=False)), \
+             mock.patch.object(MOD.Assistant, 'say', lambda self, text='', **k: said.append(text)):
+            self.assertEqual(MOD.card_turn(dict(CFG), 'hello'), 1)
+        self.assertEqual(self.events[-1]['state'], 'error')
+        self.assertIn("couldn't reach", said[0])
+
+    def test_tool_events_from_the_stream(self):
+        import io
+        body = (b'event: tool_call_started\ndata: {"tool":"phone_device"}\n\n'
+                b'event: content_delta\ndata: {"token":"x"}\n\n'
+                b'event: tool_call_completed\ndata: {"tool":"phone_device","resultOk":true}\n\n')
+        got = []
+        with mock.patch.object(MOD.urllib.request, 'urlopen', lambda url, timeout=0: io.BufferedReader(io.BytesIO(body))):
+            MOD.tool_events('voice', MOD.threading.Event(), out=lambda **kw: got.append(kw))
+        self.assertEqual(got, [{'state': 'tool', 'name': 'phone_device'}, {'state': 'thinking'}])
+
 if __name__ == '__main__':
     unittest.main()

@@ -157,7 +157,10 @@ have to arrange it yourself.
 | Agent chat, model/health cards, sessions, running missions | An OpenUnum server at `api` (`/api/chat`, `/api/chat/stream` SSE, health/model endpoints) | Chat shows a connection error; cards stay empty |
 | Agent cards, confirm prompts, Power key, brightness, model switch, camera capture | s22-touchd on `<run_dir>/ctl.sock` and a client of `<run_dir>/shell.sock` (JSON-line protocol, see [README](README.md#how-it-works) and `src/ctl.rs`) | `shell.sock` still serves; anything can send `card`, `confirm`, `display`, `lock` lines to it. Brightness and camera do nothing. |
 | Phone page, 5G/4G pill | s22-phoned at `phoned` | "Loading…" / no pill |
-| Settings network rows | s22d at `s22d` (`/v1/status`) | "absent" |
+| Settings toggles and sliders | s22d's device API on `/run/s22d.sock` (`/v1/device/...`) | Rows say "device API (s22d) not reachable"; the screen-timeout buttons write the shell's own file |
+| Camera page | `s22-campreview` (S22 V4L2 path) and `s22-develop` | "camera failed: …" in the viewfinder |
+| Agent card | `s22-assistant --card listen\|turn` (JSON lines on stdout) | "Listening failed" |
+| Haptics | a datagram socket at `/run/s22-haptic.sock` | silent |
 | Talk | The `assistant` command (records, transcribes, asks the agent, speaks the answer, appends a JSON line to `assistant_log`) | The command fails; no answer card is shown |
 | Terminal, Sway desktop | sway + foot + wtype + squeekboard, sharing the seat | The panel is handed to a session that may not exist; switch back with SIGTERM or the seat |
 

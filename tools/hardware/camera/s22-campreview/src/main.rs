@@ -9,6 +9,7 @@
 //!
 //! Prints one JSON report (fps, latency, CPU) as the last stdout line.
 
+mod avi;
 mod v4l2;
 mod process;
 
@@ -22,12 +23,90 @@ use v4l2::*;
 
 static STOP: AtomicBool = AtomicBool::new(false);
 static STILL_REQ: AtomicU32 = AtomicU32::new(0);
+static REC_REQ: AtomicU32 = AtomicU32::new(0);
 
 extern "C" fn on_stop(_: libc::c_int) {
     STOP.store(true, Ordering::SeqCst);
 }
 extern "C" fn on_still(_: libc::c_int) {
     STILL_REQ.fetch_add(1, Ordering::SeqCst);
+}
+extern "C" fn on_rec(_: libc::c_int) {
+    REC_REQ.fetch_add(1, Ordering::SeqCst);
+}
+
+/// One JSON event line on stdout (service mode: the shell reads these).
+fn event(v: Value) {
+    let mut o = std::io::stdout().lock();
+    let _ = writeln!(o, "{v}");
+    let _ = o.flush();
+}
+
+fn unix_ms() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+}
+
+/// Pin the calling thread to these cores (best effort).
+fn pin_thread(cpus: &[usize]) {
+    unsafe {
+        let mut set: libc::cpu_set_t = std::mem::zeroed();
+        for &c in cpus {
+            libc::CPU_SET(c, &mut set);
+        }
+        libc::sched_setaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &set);
+    }
+}
+
+/// Video recording: preview frames -> half size, rotated -> JPEG -> MJPEG AVI, on its own thread.
+struct Recorder {
+    tx: std::sync::mpsc::SyncSender<Vec<u32>>,
+    thread: std::thread::JoinHandle<()>,
+    dropped: u64,
+}
+
+fn start_recorder(dir: &str, w: usize, h: usize, rot: u32, mirror: bool, quality: u8, sensor: &str) -> Result<Recorder, String> {
+    let _ = std::fs::create_dir_all(dir);
+    let stamp = unix_ms() / 1000;
+    let path = format!("{dir}/vid-{stamp}-{sensor}.avi");
+    let f = std::fs::File::create(&path).map_err(|e| format!("{path}: {e}"))?;
+    let (hw, hh) = (w / 2 & !1, h / 2 & !1);
+    let (ow, oh) = if rot % 180 == 90 { (hh, hw) } else { (hw, hh) };
+    let mut avi = avi::AviWriter::new(std::io::BufWriter::with_capacity(1 << 20, f), ow as u32, oh as u32).map_err(|e| e.to_string())?;
+    let (tx, rx) = std::sync::mpsc::sync_channel::<Vec<u32>>(3);
+    let p2 = path.clone();
+    let thread = std::thread::spawn(move || {
+        pin_thread(&[4, 5]);
+        let t0 = Instant::now();
+        let mut enc_ms: Vec<f64> = vec![];
+        let mut bytes = 0u64;
+        let mut err: Option<String> = None;
+        for frame in rx {
+            let te = Instant::now();
+            let (rgb, fw, fh) = avi::half_rgb(&frame, w, h, rot, mirror);
+            let mut jpg = Vec::with_capacity(64 * 1024);
+            let r = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpg, quality)
+                .encode(&rgb, fw as u32, fh as u32, image::ExtendedColorType::Rgb8);
+            if let Err(e) = r {
+                err = Some(e.to_string());
+                break;
+            }
+            enc_ms.push(te.elapsed().as_secs_f64() * 1000.0);
+            bytes += jpg.len() as u64;
+            if let Err(e) = avi.frame(&jpg) {
+                err = Some(e.to_string());
+                break;
+            }
+        }
+        let secs = t0.elapsed().as_secs_f64();
+        let frames = avi.frames();
+        let fin = avi.finish(secs).map(|_| ());
+        event(json!({"event": "rec_stopped", "path": p2, "frames": frames, "seconds": (secs * 100.0).round() / 100.0,
+                     "fps": if secs > 0.0 { (frames as f64 / secs * 10.0).round() / 10.0 } else { 0.0 },
+                     "size": [ow, oh], "bytes": bytes, "encode_ms_p50": pct(&mut enc_ms, 0.5),
+                     "ok": err.is_none() && fin.is_ok(), "error": err.or(fin.err().map(|e| e.to_string()))}));
+    });
+    event(json!({"event": "rec_started", "path": path, "size": [ow, oh], "format": "MJPEG AVI"}));
+    Ok(Recorder { tx, thread, dropped: 0 })
 }
 
 pub fn mono_ns() -> u64 {
@@ -82,6 +161,15 @@ struct Args {
     still_out: String,
     no_develop: bool,
     skip_node_check: bool,
+    /// service mode: run until SIGTERM/SIGINT (only the no-frame watchdog ends it otherwise)
+    until_signal: bool,
+    /// write each SIGUSR1 burst while streaming, here (RAW, RAW.0..RAW.n-1, RAW.json) + a "still" event
+    still_dir: Option<String>,
+    /// SIGUSR2 starts/stops an MJPEG AVI recording here
+    rec_dir: Option<String>,
+    rec_rotate: u32,
+    rec_mirror: bool,
+    rec_quality: u8,
 }
 
 fn usage() -> ! {
@@ -91,6 +179,8 @@ fn usage() -> ! {
          \t[--fifo PATH --fifo-format i420|xrgb] [--exposure-us 10000 --again 2] [--ae] [--ae-every 6]\n\
          \t[--cpus 4-7] [--still-at-frame N --still-frames K --still-out /srv/s22/tmp/still.raw]\n\
          \t[--no-develop]   (SIGUSR1 also takes a still; SIGINT/SIGTERM stop cleanly)\n\
+         \t[--until-signal] [--still-dir DIR] [--rec-dir DIR --rec-rotate 0|90|180|270 --rec-mirror --rec-quality 75]\n\
+         \t   (service mode for the shell: JSON event lines on stdout; SIGUSR2 starts/stops a recording)\n\
        s22-campreview bench [REPS [CPUS]]       (develop speed on a dma-buf, no camera)\n\
        s22-campreview dump-structs     (byte images of every ioctl struct, for the host test)"
     );
@@ -102,7 +192,8 @@ fn parse(argv: &[String]) -> Args {
         sensor: "rear".into(), frames: 0, seconds: 0.0, scale: 2, threads: 1, leader_bufs: 4, vc_bufs: 4,
         shm: None, fifo: None, fifo_format: "i420".into(), exposure_us: 0, again: 0.0, ae: false, ae_every: 6,
         cpus: None, still_at: None, still_frames: 1, still_out: "/srv/s22/tmp/campreview-still.raw".into(),
-        no_develop: false, skip_node_check: false,
+        no_develop: false, skip_node_check: false, until_signal: false, still_dir: None, rec_dir: None,
+        rec_rotate: 0, rec_mirror: false, rec_quality: 75,
     };
     let mut i = 0;
     while i < argv.len() {
@@ -132,6 +223,12 @@ fn parse(argv: &[String]) -> Args {
             "--still-out" => a.still_out = val(),
             "--no-develop" => a.no_develop = true,
             "--skip-node-check" => a.skip_node_check = true,
+            "--until-signal" => a.until_signal = true,
+            "--still-dir" => a.still_dir = Some(val()),
+            "--rec-dir" => a.rec_dir = Some(val()),
+            "--rec-rotate" => a.rec_rotate = val().parse().unwrap_or_else(|_| usage()),
+            "--rec-mirror" => a.rec_mirror = true,
+            "--rec-quality" => a.rec_quality = val().parse().unwrap_or_else(|_| usage()),
             _ => usage(),
         }
         i += 1;
@@ -415,6 +512,8 @@ fn run(args: &Args) -> i32 {
         libc::signal(libc::SIGINT, on_stop as *const () as libc::sighandler_t);
         libc::signal(libc::SIGTERM, on_stop as *const () as libc::sighandler_t);
         libc::signal(libc::SIGUSR1, on_still as *const () as libc::sighandler_t);
+        libc::signal(libc::SIGUSR2, on_rec as *const () as libc::sighandler_t);
+        libc::signal(libc::SIGPIPE, libc::SIG_IGN);
     }
     let mut cpu_list = vec![4usize, 5, 6, 7];
     if let Some(c) = &args.cpus {
@@ -480,7 +579,14 @@ fn run(args: &Args) -> i32 {
     }
     let t0 = mono_ns();
     let hard_deadline = Instant::now()
-        + std::time::Duration::from_secs_f64(if args.seconds > 0.0 { args.seconds } else { args.frames as f64 / 10.0 } + 30.0);
+        + if args.until_signal {
+            std::time::Duration::from_secs(365 * 86400)
+        } else {
+            std::time::Duration::from_secs_f64(if args.seconds > 0.0 { args.seconds } else { args.frames as f64 / 10.0 } + 30.0)
+        };
+    let mut recorder: Option<Recorder> = None;
+    let mut rec_seen = REC_REQ.load(Ordering::SeqCst);
+    let mut still_writes: Vec<std::thread::JoinHandle<()>> = vec![];
     let mut error: Option<String> = None;
     let mut frames: Vec<FrameRec> = vec![];
     let mut leader_ts: HashMap<u32, u64> = HashMap::new();
@@ -529,10 +635,10 @@ fn run(args: &Args) -> i32 {
             if Instant::now() > hard_deadline {
                 return Err("hard deadline".into());
             }
-            if args.frames > 0 && frames.len() as u64 >= args.frames && still_pending == 0 {
+            if !args.until_signal && args.frames > 0 && frames.len() as u64 >= args.frames && still_pending == 0 {
                 break;
             }
-            if args.seconds > 0.0 && got_first && (mono_ns() - t_steady0) as f64 / 1e9 >= args.seconds && still_pending == 0 {
+            if !args.until_signal && args.seconds > 0.0 && got_first && (mono_ns() - t_steady0) as f64 / 1e9 >= args.seconds && still_pending == 0 {
                 break;
             }
             let limit = if got_first { 5.0 } else { 20.0 };
@@ -586,6 +692,10 @@ fn run(args: &Args) -> i32 {
                 cpu0 = rusage_ms();
                 sys0 = sys_cpu();
                 t_steady0 = t_dq;
+                if args.until_signal {
+                    event(json!({"event": "first_frame", "ms": (first_ms * 10.0).round() / 10.0, "start_ms": (start_ms * 10.0).round() / 10.0,
+                                 "sensor": p.name, "preview": [ow, oh]}));
+                }
             }
             let img = &s.vbufs[idx].0;
             let vmeta = &s.vbufs[idx].1;
@@ -630,8 +740,32 @@ fn run(args: &Args) -> i32 {
                     stills.push((t_dq, src.to_vec(), fcount));
                     still_pending -= 1;
                     if still_pending == 0 {
-                        still_report.push(json!({"trigger_to_last_raw_in_ram_ms": (mono_ns() - still_trigger_ns) as f64 / 1e6,
-                                                 "frames": args.still_frames}));
+                        let in_ram_ms = (mono_ns() - still_trigger_ns) as f64 / 1e6;
+                        still_report.push(json!({"trigger_to_last_raw_in_ram_ms": in_ram_ms, "frames": args.still_frames}));
+                        if let Some(dir) = &args.still_dir {
+                            // live mode: written now by a helper thread (tmpfs), the stream keeps running
+                            let burst = std::mem::take(&mut stills);
+                            let base = format!("{dir}/shot-{}.raw", unix_ms());
+                            let meta = json!({"width": p.width, "height": p.height, "stride": s.stride, "pixfmt": "BYR2", "bayer": p.bayer,
+                                              "sequence": burst.first().map(|b| b.2), "timestamp": still_trigger_ns as f64 / 1e9, "sensor": p.sensor,
+                                              "mode": format!("{}x{}@{}", p.width, p.height, p.fps), "source": "s22-campreview live stream",
+                                              "exposure_us": sae.exp_us, "again": sae.again, "frames": burst.len()});
+                            let (sensor, dir) = (p.name, dir.clone());
+                            still_writes.retain(|h| !h.is_finished());
+                            still_writes.push(std::thread::spawn(move || {
+                                let t = Instant::now();
+                                let _ = std::fs::create_dir_all(&dir);
+                                let mut ok = !burst.is_empty();
+                                for (i, (_, raw, _)) in burst.iter().enumerate() {
+                                    ok &= std::fs::write(format!("{base}.{i}"), raw).is_ok();
+                                }
+                                ok &= std::fs::hard_link(format!("{base}.0"), &base).is_ok()
+                                    && std::fs::write(format!("{base}.json"), serde_json::to_string_pretty(&meta).unwrap()).is_ok();
+                                event(json!({"event": "still", "ok": ok, "raw": base, "frames": burst.len(), "sensor": sensor,
+                                             "in_ram_ms": (in_ram_ms * 10.0).round() / 10.0, "write_ms": t.elapsed().as_millis() as u64,
+                                             "exposure_us": meta["exposure_us"], "again": meta["again"]}));
+                            }));
+                        }
                     }
                 }
                 if !args.no_develop {
@@ -670,6 +804,37 @@ fn run(args: &Args) -> i32 {
                         fifo_dropped += 1;
                     }
                 }
+                // video: SIGUSR2 toggles; frames go to the encoder thread (dropped when it lags)
+                let rq = REC_REQ.load(Ordering::SeqCst);
+                if rq != rec_seen {
+                    rec_seen = rq;
+                    match recorder.take() {
+                        Some(r) => {
+                            drop(r.tx);
+                            let _ = r.dropped;
+                            std::thread::spawn(move || { let _ = r.thread.join(); });
+                        }
+                        None => match &args.rec_dir {
+                            Some(dir) => match start_recorder(dir, ow, oh, args.rec_rotate, args.rec_mirror, args.rec_quality, p.name) {
+                                Ok(r) => recorder = Some(r),
+                                Err(e) => event(json!({"event": "rec_stopped", "ok": false, "error": e})),
+                            },
+                            None => event(json!({"event": "rec_stopped", "ok": false, "error": "no --rec-dir"})),
+                        },
+                    }
+                }
+                if let Some(r) = recorder.as_mut() {
+                    let src: &[u32] = match shm.as_ref() {
+                        Some(sh) => unsafe {
+                            let slot = (sh.next + 2) % 3;
+                            std::slice::from_raw_parts(sh.ptr.add(SHM_HDR + slot as usize * sh.slot_bytes) as *const u32, ow * oh)
+                        },
+                        None => &local,
+                    };
+                    if r.tx.try_send(src.to_vec()).is_err() {
+                        r.dropped += 1;
+                    }
+                }
                 // display AWB / gain for the next frame
                 disp.update(&last_stats);
                 luts = process::build_luts(rn, gn, disp.wb_r, disp.wb_b, disp.gain);
@@ -689,10 +854,23 @@ fn run(args: &Args) -> i32 {
                 }
             }
             frames.push(FrameRec { fcount, t_dq, t_pub, proc_ms: (t_pub - tp0) as f64 / 1e6, error: error_frame });
+            if args.until_signal && frames.len() > 20000 {
+                // service mode runs for hours: keep the stats bounded
+                frames.drain(..10000);
+                leader_ts.retain(|&fc, _| fc.wrapping_add(2000) > fcount);
+                recent_fcounts.drain(..recent_fcounts.len().saturating_sub(64));
+            }
         }
         Ok(())
     })();
     let t_end = mono_ns();
+    if let Some(r) = recorder.take() {
+        drop(r.tx);
+        let _ = r.thread.join();
+    }
+    for h in still_writes {
+        let _ = h.join();
+    }
     let cpu1 = rusage_ms();
     let sys1 = sys_cpu();
     let ts_stop = mono_ns();
