@@ -244,7 +244,21 @@ class FillerTest(unittest.TestCase):
         for k, v in self.saved.items():
             os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
         sys.modules.pop('s22_filler', None)
-        self.tmp.cleanup()
+        # The filler plays from a background thread that may still be writing its
+        # state file under the temp dir; give it a moment, then remove the dir
+        # (CI raced here: "Directory not empty" on 2026-10-22).
+        import threading, time, shutil
+        for t in threading.enumerate():
+            if t is not threading.current_thread() and t.daemon is False and t.name != 'MainThread':
+                t.join(timeout=2)
+        for _ in range(20):
+            try:
+                self.tmp.cleanup()
+                break
+            except OSError:
+                time.sleep(0.1)
+        else:
+            shutil.rmtree(self.tmp.name, ignore_errors=True)
 
     def said(self):
         import time
