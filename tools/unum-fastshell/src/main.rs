@@ -16,6 +16,7 @@ mod ctl;
 mod drm;
 mod font;
 mod gfx;
+mod idle;
 mod kbd;
 mod net;
 mod seat;
@@ -163,6 +164,9 @@ fn run() -> std::io::Result<()> {
     };
     ctl::serve(format!("{run_dir}/shell.sock"), netw.clone())?;
     let mut app = App::new(Some(netw.clone()), &run_dir, &chroot);
+    app.idle_path = env("FASTSHELL_IDLE_CFG", &format!("{state_dir}/screen-timeout.json"));
+    app.load_idle();
+    log(&format!("screen timeout: unlocked {} s, locked {} s (0 = never)", app.idle_cfg.unlocked_s, app.idle_cfg.locked_s));
     net::refresh_agent(&netw);
     net::fetch_history(&netw);
 
@@ -358,9 +362,17 @@ fn run() -> std::io::Result<()> {
         if now >= next_tick {
             next_tick = now + Duration::from_secs(1);
             app.tick();
+            if app.display_on && app.active {
+                let say = idle::flock_held(&env("FASTSHELL_SAY_LOCK", "/run/s22-say.lock"));
+                if app.idle_check(now, say) {
+                    log(&format!("screen timeout: idle {} s, locked {} -> panel off", now.saturating_duration_since(app.last_touch).as_secs(), app.locked));
+                    app.screen_timeout_off();
+                }
+            }
             if now >= next_sys {
                 next_sys = now + Duration::from_secs(10);
                 if app.display_on {
+                    app.load_idle();
                     app.read_sys();
                 }
             }

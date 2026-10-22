@@ -17,6 +17,7 @@ Measurements and screenshots are in [`evidence/fastshell-20261021/`](../../evide
 | Status bar | Clock, health dot, a **5G / 4G** pill from s22-phoned `/status` (every 20 s), battery, thermal, link. 5G = `radio.nr_nsa`, or `nr_last_seen` within 120 s (NSA keeps `act` = lte). |
 | Agent protocol | `shell.sock` in s22-touchd's run dir, the same JSON-line protocol as unum-shell: `home back switcher open card confirm confirmResult lock unlock keyboard state perf`, plus `display`, `gesture`, `ping` and `send`.<br>Confirm answers go to `confirm/<id>.json`, so `s22-ui`, the OpenUnum `s22-ui` plugin and s22d keep working unchanged. |
 | Voice | **Talk** runs `/srv/s22/hardware/bin/s22-assistant` exactly like the button hook: fixed recording window, ASR, session `voice`, spoken answer. The last `assistant.jsonl` entry is then shown as a card. |
+| Screen timeout | No touch for 60 s while unlocked: lock + panel off (the Power-press path). Lock cover lit with no touch for 15 s: panel off. Any touch or touchd call resets the clock. Never while the chat is streaming, an agent question/confirm is up, the Camera page is open, a Talk turn runs, or `/run/s22-say.lock` is held (the countdown restarts when the reason ends). Config `/srv/s22/state/fastshell/screen-timeout.json` `{"unlocked_s":60,"locked_s":15}`, 0 = never, re-read every 10 s; Settings has two buttons cycling 0/15/30/60/120/300 s. |
 | Screen power | s22-touchd's `display`/`power` (the Power key) is forwarded to the shell. It draws the lock cover, then sets DPMS on its own DRM fd, which takes the CRTC inactive and powers the panel off. While sway is showing, the shell answers `delegate` and `s22-display` does it as before. |
 
 ## Switching and the way back
@@ -38,7 +39,7 @@ Automatic fallbacks:
 ```sh
 export PATH=$HOME/.cargo/bin:$PATH
 cd tools/unum-fastshell
-cargo test --offline --release                     # 10 tests: SSE/chunked parsing, touchd protocol, confirm file, keyboard, gestures, 5G badge, camera line
+cargo test --offline --release                     # 17 tests: screen-timeout policy, SSE/chunked parsing, touchd protocol, confirm file, keyboard, gestures, 5G badge, camera line
 cargo run --release -- dump /tmp/shots             # offscreen PNG of every screen
 flock ~/.cache/rig-heavy.lock env CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld \
   cargo build --offline --release --target aarch64-unknown-linux-musl
