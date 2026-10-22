@@ -1,0 +1,34 @@
+{
+ "_note": "Measured on the phone 2026-10-22 (screen off, cpufreq governor 'powersave' set by s22-autosleep, cores ~1.0-1.15 GHz; ~40 % background CPU from llama-server etc.). Frames were never saved: the phone was out with the owner.",
+ "python_client_profile (profile-stream.py, today's Session code, one continuous stream)": {
+  "front 30 frames, 2 leader + 3 VC0 bufs, copy": {"start_ms": 137.5, "first_frame_ms": 216.3, "stop_ms": 70.2, "fps": 20.05, "copy_ms_p50": 14.7, "cpu_pct_one_core": 45.6},
+  "front 900 frames, 2+3 bufs, no copy": {"fps": 21.44, "cpu_pct_one_core": 5.5, "error_frames": 4},
+  "front 150 frames, 4+4 bufs, no copy": {"fps": 30.02, "error_frames": 4},
+  "rear 150 frames, 4+4 bufs, copy": {"start_ms": 235.4, "first_frame_ms": 255.8, "stop_ms": 106.7, "fps": 29.91, "copy_ms_p50": 20.8, "cpu_pct_one_core": 89.1},
+  "rear 1800 frames (60 s), 4+4 bufs, no copy": {"fps": 30.01, "error_frames": 12, "stop_ms": 77.4, "teardown_errors": []}
+ },
+ "s22-campreview bench (develop on a cached dma-heap buffer, rear 2040x1532 -> 1020x766)": {
+  "sync_start_end_ms": 0.0, "memcpy_6MB_ms": 1.3,
+  "bin2 1 thread X2 (cpu7)": 7.0, "bin2 1 thread A710 (cpu4)": 7.9, "bin2 1 thread A510 (cpu0, old scalar loop)": 42.5,
+  "bin2 pool 2x A710": 4.6, "bin2 pool 4 big cores": 2.3, "bin2 pool 4 little cores": 9.5,
+  "bin4 1 thread X2": 4.5, "bin4 pool 4 big cores": 1.6,
+  "xrgb_to_i420 1020x766 X2": 2.3,
+  "scoped threads (spawn per frame) do not scale: EMS wakes a new short task on the parent's core": true
+ },
+ "s22-campreview stream (continuous, 4 leader + 4 VC0 bufs)": {
+  "rear bin2 1 thread cpu7 300f": {"fps": 29.58, "process_ms_p50": 9.1, "cpu_pct_one_core": 28.2, "frame_start_to_published_ms_p50": 17.6, "p95": 21.2},
+  "rear bin2 2 workers cpu4,5 300f": {"start_ms": 160.5, "first_frame_ms": 166.2, "stop_ms": 82.9, "fps": 29.98, "fcount_gaps": 0, "process_ms_p50": 6.2, "cpu_pct_one_core": 32.8, "frame_start_to_dqbuf_ms_p50": 8.5, "frame_start_to_published_ms_p50": 14.8, "p95": 19.6},
+  "rear bin4 1 thread cpu7 300f": {"fps": 29.98, "process_ms_p50": 5.8, "cpu_pct_one_core": 21.2, "frame_start_to_published_ms_p50": 13.7, "p95": 14.6},
+  "front bin2 2 workers 300f": {"start_ms": 110.3, "first_frame_ms": 176.9, "fps": 28.76, "frame_start_to_dqbuf_ms_p50": 34.0, "frame_start_to_published_ms_p50": 39.1, "p95": 42.9, "process_ms_max": 455.8, "note": "one 456 ms stall while llama-server shared cores 4-5"},
+  "rear bin2 cpu7 + sensor AE + 4-frame still at frame 150": {"fps": 29.98, "fcount_gaps": 0, "ae_updates": 5, "ae_errors": [], "still_trigger_to_4_raws_in_ram_ms": 107.0, "s22-develop --stack on those raws (powersave)": "3280 ms (tool-reported)"},
+  "rear bin2 cpu7 + AE, 300 s": {"frames": 8993, "fps": 29.97, "error_frames": 56, "fcount_gaps": 59, "process_ms_p50": 8.84, "cpu_pct_one_core": 27.9, "frame_start_to_published_ms_p50": 17.0, "p95": 17.9, "max": 354.3, "stop_ms": 70.3, "teardown_errors": [], "thermal_before_after_mC": {"BIG": [41000, 46000], "LITTLE": [40000, 42000]}},
+  "shm-reader during the 300 s run (10 s, 4 ms poll)": {"reader_fps": 28.89, "age_ms_p50": 2.48, "age_ms_max": 23.97}
+ },
+ "video": {
+  "x264 0.164 ultrafast zerolatency, 1020x766 i420 from --fifo, 2 threads": {"encoded_fps": 17.28, "fifo_dropped": "82/296", "kbps": 50584, "scene": "dark, gain 64: pure noise, worst case"},
+  "same, 4 threads": {"encoded_fps": 16.84},
+  "x264 510x382, 2 threads": {"encoded_fps": 29.52, "fifo_dropped": 0, "kbps": 5856},
+  "hardware JPEG (SMFC /dev/video12) MMAP bench": {"1020x766 q85 ms_per_frame_p50": 3.81, "2040x1532 q90": 8.26, "cpu_ms_per_frame": 1.15, "INVALID_AND_UNSAFE": "the driver gives the compressed queue a 4 KiB MMAP buffer; the encoder wrote 260 KB past it; the third run rebooted the phone (12:20). Do not run again without a DMABUF capture buffer sized >= the raw frame and a review."},
+  "MFC H.264 (/dev/video7 s5p-mfc-enc)": "not tried: needs mfc_fw.bin (in the stock vendor image, sha256 2937555870d55688..., 1 MiB) staged as /vendor/firmware/mfc_fw.bin and loaded through imgloader + S2MPU verify; reviewed step"
+ }
+}
