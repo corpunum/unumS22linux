@@ -1,0 +1,16 @@
+parse ok
+autosleep restarted after 16s: 25615 /usr/bin/python3 /srv/s22/hardware/bin/s22-autosleep run
+{"ok":true,"result":"off"}
+t+5s file=[off] {"state": "locked-grace", "t": 1792647134.3826091, "cycles": 0, "slept_s": 0.0, "aborts": 0, "since": 17926471
+t+10s file=[off] {"state": "locked-grace", "t": 1792647140.4063528, "cycles": 0, "slept_s": 0.0, "aborts": 0, "since": 17926471
+t+15s file=[off] {"state": "locked-grace", "t": 1792647144.4219303, "cycles": 0, "slept_s": 0.0, "aborts": 0, "since": 17926471
+t+20s file=[off] {"state": "locked-grace", "t": 1792647150.445503, "cycles": 0, "slept_s": 0.0, "aborts": 0, "since": 179264713
+t+25s file=[off] {"state": "locked-grace", "t": 1792647154.4621992, "cycles": 0, "slept_s": 0.0, "aborts": 0, "since": 17926471
+t+30s file=[off] {"state": "locked-grace", "t": 1792647160.4869719, "cycles": 0, "slept_s": 0.0, "aborts": 0, "since": 17926471
+t+35s file=[off] {"state": "awake", "inhibit": ["ssh:1", "usb-host"], "t": 1792647164.7029717, "cycles": 0, "slept_s": 0.0, "ab
+t+40s file=[off] {"state": "awake", "inhibit": ["ssh:1", "usb-host"], "t": 1792647170.9601207, "cycles": 0, "slept_s": 0.0, "ab
+{"ok":true,"result":"on"}
+after on: {"state": "screen-on", "t": 1792647172.9653714, "cycles": 0, "slept_s": 0.0, "ab
+{"event": "start", "pid": 2467, "cfg": {"lock_grace_s": 30, "awake_s": 6, "max_sleep_s": 900, "poll_s": 2, "busy_pct": 25.0, "busy_window_s": 6, "ssh_inhibits":
+{"event": "start", "pid": 25615, "cfg": {"lock_grace_s": 30, "awake_s": 6, "max_sleep_s": 900, "poll_s": 2, "busy_pct": 25.0, "busy_window_s": 6, "ssh_inhibits"
+{"event": "inhibit", "why": ["ssh:1", "usb-host"], "t": 1792647162.615}

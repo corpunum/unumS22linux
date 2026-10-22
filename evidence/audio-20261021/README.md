@@ -239,3 +239,49 @@ s22-say additions: `/run/s22-say.level` (runtime speech-level override) and
 `/run/s22-say.history` (last 50 paths). The first history version never
 renamed its temp file, because `tail` failing on the missing file made the
 group's status non-zero; this is fixed and verified.
+
+## 2026-10-22: Bluetooth without the USB link; s22-autosleep "screen-on" check
+
+**ECM gate removed (owner decision: the USB goes to the ROG Ally; Tailscale over Wi-Fi is the access path).**
+- Holder: `bt/patch-hci-hold-ecm-gate.py` patches one instruction. At
+  0x401c40, `adrp` (start of the `/sys/class/net/ecm0/carrier` read) becomes
+  `b 0x401ca8` (the has_hci step that followed a passing carrier check).
+  sha 3ec69d2f… → fdb68994…; the previous binary is kept as `.orig-3ec69d2f`.
+  The disassembly shows that this was the only reference to the ecm0 path.
+  Unchanged: wlan module/wlan0, CNSS live state, no existing hci, and the
+  `votes_match` regulator checks (before power-on and after).
+- Source: the carrier block, its `#define` and its usage text are removed from
+  `bt-version-transport-probe.c` (compiles with -Werror). `s22-bt` `ready()` no
+  longer checks ecm0.
+- Verified (bt-no-ecm-keepalive.txt, bt-no-ecm-masked-carrier.txt):
+  - `s22-bt down` → **keepalive brought hci0 back in 16 s** with the new
+    binary (`/proc/<pid>/exe` sha fdb68994…).
+  - ECM-down test without touching networking (ecm0 carries the default route
+    and Tailscale's direct path): a file containing `0` was bind-mounted over
+    `ecm0/carrier`. The **old** holder was refused by its gate (rc 1,
+    `baud_probe_result=-5`, no BT rail vote). The **new** holder brought hci0 up
+    in 4 s while the carrier still read 0.
+  - After unmounting, keepalive restored hci0 in 12 s. Wi-Fi was unaffected
+    throughout (gateway ping OK).
+
+**s22-autosleep "screen-on since ~02:03, 0 cycles" (autosleep-display-state-check.txt).**
+- `/run/s22-display-state` is **not stale**: fastshell writes `off`/`on` on every
+  DPMS change (file mtime = the shell's last `dpms on`, 05:08:06). A shell
+  `display off` → file `off` within 5 s; `on` → `on`.
+- The real causes:
+  1. **The lock cover keeps the panel lit.** After the 02:03 boot the shell sat
+     locked with the panel on until the Power key at 04:56; there is no
+     locked-screen timeout. During that time "screen-on" was correct.
+  2. **With the panel off, `usb-host` inhibits suspend.** Config
+     `suspend_on_usb: false`, whose reason in the code is "rescue path,
+     charging". The Ally's USB host is attached, so 0 cycles happen all night.
+     SSH sessions inhibit too (`ssh_inhibits`).
+- Fixed in autosleep: during the lock grace / post-wake window it now writes
+  `locked-grace`/`post-wake` (before, the last `screen-on` lingered), and it logs
+  every change of the inhibitor set (`event: inhibit`). Verified live:
+  locked-grace for 30 s → `awake inhibit [ssh:1, usb-host]` → logged.
+- **Not changed (owner policy):** `suspend_on_usb` and a locked-screen-off
+  timeout. With USB no longer the rescue path, `suspend_on_usb: true` in
+  `/srv/s22/state/autosleep/config.json` would let the phone sleep while it is
+  connected to the Ally (charging continues). A screen-off timeout for the
+  lock cover would be a fastshell feature.

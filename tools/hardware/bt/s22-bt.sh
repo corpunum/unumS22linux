@@ -2,9 +2,9 @@
 # s22-bt up|down|status : manual persistent Bluetooth controller (no boot hook).
 # up   : run bt-qca6490-hci-hold pinned to the X2 core (SCHED_FIFO 50) in the
 #        background; hci0 stays registered until `down`. The holder refuses to
-#        touch the shared WLAN rail unless Wi-Fi/CNSS are fully up and the USB
-#        ECM link has carrier, so `up` first waits up to S22_BT_WAIT_S (45 s)
-#        for those (at boot Wi-Fi comes up after keepalive's first BT try).
+#        touch the shared WLAN rail unless Wi-Fi/CNSS are fully up, so `up`
+#        first waits up to S22_BT_WAIT_S (45 s) for that (at boot Wi-Fi comes up
+#        after keepalive's first BT try). No USB/ECM requirement (owner 10-22).
 # down : SIGTERM -> line-discipline detach, UART restore, chip power-off.
 # No pairing/connection is done here; discovery: chroot ... s22-bt-scan.py.
 set -u
@@ -18,11 +18,10 @@ up)
   [ -e /sys/class/bluetooth/hci0 ] && { echo "hci0 present without our holder; refusing" >&2; exit 1; }
   ready() {
     [ -e /sys/module/wlan ] && [ -e /sys/class/net/wlan0 ] &&
-    grep -q 'FW_READY | DRIVER_PROBED | COLD_BOOT_CAL_DONE' /sys/kernel/debug/cnss/stats 2>/dev/null &&
-    [ "$(cat /sys/class/net/ecm0/carrier 2>/dev/null)" = 1 ]
+    grep -q 'FW_READY | DRIVER_PROBED | COLD_BOOT_CAL_DONE' /sys/kernel/debug/cnss/stats 2>/dev/null
   }
   w=0; while ! ready && [ $w -lt "${S22_BT_WAIT_S:-45}" ]; do sleep 1; w=$((w + 1)); done
-  ready || { echo "prerequisites not ready after ${w}s: wlan=$([ -e /sys/class/net/wlan0 ] && echo y || echo n) ecm0_carrier=$(cat /sys/class/net/ecm0/carrier 2>/dev/null || echo none)" >&2; exit 1; }
+  ready || { echo "prerequisites not ready after ${w}s: wlan=$([ -e /sys/class/net/wlan0 ] && echo y || echo n)" >&2; exit 1; }
   mkdir -p "$(dirname "$LOG")"
   python3 -c '
 import os, sys, ctypes
