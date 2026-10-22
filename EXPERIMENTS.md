@@ -3266,3 +3266,16 @@ Details: `evidence/npu-custom-20261022/README.md`. Tools: `tools/hardware/npu/nn
   `/api/chat/stream?sessionId=` SSE open (the shell's mechanism) streamed turn_stage events and returned a reply.
 - Note: `/api/system/version` reports current "unknown" (no release marker on a git-tree install) and
   updateAvailable true; ignore, do not use the in-app updater on the phone.
+
+### 2026-10-22 — Bluetooth without the USB ECM gate; autosleep state check
+
+- The holder's ECM carrier check was removed by a 1-instruction patch (the
+  only ecm0 reference) plus the matching source change. s22-bt no longer
+  checks ecm0. hci0 came up via keepalive (16 s); with the carrier masked to 0
+  the old holder refused and the new one started (4 s). Wi-Fi/Tailscale were
+  never touched.
+- s22-autosleep: the display-state file is correct. The 0 cycles come from
+  (1) the lock cover leaving the panel lit after boot and (2) the `usb-host`
+  inhibitor (`suspend_on_usb: false`) while the Ally is attached. Autosleep
+  now reports locked-grace/post-wake and logs inhibitor changes; the policy
+  knobs are left to the owner.

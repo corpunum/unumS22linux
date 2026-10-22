@@ -47,7 +47,6 @@
 #define CNSS_STATS_PATH "/sys/kernel/debug/cnss/stats"
 #define WLAN_MODULE_PATH "/sys/module/wlan"
 #define WLAN_INTERFACE_PATH "/sys/class/net/wlan0"
-#define ECM_CARRIER_PATH "/sys/class/net/ecm0/carrier"
 #define REGULATOR_SUMMARY_PATH "/sys/kernel/debug/regulator/regulator_summary"
 #define BLUETOOTH_CLASS_PATH "/sys/class/bluetooth"
 #define CNSS_QUIESCENT_STATE "State: 0x400000(PCI PROBE DONE)"
@@ -239,7 +238,7 @@ static int check_vote(unsigned expected_bt)
 /* Validate only the reviewed live-WLAN observation, never infer it. */
 static int validate_live_wlan_baseline(void)
 {
-	char stats[512], carrier[16], summary[65536];
+	char stats[512], summary[65536];
 	int length;
 
 	if (access(WLAN_MODULE_PATH, F_OK) != 0 ||
@@ -248,9 +247,10 @@ static int validate_live_wlan_baseline(void)
 	length = read_small_file(CNSS_STATS_PATH, stats, sizeof(stats));
 	if (length < 0 || !strstr(stats, CNSS_LIVE_STATE))
 		return -EBUSY;
-	length = read_small_file(ECM_CARRIER_PATH, carrier, sizeof(carrier));
-	if (length < 0 || strcmp(carrier, "1\n") != 0)
-		return -ENETDOWN;
+	/* Owner 2026-10-22: no USB ECM carrier requirement. The phone's USB goes
+	 * to the ROG Ally, not the rig, so ECM is not the rescue path (Tailscale
+	 * over Wi-Fi is). The Wi-Fi/CNSS/regulator checks above and below stay.
+	 * The deployed binary has the same change (bt/patch-hci-hold-ecm-gate.py). */
 	if (has_hci_device())
 		return -EALREADY;
 	length = read_small_file(REGULATOR_SUMMARY_PATH, summary, sizeof(summary));
@@ -723,7 +723,7 @@ static void usage(const char *argv0)
 		"device identity: UART must be /dev/ttySAC1 (204:65); "
 		"btpower rdev must come from a read-only preflight\n"
 		"default WLAN baseline: no wlan module/interface and CNSS idle state; "
-		"--live-wlan-vote requires CNSS 0x420107, ecm0 carrier 1, no hci, "
+		"--live-wlan-vote requires CNSS 0x420107, no hci, "
 		"and regulator-summary vote checks\n"
 		"default: refuse device access; no hciattach/rfkill/firmware load\n",
 		argv0, argv0);

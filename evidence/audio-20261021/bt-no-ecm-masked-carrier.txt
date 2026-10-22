@@ -1,0 +1,18 @@
+baud_probe_result=0
+masked: carrier reads [0]
+== OLD holder (ECM gate) under masked carrier
+old rc=127 sh: taskset: not found 
+hci after old: []
+== NEW holder via s22-bt up under masked carrier
+hci0 up after 4s (pid 25161)
+rc=0 hci=[hci0] carrier still reads [0]
+unmasked: carrier reads [1]
+round-trip min/avg/max = 2.411/11.217/20.024 ms
+up (pid 25161)
+hci0
+baud_probe_result=0
+masked: [0] hci=[]
+OLD holder rc=1 output: baud_probe_result=-5 
+hci after old: [] votes:  bt_qca6490-vreg_wlan 0 0mA 0mV 0mV
+unmasked: [1]
+keepalive restored hci0 after 12s; holder exe sha: fdb689944754f8bb

@@ -311,6 +311,7 @@ def run():
     tot = {"cycles": 0, "slept_s": 0.0, "aborts": 0, "since": time.time()}
     last_cfg = time.monotonic()
     gov_state = None
+    last_why = None   # logged when the inhibitor set changes (diagnosis of 0-cycle nights)
     while True:
         if time.monotonic() - last_cfg > 30:
             cfg, last_cfg = load_cfg(), time.monotonic()
@@ -322,6 +323,7 @@ def run():
         disp = rd(DISPLAY, "on")
         if disp != "off":
             off_since = None
+            last_why = None
             if cfg["governors"] and gov_state != "unlocked":
                 set_governor(cfg["unlocked_governor"]); gov_state = "unlocked"
             write_status({"state": "screen-on", "t": time.time(), **tot})
@@ -334,8 +336,15 @@ def run():
         elif cfg["governors"] and gov_state != "locked":
             set_governor(cfg["locked_governor"]); gov_state = "locked"
         if now - off_since < cfg["lock_grace_s"] or now < awake_until:
+            # screen off but still in the grace / post-wake window: say so, so a
+            # stale "screen-on" status never lingers (2026-10-22)
+            write_status({"state": "locked-grace" if now - off_since < cfg["lock_grace_s"] else "post-wake",
+                          "t": time.time(), **tot})
             time.sleep(cfg["poll_s"]); continue
         why = inhibitors(cfg, busy)
+        if why != last_why:
+            log(event="inhibit", why=why or [])
+            last_why = why
         if why:
             write_status({"state": "awake", "inhibit": why, "t": time.time(), **tot})
             time.sleep(cfg["poll_s"]); continue

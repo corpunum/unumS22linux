@@ -1,0 +1,14 @@
+fdb689944754f8bbe9cd98d2adc2591ca121ff671334cd113e9a3df3c62f54d9  /srv/s22/bt-hold/bt-qca6490-hci-hold
+bt-qca6490-hci-hold
+bt-qca6490-hci-hold.orig-3ec69d2f
+bt-qca6490-hci-hold.orig-66c7863c
+ecm0 carrier now: 1
+up (pid 2553)
+hci0
+pty_cleanup_ioctl_result=0
+baud_probe_result=0
+after down: 
+hci0 back after 16s: hci0
+holder pid 25048 exe=/srv/s22/bt-hold/bt-qca6490-hci-hold
+fdb689944754f8bbe9cd98d2adc2591ca121ff671334cd113e9a3df3c62f54d9  /proc/25048/exe
+{"detail": "pid 25043", "event": "restart", "ok": true, "service": "bluetooth", "t": 1792646905.125, "was_running": false}
