@@ -32,7 +32,7 @@
 {"event": "wifi_saver_park", "method": "disconnect", "ok": true, "out": "OK", "t": 1792671103.363}
 {"event": "start", "pid": 2448, "t": 1792671674.305}
 {"event": "resumed", "t": 1792671674.306}
-{"event": "mobile_up", "ok": true, "ipv4": "10.205.144.105", "error": null, "t": 1792671674.346}
+{"event": "mobile_up", "ok": true, "ipv4": "<cgnat-ip>", "error": null, "t": 1792671674.346}
 {"event": "route", "args": ["route", "replace", "default", "dev", "rmnet0", "metric", "50"], "ok": true, "out": "", "t": 1792671674.354}
 {"event": "uplink", "old": null, "new": "mobile", "after_s": 0.0, "fails": {"wifi": 0, "mobile": 0}, "mobile": "down", "t": 1792671674.354}
 {"event": "wifi_saver_park", "method": "disconnect", "ok": true, "out": "OK", "t": 1792671910.993}

@@ -143,7 +143,7 @@
 {"src":"display","state":"off","was":"on","bat":{"cap":72.0,"raw":7266.0,"ma":-42.0,"mv":4009.0,"st":"Discharging","temp":33.8,"slate":"0"},"t":1792671725.4,"k":"event"}
 {"src":"netpolicy","rec":{"event":"start","pid":2448,"t":1792671674.305},"t":1792671735.4,"k":"event"}
 {"src":"netpolicy","rec":{"event":"resumed","t":1792671674.306},"t":1792671735.4,"k":"event"}
-{"src":"netpolicy","rec":{"event":"mobile_up","ok":true,"ipv4":"10.205.144.105","error":null,"t":1792671674.346},"t":1792671735.4,"k":"event"}
+{"src":"netpolicy","rec":{"event":"mobile_up","ok":true,"ipv4":"<cgnat-ip>","error":null,"t":1792671674.346},"t":1792671735.4,"k":"event"}
 {"src":"netpolicy","rec":{"event":"uplink","old":null,"new":"mobile","after_s":0.0,"fails":{"wifi":0,"mobile":0},"mobile":"down","t":1792671674.354},"t":1792671735.4,"k":"event"}
 {"src":"autosleep","rec":{"event":"start","pid":2447,"cfg":{"lock_grace_s":30,"awake_s":6,"net_awake_s":2.5,"max_sleep_s":900,"poll_s":2,"busy_pct":25.0,"busy_window_s":6,"ssh_inhibits":true,"suspend_on_usb":true,"ignore_wakeup_sources":["dwc3-otg","usb_notify"],"locked_governor":"powersave","unlocked_governor":"schedutil","governors":true,"max_fail_backoff_s":120},"t":1792671674.298},"t":1792671735.4,"k":"event"}
 {"src":"keepalive","rec":{"detail":"pid 2575","event":"restart","ok":true,"service":"bluetooth","t":1792671698.95,"was_running":false},"t":1792671735.4,"k":"event"}
