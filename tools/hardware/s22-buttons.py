@@ -15,7 +15,7 @@ environment and runs detached.  Without a hook the defaults above apply.
 
 Hand-over to the fast shell (2026-10-22): while unum-fastshell handles the keys
 itself (it reads the same nodes and writes its pid to /run/s22-fastshell.buttons),
-this daemon only logs, except for the safety path: Power held >= 1 s ALONE still
+this daemon only logs, except for the safety path: Power held >= 3 s ALONE still
 runs hook "power-long" (back to Quickshell), so it works even if the shell hangs.
 A Power press that overlapped a volume key (a chord such as Power + Volume down =
 screenshot) never runs power-long, in either mode.
@@ -52,6 +52,7 @@ OPT = '/opt/s22-audio'
 SAY = '/srv/s22/hardware/bin/s22-say'
 DISPLAY = '/srv/s22/hardware/bin/s22-display'
 LONG_MS = 1000
+POWER_LONG_MS = 3000   # Power alone: hold this long -> hook power-long (classic shell); 1-3 s does nothing
 LEVELS = 10            # level 10 = 0 dB amp gain, 4 dB per step, 0 = mute
 DEFAULT_LEVEL = 4      # s22-say's speech level when /run/s22-say.level is absent
 SAY_LEVEL = Path('/run/s22-say.level')
@@ -194,13 +195,14 @@ class Buttons:
         start = self.down.pop(key, None)
         held = int((now - start) * 1000) if start is not None else 0
         long = held >= LONG_MS
+        power_long = held >= POWER_LONG_MS
         chord = key == 'power' and self.power_chord
         if key == 'power':
             self.power_chord = False
         owned = self.shell_owns()
         self.log(key=key, action='release', held_ms=held, **({'chord': True} if chord else {}),
                  **({'by': 'fastshell'} if owned else {}))
-        if key == 'power' and long and not chord:
+        if key == 'power' and power_long and not chord:
             self.hook('power-long', key, held)      # the safety path: always, shell or not
             return
         if owned or chord:

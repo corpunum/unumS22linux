@@ -37,7 +37,7 @@ which can text, talk and drive its own screen.
   button runs the voice loop.
 - **The agent drives the screen:** an OpenUnum tool asks a question, a tap on *Yes* goes back to it.
 - **Camera** takes a 4-frame burst and shows a processed full-resolution photo in ~2 s.
-- **5G / 4G badge**, app switcher, Power-key lock, and Power held 1 s to fall back to the old shell.
+- **5G / 4G badge**, app switcher, Power-key lock, and Power held 3 s to fall back to the old shell.
 
 Older desktop walkthrough (10-09): [tour.gif](docs/media/tour.gif) ·
 [evidence/touchui-20261009](evidence/touchui-20261009/README.md).

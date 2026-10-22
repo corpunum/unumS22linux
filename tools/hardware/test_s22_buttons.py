@@ -118,6 +118,14 @@ class ButtonTests(unittest.TestCase):
             self.assertEqual(len(self.b.actions), 1)
         self.assertEqual(self.events()[-1]['key'], 'power')
 
+    def test_power_long_needs_3s_without_the_shell_too(self):
+        h = self._power_long_hook()
+        with mock.patch.object(MOD.os.path, 'exists', return_value=True):
+            self.b.handle(116, 1, now=0.0); self.b.handle(116, 0, now=2.9)
+            self.assertEqual(self.b.actions, [], '2.9 s: neither power-long nor display toggle')
+            self.b.handle(116, 1, now=5.0); self.b.handle(116, 0, now=8.0)
+        self.assertEqual(self.b.actions, [(str(h),)])
+
     def _shell(self, comm='unum-fastshell'):
         d = self.proc / '4242'; d.mkdir(parents=True, exist_ok=True); (d / 'comm').write_text(comm + '\n')
         self.marker.write_text('4242\n')
@@ -146,8 +154,10 @@ class ButtonTests(unittest.TestCase):
             self._hook(); (self.base / 'ptt-hold').write_text('')
             self.b.handle(115, 1, now=2.0); self.b.tick(now=3.5); self.b.handle(115, 0, now=3.6)
             self.assertEqual(self.b.actions, [], 'shell handles volume, power tap and PTT')
-            self.b.handle(116, 1, now=5.0); self.b.handle(116, 0, now=6.2)
-        self.assertEqual(self.b.actions, [(str(h),)], 'Power held 1 s alone: safety hook')
+            self.b.handle(116, 1, now=5.0); self.b.handle(116, 0, now=7.0)
+            self.assertEqual(self.b.actions, [], 'Power held 2 s alone: nothing')
+            self.b.handle(116, 1, now=8.0); self.b.handle(116, 0, now=11.1)
+        self.assertEqual(self.b.actions, [(str(h),)], 'Power held 3 s alone: safety hook')
         self.assertEqual(self.say.read_text(), '7\n')
         self.assertEqual(self.events()[1].get('by'), 'fastshell')
 
@@ -174,7 +184,7 @@ class ButtonTests(unittest.TestCase):
                 self.b.handle(116, 0, now=4.5); self.b.handle(114, 0, now=4.6)
             self.assertNotIn((str(h),), self.b.actions, f'owned={owned}')
         # and a plain hold right after still works
-        self.b.handle(116, 1, now=10.0); self.b.handle(116, 0, now=11.1)
+        self.b.handle(116, 1, now=10.0); self.b.handle(116, 0, now=13.1)
         self.assertEqual(self.b.actions[-1], (str(h),))
 
     def test_unknown_codes_and_repeats_ignored(self):
