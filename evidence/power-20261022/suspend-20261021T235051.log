@@ -1,0 +1,26 @@
+== Wed Oct 21 23:50:51 UTC 2026 suspend test: 20s state=mem pm_test=freezer mem_sleep=s2idle [deep]
+pre: success=0 fail=0 uptime=10433.20
+-201
+returned rc=0 after 5s wall; success=1 fail=0 last_failed_dev= last_failed_errno=0 last_failed_step=
+[10433.221105] [0:             sh: 8459] PM: suspend entry (deep)
+[10433.227949] [0:             sh: 8459] PM: Preparing system for sleep (deep)
+[10433.230923] [0:             sh: 8459] dwc3_otg_pm_notifier suspend prepare
+[10433.230937] [0:             sh: 8459] PM: suspend entry 2026-10-21 23:50:51.491639820 UTC
+[10433.230959] [0:             sh: 8459] Freezing user space processes ... (elapsed 0.003 seconds) done.
+[10433.234335] [0:             sh: 8459] Freezing remaining freezable tasks ... (elapsed 0.001 seconds) done.
+[10433.236278] [0:             sh: 8459] PM: suspend debug: Waiting for 5 second(s).
+[10438.239384] [1:             sh: 8459] PM: Finishing wakeup.
+[10438.239407] [1:             sh: 8459] Restarting tasks ... 
+[10438.243349] [3:             sh: 8459] dwc3_otg_pm_notifier post suspend
+[10438.243364] [3:             sh: 8459] PM: suspend exit 2026-10-21 23:50:56.504067242 UTC
+[10438.243381] [3:             sh: 8459] PM: suspend exit
+== health
+wifi ok 192.168.50.95/24 gw-ping
+tailscale ok pong from corpunumrig (100.76.5.104) via 192.168.50.126:41641 in 8ms
+modem ok ONLINE READY True home_3gpp lte
+audio ok card0 present, abox suspended
+bt ok hci0 rfkill_soft=0
+shell ok pid 13946 display=off
+touch ok evdev present, stm_ts irqs=10 (physical touch not tested)
+usb ok udc=configured
+== done Wed Oct 21 23:51:04 UTC 2026

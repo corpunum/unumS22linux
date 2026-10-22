@@ -64,7 +64,8 @@ All screenshots: [evidence/touchui-20261009](evidence/touchui-20261009/README.md
 | ✅ **Camera** | Rear and front cameras through our own capture path (no Android camera stack). Photos are processed by our own software ISP (demosaic, white balance, stock colour matrix, multi-frame noise reduction); the shell's Camera page takes and shows them in ~2 s. Short videos under 1 frame/s |
 | ✅ **Audio** | Speaker and microphone work, both directly and through Samsung's DSP graph (the phone's mic hears its own speaker: a 1 kHz test tone at ~1000× the noise floor); earpiece and calls not yet |
 | 🟡 **GPS** | The GNSS chip runs under Linux with Samsung's own engine and tracks real satellites (indoors so far: 1–2 satellites, no position fix yet) |
-| ❌ **Calls, custom NPU models, suspend** | Not working yet |
+| ✅ **Battery / suspend** | Locked, the phone suspends to RAM by itself (`s22-autosleep`) and still answers SSH over Wi-Fi/Tailscale: **36 mA (1.1 %/h) instead of 192 mA (5.8 %/h)** measured; wakes on Wi-Fi and the RTC alarm (Power key and incoming SMS not yet tested physically) |
+| ❌ **Calls, custom NPU models** | Not working yet |
 
 Full hardware table and every earlier checkpoint: [docs/HISTORY.md](docs/HISTORY.md).
 Current details: [STATUS.md](STATUS.md).

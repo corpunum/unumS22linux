@@ -1,0 +1,64 @@
+== Wed Oct 21 23:53:25 UTC 2026 suspend test: 20s state=mem pm_test=core mem_sleep=s2idle [deep]
+pre: success=4 fail=0 uptime=10587.48
+-163
+sh: write error: Resource temporarily unavailable
+returned rc=1 after 0s wall; success=4 fail=1 last_failed_dev=0000:01:00.0 last_failed_errno=-11 last_failed_step=suspend
+[10587.516483] [0:             sh: 8887] PM: suspend entry (deep)
+[10587.527350] [0:             sh: 8887] PM: Preparing system for sleep (deep)
+[10587.530519] [0:             sh: 8887] dwc3_otg_pm_notifier suspend prepare
+[10587.530548] [0:             sh: 8887] PM: suspend entry 2026-10-21 23:53:25.791244703 UTC
+[10587.530591] [0:             sh: 8887] Freezing user space processes ... (elapsed 0.006 seconds) done.
+[10587.536957] [0:             sh: 8887] Freezing remaining freezable tasks ... (elapsed 0.002 seconds) done.
+[10587.539988] [0:             sh: 8887] PM: Suspending system (deep)
+[10587.545072] [0:             sh: 8887] exynos-pcie-rc 113b0000.pcie: exynos_pcie_suspend_prepare - PCIe(HSI) block enable to prepare suspend.
+[10587.554403] [3: kworker/u16:17: 8723] [kworke][0x2771137f8][23:53:25.815091] wlan: [8723:I:HDD] hdd_suspend_wlan: WLAN being suspended by OS
+[10587.556978] [0:             sh: 8887] cs40l26 17-0040: System suspend, disabling IRQ
+[10587.557100] [0:             sh: 8887] ALS_dbg : tsl2510_suspend - 0
+[10587.557265] [0:             sh: 8887] max77705_fuelgauge_suspend: ++
+[10587.557382] [0:             sh: 8887] pdic_max77705: max77705_muic_suspend
+[10587.557623] [0:             sh: 8887] dwc3_suspend +++
+[10587.558145] [0:             sh: 8887] dwc3_suspend ---
+[10587.558650] [0:             sh: 8887] exynos-dwc3 10b00000.usb: dwc3_exynos_suspend
+[10587.559439] [1:             sh: 8887] sec_nfc: suspend
+[10587.559558] [1:             sh: 8887] mfc_charger_suspend: det(0) int(1)
+[10587.559880] [1:             sh: 8887] [sec_mst] mst_ldo_device_suspend: mst power is off, 0
+[10587.560289] [1:             sh: 8887] [sh][0x277114efb][23:53:25.820982] wlan: [8887:I:HDD] __wlan_hdd_bus_suspend: starting bus suspend
+[10587.560610] [1:             sh: 8887] [sh][0x27711503b][23:53:25.821302] wlan: [8887:I:PMO] pmo_core_enable_wow_in_fw: system suspend wow
+[10587.581481] [0:             sh: 8887] [sh][0x27711a1c4][23:53:25.842175] wlan: [8887:E:HDD] __wlan_hdd_bus_suspend: Failed pmo bus suspend: 3
+[10587.581539] [0:             sh: 8887] cnss: Failed to suspend host driver, err = -11
+[10587.581784] [0:             sh: 8887] PM: dpm_run_callback(): cnss_pci_suspend+0x0/0x2ec [cnss2] returns -11
+[10587.581821] [0:             sh: 8887] cnss_pci 0000:01:00.0: PM: failed to suspend: error -11
+[10587.581850] [0:             sh: 8887] PM: suspend of devices aborted after 32.040 msecs
+[10587.581868] [0:             sh: 8887] PM: start suspend of devices aborted after 41.861 msecs
+[10587.581877] [0:             sh: 8887] PM: Some devices failed to suspend, or early wake event detected
+[10587.582285] [0:             sh: 8887] mfc_charger_resume: det(0) int(1)
+[10587.582810] [0:             sh: 8887] sec_nfc: resume
+[10587.582888] [0:             sh: 8887] exynos-dwc3 10b00000.usb: dwc3_exynos_resume
+[10587.582953] [2:  kworker/u16:0: 8581] [kworke][0x27711a776][23:53:25.843633] wlan: [8581:I:HDD] hdd_resume_wlan: WLAN being resumed by OS
+[10587.583352] [0:             sh: 8887] dwc3_resume +++
+[10587.584580] [1:  kworker/u16:0: 8581] [kworke][0x27711add9][23:53:25.845269] wlan: [8581:E:HDD] hdd_restart_tsf_sync_post_wlan_resume: Host TSF sync is not initialized!!
+[10587.598590] [0:             sh: 8887] CR write failed to 0x31c5
+[10587.598759] [0:             sh: 8887] CR write failed to 0x32c5
+[10587.643764] [0:             sh: 8887] dwc3_resume ---
+[10587.643896] [0:             sh: 8887] pdic_max77705: max77705_muic_resume
+[10587.643930] [0:             sh: 8887] max77705_fuelgauge_resume: ++
+[10587.644086] [0:             sh: 8887] ALS_dbg : tsl2510_resume - 0
+[10587.644167] [0:             sh: 8887] cs40l26 17-0040: System resume, re-enabling IRQ
+[10587.648379] [4:             sh: 8887] PM: resume of devices complete after 66.472 msecs
+[10587.658238] [0:             sh: 8887] sec_wakeup_cpu_allocator_complete: cpu mask
+[10587.659919] [0:             sh: 8887] PM: Finishing wakeup.
+[10587.659951] [0:             sh: 8887] Restarting tasks ... 
+[10587.667310] [0:             sh: 8887] Abort: Device 0000:01:00.0 failed to suspend: error -11
+[10587.668400] [0:             sh: 8887] dwc3_otg_pm_notifier post suspend
+[10587.668432] [0:             sh: 8887] PM: suspend exit 2026-10-21 23:53:25.929128648 UTC
+[10587.668468] [0:             sh: 8887] PM: suspend exit
+== health
+wifi ok 192.168.50.95/24 gw-ping
+tailscale ok pong from corpunumrig (100.76.5.104) via 192.168.1.190:41641 in 11ms
+modem ok ONLINE READY True home_3gpp lte
+audio ok card0 present, abox suspended
+bt ok hci0 rfkill_soft=0
+shell ok pid 13946 display=off
+touch ok evdev present, stm_ts irqs=10 (physical touch not tested)
+usb ok udc=configured
+== done Wed Oct 21 23:53:34 UTC 2026

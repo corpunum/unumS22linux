@@ -1,0 +1,166 @@
+== Wed Oct 21 23:54:06 UTC 2026 suspend test: 20s state=mem pm_test=core mem_sleep=s2idle [deep]
+pre: success=4 fail=1 uptime=10628.69
+-163
+returned rc=0 after 6s wall; success=5 fail=1 last_failed_dev=0000:01:00.0 last_failed_errno=-11 last_failed_step=suspend
+401
+^ pm_wakeup_irq
+[10628.723480] [0:             sh: 8996] PM: suspend entry (deep)
+[10628.734538] [0:             sh: 8996] PM: Preparing system for sleep (deep)
+[10628.737432] [0:             sh: 8996] dwc3_otg_pm_notifier suspend prepare
+[10628.737445] [0:             sh: 8996] PM: suspend entry 2026-10-21 23:54:06.998148140 UTC
+[10628.737465] [0:             sh: 8996] Freezing user space processes ... (elapsed 0.003 seconds) done.
+[10628.740933] [0:             sh: 8996] Freezing remaining freezable tasks ... (elapsed 0.001 seconds) done.
+[10628.742941] [0:             sh: 8996] PM: Suspending system (deep)
+[10628.745351] [0:             sh: 8996] exynos-pcie-rc 113b0000.pcie: exynos_pcie_suspend_prepare - PCIe(HSI) block enable to prepare suspend.
+[10628.750804] [0:             sh: 8996] cs40l26 17-0040: System suspend, disabling IRQ
+[10628.750858] [0:             sh: 8996] ALS_dbg : tsl2510_suspend - 0
+[10628.750864] [3:  kworker/u16:6: 8584] [kworke][0x27985d3ac][23:54:07.011559] wlan: [8584:I:HDD] hdd_suspend_wlan: WLAN being suspended by OS
+[10628.750946] [0:             sh: 8996] max77705_fuelgauge_suspend: ++
+[10628.750997] [0:             sh: 8996] pdic_max77705: max77705_muic_suspend
+[10628.751108] [0:             sh: 8996] dwc3_suspend +++
+[10628.751600] [0:             sh: 8996] dwc3_suspend ---
+[10628.751830] [0:             sh: 8996] exynos-dwc3 10b00000.usb: dwc3_exynos_suspend
+[10628.751861] [0:             sh: 8996] sec_nfc: suspend
+[10628.751916] [0:             sh: 8996] mfc_charger_suspend: det(0) int(1)
+[10628.752084] [0:             sh: 8996] [sec_mst] mst_ldo_device_suspend: mst power is off, 0
+[10628.752709] [0:             sh: 8996] [sh][0x27985dae8][23:54:07.013411] wlan: [8996:I:HDD] __wlan_hdd_bus_suspend: starting bus suspend
+[10628.752827] [0:             sh: 8996] [sh][0x27985db5f][23:54:07.013530] wlan: [8996:I:PMO] pmo_core_enable_wow_in_fw: system suspend wow
+[10628.796253] [0:             sh: 8996] [sh][0x2798684d1][23:54:07.056907] wlan: [8996:I:HDD] __wlan_hdd_bus_suspend: bus suspend succeeded
+[10628.797102] [0:             sh: 8996] mhi mhi_1103_00.01.00: [I][mhi_pm_suspend] Allowing M3 transition
+[10628.797122] [0:             sh: 8996] mhi mhi_1103_00.01.00: [I][mhi_pm_suspend] Wait for M3 completion
+[10628.815160] [0:             sh: 8996] exynos-pcie-rc 113b0000.pcie: ## exynos_pcie_pm_suspend(state: 3)
+[10628.816622] [0:             sh: 8996] [@]is_sensor_suspend
+[10628.816661] [0:             sh: 8996] [@]is_sensor_suspend
+[10628.816698] [0:             sh: 8996] [@]is_sensor_suspend
+[10628.816735] [0:             sh: 8996] [@]is_sensor_suspend
+[10628.816772] [0:             sh: 8996] [@]is_sensor_suspend
+[10628.824439] [0:             sh: 8996] s2mps26_pmic_suspend: adc_mode enable
+[10628.883161] [2:  kworker/u16:2: 7612] exynos-ufs 11100000.ufs: __exynos_ufs_suspend: prev h_state 5, cur c_state 1
+[10628.887588] [0:             sh: 8996] s2mps25_pmic_suspend: adc_mode enable
+[10628.887930] [0:             sh: 8996] [GRIP_0] isg6320_suspend
+[10628.887988] [0:             sh: 8996] max77705:max77705_suspend
+[10628.889366] [0:             sh: 8996] [VTS]vts_suspend: TEST
+[10628.893264] [0:             sh: 8996] exynos-uart 11c40000.uart: exynos_serial_suspend
+[10628.894010] [0:             sh: 8996] exynos-uart 10840000.uart: exynos_serial_suspend
+[10628.895543] [2:  kworker/u16:2: 7612] hub 1-0:1.0: hub_resume
+[10628.895928] [3:  kworker/u16:2: 7612] hub 1-0:1.0: hub_suspend
+[10628.898141] [0:             sh: 8996] exynos_tmu_suspend: TMU suspend w/ AUD-off
+[10628.898619] [2:             sh: 8996] exynos-itmon exynos-itmon: itmon_suspend
+[10628.900154] [2:             sh: 8996] PM: suspend of devices complete after 152.549 msecs
+[10628.900168] [2:             sh: 8996] PM: start suspend of devices complete after 157.217 msecs
+[10628.906102] [2:             sh: 8996] exynos-devfreq 170000f0.devfreq_vts: failed get frequency from CAL
+[10628.907916] [2:             sh: 8996] exynos-devfreq 17000070.devfreq_aud: failed get freq
+[10628.915973] [2:             sh: 8996] PM: late suspend of devices complete after 15.777 msecs
+[10628.923705] [2:             sh: 8996] cs40l26 17-0040: Late system suspend, re-enabling IRQ
+[10628.925463] [2:             sh: 8996] exynos-pcie-rc 113b0000.pcie: ## SUSPEND[exynos_pcie_rc_suspend_noirq]: LINK_DOWN(pcie_is_linkup: 0)
+[10628.925479] [2:             sh: 8996] exynos-pcie-rc 113b0000.pcie: exynos_pcie_rc_suspend_noirq: RC0 already off
+[10628.929691] [2:             sh: 8996] cpif: suspend_cp: s5133ap: pda_active:0
+[10628.930813] [2:             sh: 8996] sec_wakeup_cpu_allocator_suspend_noirq
+[10628.931939] [2:             sh: 8996] PM: noirq suspend of devices complete after 10.511 msecs
+[10628.951994] [0:             sh: 8996] PM: Checking wakeup interrupts
+[10628.952031] [0:             sh: 8996] PM: Calling exynos_bts_syscore_suspend+0x0/0x14 [exynos_bts]
+[10628.952047] [0:             sh: 8996] PM: Calling exynos_pm_syscore_suspend+0x0/0x12c [exynos_pm]
+[10628.953003] [0:             sh: 8996] EXYNOS-PM: exynos_pm_syscore_suspend: Enter Suspend scenario. suspend_mode_idx = 8)
+[10628.953021] [0:             sh: 8996] EXYNOS-PM:: prev mif_count:0, apsoc_count:0, seq_early_wakeup_count:0
+[10628.953052] [0:             sh: 8996] PM: Calling samsung_pinctrl_suspend+0x0/0x308 [pinctrl_samsung_core]
+[10628.953078] [0:             sh: 8996] samsung-pinctrl 15850000.pinctrl: No retention data configured bank with external wakeup interrupt. Wake-up mask will not be set.
+[10628.953106] [0:             sh: 8996] samsung-pinctrl 14e30000.pinctrl: No retention data configured bank with external wakeup interrupt. Wake-up mask will not be set.
+[10628.953493] [0:             sh: 8996] PM: Calling s3c2410wdt_syscore_suspend+0x0/0x124 [s3c2410_wdt]
+[10628.953580] [0:             sh: 8996] PM: Calling sched_clock_suspend+0x0/0x164
+[10628.953584] [0:             sh: 8996] PM: Calling timekeeping_suspend+0x0/0x40c
+[10628.953584] [0:             sh: 8996] PM: Calling irq_gc_suspend+0x0/0xd8
+[10628.953584] [0:             sh: 8996] PM: Calling cpu_pm_suspend+0x0/0xcc
+[10628.953584] [0:             sh: 8996] PM: Calling gic_suspend+0x0/0xe4
+[10628.953584] [0:             sh: 8996] PM: suspend debug: Waiting for 5 second(s).
+[10628.953584] [0:             sh: 8996] PM: Calling gic_resume+0x0/0xa8
+[10628.953584] [0:             sh: 8996] PM: Calling cpu_pm_resume+0x0/0x6c
+[10628.953584] [0:             sh: 8996] PM: Calling irq_gc_resume+0x0/0xd4
+[10628.953584] [0:             sh: 8996] PM: Calling irq_pm_syscore_resume+0x0/0x24
+[10628.953584] [0:             sh: 8996] PM: Calling timekeeping_resume+0x0/0x18c
+[10628.953584] [0:             sh: 8996] PM: Timekeeping suspended for 5.001 seconds
+[10628.953584] [0:             sh: 8996] PM: Calling sched_clock_resume+0x0/0x10c
+[10628.953599] [0:             sh: 8996] PM: Calling s3c2410wdt_syscore_resume+0x0/0x414 [s3c2410_wdt]
+[10628.953714] [0:             sh: 8996] PM: Calling samsung_pinctrl_resume+0x0/0x390 [pinctrl_samsung_core]
+[10628.954049] [0:             sh: 8996] PM: Calling exynos_pm_syscore_resume+0x0/0x57c [exynos_pm]
+[10628.954057] [0:             sh: 8996] EXYNOS-PM:: post mif_count:0, apsoc_count:0, seq_early_wakeup_count:0
+[10628.954067] [0:             sh: 8996] EXYNOS-PM: exynos_pm_syscore_resume: return to originator
+[10628.954078] [0:             sh: 8996] EXYNOS-PM:: MIF blocked. MIF request Mster was  0x40
+[10628.954270] [0:             sh: 8996] EXYNOS-PM: early wakeup! Dumping pending registers...
+[10628.954665] [0:             sh: 8996] EXYNOS-PM: done.
+[10628.954685] [0:             sh: 8996] PM: Calling exynos_bts_syscore_resume+0x0/0x454 [exynos_bts]
+[10628.971021] [2:             sh: 8996] usi_v2 11c2117c.usi: usi_v2_resume_noirq mode:4
+[10628.971041] [2:             sh: 8996] usi_v2 11c21180.usi: usi_v2_resume_noirq mode:2
+[10628.974087] [2:             sh: 8996] sec_wakeup_cpu_allocator_resume_noirq: cpu mask
+[10628.975090] [4:             sh: 8996] cpif: resume_cp: s5133ap: pda_active:1
+[10628.978478]I[0:      swapper/0:    0] PM: pm_system_irq_wakeup: 401 triggered cp_mbox_irq_0
+[10628.984866] [4:             sh: 8996] exynos-pcie-rc 113b0000.pcie: ## RESUME[exynos_pcie_rc_resume_noirq]: LINK_DOWN(pcie_is_linkup: 0)
+[10628.984878] [4:             sh: 8996] exynos-pcie-rc 113b0000.pcie: exynos_pcie_rc_resume_noirq: RC0 Link down state-> phypwr off
+[10628.984907] [4:             sh: 8996] exynos-pcie-rc 113b0000.pcie: [exynos_pcie_rc_resumed_phydown] ## PCIe PMU regmap update 1 : BYPASS ##
+[10628.993575] [4:             sh: 8996] cs40l26 17-0040: Early system resume, disabling IRQ
+[10628.994681] [4:             sh: 8996] PM: noirq resume of devices complete after 25.081 msecs
+[10628.995227]I[0:      swapper/0:    0] cpif: io_dev_recv_skb_single_from_link_dev: umts_ipc1<-shmem: ERR! rx_demux fail (err -19)
+[10628.995246]I[0:      swapper/0:    0] cpif: pass_skb_to_demux: shmem: umts_ipc1<-s5133ap: ERR! umts_ipc1->recv_skb fail (-19)
+[10628.995301]I[0:      swapper/0:    0] cpif: io_dev_recv_skb_single_from_link_dev: umts_ipc1<-shmem: ERR! rx_demux fail (err -19)
+[10628.995316]I[0:      swapper/0:    0] cpif: pass_skb_to_demux: shmem: umts_ipc1<-s5133ap: ERR! umts_ipc1->recv_skb fail (-19)
+[10629.004215] [4:             sh: 8996] exynos-devfreq 170000f0.devfreq_vts: failed get frequency from CAL
+[10629.006712] [4:             sh: 8996] PM: early resume of devices complete after 11.468 msecs
+[10629.009503] [4:             sh: 8996] exynos-itmon exynos-itmon: itmon_resume
+[10629.009635] [4:             sh: 8996] exynos_acpm_tmu_set_resume: acpm irq 0 cold cnt 0 stat 1
+[10629.010631] [4:             sh: 8996] exynos_tmu_resume: thermal zone 0 temp 31 stat 0
+[10629.011185] [4:             sh: 8996] exynos_tmu_resume: thermal zone 1 temp 30 stat 0
+[10629.011470] [4:             sh: 8996] exynos_tmu_resume: thermal zone 2 temp 30 stat 0
+[10629.011968] [4:             sh: 8996] exynos_tmu_resume: thermal zone 3 temp 31 stat 0
+[10629.012088] [4:             sh: 8996] exynos_tmu_resume: thermal zone 4 temp 30 stat 0
+[10629.012257] [4:             sh: 8996] exynos_tmu_resume: thermal zone 5 temp 31 stat 0
+[10629.012332] [4:             sh: 8996] exynos_tmu_resume: thermal zone 6 temp 32 stat 0
+[10629.012339] [4:             sh: 8996] exynos_tmu_resume: TMU resume complete
+[10629.012902] [4:             sh: 8996] pwm_samsung_restore_regs: PWM chip data resume done.
+[10629.013084] [0:  kworker/u16:3: 7907] hub 1-0:1.0: hub_resume
+[10629.014409] [4:             sh: 8996] hall_ic_resume certify_hall open(1)
+[10629.014465] [4:             sh: 8996] hall_ic_resume hall open(1)
+[10629.016554] [4:             sh: 8996] max77705:max77705_resume
+[10629.016602] [4:             sh: 8996] [GRIP_0] isg6320_resume
+[10629.016700] [4:             sh: 8996] s2mps25_pmic_resume: adc_mode enable
+[10629.018204] [4:             sh: 8996] s2mps26_pmic_resume: adc_mode enable
+[10629.018387] [4:             sh: 8996] phy_exynos_usbdrd 10aa0000.phy: exynos_usbdrd_phy_resume, is_conn = 0
+[10629.018613] [4:             sh: 8996] [@]is_sensor_resume
+[10629.018628] [4:             sh: 8996] [@]is_sensor_resume
+[10629.018640] [4:             sh: 8996] [@]is_sensor_resume
+[10629.018651] [4:             sh: 8996] [@]is_sensor_resume
+[10629.018663] [4:             sh: 8996] [@]is_sensor_resume
+[10629.064598] [4:             sh: 8996] mhi mhi_1103_00.01.00: [I][mhi_pm_resume] Entered with PM state: M3, MHI state: M3
+[10629.068013] [4:             sh: 8996] [sh][0x2798aaada][23:54:12.330263] wlan: [8996:I:HDD] wlan_hdd_bus_resume: starting bus resume
+[10629.068252] [4:             sh: 8996] [sh][0x2798aabd0][23:54:12.330508] wlan: [8996:I:PMO] pmo_core_psoc_send_host_wakeup_ind_to_fw: Host wakeup indication sent to fw
+[10629.079715]I[0:      swapper/0:    0] [soft_i][0x2798ad88f][23:54:12.341963] wlan: [0:I:WMA] Non-WLAN triggered wakeup: UNSPECIFIED (-1)
+[10629.080619] [4:             sh: 8996] [sh][0x2798adc1c][23:54:12.342872] wlan: [8996:I:HDD] wlan_hdd_bus_resume: bus resume succeeded
+[10629.080787] [4:             sh: 8996] mfc_charger_resume: det(0) int(1)
+[10629.080927] [4:             sh: 8996] sec_nfc: resume
+[10629.080962] [4:             sh: 8996] exynos-dwc3 10b00000.usb: dwc3_exynos_resume
+[10629.081068] [2:  kworker/u16:2: 7612] [kworke][0x2798adddf][23:54:12.343323] wlan: [7612:I:HDD] hdd_resume_wlan: WLAN being resumed by OS
+[10629.081156] [4:             sh: 8996] dwc3_resume +++
+[10629.081619] [2:  kworker/u16:2: 7612] [kworke][0x2798ae008][23:54:12.343877] wlan: [7612:E:HDD] hdd_restart_tsf_sync_post_wlan_resume: Host TSF sync is not initialized!!
+[10629.095735] [4:             sh: 8996] CR write failed to 0x31c5
+[10629.095784] [4:             sh: 8996] CR write failed to 0x32c5
+[10629.139462] [4:             sh: 8996] dwc3_resume ---
+[10629.139522] [4:             sh: 8996] pdic_max77705: max77705_muic_resume
+[10629.139538] [4:             sh: 8996] max77705_fuelgauge_resume: ++
+[10629.139618] [4:             sh: 8996] ALS_dbg : tsl2510_resume - 0
+[10629.139656] [4:             sh: 8996] cs40l26 17-0040: System resume, re-enabling IRQ
+[10629.140561] [4:             sh: 8996] PM: resume of devices complete after 133.836 msecs
+[10629.144304] [4:             sh: 8996] sec_wakeup_cpu_allocator_complete: cpu mask
+[10629.144862] [4:             sh: 8996] PM: Finishing wakeup.
+[10629.144873] [4:             sh: 8996] Restarting tasks ... 
+[10629.146947] [4:             sh: 8996] Resume caused by IRQ 401, cp_mbox_irq_0
+[10629.147275] [4:             sh: 8996] dwc3_otg_pm_notifier post suspend
+[10629.147287] [4:             sh: 8996] PM: suspend exit 2026-10-21 23:54:12.409548335 UTC
+[10629.147302] [4:             sh: 8996] PM: suspend exit
+== health
+wifi ok 192.168.50.95/24 gw-ping
+tailscale ok pong from corpunumrig (100.76.5.104) via 192.168.1.190:41641 in 20ms
+modem ok ONLINE READY True home_3gpp lte
+audio ok card0 present, abox suspended
+bt ok hci0 rfkill_soft=0
+shell ok pid 13946 display=off
+touch ok evdev present, stm_ts irqs=10 (physical touch not tested)
+usb ok udc=configured
+== done Wed Oct 21 23:54:21 UTC 2026

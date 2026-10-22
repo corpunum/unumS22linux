@@ -12,7 +12,8 @@
     "wifi_wpa",
     "wifi_dhcp",
     "lightpanda_proxy",
-    "bluetooth"
+    "bluetooth",
+    "autosleep"
   ],
   "pin_model": true,
   "pin": {
@@ -208,6 +209,17 @@
       "start_wait_s": 110,
       "max_restarts": 1000,
       "backoff_max_s": 300
+    },
+    "autosleep": {
+      "argv": [
+        "/usr/bin/python3",
+        "/srv/s22/hardware/bin/s22-autosleep",
+        "run"
+      ],
+      "needle": "/srv/s22/hardware/bin/s22-autosleep run",
+      "requires": "/srv/s22/hardware/bin/s22-autosleep",
+      "log": "/srv/s22/state/autosleep/daemon.out",
+      "start_wait_s": 5
     }
   },
   "pin_allow": [
