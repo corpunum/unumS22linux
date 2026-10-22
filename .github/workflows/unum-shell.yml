@@ -3,7 +3,7 @@ on:
   pull_request:
     paths: ["tools/unum-shell/**", ".github/workflows/unum-shell.yml"]
   push:
-    branches: [master]
+    branches: [main]
     paths: ["tools/unum-shell/**", ".github/workflows/unum-shell.yml"]
   workflow_dispatch:
 permissions:
