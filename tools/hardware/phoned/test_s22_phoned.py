@@ -295,6 +295,33 @@ class GateTest(unittest.TestCase):
         self.assertEqual(code, 403)
         self.assertEqual(self.ph.link.sent, [])            # nothing was transmitted
 
+    def grant(self, n, kind, expires_in=60, **over):
+        d = Path(self.tmp.name, "grants")
+        d.mkdir(exist_ok=True)
+        g = {"number": n, "kind": kind, "expires": time.time() + expires_in, **over}
+        (d / f"{n}.{kind}").write_text(json.dumps(g))
+        return d / f"{n}.{kind}"
+
+    def test_s22d_grant_is_one_shot_kind_bound_and_expires(self):
+        Path(self.tmp.name, "tx_enabled").touch()
+        n = "+306912345678"
+        g = self.grant(n, "dial")
+        self.assertIn("allowlist", self.ph.send_sms(n, "x")[1]["error"])   # wrong kind
+        self.assertTrue(g.exists(), "an sms send must not consume a dial grant")
+        self.assertEqual(self.ph.dial(n)[0], 200)
+        self.assertFalse(g.exists(), "consumed")
+        self.ph.dial_rate = P.RateLimit(5)
+        self.assertEqual(self.ph.dial(n)[0], 403, "one shot only")
+        self.grant(n, "dial", expires_in=-1)
+        self.assertEqual(self.ph.dial(n)[0], 403, "expired")
+        self.grant(n, "dial", number="+30000000000")
+        self.assertEqual(self.ph.dial(n)[0], 403, "number inside must match")
+        self.grant("112", "dial")
+        self.assertIn("emergency", self.ph.dial("112")[1]["error"])
+        Path(self.tmp.name, "tx_enabled").unlink()
+        self.grant(n, "dial")
+        self.assertIn("tx disabled", self.ph.dial(n)[1]["error"])
+
     def test_emergency_always_refused(self):
         Path(self.tmp.name, "tx_enabled").touch()
         self.allow("112", "+30112", "911", "166")

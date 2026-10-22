@@ -9,6 +9,7 @@ pub mod phoned;
 pub mod recovery;
 pub mod runner;
 pub mod services;
+pub mod settings;
 pub mod sys;
 pub mod touch;
 pub mod wifi;

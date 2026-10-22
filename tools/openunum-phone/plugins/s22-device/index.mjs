@@ -5,12 +5,16 @@
 // or a risk tier. Risky actions (SMS, calls, recovery reboot) are confirmed by s22d itself, on the
 // phone's screen, before it acts; this plugin never answers that question on the owner's behalf.
 //
+// The device API (/v1/device) becomes one tool, phone_device; legacy tools the daemon marks
+// superseded_by "phone_device" are then hidden (config legacy_tools: "uncovered" | "all").
+//
 // Enabled only on the phone: the /srv/s22 marker exists, or config {"enabled": true}.
 // Config: plugin.json "config", overridden by $OPENUNUM_HOME/plugins.json {"s22-device": {...}}.
 import fs from 'node:fs';
 import { PluginBase, pluginBaseSource } from './lib/plugin-base.mjs';
 import { buildRequest, toolsFromCapabilities } from './lib/capabilities.mjs';
 import { validate } from './lib/schema.mjs';
+import { DEVICE_TOOL, deviceTool } from './lib/device.mjs';
 
 export { pluginBaseSource };
 
@@ -26,7 +30,8 @@ export function resolveConfig(raw = {}) {
     discoveryTimeoutMs: Math.min(60000, Math.max(500, Number(raw.discovery_timeout_ms) || 8000)),
     refreshIntervalMs: Math.max(0, Number(raw.refresh_interval_s ?? 60) * 1000),
     marker: raw.mobile_marker || '/srv/s22',
-    enabled: raw.enabled
+    enabled: raw.enabled,
+    legacyTools: raw.legacy_tools === 'all' ? 'all' : 'uncovered'
   };
 }
 
@@ -39,6 +44,7 @@ export class S22DevicePlugin extends PluginBase {
     this.enabled = false;
     this.reachable = null;
     this.timer = null;
+    this.devTool = null;
   }
 
   async onInit(config = {}) {
@@ -81,8 +87,38 @@ export class S22DevicePlugin extends PluginBase {
     this.reachable = doc?.ok !== false;
     if (!this.reachable) return;
     const { tools, skipped } = toolsFromCapabilities(doc);
+    const devDoc = await this._request('GET', '/v1/device', undefined, this.settings.discoveryTimeoutMs);
+    const blip = devDoc?.error === 'daemon_timeout' || devDoc?.error === 'daemon_unreachable';
+    const dev = blip ? this.devTool : deviceTool(devDoc);
+    this.devTool = dev;
+    const superseded = new Set((doc.capabilities || []).filter((c) => c?.superseded_by === DEVICE_TOOL).map((c) => c.tool));
+    const keep = dev && this.settings.legacyTools === 'uncovered' ? tools.filter((t) => !superseded.has(t.name)) : tools;
     this.skipped = skipped;
-    this.tools = tools.map((tool) => ({ ...tool, execute: (input) => this._execute(tool, input) }));
+    this.tools = keep.map((tool) => ({ ...tool, execute: (input) => this._execute(tool, input) }));
+    if (dev) this.tools.unshift({ ...dev, execute: (input) => this._device(dev, input) });
+  }
+
+  /** phone_device: POST /v1/device/<action> with the remaining arguments; the daemon checks them. */
+  async _device(tool, input = {}) {
+    const args = { ...(input?.args && typeof input.args === 'object' ? input.args : input) };
+    // Small models send "40" and "true"; coerce to the declared type before checking.
+    for (const [k, v] of Object.entries(args)) {
+      const type = tool.parameters.properties[k]?.type;
+      if (typeof v !== 'string') continue;
+      if (type === 'integer' && /^\s*\d+\s*%?\s*$/.test(v)) args[k] = parseInt(v, 10);
+      if (type === 'boolean' && /^(true|false|on|off)$/i.test(v)) args[k] = /^(true|on)$/i.test(v);
+    }
+    const problems = validate(tool.parameters, args);
+    if (problems.length) return { ok: false, error: 'invalid_input', details: problems };
+    const action = args.action;
+    delete args.action;
+    const out = await this._request('POST', `/v1/device/${encodeURIComponent(action)}`, args, tool.actionTimeoutMs(action));
+    if (tool.effectOf(action) !== 'read') {
+      try {
+        this.ctx?.log?.info?.('s22-device action', { tool: tool.name, action, ok: out?.ok !== false, code: out?.code });
+      } catch { /* logging must never fail the action */ }
+    }
+    return out;
   }
 
   async _request(method, path, body, timeoutMs) {
@@ -92,7 +128,8 @@ export class S22DevicePlugin extends PluginBase {
       const res = await fetch(this.settings.daemonUrl + path, {
         method,
         signal: abort.signal,
-        headers: body === undefined ? {} : { 'content-type': 'application/json' },
+        // The daemon's audit log records who asked.
+        headers: body === undefined ? { 'x-s22-caller': 'agent' } : { 'content-type': 'application/json', 'x-s22-caller': 'agent' },
         ...(body === undefined ? {} : { body: JSON.stringify(body) })
       });
       const text = await res.text();

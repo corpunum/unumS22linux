@@ -9,9 +9,11 @@ import { fileURLToPath } from 'node:url';
 import Plugin from '../index.mjs';
 import { RISK_FLOOR, buildRequest, toolsFromCapabilities } from '../lib/capabilities.mjs';
 import { sampleInput, validate } from '../lib/schema.mjs';
+import { deviceTool } from '../lib/device.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SPEC = JSON.parse(fs.readFileSync(path.join(here, '../../../../s22d/capabilities.json'), 'utf8'));
+const DEVICE = JSON.parse(fs.readFileSync(path.join(here, '../../../../s22d/device-capabilities.json'), 'utf8'));
 const clone = (x) => JSON.parse(JSON.stringify(x));
 
 // ---------------------------------------------------------------- a fake s22d
@@ -27,7 +29,7 @@ function matchRoute(caps, method, pathname) {
 }
 
 /** Plays s22d: serves the spec, checks every request against it, and records what it saw. */
-async function startDaemon(spec = SPEC, { delayMs = 0, answer } = {}) {
+async function startDaemon(spec = SPEC, { delayMs = 0, answer, device = null } = {}) {
   const seen = [];
   const server = http.createServer(async (req, res) => {
     let raw = '';
@@ -38,6 +40,18 @@ async function startDaemon(spec = SPEC, { delayMs = 0, answer } = {}) {
       res.end(JSON.stringify(body));
     };
     if (req.method === 'GET' && url.pathname === '/v1/capabilities') return send(200, spec);
+    if (device && req.method === 'GET' && url.pathname === '/v1/device') return send(200, device);
+    if (device && req.method === 'POST' && url.pathname.startsWith('/v1/device/')) {
+      const id = decodeURIComponent(url.pathname.slice('/v1/device/'.length));
+      const cap = device.capabilities.find((c) => c.id === id);
+      const body = raw ? JSON.parse(raw) : {};
+      seen.push({ id: `device:${id}`, method: req.method, path: url.pathname, body, caller: req.headers['x-s22-caller'] });
+      if (!cap) return send(404, { ok: false, code: 'not_found', error: 'no such capability' });
+      const problems = validate(cap.args, body);
+      if (problems.length) return send(400, { ok: false, cap: id, code: 'bad_request', error: problems.join('; ') });
+      if (answer) return send(...answer(cap, body));
+      return send(200, { ok: true, cap: id, effect: cap.effect, state: { echo: body } });
+    }
     const route = matchRoute(spec.capabilities, req.method, url.pathname);
     if (!route) return send(404, { ok: false, code: 'not_found', error: 'no such endpoint' });
     // s22d reads GET parameters from the query string and POST parameters from the JSON body.
@@ -90,19 +104,21 @@ test('spec: every usable capability becomes exactly one tool with the daemon sch
   await daemon.close();
 });
 
-test('spec: unavailable capabilities (Bluetooth power and scan) get no tool', async () => {
+test('spec: unavailable capabilities (Bluetooth scan) get no tool', async () => {
   const daemon = await startDaemon();
   const plugin = await makePlugin(daemon);
   const names = plugin.getTools().map((t) => t.name);
-  assert.ok(!names.includes('bt_power') && !names.includes('bt_scan'));
-  assert.ok(names.includes('bt_status'));
+  assert.ok(!names.includes('bt_scan'));
+  assert.ok(names.includes('bt_status') && names.includes('bt_power'));
   await daemon.close();
 });
 
 test('spec: the three risky capabilities are exactly the ones the plugin locks to risky', () => {
   const risky = SPEC.capabilities.filter((c) => c.risk === 'risky').map((c) => c.id).sort();
   assert.deepEqual(risky, Object.keys(RISK_FLOOR).sort());
-  for (const cap of SPEC.capabilities.filter((c) => c.risk === 'risky')) assert.equal(cap.confirm, 'owner');
+  // Owner policy 2026-10-22: calls and SMS ask only for numbers that are not on the phone allowlist.
+  const confirm = Object.fromEntries(SPEC.capabilities.filter((c) => c.risk === 'risky').map((c) => [c.id, c.confirm]));
+  assert.deepEqual(confirm, { 'sms.send': 'unlisted_number', 'call.dial': 'unlisted_number', 'system.reboot-recovery': 'owner' });
 });
 
 test('contract: every tool calls exactly its method and path with the parameters the schema names', async () => {
@@ -407,4 +423,82 @@ test('no tool name collides with another phone plugin (OpenUnum runs the first m
   assert.ok(others.includes('sms_send'), 'fixture sanity: s22-phone exposes sms_send');
   const mine = SPEC.capabilities.map((c) => c.tool);
   assert.deepEqual(mine.filter((t) => others.includes(t)), []);
+});
+
+// ---------------------------------------------------------------- phone_device (the device API)
+
+test('phone_device: one tool from /v1/device; superseded legacy tools are hidden', async () => {
+  const daemon = await startDaemon(SPEC, { device: DEVICE });
+  const plugin = await makePlugin(daemon);
+  const names = plugin.getTools().map((t) => t.name);
+  assert.equal(names[0], 'phone_device');
+  const tool = toolByName(plugin, 'phone_device');
+  assert.deepEqual(tool.parameters.properties.action.enum, DEVICE.capabilities.map((c) => c.id));
+  for (const cap of SPEC.capabilities.filter((c) => c.available)) {
+    assert.equal(names.includes(cap.tool), cap.superseded_by !== 'phone_device', cap.id);
+  }
+  assert.ok(names.includes('wifi_scan') && names.includes('service_restart') && names.includes('camera_record'));
+  // The schema stays small for local models: few properties, short description.
+  assert.ok(Object.keys(tool.parameters.properties).length <= 12);
+  assert.ok(JSON.stringify(tool.parameters).length + tool.description.length < 3000, 'tool too large');
+  const all = await makePlugin(daemon, { legacy_tools: 'all' });
+  assert.equal(all.getTools().length, SPEC.capabilities.filter((c) => c.available).length + 1);
+  await daemon.close();
+});
+
+test('phone_device: posts the action to /v1/device/<action> with the other args, as the agent', async () => {
+  const daemon = await startDaemon(SPEC, { device: DEVICE });
+  const plugin = await makePlugin(daemon);
+  const tool = toolByName(plugin, 'phone_device');
+  const out = await tool.execute({ args: { action: 'brightness.set', value: 40 }, context: {} });
+  assert.equal(out.ok, true);
+  assert.deepEqual(out.state.echo, { value: 40 });
+  const last = daemon.seen.at(-1);
+  assert.equal(last.path, '/v1/device/brightness.set');
+  assert.equal(last.caller, 'agent');
+  // Strings from small models are coerced to the declared types.
+  await tool.execute({ action: 'wifi.set', on: 'off' });
+  assert.deepEqual(daemon.seen.at(-1).body, { on: false });
+  await tool.execute({ action: 'brightness.set', value: '40%' });
+  assert.deepEqual(daemon.seen.at(-1).body, { value: 40 });
+  // The daemon's own refusal comes back unchanged.
+  const bad = await tool.execute({ action: 'wifi.set', value: 3 });
+  assert.equal(bad.code, 'bad_request');
+  // Unknown actions never reach the network.
+  const before = daemon.seen.length;
+  const nope = await tool.execute({ action: 'rm -rf' });
+  assert.equal(nope.error, 'invalid_input');
+  assert.equal(daemon.seen.length, before);
+  await daemon.close();
+});
+
+test('phone_device: needs_confirmation from the daemon is passed back for the agent to report', async () => {
+  const daemon = await startDaemon(SPEC, {
+    device: DEVICE,
+    answer: (cap) => [409, { ok: false, cap: cap.id, code: 'needs_confirmation', error: 'nobody confirmed' }]
+  });
+  const plugin = await makePlugin(daemon);
+  const out = await toolByName(plugin, 'phone_device').execute({ action: 'sms.send', number: '+306900000000', text: 'hi' });
+  assert.equal(out.code, 'needs_confirmation');
+  assert.equal(out.status, 409);
+  await daemon.close();
+});
+
+test('phone_device: no device API (older s22d) means the legacy tools only', async () => {
+  const daemon = await startDaemon();
+  const plugin = await makePlugin(daemon);
+  assert.equal(toolByName(plugin, 'phone_device'), undefined);
+  assert.ok(toolByName(plugin, 'display_brightness'));
+  assert.equal(deviceTool({ ok: false }), null);
+  assert.equal(deviceTool({ api: 'device/2', capabilities: [] }), null);
+  await daemon.close();
+});
+
+test('phone_device: per-action timeouts come from the catalog', () => {
+  const tool = deviceTool(DEVICE);
+  assert.equal(tool.actionTimeoutMs('camera.capture'), 330000);
+  assert.equal(tool.actionTimeoutMs('volume.get'), 10000);
+  assert.equal(tool.effectOf('wifi.set'), 'set');
+  assert.equal(tool.parameters.properties.value.minimum, 0);
+  assert.equal(tool.parameters.properties.value.maximum, 3600);
 });

@@ -16,6 +16,7 @@
       "path": "/v1/status",
       "reason": null,
       "risk": "read",
+      "superseded_by": "phone_device",
       "timeout_s": 15,
       "tool": "device_status"
     },
@@ -34,6 +35,7 @@
       "path": "/v1/battery",
       "reason": null,
       "risk": "read",
+      "superseded_by": "phone_device",
       "timeout_s": 15,
       "tool": "device_battery"
     },
@@ -52,6 +54,7 @@
       "path": "/v1/thermal",
       "reason": null,
       "risk": "read",
+      "superseded_by": "phone_device",
       "timeout_s": 15,
       "tool": "device_thermal"
     },
@@ -83,6 +86,7 @@
       "path": "/v1/processes/top",
       "reason": null,
       "risk": "read",
+      "superseded_by": null,
       "timeout_s": 15,
       "tool": "processes_top"
     },
@@ -111,6 +115,7 @@
       "path": "/v1/logs/dmesg",
       "reason": null,
       "risk": "read",
+      "superseded_by": null,
       "timeout_s": 15,
       "tool": "dmesg_read"
     },
@@ -129,6 +134,7 @@
       "path": "/v1/wifi/status",
       "reason": null,
       "risk": "read",
+      "superseded_by": "phone_device",
       "timeout_s": 20,
       "tool": "wifi_status"
     },
@@ -147,6 +153,7 @@
       "path": "/v1/wifi/scan",
       "reason": null,
       "risk": "read",
+      "superseded_by": null,
       "timeout_s": 25,
       "tool": "wifi_scan"
     },
@@ -178,6 +185,7 @@
       "path": "/v1/wifi/connect",
       "reason": null,
       "risk": "reversible",
+      "superseded_by": null,
       "timeout_s": 60,
       "tool": "wifi_connect"
     },
@@ -196,6 +204,7 @@
       "path": "/v1/wifi/disconnect",
       "reason": null,
       "risk": "reversible",
+      "superseded_by": "phone_device",
       "timeout_s": 20,
       "tool": "wifi_disconnect"
     },
@@ -214,13 +223,14 @@
       "path": "/v1/wifi/reconnect",
       "reason": null,
       "risk": "reversible",
+      "superseded_by": "phone_device",
       "timeout_s": 20,
       "tool": "wifi_reconnect"
     },
     {
       "available": true,
       "confirm": "none",
-      "description": "Bluetooth availability. Currently always unavailable (HCI kernel panic fix pending).",
+      "description": "Bluetooth controller on/off (s22-bt) and whether hci0 exists.",
       "id": "bt.status",
       "input_schema": {
         "additionalProperties": false,
@@ -232,13 +242,14 @@
       "path": "/v1/bt/status",
       "reason": null,
       "risk": "read",
+      "superseded_by": "phone_device",
       "timeout_s": 15,
       "tool": "bt_status"
     },
     {
-      "available": false,
+      "available": true,
       "confirm": "none",
-      "description": "Bluetooth power. Unavailable: raw HCI sockets panic the kernel.",
+      "description": "Turn the Bluetooth controller on or off with s22-bt (on waits for Wi-Fi and hci0, up to 2 minutes).",
       "id": "bt.power",
       "input_schema": {
         "additionalProperties": false,
@@ -254,15 +265,16 @@
       },
       "method": "POST",
       "path": "/v1/bt/power",
-      "reason": "HCI raw-socket kernel panic: disabled",
+      "reason": null,
       "risk": "reversible",
-      "timeout_s": 15,
+      "superseded_by": "phone_device",
+      "timeout_s": 140,
       "tool": "bt_power"
     },
     {
       "available": false,
       "confirm": "none",
-      "description": "Bluetooth scan. Unavailable: raw HCI sockets panic the kernel.",
+      "description": "Bluetooth scan. Unavailable from s22d: raw HCI scanning risks a kernel panic.",
       "id": "bt.scan",
       "input_schema": {
         "additionalProperties": false,
@@ -272,8 +284,9 @@
       },
       "method": "POST",
       "path": "/v1/bt/scan",
-      "reason": "HCI raw-socket kernel panic: disabled",
+      "reason": "raw HCI scanning from s22d is disabled (kernel panic risk); use s22-bt-scan in the chroot",
       "risk": "read",
+      "superseded_by": "phone_device",
       "timeout_s": 15,
       "tool": "bt_scan"
     },
@@ -292,6 +305,7 @@
       "path": "/v1/modem/status",
       "reason": null,
       "risk": "read",
+      "superseded_by": null,
       "timeout_s": 25,
       "tool": "modem_status"
     },
@@ -326,13 +340,14 @@
       "path": "/v1/sms",
       "reason": null,
       "risk": "read",
+      "superseded_by": null,
       "timeout_s": 25,
       "tool": "device_sms_inbox"
     },
     {
       "available": true,
-      "confirm": "owner",
-      "description": "Send a text message. The owner must confirm on the phone; s22-phoned still enforces its number allowlist and rate limits.",
+      "confirm": "unlisted_number",
+      "description": "Send a text message. Numbers not on the phone's private allowlist need the owner's yes on the screen; s22-phoned still enforces tx_enabled and its rate limits.",
       "id": "sms.send",
       "input_schema": {
         "additionalProperties": false,
@@ -357,6 +372,7 @@
       "path": "/v1/sms/send",
       "reason": null,
       "risk": "risky",
+      "superseded_by": "phone_device",
       "timeout_s": 95,
       "tool": "device_sms_send"
     },
@@ -375,13 +391,14 @@
       "path": "/v1/calls",
       "reason": null,
       "risk": "read",
+      "superseded_by": "phone_device",
       "timeout_s": 25,
       "tool": "device_call_list"
     },
     {
       "available": true,
-      "confirm": "owner",
-      "description": "Place a call. The owner must confirm on the phone; s22-phoned still enforces its allowlist. Call audio is not available yet.",
+      "confirm": "unlisted_number",
+      "description": "Place a call. Numbers not on the phone's private allowlist need the owner's yes on the screen; refused when calls are switched off. Call audio is not available yet.",
       "id": "call.dial",
       "input_schema": {
         "additionalProperties": false,
@@ -399,6 +416,7 @@
       "path": "/v1/call/dial",
       "reason": null,
       "risk": "risky",
+      "superseded_by": "phone_device",
       "timeout_s": 95,
       "tool": "device_call_dial"
     },
@@ -417,6 +435,7 @@
       "path": "/v1/call/hangup",
       "reason": null,
       "risk": "reversible",
+      "superseded_by": "phone_device",
       "timeout_s": 25,
       "tool": "device_call_hangup"
     },
@@ -435,6 +454,7 @@
       "path": "/v1/mobile-data/status",
       "reason": null,
       "risk": "read",
+      "superseded_by": "phone_device",
       "timeout_s": 25,
       "tool": "mobile_data_status"
     },
@@ -459,6 +479,7 @@
       "path": "/v1/mobile-data/up",
       "reason": null,
       "risk": "reversible",
+      "superseded_by": "phone_device",
       "timeout_s": 70,
       "tool": "mobile_data_up"
     },
@@ -477,6 +498,7 @@
       "path": "/v1/mobile-data/down",
       "reason": null,
       "risk": "reversible",
+      "superseded_by": "phone_device",
       "timeout_s": 70,
       "tool": "mobile_data_down"
     },
@@ -495,6 +517,7 @@
       "path": "/v1/camera/status",
       "reason": null,
       "risk": "read",
+      "superseded_by": null,
       "timeout_s": 15,
       "tool": "camera_status"
     },
@@ -536,6 +559,7 @@
       "path": "/v1/camera/capture",
       "reason": null,
       "risk": "reversible",
+      "superseded_by": "phone_device",
       "timeout_s": 330,
       "tool": "camera_capture"
     },
@@ -585,6 +609,7 @@
       "path": "/v1/camera/record",
       "reason": null,
       "risk": "reversible",
+      "superseded_by": null,
       "timeout_s": 330,
       "tool": "camera_record"
     },
@@ -603,6 +628,7 @@
       "path": "/v1/display",
       "reason": null,
       "risk": "read",
+      "superseded_by": "phone_device",
       "timeout_s": 15,
       "tool": "display_status"
     },
@@ -621,6 +647,7 @@
       "path": "/v1/display/on",
       "reason": null,
       "risk": "reversible",
+      "superseded_by": null,
       "timeout_s": 35,
       "tool": "display_on"
     },
@@ -639,6 +666,7 @@
       "path": "/v1/display/off",
       "reason": null,
       "risk": "reversible",
+      "superseded_by": null,
       "timeout_s": 35,
       "tool": "display_off"
     },
@@ -665,6 +693,7 @@
       "path": "/v1/display/brightness",
       "reason": null,
       "risk": "reversible",
+      "superseded_by": "phone_device",
       "timeout_s": 15,
       "tool": "display_brightness"
     },
@@ -683,6 +712,7 @@
       "path": "/v1/audio/volume",
       "reason": null,
       "risk": "read",
+      "superseded_by": "phone_device",
       "timeout_s": 15,
       "tool": "audio_volume"
     },
@@ -709,6 +739,7 @@
       "path": "/v1/audio/volume",
       "reason": null,
       "risk": "reversible",
+      "superseded_by": "phone_device",
       "timeout_s": 15,
       "tool": "audio_mute"
     },
@@ -740,6 +771,7 @@
       "path": "/v1/services/{name}/restart",
       "reason": null,
       "risk": "reversible",
+      "superseded_by": null,
       "timeout_s": 40,
       "tool": "service_restart"
     },
@@ -758,6 +790,7 @@
       "path": "/v1/system/reboot-recovery",
       "reason": null,
       "risk": "risky",
+      "superseded_by": null,
       "timeout_s": 95,
       "tool": "recovery_mode"
     }

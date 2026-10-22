@@ -1,0 +1,8 @@
+58e7722c58eac6e5b0a6a10f27ad8800  /srv/s22/hardware/bin/s22-phoned
+13:23:09
+{"cap":"sms.send","code":"needs_confirmation","effect":"action","error":"the number is not on the allowlist and nobody confirmed on the phone (owner_timeout)","ok":false}
+13:24:09
+ls: /srv/s22/state/phoned/grants: No such file or directory
+{"cap":"mobile_data.get","effect":"read","ok":true,"state":{"interface":"rmnet0","ipv4":"100.64.0.105","mode":"failover","on":true,"state":"up","uplink":"mobile"}}
+cancelled
+{"action":"sms.send","caller":"cli","detail":{"args":{"number":"12345","text":"<35 chars>"},"code":"needs_confirmation","error":"the number is not on the allowlist and nobody confirmed on the phone (owner_timeout)"},"outcome":"refused","risk":"action","ts":1792675449}

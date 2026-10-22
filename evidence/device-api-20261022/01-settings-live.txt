@@ -1,0 +1,50 @@
+-- before: buttons/volume=0 say.level=absent
+== brightness.set {"value":40}
+{"cap":"brightness.set","effect":"set","ok":true,"state":{"brightness":204,"max_brightness":510,"percent":40,"state":"off"}}
+sysfs: 204
+== brightness.set {"value":25}
+{"cap":"brightness.set","effect":"set","ok":true,"state":{"brightness":127,"max_brightness":510,"percent":25,"state":"off"}}
+== volume.set {"value":5}
+{"cap":"volume.set","effect":"set","note":"applies to the next spoken output","ok":true,"state":{"level":5,"max":10,"muted":false,"source":"file"}}
+say.level=5
+== volume.set {"muted":true}
+{"cap":"volume.set","effect":"set","note":"applies to the next spoken output","ok":true,"state":{"level":0,"max":10,"muted":true,"source":"file"}}
+say.level=0
+== volume.set {"muted":false}
+{"cap":"volume.set","effect":"set","note":"applies to the next spoken output","ok":true,"state":{"level":5,"max":10,"muted":false,"source":"file"}}
+say.level=5 state={"muted_from":5}
+== vibration.set {"on":false}
+{"cap":"vibration.set","effect":"set","ok":true,"state":{"daemon":true,"enabled":false}}
+config={"enabled":false}
+== haptic.play {"pattern":"tick"}
+{"cap":"haptic.play","effect":"action","note":"vibration is disabled (vibration.set on:true)","ok":true,"state":{"played":false,"vibration":{"daemon":true,"enabled":false}}}
+== vibration.set {"on":true}
+{"cap":"vibration.set","effect":"set","ok":true,"state":{"daemon":true,"enabled":true}}
+== haptic.play {"pattern":"40,80,40"}
+{"cap":"haptic.play","effect":"action","ok":true,"state":{"daemon":"ok","played":true}}
+== autosleep.set {"on":false}
+{"cap":"autosleep.set","effect":"set","ok":true,"state":{"cycles":25,"enabled":false,"state":"post-wake"}}
+/srv/s22/state/autosleep/disabled
+autosleep: DISABLED (s22-autosleep on to enable)
+== autosleep.set {"on":true}
+{"cap":"autosleep.set","effect":"set","ok":true,"state":{"cycles":25,"enabled":true,"state":"post-wake"}}
+autosleep: enabled
+== screen_timeout.set {"value":120}
+{"cap":"screen_timeout.set","effect":"set","note":"the shell applies it within 10 s","ok":true,"state":{"locked_s":15,"never":0,"unlocked_s":120}}
+file={"unlocked_s":120,"locked_s":15}
+== calls.set {"on":false}
+{"cap":"calls.set","effect":"set","ok":true,"state":{"audio":"two-way call audio does not work yet (issue #63): the call connects but nobody can hear or talk","enabled":false}}
+== call.dial {"number":"12345"}
+{"cap":"call.dial","code":"calls_disabled","effect":"action","error":"calls are switched off on the phone (calls.set on:true)","ok":false}
+== calls.set {"on":true}
+{"cap":"calls.set","effect":"set","ok":true,"state":{"audio":"two-way call audio does not work yet (issue #63): the call connects but nobody can hear or talk","enabled":true}}
+calls.json={"enabled":true}
+== mobile_data.set {"on":false}
+{"cap":"mobile_data.set","code":"would_strand","effect":"set","error":"Wi-Fi is not connected and no USB link is up: turning mobile data off would leave the phone offline (pass force to do it anyway)","ok":false}
+== mobile_data.set {"on":true}
+{"cap":"mobile_data.set","effect":"set","ok":true,"state":{"interface":"rmnet0","ipv4":"100.64.0.105","mode":"failover","on":true,"state":"up","uplink":"mobile"}}
+== screenshot {}
+{"cap":"screenshot","code":"unavailable","effect":"action","error":"the running shell has no screenshot hook (deploy a newer unum-fastshell)","ok":false}
+== brightness.set {"percent":40}
+{"cap":"brightness.set","code":"bad_request","effect":"set","error":"brightness.set takes no argument \"percent\" (arguments: [\"value\"])","ok":false}
+-- restored: buttons/volume=0 say.level=absent

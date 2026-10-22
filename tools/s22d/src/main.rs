@@ -4,6 +4,7 @@ mod app;
 mod backends;
 mod catalog;
 mod config;
+mod device;
 mod error;
 mod real;
 mod routes;
@@ -26,12 +27,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("{}", serde_json::to_string_pretty(&v)?);
             return Ok(());
         }
+        Some("--print-device-capabilities") => {
+            let v = device::capabilities(&|_| None);
+            println!("{}", serde_json::to_string_pretty(&v)?);
+            return Ok(());
+        }
         Some("--version") => {
             println!("s22d {}", env!("CARGO_PKG_VERSION"));
             return Ok(());
         }
         Some(other) => {
-            eprintln!("usage: s22d [--print-capabilities | --version]  (unknown: {other})");
+            eprintln!("usage: s22d [--print-capabilities | --print-device-capabilities | --version]  (unknown: {other})");
             std::process::exit(2);
         }
         None => {}
@@ -52,13 +58,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn serve() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = Arc::new(config::Config::from_env());
     // No audit log, no daemon: state-changing requests must always leave a record.
-    let audit = Audit::open(&cfg.audit_path)?;
+    let audit = Audit::open_capped(&cfg.audit_path, cfg.audit_max_bytes)?;
     audit.record(
         "s22d.start",
         "read",
         "ok",
         serde_json::json!({"version": env!("CARGO_PKG_VERSION")}),
     );
+    real::settings::wifi_off_cleanup_at_start(&cfg);
     let app = App::new(cfg.clone(), real::backends(&cfg), audit);
 
     let tcp = tokio::net::TcpListener::bind(&cfg.tcp_addr).await?;

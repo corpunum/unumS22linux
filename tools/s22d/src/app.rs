@@ -42,8 +42,12 @@ impl App {
 
     /// Availability of one capability: `None` when usable, else why not.
     pub fn availability(&self, id: &str) -> Option<String> {
-        if id.starts_with("bt.") {
+        if id == "bt.scan" {
             return crate::catalog::static_availability(id);
+        }
+        if id.starts_with("bt.") {
+            return (!self.cfg.bt_tool.exists())
+                .then(|| format!("s22-bt missing: {}", self.cfg.bt_tool.display()));
         }
         match id.split('.').next().unwrap_or("") {
             "wifi" => self.b.wifi.availability(),
@@ -57,23 +61,101 @@ impl App {
     }
 }
 
-/// Append-only JSON lines. Every state-changing request leaves one record with its outcome.
+tokio::task_local! {
+    /// Who sent the request being served (`X-S22-Caller`), for the audit log.
+    pub static CALLER: &'static str;
+}
+
+/// `X-S22-Caller: agent | shell | cli`; anything else (or nothing) is `cli`.
+pub fn caller_from(header: Option<&str>) -> &'static str {
+    match header.map(|h| h.trim().to_ascii_lowercase()).as_deref() {
+        Some("agent") => "agent",
+        Some("shell") => "shell",
+        _ => "cli",
+    }
+}
+
+/// Serve the request with its caller in scope.
+pub async fn caller_scope(req: Request, next: Next) -> Response {
+    let caller = caller_from(
+        req.headers()
+            .get("x-s22-caller")
+            .and_then(|v| v.to_str().ok()),
+    );
+    CALLER.scope(caller, next.run(req)).await
+}
+
+/// `+306912345678` -> `+306*******78`: enough to tell numbers apart in the audit log, not to dial.
+pub fn mask_number(n: &str) -> String {
+    let total = n.chars().filter(|c| c.is_ascii_digit()).count();
+    let mut seen = 0;
+    n.chars()
+        .filter(|c| !c.is_whitespace())
+        .map(|c| {
+            if !c.is_ascii_digit() {
+                return c;
+            }
+            seen += 1;
+            if seen <= 3 || seen + 2 > total {
+                c
+            } else {
+                '*'
+            }
+        })
+        .collect()
+}
+
+/// Mask every phone number (`number`, `to`) anywhere in an audit detail.
+fn mask_numbers(v: &mut Value) {
+    match v {
+        Value::Object(m) => {
+            for (k, x) in m.iter_mut() {
+                match (k.as_str(), &x) {
+                    ("number" | "to", Value::String(s)) => *x = Value::String(mask_number(s)),
+                    _ => mask_numbers(x),
+                }
+            }
+        }
+        Value::Array(a) => a.iter_mut().for_each(mask_numbers),
+        _ => {}
+    }
+}
+
+/// Append-only JSON lines, size-capped: past `max_bytes` the file becomes `<name>.1` (one
+/// generation kept) and a new one starts. Every state-changing request and every device API call
+/// leaves one record `{ts, caller, action, risk, outcome, detail}` with phone numbers masked.
 pub struct Audit {
+    path: std::path::PathBuf,
+    max_bytes: u64,
     file: Mutex<std::fs::File>,
 }
 
 impl Audit {
+    #[cfg(test)]
     pub fn open(path: &std::path::Path) -> std::io::Result<Self> {
+        Self::open_capped(path, 1 << 20)
+    }
+
+    pub fn open_capped(path: &std::path::Path, max_bytes: u64) -> std::io::Result<Self> {
         if let Some(dir) = path.parent() {
+            use std::os::unix::fs::PermissionsExt;
             std::fs::create_dir_all(dir)?;
+            std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
         }
-        let file = std::fs::OpenOptions::new()
+        Ok(Self {
+            path: path.to_path_buf(),
+            max_bytes,
+            file: Mutex::new(Self::append(path)?),
+        })
+    }
+
+    fn append(path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        use std::os::unix::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new()
             .create(true)
             .append(true)
-            .open(path)?;
-        Ok(Self {
-            file: Mutex::new(file),
-        })
+            .mode(0o600)
+            .open(path)
     }
 
     pub fn record(&self, action: &str, risk: &str, outcome: &str, detail: Value) {
@@ -81,9 +163,23 @@ impl Audit {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        let line =
-            json!({"ts": ts, "action": action, "risk": risk, "outcome": outcome, "detail": detail});
+        let caller = CALLER.try_with(|c| *c).unwrap_or("internal");
+        let mut detail = detail;
+        mask_numbers(&mut detail);
+        let line = json!({"ts": ts, "caller": caller, "action": action, "risk": risk, "outcome": outcome, "detail": detail});
         if let Ok(mut f) = self.file.lock() {
+            if f.metadata()
+                .map(|m| m.len() >= self.max_bytes)
+                .unwrap_or(false)
+            {
+                let mut old = self.path.clone().into_os_string();
+                old.push(".1");
+                if std::fs::rename(&self.path, &old).is_ok() {
+                    if let Ok(n) = Self::append(&self.path) {
+                        *f = n;
+                    }
+                }
+            }
             let _ = writeln!(f, "{line}");
             let _ = f.flush();
         }
@@ -256,5 +352,41 @@ mod tests {
         assert_eq!(lines[0]["detail"]["ssid"], "Lab");
         assert_eq!(lines[1]["outcome"], "refused");
         assert!(lines[0]["ts"].as_u64().unwrap() > 1_700_000_000);
+        assert_eq!(lines[0]["caller"], "internal");
+    }
+
+    #[test]
+    fn audit_masks_numbers_and_rotates_at_the_cap() {
+        let t = crate::testutil::Tmp::new();
+        let p = t.path().join("audit.jsonl");
+        let a = Audit::open_capped(&p, 300).unwrap();
+        for _ in 0..4 {
+            a.record(
+                "sms.send",
+                "action",
+                "ok",
+                json!({"args": {"number": "+30 691 234 5678"}}),
+            );
+        }
+        let cur = std::fs::read_to_string(&p).unwrap();
+        let old = std::fs::read_to_string(t.path().join("audit.jsonl.1")).unwrap();
+        assert!(cur.len() < 300 && !old.is_empty());
+        assert!(!cur.contains("2345") && !old.contains("2345"));
+        assert!(cur.contains("+306*******78"), "{cur}");
+    }
+
+    #[test]
+    fn mask_keeps_prefix_and_last_two_digits() {
+        assert_eq!(mask_number("+306912345678"), "+306*******78");
+        assert_eq!(mask_number("0030 6912"), "003***12");
+        assert_eq!(mask_number("12"), "12");
+    }
+
+    #[test]
+    fn caller_header_is_one_of_three_names() {
+        assert_eq!(caller_from(Some("Agent")), "agent");
+        assert_eq!(caller_from(Some("shell")), "shell");
+        assert_eq!(caller_from(Some("evil\nx")), "cli");
+        assert_eq!(caller_from(None), "cli");
     }
 }

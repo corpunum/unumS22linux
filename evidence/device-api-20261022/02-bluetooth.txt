@@ -1,0 +1,9 @@
+armed: 10696 1792675487 devapi-bt
+13:14:47
+{"cap":"bluetooth.set","effect":"set","ok":true,"state":{"detail":"down","hci0":false,"on":false}}
+13:14:48
+pong from s22-linux (100.95.191.103) via 203.0.113.20:40226 in 58ms
+13:14:53
+{"cap":"bluetooth.set","effect":"set","ok":true,"state":{"detail":"up (pid 10781)","hci0":true,"on":true}}
+13:14:57
+pong from s22-linux (100.95.191.103) via 203.0.113.20:40226 in 58ms

@@ -1,0 +1,16 @@
+armed: 10696 1792675487 devapi-bt now=1792674902
+13:15:02
+{"cap":"wifi.get","effect":"read","ok":true,"state":{"bssid":null,"connected":false,"enabled":true,"freq_mhz":null,"ip":null,"link_mbps":null,"network_id":null,"on":true,"rssi_dbm":null,"saver_parked":false,"ssid":null,"state":"SCANNING","uplink":"mobile"}}
+{"cap":"wifi.set","effect":"set","note":"Wi-Fi off until wifi.set on:true (or a restart); mobile data takes over within about 30 s when enabled","ok":true,"state":{"bssid":null,"connected":false,"enabled":false,"freq_mhz":null,"ip":null,"link_mbps":null,"network_id":null,"on":false,"rssi_dbm":null,"saver_parked":false,"ssid":null,"state":"DISCONNECTED","uplink":"mobile"}}
+13:15:02
+-rw-rw-rw-    1 root     root             4 Oct 22 13:15 /run/s22d-wifi-off
+-rw-rw-rw-    1 root     root            18 Oct 22 13:15 /srv/s22/state/netpolicy/wifi-saver-off
+{"parked": false, "method": null, "parked_at": null, "next_discover": null, "discovering": false, "discoveries": 1, "reason": "screen_on"}pong from s22-linux (100.95.191.103) via 203.0.113.20:40226 in 70ms
+13:15:42
+wpa_state=DISCONNECTED
+{"cap":"wifi.set","effect":"set","note":"Wi-Fi is on but not connected yet (no known network in range, or still associating)","ok":true,"state":{"bssid":null,"connected":false,"enabled":true,"freq_mhz":null,"ip":null,"link_mbps":null,"network_id":null,"on":true,"rssi_dbm":null,"saver_parked":false,"ssid":null,"state":"SCANNING","uplink":"mobile"}}
+13:16:02
+ls: /srv/s22/state/netpolicy/wifi-saver-off: No such file or directory
+ls: /run/s22d-wifi-off: No such file or directory
+cancelled
+pong from s22-linux (100.95.191.103) via 203.0.113.20:40226 in 36ms
