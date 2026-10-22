@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """s22_filler: the one shared way to play a pre-rendered "hmm, let me think" clip on the phone speaker.
 
-The clips (voice-fillers/<lang>/<category>/<n>.wav + manifest.json) are rendered once with the phone's own
-voices (Supertonic F1 for English, the el-antonis Piper voice for Greek) and loudness-normalised to the same
+The clips (voice-fillers/<lang>/<category>/<n>.wav + manifest.json) are rendered once in the owner's own voice
+(the rig's VoxCPM "antonis", Greek and English; s22-render-fillers) and loudness-normalised to the same
 -16 LUFS as every synthesized answer (s22_loudnorm.py), so a filler and the answer after it are one voice at
 one volume.  Picking is s22_voice.FillerBank (question -> category, never the same clip twice).
 

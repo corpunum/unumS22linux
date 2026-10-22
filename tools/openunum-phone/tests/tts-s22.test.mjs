@@ -27,17 +27,20 @@ test('plays by default through s22-ui tts --play', async () => {
   const f = fakeCli({ ok: true, path: '/run/s22-touch/tts/a.wav', engine: 'supertonic', ms: 900, played: true, out: 'speaker', play_ms: 2100 });
   const t = await tool({ ui_cli: f.cli, play: true });
   const r = await t.execute({ args: { text: 'Hello there' } });
-  assert.deepEqual(f.args(), ['tts', '--engine', 'supertonic', '--play', '--out', 'speaker', 'Hello there']);
+  assert.deepEqual(f.args(), ['tts', '--engine', 'antonis', '--play', '--out', 'speaker', 'Hello there']);
   assert.equal(r.played, true);
   assert.equal(r.playMs, 2100);
 });
 
-test('Greek engine and play=false render only', async () => {
-  const f = fakeCli({ ok: true, path: '/run/s22-touch/tts/b.wav', engine: 'el-antonis', ms: 700, played: false });
+test('one voice: a model-chosen engine is ignored; play=false renders only', async () => {
+  const f = fakeCli({ ok: true, path: '/run/s22-touch/tts/b.wav', engine: 'antonis', ms: 700, played: false });
   const t = await tool({ ui_cli: f.cli });
-  const r = await t.execute({ args: { text: 'Καλημέρα', engine: 'el-antonis', play: false } });
-  assert.deepEqual(f.args(), ['tts', '--engine', 'el-antonis', 'Καλημέρα']);
+  const r = await t.execute({ args: { text: 'Καλημέρα', engine: 'supertonic', play: false } });
+  assert.deepEqual(f.args(), ['tts', '--engine', 'antonis', 'Καλημέρα']);
   assert.equal(r.played, false);
+  const t2 = await tool({ ui_cli: f.cli, allow_engine_override: true });
+  await t2.execute({ args: { text: 'Καλημέρα', engine: 'el-antonis', play: false } });
+  assert.deepEqual(f.args(), ['tts', '--engine', 'el-antonis', 'Καλημέρα']);
 });
 
 test('reports a playback failure', async () => {
@@ -52,8 +55,8 @@ test('filler option adds --filler (and --for) to s22-ui tts only when playing', 
   const f = fakeCli({ ok: true, path: '/x.wav', engine: 'supertonic', played: true, out: 'speaker', filler: { ok: true, category: 'general' } });
   const t = await tool({ ui_cli: f.cli });
   const r = await t.execute({ args: { text: 'It is noon.', filler: true, thinking_for: 'what time is it' } });
-  assert.deepEqual(f.args(), ['tts', '--engine', 'supertonic', '--play', '--out', 'speaker', '--filler', '--for', 'what time is it', 'It is noon.']);
+  assert.deepEqual(f.args(), ['tts', '--engine', 'antonis', '--play', '--out', 'speaker', '--filler', '--for', 'what time is it', 'It is noon.']);
   assert.equal(r.filler.ok, true);
   await t.execute({ args: { text: 'x', filler: true, play: false } });
-  assert.deepEqual(f.args(), ['tts', '--engine', 'supertonic', 'x']);
+  assert.deepEqual(f.args(), ['tts', '--engine', 'antonis', 'x']);
 });

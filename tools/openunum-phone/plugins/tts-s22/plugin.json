@@ -1,9 +1,9 @@
 {
   "name": "tts-s22",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "tts",
   "entrypoint": "index.mjs",
-  "description": "On-device text-to-speech for the S22: s22-say neural engines (supertonic default, paradee, kitten, piper, kokoro, Greek Piper el-antonis/el-female, espeak) rendered through s22-touchd and, by default, spoken through the phone speaker (firmware-graph audio path; the amps return to the resting mute afterwards). Set play=false to render only.",
+  "description": "On-device text-to-speech for the S22: the owner's own voice for Greek and English (engine antonis: the rig's VoxCPM voice, Piper el-antonis on the phone as the offline fallback; other s22-say engines only with allow_engine_override) rendered through s22-touchd and, by default, spoken through the phone speaker (firmware-graph audio path; the amps return to the resting mute afterwards). Set play=false to render only.",
   "capabilities": [
     "text_to_speech",
     "audio_generation"
@@ -11,7 +11,8 @@
   "dependencies": [],
   "config": {
     "ui_cli": "/usr/local/bin/s22-ui",
-    "engine": "supertonic",
+    "engine": "antonis",
+    "allow_engine_override": false,
     "timeout_ms": 500000,
     "play": true,
     "filler": false,

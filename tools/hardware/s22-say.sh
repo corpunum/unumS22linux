@@ -10,17 +10,23 @@
 # to close the route (only that route's controls: <route>.reset).  Needs sectiongraph_tplg.bin + amp firmware staged by
 # start-persistent-desktop (stage_optional_audio_firmware / fallback answer).
 #
-# Neural TTS (default): sherpa-onnx (static aarch64 build) with on-device
+# Default voice (owner 2026-10-22: one voice everywhere, his own): engine "antonis" = the rig's VoxCPM2 +
+# LoRA owner voice for Greek AND English, fetched over Tailscale by s22_rigvoice.py (first audio within 2 s or
+# it gives up, then skips the rig for 60 s). When the rig is unreachable or slow the same voice comes from the
+# phone: Piper el-antonis (S22_TTS_OFFLINE, its English is only partly intelligible; S22_TTS_OFFLINE_EN picks
+# another engine for English text, e.g. supertonic). S22_SAY_STRICT=1: no fallback at all (exit 1), used when
+# rendering the filler clips so a bank never mixes voices. /run/s22-say.voices records the voice of every render.
+# On-device neural TTS: sherpa-onnx (static aarch64 build) with on-device
 # models under /opt/s22-tts in the chroot, CPU only, pinned to the big cores.
-# Engines: supertonic (default; int8, RTF ~0.16), kitten (nano int8, ~0.29),
+# Engines: supertonic (int8, RTF ~0.16), kitten (nano int8, ~0.29),
 # piper (lessac-medium, ~0.26), kokoro (int8 v0.19, ~1.2, best prosody,
 # slower than real time), paradee (Paradee-8M int8, Kokoro af_heart distill,
 # own runner under /opt/s22-tts/paradee, see tools/hardware/tts/paradee/),
 # el-antonis / el-female (Greek Piper-medium voices distilled from the rig's VoxCPM2
 # voices, vits-piper-el-<voice> under /opt/s22-tts, espeak-ng data shared with piper),
 # espeak (formant). If the neural engine fails, it
-# falls back to espeak-ng. S22_TTS_ENGINE sets the default. Greek text with no --engine given
-# goes to S22_TTS_GREEK (default el-antonis) when that voice is installed.
+# falls back to espeak-ng. S22_TTS_ENGINE sets the default. With a phone engine as the default, Greek text with
+# no --engine given goes to S22_TTS_GREEK (default el-antonis) when that voice is installed.
 #
 #   s22-say [--out speaker|earpiece|bottom|top] [--engine E] [--sid N] [--amp N] [--diag DIR] TEXT...
 #   s22-say [--out ...] --wav /path/inside/chroot.wav
@@ -38,7 +44,7 @@ OUT=speaker
 AMP=60                     # espeak-ng amplitude (0-200, default 100)
 DIAG=
 WAV=
-ENGINE=${S22_TTS_ENGINE:-supertonic}
+ENGINE=${S22_TTS_ENGINE:-antonis}
 ENGINE_SET=
 SID=${S22_TTS_SID:-0}       # supertonic sid 0-4 = female styles (0 = F1, owner's choice: female), 5-9 = male
 while [ $# -gt 0 ]; do
@@ -70,20 +76,37 @@ TTS=/opt/s22-tts
 # same volume (Supertonic rendered ~-26 LUFS, Piper/Greek ~-21, the earcons ~-14). --wav inputs are
 # played as given (clips are normalised when they are made). S22_LOUDNORM=off disables it.
 LOUDNORM_PY=${S22_LOUDNORM_PY:-/srv/s22/hardware/bin/s22_loudnorm.py}
-loudnorm() {   # $1 = WAV path on the outer filesystem; never fails
-  [ "${S22_LOUDNORM:-on}" = off ] || [ ! -f "$LOUDNORM_PY" ] || python3 -I -B "$LOUDNORM_PY" "$1" >/dev/null 2>&1 || :
+loudnorm() {   # $1 = WAV path on the outer filesystem; never fails. Rig renders arrive normalised already.
+  [ "${S22_LOUDNORM:-on}" = off ] || [ "$VOICE_USED" = antonis-rig ] || [ ! -f "$LOUDNORM_PY" ] || python3 -I -B "$LOUDNORM_PY" "$1" >/dev/null 2>&1 || :
 }
 # Greek letters are U+0370-03FF (UTF-8 lead bytes 0xCE/0xCF). Checked byte-wise with tr: busybox ash matches
 # case patterns per character, so a lone lead byte never matches there.
-if [ -z "$ENGINE_SET" ] && [ -n "$TEXT" ]; then
+is_greek() { [ "$(printf '%s' "$1" | tr -d '\316\317')" != "$1" ]; }
+if [ -z "$ENGINE_SET" ] && [ -n "$TEXT" ] && [ "$ENGINE" != antonis ]; then
   G=${S22_TTS_GREEK:-el-antonis}
-  if [ "$(printf '%s' "$TEXT" | tr -d '\316\317')" != "$TEXT" ] && [ -f "$CHROOT$TTS/vits-piper-$G/model.onnx" ]; then
+  if is_greek "$TEXT" && [ -f "$CHROOT$TTS/vits-piper-$G/model.onnx" ]; then
     ENGINE=$G
   fi
 fi
+RIGVOICE_PY=${S22_RIGVOICE_PY:-/srv/s22/hardware/bin/s22_rigvoice.py}
+VOICE_USED=
+voice_log() {   # bounded history (last 50) of which voice rendered what
+  { printf '%s %s chars=%s\n' "$(date +%s)" "$1" "${#TEXT}"; head -n 49 /run/s22-say.voices 2>/dev/null || :; } \
+    > /run/s22-say.voices.$$ 2>/dev/null && mv -f /run/s22-say.voices.$$ /run/s22-say.voices 2>/dev/null || :
+}
 neural_tts() {  # $1 = wav path inside the chroot, $2 = text
   M=$TTS
   case "$ENGINE" in
+    antonis)   # the owner's voice from the rig; on failure the same voice from the phone (Piper el-antonis)
+      if [ -f "$RIGVOICE_PY" ] && python3 -I -B "$RIGVOICE_PY" tts "$CHROOT$1" "$2" >/dev/null 2>/run/s22-say.rig.err \
+          && [ -s "$CHROOT$1" ]; then
+        VOICE_USED=antonis-rig; return 0
+      fi
+      [ "${S22_SAY_STRICT:-}" = 1 ] && return 1
+      if is_greek "$2"; then ENGINE=${S22_TTS_OFFLINE:-el-antonis}; else ENGINE=${S22_TTS_OFFLINE_EN:-${S22_TTS_OFFLINE:-el-antonis}}; fi
+      [ "$ENGINE" = antonis ] && ENGINE=el-antonis
+      neural_tts "$1" "$2" || return 1
+      VOICE_USED="$ENGINE-fallback"; return 0;;
     supertonic) S=$M/sherpa-onnx-supertonic-tts-int8-2026-03-06
       set -- "$1" "$2" --supertonic-duration-predictor=$S/duration_predictor.int8.onnx \
         --supertonic-text-encoder=$S/text_encoder.int8.onnx \
@@ -134,10 +157,13 @@ if [ -n "${S22_SAY_OUT:-}" ]; then   # render only: never touches the sound card
   fi
   R=/tmp/s22-say-render-$$.wav
   if ! neural_tts "$R" "$TEXT"; then
+    [ "${S22_SAY_STRICT:-}" = 1 ] && { echo "s22-say: $ENGINE failed (strict: no fallback)" >&2; rm -f "$CHROOT$R"; exit 1; }
     [ "$ENGINE" = espeak ] || echo "s22-say: $ENGINE failed, falling back to espeak-ng" >&2
     run $OPT/usr/bin/espeak-ng -a "$AMP" -s 150 -w "$R" "$TEXT" || { rm -f "$CHROOT$R"; exit 1; }
+    VOICE_USED=espeak-fallback
   fi
- loudnorm "$CHROOT$R"
+  voice_log "${VOICE_USED:-$ENGINE}"
+  loudnorm "$CHROOT$R"
   cp "$CHROOT$R" "$S22_SAY_OUT.tmp" && mv "$S22_SAY_OUT.tmp" "$S22_SAY_OUT"; rc=$?
   rm -f "$CHROOT$R"; exit $rc
 fi
@@ -164,9 +190,12 @@ flock 9
 if [ -z "$WAV" ]; then
   WAV=/tmp/s22-say-$$.wav
   if ! neural_tts "$WAV" "$TEXT"; then
+    [ "${S22_SAY_STRICT:-}" = 1 ] && { echo "s22-say: $ENGINE failed (strict: no fallback)" >&2; exit 1; }
     [ "$ENGINE" = espeak ] || echo "s22-say: $ENGINE failed, falling back to espeak-ng" >&2
     run $OPT/usr/bin/espeak-ng -a "$AMP" -s 150 -w "$WAV" "$TEXT" || exit 1
+    VOICE_USED=espeak-fallback
   fi
+  voice_log "${VOICE_USED:-$ENGINE}"
   CLEANWAV=1
   loudnorm "$CHROOT$WAV"
 fi

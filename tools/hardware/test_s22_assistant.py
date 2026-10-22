@@ -6,7 +6,7 @@ from unittest import mock
 
 SPEC = importlib.util.spec_from_file_location('s22_assistant', Path(__file__).with_name('s22-assistant.py'))
 MOD = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(MOD)
-CFG = dict(MOD.DEFAULTS)
+CFG = dict(MOD.DEFAULTS, asr='phone')   # host tests never reach the rig
 
 
 class PureTests(unittest.TestCase):
@@ -114,7 +114,7 @@ class RunTests(unittest.TestCase):
             order.append(('say', wav or text)); return Proc(wav or text) if not wait else None
         class Bank:
             n = 0
-            def pick(s, q, second=False):
+            def pick(s, q, second=False, lang=None):
                 s.n += 1; return f'/f{s.n}.wav', {'category': 'search', 'second': second}
         def slow_ask(text, still_working=True):
             _t.sleep(1.3); return 'Answer.'
@@ -138,11 +138,97 @@ class RunTests(unittest.TestCase):
         a.say = lambda text='', wav=None, wait=True, filler=False: (calls.append(('say', wav or text)), Proc() if not wait else None)[1]
         long_text = 'This is the first sentence of the answer. ' + 'And the rest goes on for a good while longer. ' * 4
         a.speak_answer(long_text.strip())
-        self.assertEqual(calls, [('render', 'answer1.wav'), ('say', '/tmp/answer1.wav'), ('render', 'answer2.wav'),
-                                 'first-done', ('say', '/tmp/answer2.wav')])
+        n = len(MOD.speech_chunks(long_text.strip()))
+        self.assertGreater(n, 2)
+        expected = [('render', 'answer1.wav'), ('say', '/tmp/answer1.wav')]
+        for i in range(2, n + 1):           # chunk i renders while chunk i-1 plays, then plays after it
+            expected += [('render', f'answer{i}.wav'), 'first-done', ('say', f'/tmp/answer{i}.wav')]
+        self.assertEqual(calls, expected + ['first-done'])
         calls.clear()
         a.speak_answer('Short answer.')
         self.assertEqual(calls, [('render', 'answer1.wav'), ('say', '/tmp/answer1.wav'), 'first-done'])
+
+    def test_speech_chunks_short_first_then_never_longer_than_the_one_playing(self):
+        text = 'This is the first sentence of the answer. ' + ' '.join(f'Sentence number {i} goes on for a while.' for i in range(12))
+        chunks = MOD.speech_chunks(text)
+        self.assertEqual(chunks[0], 'This is the first sentence of the answer.')
+        for prev, nxt in zip(chunks, chunks[1:]):
+            self.assertLessEqual(len(nxt), max(50, len(prev)))
+        self.assertGreater(len(chunks), 2)
+        self.assertEqual(' '.join(chunks), text.strip())
+        self.assertEqual(MOD.speech_chunks('Short.'), ['Short.'])
+        long_first = ('Well, when you think about it carefully, the long first sentence keeps going, and going, '
+                      'with many clauses, until the very end of the line. Then a short one.')
+        chunks = MOD.speech_chunks(long_first)
+        self.assertLessEqual(len(chunks[0]), 70)
+        self.assertEqual(' '.join(chunks), long_first)
+
+    def test_slow_first_render_is_covered_by_gap_fillers(self):
+        import time as _t
+        played = []
+
+        class Proc:
+            def __init__(s): s.t = _t.time()
+            def poll(s): return None if _t.time() - s.t < 0.1 else 0
+            def wait(s, timeout=None): pass
+
+        class Bank:
+            def pick(s, q, second=False, lang=None):
+                played.append((q, second, lang)); return f'/g{len(played)}.wav', {'category': 'general', 'lang': lang}
+        a = MOD.Assistant(dict(CFG, gap_filler_s=0.2, gap_fillers_max=2), speak=True, base=self.base)
+        a.filler_bank = lambda: Bank()
+        a.question = 'Τι ώρα είναι;'
+        a.say = lambda text='', wav=None, wait=True, filler=False: Proc()
+        a._render = lambda text, name: (_t.sleep(0.9), f'/tmp/{name}')[1]
+        self.assertEqual(a._render_covered('Είναι δώδεκα.', 'answer1.wav'), '/tmp/answer1.wav')
+        self.assertEqual(played, [('Τι ώρα είναι;', True, 'el')] * 2)        # capped at gap_fillers_max
+        self.assertEqual([f['kind'] for f in a.rec['fillers']], ['gap', 'gap'])
+        played.clear()
+        a._render = lambda text, name: f'/tmp/{name}'                          # fast render: no filler
+        a._render_covered('x', 'answer1.wav')
+        self.assertEqual(played, [])
+
+    def test_reply_language_hint_follows_the_utterance(self):
+        calls = []
+        a = MOD.Assistant(dict(CFG), speak=False, base=self.base)
+        a._http = lambda m, path, body=None, timeout=30: (calls.append(body), (200, {'reply': 'ok'}))[1]
+        a.ask('Τι ώρα είναι;', still_working=False)
+        self.assertEqual(calls[-1]['context'][1]['content'], MOD.REPLY_LANGUAGE['el'])
+        a.ask('what time is it', still_working=False)
+        self.assertEqual(calls[-1]['context'][1]['content'], MOD.REPLY_LANGUAGE['en'])
+        a.lang = 'el'                                     # the rig ASR heard Greek (even in Latin letters)
+        a.ask('ti ora einai', still_working=False)
+        self.assertEqual(calls[-1]['context'][1]['content'], MOD.REPLY_LANGUAGE['el'])
+        self.assertEqual(calls[-1]['context'][0]['content'], MOD.VOICE_CONTEXT)
+
+    def test_greek_fixed_phrases(self):
+        self.assertEqual(MOD.text_lang('Γεια σου τι κάνεις'), 'el')
+        self.assertEqual(MOD.text_lang('hello OpenUnum'), 'en')
+        self.assertTrue(MOD.summarize('Μια πρόταση. ' * 80, 100, 'el')[0].endswith(MOD.PHRASES['el']['more']))
+        self.assertEqual(MOD.phrase('moment', 'el'), 'Μισό λεπτό.')
+        self.assertEqual(MOD.phrase('moment', None), 'One moment.')
+
+    def test_transcribe_prefers_rig_and_falls_back_to_phone(self):
+        class RV:
+            class RigUnavailable(Exception):
+                pass
+            ok = True
+            @staticmethod
+            def load_config(): return {}
+            @classmethod
+            def transcribe(cls, path, cfg):
+                if not cls.ok:
+                    raise cls.RigUnavailable('down')
+                return {'text': 'Καλημέρα', 'lang': 'el', 'ms': 900}
+        a = MOD.Assistant(dict(CFG, asr='rig'), speak=False, base=self.base)
+        with mock.patch.object(MOD, 'RV', RV), \
+                mock.patch.object(MOD.subprocess, 'run', lambda *x, **k: mock.Mock(
+                    returncode=0, stdout='{"text": "good morning"}', stderr='')):
+            self.assertEqual(a.transcribe('/tmp/x.wav'), 'Καλημέρα')
+            self.assertEqual((a.lang, a.rec['asr_engine']), ('el', 'rig-whisper'))
+            RV.ok = False
+            self.assertEqual(a.transcribe('/tmp/x.wav'), 'good morning')
+            self.assertEqual((a.lang, a.rec['asr_engine'], a.rec['asr_rig_error']), (None, 'parakeet', 'down'))
 
     def test_split_first_chunk(self):
         f = MOD.split_first_chunk

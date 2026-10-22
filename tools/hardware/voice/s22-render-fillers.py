@@ -5,8 +5,10 @@ Runs on the phone (root). Each phrase of filler-phrases.json (the rig's
 FILLER_PHRASES from src/ui/modules/voice-fillers.js) is synthesized by s22-say
 in render-only mode (S22_SAY_OUT: nothing is played, the sound card is not
 touched) with exactly the engine that speaks the answers, so a filler and the
-answer that follows it share one voice: Greek text goes to el-antonis,
-English to s22-say's default engine. Output layout and manifest.json match
+answer that follows it share one voice: the owner's own voice (s22-say engine "antonis", the rig's VoxCPM
+voice) for Greek and English. Rendering is strict (S22_SAY_STRICT=1): a clip the rig cannot render fails the
+run instead of falling back to another voice, so a bank never mixes voices (rerun when the rig is back;
+existing clips are kept unless --force). Output layout and manifest.json match
 the rig's ~/.openunum/assets/voice-fillers:
 
   <out>/<lang>/<category>/<n>.wav      (n starts at 1)
@@ -49,7 +51,7 @@ def wav_seconds(path: Path) -> float:
 
 def render(text: str, out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
-    env = {**os.environ, 'S22_SAY_OUT': str(out)}
+    env = {**os.environ, 'S22_SAY_OUT': str(out), 'S22_SAY_STRICT': '1', 'S22_RIGVOICE_LENIENT': '1'}
     r = subprocess.run([SAY, text], env=env, capture_output=True, text=True, timeout=180)
     if r.returncode != 0 or not out.is_file() or out.stat().st_size < 1000:
         raise RuntimeError(f'render failed rc={r.returncode} {r.stderr[-200:]!r} for {text!r}')
@@ -66,7 +68,7 @@ def main(argv=None) -> int:
     bank = json.loads(Path(args.phrases).read_text())['phrases']
     out = Path(args.out)
     manifest = {'version': 1, 'generatedAt': time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime()),
-                'voice': 'phone s22-say supertonic sid0 F1 (en) / el-antonis (el), -16 LUFS', 'clips': {}}
+                'voice': 'owner voice: rig VoxCPM2 antonis (en + el) via s22-say engine antonis, -16 LUFS', 'clips': {}}
     done = skipped = 0
     for lang, cats in bank.items():
         if args.only and lang != args.only:

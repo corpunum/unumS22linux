@@ -132,7 +132,7 @@ def main(argv: list[str]) -> dict:
     if cmd == 'brightness':
         return request({'cmd': 'brightness', 'arg': rest[0] if rest else 'get'})
     if cmd == 'tts':
-        rest, engine = opt(rest, '--engine', 'supertonic')
+        rest, engine = opt(rest, '--engine', 'antonis')
         rest, out = opt(rest, '--out', 'speaker')
         rest, thinking_for = opt(rest, '--for', '')
         play = '--play' in rest
