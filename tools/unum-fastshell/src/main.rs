@@ -378,6 +378,10 @@ fn run() -> std::io::Result<()> {
             kevs.sort_by_key(|e| e.2);
             if app.buttons_enabled {
                 for &(k, down, t) in &kevs {
+                    if down && !machine.any_down() {
+                        // others write the level too (s22-buttons fallback, quiet hours): start from the file
+                        app.level = buttons::read_level(buttons::SAY_LEVEL);
+                    }
                     let ctx = key_ctx(&app);
                     let acts = if down { machine.press(k, t, ctx) } else { machine.release(k, t, ctx) };
                     if !acts.is_empty() {
@@ -451,8 +455,10 @@ fn run() -> std::io::Result<()> {
         }
         app.check_repeat();
         app.check_hold();
-        // ---- effects
-        for e in std::mem::take(&mut app.effects) {
+        // ---- effects (level first: a wake's DPMS-on blocks ~180 ms and must not delay it)
+        let mut effs = std::mem::take(&mut app.effects);
+        effs.sort_by_key(|e| !matches!(e, Effect::Level(_) | Effect::PttRelease(_)));
+        for e in effs {
             match e {
                 Effect::Activate => {
                     want_active = true;

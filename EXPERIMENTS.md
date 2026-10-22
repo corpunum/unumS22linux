@@ -3351,3 +3351,34 @@ Details: `evidence/npu-custom-20261022/README.md`. Tools: `tools/hardware/npu/nn
 - **Code changes (s22-autosleep):** `net_awake_s` = 2.5 s minimum awake after a wake caused only by modem/Wi-Fi IRQs (was 6 s), and per-cycle `net_pk` (rx/tx packets of rmnet0, tailscale0, wlan0 during the sleep) in the jsonl for diagnosis. Deployed to the phone (autosleep restarted by keepalive). Effect of `net_awake_s` alone not separable: the owner picked the phone up from ~07:25 UTC, so no clean second locked window.
 - **Open:** a >=20 min locked window after the Wi-Fi scan change; the llama-ondemand/voice-turn first-token cap (900 s with a CPU-only model) should be shorter so a stuck turn cannot burn CPU for 45 min.
 - **Rules kept:** no reboot, exact-PID kills only (llama-server 25953, autosleep 25615), dead-man armed for the wpa change and cancelled after a rig `tailscale ping` (183 ms via mobile). No installs.
+
+### 2026-10-22 — Physical buttons handled in unum-fastshell (instant volume, chords)
+
+- Why: the keys felt laggy. s22-buttons acted on release, spawned a chroot amixer per step (amp +121–140 ms after
+  key-down) and spoke "volume N" 3.3–3.8 s later. Power went through hooks/power → python s22-touchd → shell:
+  screen on 520–560 ms after release.
+- Design: the shell reads the key nodes itself (found by capabilities), no grab, and runs a pure recogniser
+  (`tools/unum-fastshell/src/buttons.rs`, unit-tested). Taking over in the shell beats forwarding from s22-buttons:
+  one hop fewer, and no python scheduling under load ~15. s22-buttons is the fallback: the shell writes its pid to
+  `/run/s22-fastshell.buttons`; s22-buttons then only logs, and still runs **Power ≥ 1 s alone → hooks/power-long**,
+  so the safety path does not depend on the shell. A Power press overlapping a volume key never runs power-long.
+- Bindings: volume ±1 on key-down with a level overlay; hold Volume up = push-to-talk (same hook/env as
+  s22-buttons); hold Volume down = mute/unmute; Power = lock / wake (wake on key-down); Power twice = camera;
+  Power + Volume down = screenshot to the OpenUnum gallery (visible in Files) with a flash; Power + Volume up =
+  keep screen on; any key wakes the screen. Chord window 400 ms, double press 400 ms, hold 1 s. All are listed in
+  Settings → Buttons, whose hold-toggle hands the keys back to s22-buttons.
+- Level = `/run/s22-say.level`, which s22-say uses and the mute guard leaves alone. The amps are written by an ALSA
+  ioctl only while something plays, so the resting state stays muted.
+- After, on the phone, from injected events: level written +1.6–4.3 ms after key-down; amps +4.3 ms; overlay on
+  screen +2.6–8.4 ms; screen on from Power 177–211 ms after down (DPMS-on is ~170 ms of it); lock cover +6–16 ms
+  after release; tap → page p50 13.4 ms (was 12.3). Chord held 1.4 s did not fall back; Power held 1.3 s alone did.
+  Details: `evidence/buttons-20261022/README.md`.
+- Bug: s22-buttons stepped from a stale in-memory level after the mute guard zeroed it (the baseline run reached
+  level 8 and spoke there 4×). Both daemons now read the level at each press.
+- Deployed: unum-fastshell sha256 80b39060…, s22-buttons from this commit; backups in
+  `/srv/s22/state/fastshell/backup-buttons-20261022-093331/`. The shell was restarted by exact PID (TERM) and
+  s22-touchd restarted it. s22-buttons was restarted by exact PID and started detached (setsid), because nothing
+  supervises it. The next boot starts it normally. No reboot.
+- Not verified on the phone: PTT hold (it would start a voice turn), Volume-down mute, grim screenshot under sway,
+  the Settings toggle by touch, real finger, Power wake from a real suspend.
+

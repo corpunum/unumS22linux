@@ -1,0 +1,34 @@
+1792661626.929 fastshell: card1 crtc 184 conn 191 mode 1080x2340@120hs 1080x2340
+1792661626.933 fastshell: active as seat session 2
+on
+{"keys": ["power"], "hold_ms": 100.0, "up_at_ms": 101.9, "before": {"amp": 0, "level": "1", "saved": "0", "pcm": false, "display": "on", "crtc": "1", "fb": "202"}, "after": {"amp": 0, "level": "1", "saved": "0", "pcm": false, "display": "off", "crtc": "0", "fb": "198"}, "display": {"from_down_ms": 266.2, "from_up_ms": 164.3, "changes": [[266.2, "off"]]}, "crtc": {"from_down_ms": 266.2, "from_up_ms": 164.3, "changes": [[266.2, "0"]]}, "fb": {"from_down_ms": 111.9, "from_up_ms": 9.9, "changes": [[111.9, "198"]]}}
+{"keys": ["volup"], "hold_ms": 80, "up_at_ms": 190.0, "before": {"amp": 0, "level": "1", "saved": "0", "pcm": false, "display": "off", "crtc": "0", "fb": "198"}, "after": {"amp": 0, "level": "5", "saved": "5", "pcm": false, "display": "on", "crtc": "1", "fb": "198"}, "level": {"from_down_ms": 187.1, "from_up_ms": -2.9, "changes": [[187.1, "5"]]}, "saved": {"from_down_ms": 192.3, "from_up_ms": 2.3, "changes": [[192.3, "5"]]}, "display": {"from_down_ms": 187.1, "from_up_ms": -2.9, "changes": [[187.1, "on"]]}, "crtc": {"from_down_ms": 187.1, "from_up_ms": -2.9, "changes": [[187.1, "1"]]}, "fb": {"from_down_ms": 226.5, "from_up_ms": 36.5, "changes": [[226.5, "202"], [368.1, "198"]]}}
+{"keys": ["voldown"], "hold_ms": 80, "up_at_ms": 82.0, "before": {"amp": 0, "level": "5", "saved": "5", "pcm": false, "display": "on", "crtc": "1", "fb": "202"}, "after": {"amp": 0, "level": "4", "saved": "4", "pcm": false, "display": "on", "crtc": "1", "fb": "198"}, "level": {"from_down_ms": 1.7, "from_up_ms": -80.2, "changes": [[1.7, "4"]]}, "saved": {"from_down_ms": 1.7, "from_up_ms": -80.2, "changes": [[1.7, "4"]]}, "fb": {"from_down_ms": 4.0, "from_up_ms": -78.0, "changes": [[4.0, "198"]]}}
+{"keys": ["volup"], "hold_ms": 80, "up_at_ms": 81.6, "before": {"amp": 0, "level": "4", "saved": "4", "pcm": false, "display": "on", "crtc": "1", "fb": "202"}, "after": {"amp": 0, "level": "5", "saved": "5", "pcm": false, "display": "on", "crtc": "1", "fb": "198"}, "level": {"from_down_ms": 1.6, "from_up_ms": -80.0, "changes": [[1.6, "5"]]}, "saved": {"from_down_ms": 3.6, "from_up_ms": -78.0, "changes": [[3.6, "5"]]}, "fb": {"from_down_ms": 4.7, "from_up_ms": -76.9, "changes": [[4.7, "198"]]}}
+{"keys": ["voldown"], "hold_ms": 80, "up_at_ms": 81.1, "before": {"amp": 0, "level": "5", "saved": "5", "pcm": false, "display": "on", "crtc": "1", "fb": "202"}, "after": {"amp": 0, "level": "4", "saved": "4", "pcm": false, "display": "on", "crtc": "1", "fb": "198"}, "level": {"from_down_ms": 1.6, "from_up_ms": -79.5, "changes": [[1.6, "4"]]}, "saved": {"from_down_ms": 1.6, "from_up_ms": -79.5, "changes": [[1.6, "4"]]}, "fb": {"from_down_ms": 2.6, "from_up_ms": -78.5, "changes": [[2.6, "198"]]}}
+{"keys": ["volup"], "hold_ms": 80, "up_at_ms": 80.9, "before": {"amp": 0, "level": "4", "saved": "4", "pcm": false, "display": "on", "crtc": "1", "fb": "202"}, "after": {"amp": 0, "level": "5", "saved": "5", "pcm": false, "display": "on", "crtc": "1", "fb": "198"}, "level": {"from_down_ms": 3.0, "from_up_ms": -77.8, "changes": [[3.0, "5"]]}, "saved": {"from_down_ms": 3.0, "from_up_ms": -77.8, "changes": [[3.0, "5"]]}, "fb": {"from_down_ms": 7.0, "from_up_ms": -73.8, "changes": [[7.0, "198"]]}}
+{"keys": ["voldown"], "hold_ms": 80, "up_at_ms": 80.9, "before": {"amp": 0, "level": "5", "saved": "5", "pcm": false, "display": "on", "crtc": "1", "fb": "202"}, "after": {"amp": 0, "level": "4", "saved": "0", "pcm": false, "display": "on", "crtc": "1", "fb": "198"}, "level": {"from_down_ms": 2.9, "from_up_ms": -78.0, "changes": [[2.9, "4"]]}, "saved": {"from_down_ms": 7.3, "from_up_ms": -73.6, "changes": [[7.3, "4"], [403.8, "0"]]}, "fb": {"from_down_ms": 8.4, "from_up_ms": -72.4, "changes": [[8.4, "198"]]}}
+{"keys": ["power"], "hold_ms": 100.0, "up_at_ms": 101.1, "before": {"amp": 0, "level": "4", "saved": "0", "pcm": false, "display": "on", "crtc": "1", "fb": "202"}, "after": {"amp": 0, "level": "4", "saved": "0", "pcm": false, "display": "off", "crtc": "0", "fb": "198"}, "display": {"from_down_ms": 253.6, "from_up_ms": 152.5, "changes": [[253.6, "off"]]}, "crtc": {"from_down_ms": 253.6, "from_up_ms": 152.5, "changes": [[253.6, "0"]]}, "fb": {"from_down_ms": 110.6, "from_up_ms": 9.4, "changes": [[110.6, "198"]]}}
+{"keys": ["power"], "hold_ms": 100.0, "up_at_ms": 181.3, "before": {"amp": 0, "level": "4", "saved": "0", "pcm": false, "display": "off", "crtc": "0", "fb": "198"}, "after": {"amp": 0, "level": "4", "saved": "0", "pcm": false, "display": "on", "crtc": "1", "fb": "202"}, "display": {"from_down_ms": 180.3, "from_up_ms": -1.0, "changes": [[180.3, "on"]]}, "crtc": {"from_down_ms": 180.3, "from_up_ms": -1.0, "changes": [[180.3, "1"]]}, "fb": {"from_down_ms": 210.5, "from_up_ms": 29.2, "changes": [[210.5, "202"]]}}
+{"keys": ["power"], "hold_ms": 100.0, "up_at_ms": 100.7, "before": {"amp": 0, "level": "4", "saved": "0", "pcm": false, "display": "on", "crtc": "1", "fb": "198"}, "after": {"amp": 0, "level": "4", "saved": "0", "pcm": false, "display": "off", "crtc": "0", "fb": "202"}, "display": {"from_down_ms": 253.2, "from_up_ms": 152.5, "changes": [[253.2, "off"]]}, "crtc": {"from_down_ms": 253.2, "from_up_ms": 152.5, "changes": [[253.2, "0"]]}, "fb": {"from_down_ms": 110.8, "from_up_ms": 10.1, "changes": [[110.8, "202"]]}}
+4
+off
+1792661646.379 fastshell: dpms on: Ok(())
+1792661647.870 fastshell: key voldown down -> [Step(-1)]
+1792661649.554 fastshell: key volup down -> [Step(1)]
+1792661651.228 fastshell: key voldown down -> [Step(-1)]
+1792661652.911 fastshell: key volup down -> [Step(1)]
+1792661654.590 fastshell: key voldown down -> [Step(-1)]
+1792661656.374 fastshell: key power up -> [Lock]
+1792661656.523 fastshell: dpms off: Ok(())
+1792661659.488 fastshell: key power down -> [Wake]
+1792661659.664 fastshell: dpms on: Ok(())
+1792661662.676 fastshell: key power up -> [Lock]
+1792661662.826 fastshell: dpms off: Ok(())
+{"t":25504632776,"kind":"button","touch_to_flip_ms":217.50,"page":"","modeset":true}
+{"t":25506101829,"kind":"button","touch_to_flip_ms":12.63,"page":""}
+{"t":25507788720,"kind":"button","touch_to_flip_ms":15.31,"page":""}
+{"t":25509459142,"kind":"button","touch_to_flip_ms":11.49,"page":""}
+{"t":25511146410,"kind":"button","touch_to_flip_ms":16.51,"page":""}
+{"t":25512825334,"kind":"button","touch_to_flip_ms":16.41,"page":""}
+{"t":25517908709,"kind":"button","touch_to_flip_ms":202.05,"page":"","modeset":true}
