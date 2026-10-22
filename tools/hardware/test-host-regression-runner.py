@@ -87,6 +87,7 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/pi-web/test_pi_readiness.py",
     "tools/pi-web/test_agent_web.py",
     "tools/hardware/test_s22_buttons.py",
+    "tools/hardware/test_s22_haptic.py",
     "tools/hardware/test_s22_assistant.py",
     "tools/hardware/test_s22_modem.py",
     "tools/hardware/test_s22_keepalive.py",
