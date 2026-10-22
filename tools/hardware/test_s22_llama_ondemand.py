@@ -19,6 +19,7 @@ spec = importlib.util.spec_from_loader('s22_llama_ondemand', loader)
 mod = importlib.util.module_from_spec(spec)
 loader.exec_module(mod)
 mod.WARM_QUIET_S = 0.4
+mod.LEAN_DEFAULT = False      # the lean rewrite has its own tests (LeanTest)
 
 FAKE = r'''
 import http.server, json, sys, time
@@ -181,6 +182,7 @@ class H(http.server.BaseHTTPRequestHandler):
                 note('restore ' + body['filename']); return self.reply({'n_restored': 10})
             return self.reply({'error': 'nofile'}, 400)
         note('chat max_tokens=%s last=%s' % (body.get('max_tokens'), body['messages'][-1]['content'][:20]))
+        open(os.path.join(slots, 'last-body.json'), 'w').write(json.dumps(body))
         self.reply({'choices': [{'message': {'content': 'ok'}}], 'timings': {'prompt_n': 5, 'cache_n': 0}})
 http.server.ThreadingHTTPServer(('127.0.0.1', port), H).serve_forever()
 '''
@@ -296,6 +298,98 @@ class PrecacheTest(unittest.TestCase):
         self.argv = self.argv[:-2]
         self.make()
         self.assertFalse(self.od.precache)
+
+
+TURN = ('## Session digest (older context)\n\n**Goal:** /new\nUSER: old stuff ' + 'd' * 3000 +
+        '\n<openunum_turn_context>\nSession workspace: /root/x\nskills ' + 'k' * 2500 + '\n</openunum_turn_context>\n'
+        'hello there\n[OPENUNUM INTERNAL TURN DIRECTIVE]\n## CONSTRAINTS\n\n[OPENUNUM INTERNAL TURN DIRECTIVE]\nROLE MODE: EXECUTION')
+
+
+def controller_body(n_old=10):
+    msgs = [{'role': 'system', 'content': 'You are OpenUnum ' + 'S' * 12000}]
+    for i in range(n_old):
+        msgs += [{'role': 'user', 'content': f'q{i}'}, {'role': 'assistant', 'content': f'a{i} ' + 'z' * 2000}]
+    msgs.append({'role': 'user', 'content': TURN})
+    return {'model': 'm', 'messages': msgs, 'max_tokens': 4096, 'temperature': 0.2, 'stream': True,
+            'tools': [{'type': 'function', 'function': {'name': 'web_search', 'description': 'w' * 2000, 'parameters': {}}}]}
+
+
+class LeanTest(unittest.TestCase):
+    setUp, tearDown, request, calls, wait = (PrecacheTest.setUp, PrecacheTest.tearDown, PrecacheTest.request,
+                                             PrecacheTest.calls, PrecacheTest.wait)
+
+    def make(self):
+        d = Path(self.tmp.name)
+        self.od = mod.OnDemand(idle_s=60, argv=self.argv, backend_port=self.bport, hold=d / 'hold', state=d / 'state',
+                               start_timeout_s=10, mid_cap=None, lean=True)
+
+    def test_user_text_strips_digest_context_and_directives(self):
+        self.assertEqual(mod.lean_user_text(TURN), 'hello there')
+        self.assertEqual(mod.lean_user_text('plain question'), 'plain question')
+        only = '[OPENUNUM INTERNAL TURN DIRECTIVE]\nThe tool result is above; answer now.'
+        self.assertEqual(mod.lean_user_text(only), 'The tool result is above; answer now.')
+        self.assertEqual(mod.lean_user_text('## Session digest (older context)\nUSER: x'), '')
+
+    def test_lean_request_is_small_stable_and_keeps_tool_pairs(self):
+        a = mod.lean_request(controller_body(), today='2026-10-22')
+        b = mod.lean_request(controller_body(3), today='2026-10-22')
+        self.assertEqual(a['messages'][0], b['messages'][0])                      # byte-stable system prompt
+        self.assertEqual(a['messages'][-1], {'role': 'user', 'content': 'hello there'})
+        self.assertLessEqual(len(a['messages']), mod.LEAN_KEEP_MSGS + 1)
+        self.assertLess(len(json.dumps(a)), 6000)
+        self.assertEqual(a['max_tokens'], mod.LEAN_MAX_TOKENS)
+        self.assertEqual(a['tools'], controller_body()['tools'])
+        loop = controller_body()
+        loop['messages'] += [{'role': 'assistant', 'content': '', 'tool_calls': [{'id': '1'}]}] + \
+            [{'role': 'tool', 'tool_call_id': '1', 'content': 'r' * 4000}] * 7
+        c = mod.lean_request(loop, today='2026-10-22')['messages']
+        self.assertEqual(c[1]['role'], 'assistant')                                 # the call its results belong to
+        self.assertTrue(c[1].get('tool_calls'))
+        self.assertLessEqual(len(c[-1]['content']), mod.LEAN_CLIP_TOOL + 10)
+
+    def test_relayed_body_is_lean_and_prefix_is_cached(self):
+        self.request(controller_body())
+        sent = json.loads((self.slots / 'last-body.json').read_text())
+        self.assertTrue(sent['messages'][0]['content'].startswith('You are OpenUnum, the owner'))
+        self.assertEqual(sent['messages'][-1]['content'], 'hello there')
+        self.assertTrue(self.wait(lambda: any(c.startswith('save ') for c in self.calls())), self.calls())
+        shape = [json.loads(l) for l in (self.od.state / 'ondemand.jsonl').read_text().splitlines()]
+        shape = [r for r in shape if r.get('event') == 'request_shape'][-1]
+        self.assertTrue(shape['lean'])
+        self.assertGreater(shape['orig_bytes'], 30000)
+
+    def test_force_close_makes_one_request_per_connection(self):
+        h = b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\n{}'
+        out = mod.force_close(h)
+        self.assertEqual(out.count(b'Connection: close'), 1)
+        self.assertNotIn(b'keep-alive', out.lower().replace(b'connection: close', b''))
+        self.assertTrue(out.endswith(b'\r\n\r\n{}'))
+
+    def test_small_side_requests_keep_their_instructions(self):
+        side = {'messages': [{'role': 'system', 'content': 'Extract facts as JSON.'}, {'role': 'user', 'content': 'x'}],
+                'max_tokens': 700, 'temperature': 0}
+        self.assertFalse(mod.wants_lean(side))
+        self.assertTrue(mod.wants_lean(controller_body()))
+        self.request(side)
+        sent = json.loads((self.slots / 'last-body.json').read_text())
+        self.assertEqual(sent['messages'][0]['content'], 'Extract facts as JSON.')
+
+    def test_openunum_prewarm_is_answered_without_loading(self):
+        a, b = socket.socketpair()
+        data = json.dumps({'prompt': 'x' * 9000, 'n_predict': 0}).encode()
+        a.sendall(b'POST /completion HTTP/1.1\r\nHost: x\r\nContent-Length: %d\r\n\r\n' % len(data) + data)
+        self.od.handle(b)
+        resp = a.recv(65536)
+        a.close()
+        self.assertIn(b'200 OK', resp)
+        self.assertFalse(self.od.running())
+        self.assertEqual(self.calls(), [])
+
+    def test_lean_off_file_restores_passthrough(self):
+        (self.od.state / 'lean-off').write_text('')
+        self.request(controller_body())
+        sent = json.loads((self.slots / 'last-body.json').read_text())
+        self.assertTrue(sent['messages'][0]['content'].startswith('You are OpenUnum S'))
 
 
 if __name__ == '__main__':

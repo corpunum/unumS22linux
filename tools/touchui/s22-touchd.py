@@ -75,7 +75,8 @@ SHELL_SOCK = RUN / 'shell.sock'                         # unum-shell's control s
 OPENUNUM_API = 'http://127.0.0.1:18880'
 PIN_FILE = Path('/srv/s22/state/keepalive/openunum.pinned.json')   # s22-keepalive pin_source
 MODEL_CHOICES = {'luna': ('openai', 'openai/gpt-6-luna'),
-                 'local': ('llama-cpp-local', '/models/Qwen3.5-0.8B-Q4_0.gguf')}
+                 # what s22-llama-ondemand actually serves on :8090 (keepalive service_defs.llama_backend)
+                 'local': ('llama-cpp-local', '/models/gemma-4-E2B-it-qat-q4_0-heretic-Q4_0_PURE.gguf')}
 DEFAULT_MODEL_CHOICE = 'luna'
 LOG_MAX = 1 << 20
 

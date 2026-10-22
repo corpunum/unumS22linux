@@ -3,6 +3,43 @@
 Updated 2026-10-22 (own models on the NPU; suspend-to-RAM + autosleep; camera ISP, 5G badge, GNSS plan); 2026-10-21 (fast touch shell); earlier sections updated 2026-10-06 by the Claude lead session.
 The 2026-10-02 task board and earlier checkpoints below are historical.
 
+## Local model chat answers in seconds — 2026-10-22 (late morning)
+
+Switching the shell to **Local (Gemma E2B)** used to fail: one "hello" sent the CPU-only Gemma-4 E2B
+(2 throttled A710 cores, ~8–30 tok/s prefill) 8–10k tokens and timed out after minutes at 77–78 °C.
+Now, end to end through the shell's path (`s22-touchd model local` + `POST /api/chat`, session `touch`):
+
+| Turn | First token | Reply done |
+|---|---|---|
+| first after an unload (19 s model load + saved prefix restored) | 27.6 s | 29 s |
+| next turns ("capital of France?", "and of Greece?") | 8.4–9.9 s | 9–21 s |
+| Luna after switching back | — | 9.4 s |
+
+CPU zones stayed at 37–43 °C (was 77–78 °C). What changed:
+- **Lean local profile in `s22-llama-ondemand`** (default on; off: `touch /srv/s22/state/llama-ondemand/lean-off`).
+  Only the local model passes through it, so Luna is unchanged. For OpenUnum's controller requests it sends a
+  short fixed system prompt, the request's tools, the last 6 messages (older ones clipped), and the owner's words
+  without the session digest, turn context and directive blocks; `max_tokens` is capped at 768. That makes
+  about 700 tokens of stable prefix, saved as a slot and restored in 0.05 s. OpenUnum's own prefix prewarm is
+  answered by the proxy instead of costing about 3 min of prefill. OpenUnum's small side requests (no tools,
+  short prompt) pass through unchanged.
+- **One request per connection.** OpenUnum's client kept connections alive, so every request after the first
+  on a connection went through the byte relay **uninspected**: no lean rewrite, no prefix learning, no log. That
+  was why each new turn first sent the full 4.4k-token prompt. The proxy now sends `Connection: close`. When the
+  client goes away, the backend connection is closed fully, so llama-server cancels the task.
+- **OpenUnum config** (`tools/openunum-phone/local-compact-profile.py`): the local model id is now the Gemma
+  file, not the old Qwen 0.8B. `runtime.toolDisclosureCore=["web_search"]` applies to local routes only, and the
+  compact tier keeps 6 history messages. The old compact profile (`swap08.sh`: allowedTools + toolTrim) has done
+  nothing since guardrails were turned off.
+- **First-token cap 900 s → 120 s** (`s22-openunum.sh`). It only covers the openai-compatible/local route; Luna
+  uses the Codex provider.
+- **Labels:** touchd maps `local` to the Gemma file, and the fastshell and Quickshell buttons read
+  "Local (Gemma E2B)" (fastshell rebuilt).
+
+Caveats: the slot cache is keyed on the date in the lean system prompt, so the first local turn of a day pays
+about 80 s once to rebuild it. A cold load also pays that if no slot was saved yet. Tool use on the local model
+is limited to web_search plus tool_search discovery.
+
 ## Works on its own SIM: no Wi-Fi, no USB — 2026-10-22 (morning)
 
 **The phone no longer needs the USB cable or Wi-Fi.** It was unplugged for real and taken out of the house, and it stays reachable over Tailscale on mobile data.

@@ -2204,7 +2204,7 @@ impl App {
         let b2 = Rect::new(r.x + 56 + bw, r.y + 150, bw, 120);
         self.button(cv, b1, "Luna", Act::Model("luna"), SURF2, PRESS, 36);
         self.hold_last(800);
-        self.button(cv, b2, "Local 0.8B", Act::Model("local"), SURF2, PRESS, 36);
+        self.button(cv, b2, "Local (Gemma E2B)", Act::Model("local"), SURF2, PRESS, 36);
         self.hold_last(800);
         y += 300 + M;
         // screen + desktop

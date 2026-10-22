@@ -3,7 +3,8 @@
 
 Native (Alpine) root, as root; supervised by s22-keepalive (service "llama").
 Listens on 127.0.0.1:8090, where OpenUnum, s22-assistant and s22-touchd expect
-the Qwen3.5-0.8B fallback, and runs the real llama-server on 127.0.0.1:8091.
+the local model (the keepalive "llama_backend" argv; since 2026-10-22 Gemma-4 E2B
+on the CPU), and runs the real llama-server on 127.0.0.1:8091.
 
   * A real request (anything but the probes below) starts llama-server if it
     is not running (warm load measured at ~2.6 s on the phone, against ~35 s of
@@ -29,6 +30,18 @@ the Qwen3.5-0.8B fallback, and runs the real llama-server on 127.0.0.1:8091.
     carried it; the last 3 prefixes/slots are kept. The warm job is cancelled if a request for a
     different prefix arrives, honours the guardian hold, and counts as "active" (no idle unload
     while it runs). All of it is best effort: any failure just means a cold prefill, as before.
+
+  * Lean local profile (2026-10-22, default on). The local model is Gemma-4 E2B on two throttled
+    A710 cores: ~20-30 tok/s prefill. OpenUnum's controller prompt (~12.5k chars of system text,
+    a session digest and a ~3k-char per-turn context block in the user message) costs 3-8 min
+    before the first token, and no OpenUnum knob shrinks it with guardrails off. So for chat
+    requests the proxy rewrites what the LOCAL model sees (cloud routes never pass here):
+    one short byte-stable system prompt (so the prefix slot cache keeps working), the request's
+    own tools, the last LEAN_KEEP_MSGS messages with old ones clipped, the digest / turn-context
+    / internal-directive blocks stripped from user text, max_tokens capped. OpenUnum's own
+    prefix prewarm (POST /completion with n_predict 0) is answered here without loading the
+    model, since the lean prompt never uses that prefix. Off: S22_LLAMA_LEAN=0 or the file
+    STATE/lean-off (checked per request).
 
 Measured 2026-10-10 (sway, idle): unloading frees ~860 MB of MemAvailable and
 ~0.5-1 % of a core; temperature unchanged (31-32 C).
@@ -74,7 +87,7 @@ MID_CAP_KHZ = int(os.environ.get('S22_LLAMA_MID_CAP_KHZ', '1800000'))
 # -- prompt precache
 SLOT_ARG = '/data/slots'            # as seen inside the isolated exec (chroot = the llama-vulkan dir)
 KEEP_PREFIXES = 3
-MIN_PREFIX_CHARS = 4000             # ignore small prompts (probes, one-off helpers): not worth a slot
+MIN_PREFIX_CHARS = 2000             # ignore small prompts (probes, one-off helpers): not worth a slot
 WARM_TIMEOUT_S = 1800
 CHAT_PATHS = ('/v1/chat/completions', '/chat/completions')
 # first streamed chunk that carries model output (text, reasoning or a tool call), i.e. the real time to first token
@@ -82,6 +95,23 @@ CONTENT_RE = re.compile(rb'"(?:content|reasoning_content|tool_calls)"\s*:\s*(?:"
 WARM_QUIET_S = float(os.environ.get('S22_LLAMA_WARM_QUIET_S', '60'))   # warm only after the conversation went quiet
 MAX_PREFIX_FRAC = 0.6
 MAX_BODY = 8 * 1024 * 1024
+# -- lean local profile
+LEAN_DEFAULT = os.environ.get('S22_LLAMA_LEAN', '1') != '0'
+LEAN_KEEP_MSGS = 6                  # non-system messages kept (a tool result keeps its assistant call)
+LEAN_CLIP_OLD = 600                 # chars kept of a message before the current user turn
+LEAN_CLIP_TOOL = 2500               # chars kept of a tool result in the current turn
+LEAN_MAX_TOKENS = 768
+LEAN_MIN_SYSTEM = 4000              # a request without tools is only rewritten if it carries a controller-size prompt
+WARM_PATHS = ('/completion', '/completions')
+DIRECTIVE = '[OPENUNUM INTERNAL TURN DIRECTIVE]'
+LEAN_SYSTEM = (
+    "You are OpenUnum, the owner's personal assistant, running on the owner's Samsung Galaxy S22 "
+    "(native Linux) on a small local model with no cloud access to other models. "
+    "Reply briefly and directly, in the language the user writes in; plain text, no long lists unless asked. "
+    "Use a tool only when the answer needs fresh, online or device information you do not have; "
+    "tool_search finds more tools (phone, files, shell) by description. "
+    "Never claim you did something unless a tool result in this conversation shows it. "
+    "Current date: {date}.")
 DEFAULT_ARGV = ['/usr/bin/python3', '/srv/s22/hardware/bin/s22-gpu-exec-isolated',
                 '/srv/s22/gpu-compat-20260921/llama-vulkan', '--bridge-v4', '/system/bin/llama-server',
                 '-m', '/models/Qwen3.5-0.8B-Q4_0.gguf', '-ngl', '99', '-t', '4', '-c', '16384', '-np', '1',
@@ -173,6 +203,96 @@ def warm_body(spec: dict, n_predict: int = 1) -> dict:
     return b
 
 
+def clip(text: str, n: int) -> str:
+    if len(text) <= n:
+        return text
+    head = max(n - n // 4, 0)
+    return text[:head] + ' [...] ' + text[len(text) - (n - head):]
+
+
+def lean_user_text(text: str) -> str:
+    """The owner's words without OpenUnum's per-turn scaffolding. OpenUnum sends a user turn as
+    [session digest] <openunum_turn_context>...</openunum_turn_context> WORDS [directive blocks]."""
+    before, sep, after = text.partition('</openunum_turn_context>')
+    if not sep:
+        before, after = '', text
+    before = before.split('<openunum_turn_context>', 1)[0]
+    parts = after.split(DIRECTIVE)
+    words = parts[0].strip()
+    if not words and not before.lstrip().startswith('## Session digest'):
+        words = before.strip()
+    if words.startswith('## Session digest'):
+        words = ''
+    if words:
+        return words
+    # a message made only of directives (continuations, nudges): keep the first one, short
+    rest = [p.strip() for p in parts[1:] if p.strip()]
+    return clip(rest[0], 400) if rest else ''
+
+
+def wants_lean(body: dict) -> bool:
+    """The agent controller turn (tools, or a big system prompt). OpenUnum's small side requests (fact
+    extraction, titles, verdicts: no tools, short system prompt) keep their own instructions."""
+    if body.get('tools'):
+        return True
+    msgs = [m for m in (body.get('messages') or []) if isinstance(m, dict)]
+    return sum(len(str(m.get('content') or '')) for m in msgs if m.get('role') in ('system', 'developer')) > LEAN_MIN_SYSTEM
+
+
+def lean_request(body: dict, today: str | None = None) -> dict:
+    """What the local model gets instead of the full controller request (see module doc)."""
+    msgs = [m for m in (body.get('messages') or []) if isinstance(m, dict)]
+    rest = [dict(m) for m in msgs if m.get('role') not in ('system', 'developer')]
+    cut = max(len(rest) - LEAN_KEEP_MSGS, 0)
+    while cut > 0 and rest[cut].get('role') == 'tool':
+        cut -= 1                                  # keep the assistant tool call its results belong to
+    rest = rest[cut:]
+    while rest and rest[0].get('role') == 'tool':
+        rest.pop(0)
+    last_user = max((i for i, m in enumerate(rest) if m.get('role') == 'user'), default=-1)
+    out = []
+    for i, m in enumerate(rest):
+        c = m.get('content')
+        if isinstance(c, str):
+            if m.get('role') == 'user':
+                c = lean_user_text(c)
+                if i != last_user:
+                    c = clip(c, LEAN_CLIP_OLD)
+            elif m.get('role') == 'tool':
+                c = clip(c, LEAN_CLIP_TOOL if i > last_user else LEAN_CLIP_OLD)
+            elif i < last_user:
+                c = clip(c, LEAN_CLIP_OLD)
+            m['content'] = c
+        if m.get('role') == 'user' and not (c or '').strip() and i != last_user:
+            continue
+        out.append(m)
+    b = dict(body)
+    b['messages'] = [{'role': 'system', 'content': LEAN_SYSTEM.format(date=today or time.strftime('%Y-%m-%d'))}] + out
+    mt = b.get('max_tokens') or b.get('n_predict')
+    b['max_tokens'] = min(int(mt), LEAN_MAX_TOKENS) if isinstance(mt, (int, float)) and mt > 0 else LEAN_MAX_TOKENS
+    b.pop('n_predict', None)
+    return b
+
+
+def set_body(head: bytes, body: bytes) -> bytes:
+    """Replace the body of a Content-Length request."""
+    hdr = head.partition(b'\r\n\r\n')[0]
+    lines = [ln for ln in hdr.split(b'\r\n') if ln.partition(b':')[0].strip().lower() != b'content-length']
+    return b'\r\n'.join(lines + [b'Content-Length: ' + str(len(body)).encode()]) + b'\r\n\r\n' + body
+
+
+def force_close(head: bytes) -> bytes:
+    """One request per connection: OpenUnum's HTTP client keeps connections alive, and every request after
+    the first on a kept-alive connection used to flow through the byte relay uninspected (no lean rewrite,
+    no prefix learning, no logging). With Connection: close the backend ends the connection after its
+    response and the client opens a new one for the next request."""
+    hdr, sep, rest = head.partition(b'\r\n\r\n')
+    if not sep:
+        return head
+    lines = [ln for ln in hdr.split(b'\r\n') if ln.partition(b':')[0].strip().lower() not in (b'connection', b'keep-alive')]
+    return b'\r\n'.join(lines + [b'Connection: close']) + b'\r\n\r\n' + rest
+
+
 def pin_cool_cpus() -> None:   # Popen preexec_fn: runs in the child before exec
     try:
         os.sched_setaffinity(0, COOL_CPUS)
@@ -188,8 +308,10 @@ def http_response(status: str, body: bytes, ctype: str = 'application/json') -> 
 class OnDemand:
     def __init__(self, idle_s: float = 600, argv: list[str] | None = None, backend_port: int = BACKEND_PORT,
                  hold: Path = HOLD, state: Path = STATE, start_timeout_s: float = 120, clock=time.monotonic,
-                 mid_cap: tuple[Path, int] | None = (MID_MAX_FREQ, MID_CAP_KHZ), preexec=pin_cool_cpus):
+                 mid_cap: tuple[Path, int] | None = (MID_MAX_FREQ, MID_CAP_KHZ), preexec=pin_cool_cpus,
+                 lean: bool | None = None):
         self.preexec = preexec
+        self.lean_default = LEAN_DEFAULT if lean is None else lean
         self.idle_s, self.backend_port, self.hold, self.state = idle_s, backend_port, hold, state
         self.argv = argv or backend_argv()
         self.start_timeout_s = start_timeout_s
@@ -570,8 +692,21 @@ class OnDemand:
             spec = key = None
             last_role = ''
             self.last_user = ''
-            if self.precache and method == 'POST' and path in CHAT_PATHS:
-                head, spec, last_role = self.read_body(conn, head)
+            lean = self.lean()
+            if lean and method == 'POST' and path in WARM_PATHS:
+                head, j = self.read_json(conn, head)
+                if isinstance(j, dict) and j.get('n_predict') == 0 and not j.get('stream'):
+                    # OpenUnum's prefix prewarm: the lean prompt never uses that prefix, and on this CPU it
+                    # costs ~3 min of single-slot prefill in front of the owner's turn
+                    self.log(event='prewarm_skipped', chars=len(json.dumps(j.get('prompt', ''))))
+                    conn.sendall(http_response('200 OK', json.dumps(
+                        {'content': '', 'tokens': [], 'stop': True, 'tokens_evaluated': 0,
+                         'skipped_by': 's22-llama-ondemand lean'}).encode()))
+                    return
+            if (self.precache or lean) and method == 'POST' and path in CHAT_PATHS:
+                head, spec, last_role = self.read_body(conn, head, lean=lean)
+                if not self.precache:
+                    spec = None
                 if spec is not None and not self.cacheable(spec):
                     self.log(event='prefix_too_big', chars=len(json.dumps(spec)))
                     spec = None
@@ -633,8 +768,53 @@ class OnDemand:
         except OSError:
             pass
 
-    def read_body(self, conn: socket.socket, head: bytes) -> tuple[bytes, dict | None, str]:
-        """Complete the request (Content-Length body) so its prefix can be learned; returns (bytes to relay, spec)."""
+    def log_shape(self, j: dict, **extra) -> None:
+        """Diagnostic: where a chat request's size goes (chars ~ 3 per token)."""
+        try:
+            msgs = [m for m in (j.get('messages') or []) if isinstance(m, dict)]
+            sys_c = sum(len(json.dumps(m.get('content'))) for m in msgs if m.get('role') in ('system', 'developer'))
+            tools = j.get('tools') or []
+            self.log(event='request_shape', n_msgs=len(msgs), system_chars=sys_c,
+                     history_chars=sum(len(json.dumps(m.get('content'))) for m in msgs) - sys_c,
+                     n_tools=len(tools), tools_chars=len(json.dumps(tools)),
+                     tools=sorted(str((t.get('function') or {}).get('name')) for t in tools if isinstance(t, dict))[:40],
+                     max_tokens=j.get('max_tokens'), temperature=j.get('temperature'), lean='orig_bytes' in extra,
+                     **extra)
+        except (TypeError, AttributeError, ValueError):
+            pass
+
+    def lean(self) -> bool:
+        return self.lean_default and not (self.state / 'lean-off').exists()
+
+    def read_json(self, conn: socket.socket, head: bytes) -> tuple[bytes, dict | None]:
+        """Complete a Content-Length request; returns (bytes to relay, parsed JSON or None)."""
+        try:
+            hdr, _, rest = head.partition(b'\r\n\r\n')
+            n = None
+            for ln in hdr.split(b'\r\n')[1:]:
+                k, _, v = ln.partition(b':')
+                if k.strip().lower() == b'content-length':
+                    n = int(v.strip())
+                elif k.strip().lower() == b'transfer-encoding':
+                    return head, None
+            if n is None or n > MAX_BODY:
+                return head, None
+            body = rest
+            while len(body) < n:
+                chunk = conn.recv(min(65536, n - len(body)))
+                if not chunk:
+                    break
+                body += chunk
+            head = hdr + b'\r\n\r\n' + body
+            if len(body) != n:
+                return head, None
+            return head, json.loads(body)
+        except (ValueError, OSError):
+            return head, None
+
+    def read_body(self, conn: socket.socket, head: bytes, lean: bool = False) -> tuple[bytes, dict | None, str]:
+        """Complete the request (Content-Length body) so its prefix can be learned; returns (bytes to relay, spec).
+        With lean, the relayed body is the lean rewrite (and the prefix is learned from it)."""
         try:
             hdr, _, rest = head.partition(b'\r\n\r\n')
             n = None
@@ -657,6 +837,14 @@ class OnDemand:
                 return head, None, ''
             j = json.loads(body)
             self.dump_user(j)
+            if lean and wants_lean(j):
+                orig = len(body)
+                j = lean_request(j)
+                body = json.dumps(j, ensure_ascii=False).encode()
+                head = set_body(head, body)
+                self.log_shape(j, orig_bytes=orig)
+            else:
+                self.log_shape(j)
             for m in reversed(j.get('messages') or []):
                 if isinstance(m, dict) and m.get('role') == 'user':
                     self.last_user = str(m.get('content'))[:60]
@@ -671,7 +859,7 @@ class OnDemand:
         up = socket.create_connection(('127.0.0.1', self.backend_port), timeout=10)
         up.settimeout(None)
         client.settimeout(None)
-        up.sendall(head)
+        up.sendall(force_close(head))
 
         first: list[float] = []
         content_first: list[float] = []
@@ -695,7 +883,10 @@ class OnDemand:
                 pass
             finally:
                 try:
-                    dst.shutdown(socket.SHUT_WR)
+                    # Client gone (HTTP clients never half-close): close the backend connection
+                    # fully so llama-server cancels the task. A half-close left an abandoned
+                    # 8-10k-token prefill running for 10+ minutes (2026-10-22).
+                    dst.shutdown(socket.SHUT_RDWR if src is client else socket.SHUT_WR)
                 except OSError:
                     pass
 
