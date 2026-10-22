@@ -82,7 +82,9 @@ Full hardware table and every earlier checkpoint: [docs/HISTORY.md](docs/HISTORY
 Current details: [STATUS.md](STATUS.md).
 
 **Driver people: help is very welcome**, especially on calls (IMS/VoLTE audio), wide-kernel
-models on the NPU, camera colour tuning, GPS fix and Bluetooth audio. Open an issue, or read the [driver task board](docs/S22_LUNA_TASK_BOARD_2026-10-02.md) first.
+models on the NPU, camera colour tuning, GPS fix and Bluetooth audio. See the
+[help-wanted issues](https://github.com/corpunum/unumS22linux/labels/help%20wanted) and
+[how to work on them with your own agent](CONTRIBUTING.md#working-with-your-agent-on-this-repo).
 
 <details>
 <summary><b>🔧 How it boots, and the safety rules</b></summary>

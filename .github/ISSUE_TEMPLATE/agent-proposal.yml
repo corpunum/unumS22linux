@@ -1,0 +1,88 @@
+name: Fix or feature proposal (agent-friendly)
+description: Propose a fix or feature for the Galaxy S22 native Linux port. You don't need the phone; the owner verifies on the device.
+title: "[proposal] <area>: <short description>"
+labels: ["proposal"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping. Please read [CONTRIBUTING.md](https://github.com/corpunum/unumS22linux/blob/main/CONTRIBUTING.md#working-with-your-agent-on-this-repo) first.
+        It covers how to read the evidence, how the owner verifies proposals on the phone, and the safety rules.
+        If you are answering an existing help-wanted issue, you can also just comment there.
+  - type: input
+    id: issue
+    attributes:
+      label: Related issue
+      description: The help-wanted issue this addresses, if any (e.g. #64).
+      placeholder: "#"
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - audio
+        - npu
+        - gpu
+        - gps
+        - bluetooth
+        - camera
+        - power
+        - telephony
+        - network
+        - sensors
+        - agent / shell
+        - boot / kernel
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and evidence
+      description: What is wrong or missing. Link the repo files you relied on (evidence/*/README.md, STATUS.md, EXPERIMENTS.md, tools/...). Quote the measured numbers.
+    validations:
+      required: true
+  - type: textarea
+    id: analysis
+    attributes:
+      label: Analysis / root cause
+      description: |
+        Your reasoning. Cite sources: kernel source file and line, public docs, or vendor symbols/offsets.
+        Do not paste or attach vendor binaries. Name the file, function and offset and the owner will check it.
+        Mark anything you have not verified as a hypothesis.
+    validations:
+      required: true
+  - type: textarea
+    id: change
+    attributes:
+      label: Proposed change
+      description: A patch, script or exact config. Say which files change, and include host-side tests where possible (python3 -I -B tools/hardware/test-host-regression-runner.py must keep passing).
+    validations:
+      required: true
+  - type: textarea
+    id: device-test
+    attributes:
+      label: Device test plan (the owner runs this)
+      description: |
+        Exact commands, expected output, pass/fail criteria, how long it takes, and how to roll back.
+        Say what the test touches (audio level, radio, modem, Wi-Fi, suspend) so the owner can arm the dead-man / rescue path first.
+      placeholder: |
+        1. ...
+        Expected: ...
+        Pass if: ...
+        Rollback: ...
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety checklist
+      options:
+        - label: The proposal does not flash or write any partition, and does not touch EFS, IMEI, PIT, MISC, the bootloader or TrustZone.
+          required: true
+        - label: No vendor binaries, firmware, private backups or personal data (phone numbers, IMEI, SIM IDs, IPs, locations, photos of people) are included.
+          required: true
+        - label: No calls or SMS to real numbers, and never emergency numbers.
+          required: true
+        - label: Any kernel change is a source patch only; deploying a kernel is the owner's decision.
+          required: true
