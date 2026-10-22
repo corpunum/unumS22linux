@@ -1,0 +1,26 @@
+{"what": "proxy_started", "pid": 17349, "t": 1792675468.47}
+{"what": "cpu", "tag": "attempt1", "pgid": 17354, "pct": 100.0, "t": 1792675478.62}
+{"what": "cpu", "tag": "attempt1", "pgid": 17354, "pct": 99.2, "t": 1792675483.75}
+{"what": "cpu", "tag": "attempt1", "pgid": 17354, "pct": 100.2, "t": 1792675488.9}
+{"what": "cpu", "tag": "attempt1", "pgid": 17354, "pct": 99.6, "t": 1792675494.04}
+{"what": "attempt", "n": 1, "elapsed_s": 30.3, "status": "HTTP/1.1 504 Gateway Timeout", "tail": "h: 171\r\nConnection: close\r\n\r\n{\"error\": {\"type\": \"timeout\", \"message\": \"s22-llama-ondemand: local model request stopped after 30 s (no_first_output); the phone CPU model is too slow for this request\"}}", "t": 1792675498.78}
+{"what": "cpu", "tag": "attempt1", "pgid": 17354, "pct": 92.0, "t": 1792675499.18}
+{"what": "after_attempt", "n": 1, "backend_pgid": 17354, "cpu_pct_4s_after": 0.0, "t": 1792675506.93}
+{"what": "cpu", "tag": "attempt2", "pgid": 17354, "pct": 104.4, "t": 1792675512.41}
+{"what": "cpu", "tag": "attempt2", "pgid": 17354, "pct": 104.0, "t": 1792675518.09}
+{"what": "cpu", "tag": "attempt2", "pgid": 17354, "pct": 99.6, "t": 1792675523.47}
+{"what": "cpu", "tag": "attempt2", "pgid": 17354, "pct": 100.2, "t": 1792675528.61}
+{"what": "cpu", "tag": "attempt2", "pgid": 17354, "pct": 99.6, "t": 1792675533.76}
+{"what": "attempt", "n": 2, "elapsed_s": 30.1, "status": "HTTP/1.1 504 Gateway Timeout", "tail": "h: 171\r\nConnection: close\r\n\r\n{\"error\": {\"type\": \"timeout\", \"message\": \"s22-llama-ondemand: local model request stopped after 30 s (no_first_output); the phone CPU model is too slow for this request\"}}", "t": 1792675536.99}
+{"what": "cpu", "tag": "attempt2", "pgid": 17354, "pct": 62.4, "t": 1792675539.05}
+{"what": "after_attempt", "n": 2, "backend_pgid": 17354, "cpu_pct_4s_after": 0.0, "t": 1792675545.62}
+{"what": "attempt", "n": 3, "elapsed_s": 0.0, "status": "HTTP/1.1 503 Service Unavailable", "tail": "\r\nConnection: close\r\n\r\n{\"error\": {\"type\": \"retry_budget\", \"message\": \"s22-llama-ondemand: this request already failed 2 times in the last 30 min on the phone CPU model (time limit); not retrying it\"}}", "t": 1792675545.64}
+{"what": "cpu", "tag": "attempt3", "pgid": 17354, "pct": 0.2, "t": 1792675551.27}
+{"what": "after_attempt", "n": 3, "backend_pgid": 17354, "cpu_pct_4s_after": 0.2, "t": 1792675554.26}
+{"what": "before_proxy_kill", "backend_pgid": 17354, "cpu_pct": 108.3, "active": {"17349-3": {"t0": 1792675554.2814884, "key": "e26fafd9f95fca2c", "limits": [30.0, 60.0]}}, "t": 1792675565.88}
+{"what": "inflight_result", "r": [11.6, "", ""], "t": 1792675565.91}
+{"what": "proxy_killed", "pid": 17349, "orphan_alive": true, "orphan_cpu_pct": 108.3, "t": 1792675572.84}
+{"what": "proxy_restarted", "pid": 18168, "orphan_alive_after": false, "t": 1792675577.79}
+{"what": "retry_of_interrupted", "elapsed_s": 31.0, "status": "HTTP/1.1 504 Gateway Timeout", "tail": "\"type\": \"timeout\", \"message\": \"s22-llama-ondemand: local model request stopped after 30 s (no_first_output); the phone CPU model is too slow for this request\"}}", "t": 1792675608.78}
+{"what": "proxy_log", "events": [{"event": "start", "pid": 17349, "reaped": {"interrupted": 0, "orphan": null}}, {"event": "load", "pid": 17354}, {"event": "ready", "pid": 17354}, {"event": "request_abort", "reason": "no_first_output", "after_s": 30.0, "failures": 1}, {"event": "after_abort_cpu", "pct": 0.0, "pid": 17354}, {"event": "request_abort", "reason": "no_first_output", "after_s": 30.0, "failures": 2}, {"event": "after_abort_cpu", "pct": 0.0, "pid": 17354}, {"event": "retry_budget", "failures": 2}, {"event": "orphan_killed", "pid": 17354}, {"event": "interrupted"}, {"event": "start", "pid": 18168, "reaped": {"interrupted": 1, "orphan": 17354}}, {"event": "load", "pid": 18198}, {"event": "ready", "pid": 18198}], "t": 1792675608.78}
+{"what": "done", "leftover_fake": null, "t": 1792675609.01}

@@ -23,6 +23,11 @@ events. So the limit is enforced from outside, per kind of session, through Open
   The same message in the same session starting again within retry_window_s, after retry_max
   timeouts, is cancelled at once ("retry_budget"). A client that re-posts after an OpenUnum
   restart is caught the same way.
+* Tool processes: OpenUnum's cancel ends the turn but leaves the shell tool's child running
+  (measured 2026-10-22: "bash -c sleep 150" kept running after the cancel). When a cancelled
+  turn ends and no other turn is pending, the guard stops the OpenUnum server's child processes
+  (and their descendants) that started after that turn began: exact PIDs, TERM then KILL after
+  5 s, logged as reap_children ("reap_children": false turns it off).
 * Survives restarts: the tracked turns (with their start times) and the timeout history are in
   STATE/state.json. OpenUnum's startedAt wins when present; a guard restart never restarts a clock.
 
@@ -53,7 +58,9 @@ CONFIG = {
     "retry_max": 2,                # timeouts of the same message before a new attempt is cut at once
     "retry_window_s": 1800,
     "forget_s": 86400,
+    "reap_children": True,
 }
+OPENUNUM_NEEDLE = "node src/server.mjs"
 
 
 def log(**kw):
@@ -109,10 +116,68 @@ def msg_hash(session, preview):
     return hashlib.sha256(("%s\0%s" % (session, (preview or "").strip())).encode()).hexdigest()[:16]
 
 
+def proc_table():
+    """{pid: (ppid, start_wall, cmdline)} from /proc."""
+    try:
+        with open("/proc/stat") as f:
+            btime = next(float(l.split()[1]) for l in f if l.startswith("btime"))
+    except (OSError, StopIteration):
+        btime = 0.0
+    hz = os.sysconf("SC_CLK_TCK")
+    out = {}
+    for p in os.listdir("/proc"):
+        if not p.isdigit():
+            continue
+        try:
+            with open("/proc/%s/stat" % p) as f:
+                fields = f.read().rsplit(")", 1)[1].split()
+            with open("/proc/%s/cmdline" % p, "rb") as f:
+                cmd = f.read().replace(b"\0", b" ").decode("utf-8", "replace").strip()
+            out[int(p)] = (int(fields[1]), btime + int(fields[19]) / hz, cmd)
+        except (OSError, IndexError, ValueError):
+            pass
+    return out
+
+
+def tool_children(table, since, needle=OPENUNUM_NEEDLE):
+    """PIDs to stop: children of the OpenUnum server started at/after `since`, plus their descendants
+    (descendants first). Pure over a proc table, for tests."""
+    servers = [pid for pid, (_, _, cmd) in table.items() if needle in cmd]
+    roots = [pid for pid, (ppid, st, _) in table.items() if ppid in servers and st >= since - 1]
+    order, stack = [], list(roots)
+    while stack:
+        pid = stack.pop()
+        order.append(pid)
+        stack += [c for c, (pp, _, _) in table.items() if pp == pid and c not in order]
+    return list(reversed(order))
+
+
+def kill_pids(pids, table_fn=proc_table, wait_s=5.0):
+    done = []
+    for pid in pids:
+        try:
+            os.kill(pid, 15)
+            done.append(pid)
+        except OSError:
+            pass
+    t0 = time.time()
+    while done and time.time() - t0 < wait_s:
+        time.sleep(0.5)
+        if not any(p in table_fn() for p in done):
+            return done, []
+    left = [p for p in done if p in table_fn()]
+    for pid in left:
+        try:
+            os.kill(pid, 9)
+        except OSError:
+            pass
+    return done, left
+
+
 class Guard:
     """Pure-ish core: step(pending, now) -> actions done through self.cancel / self.escalate."""
 
-    def __init__(self, cfg, state=None, cancel=None, escalate=None, save=None):
+    def __init__(self, cfg, state=None, cancel=None, escalate=None, save=None, reaper=None):
         self.cfg = cfg
         st = state or {}
         self.turns = st.get("turns") or {}          # key -> {session, turn, started, limit, cls, h, cancelled_at, tries}
@@ -120,6 +185,17 @@ class Guard:
         self.cancel = cancel or (lambda sid: http("POST", API + "/api/chat/cancel", {"sessionId": sid}))
         self.escalate = escalate or (lambda: http("POST", PROXY + "/_s22/abort", {}, timeout=5))
         self.save = save or (lambda st: None)
+        self.reaper = reaper or self.reap
+
+    @staticmethod
+    def reap(since):
+        table = proc_table()
+        pids = tool_children(table, since)
+        if not pids:
+            return {"killed": [], "kill9": []}
+        cmds = {p: table[p][2][:80] for p in pids}
+        done, left = kill_pids(pids)
+        return {"killed": done, "kill9": left, "cmds": cmds}
 
     def snapshot(self):
         return {"turns": self.turns, "timeouts": self.timeouts}
@@ -189,6 +265,13 @@ class Guard:
             log(event="turn_end", session=tr["session"], turn=tr["turn"], cls=tr["cls"],
                 dur_s=round(now - tr["started"], 1), cancelled=bool(tr.get("cancelled_at")), why=tr.get("why"),
                 after_cancel_s=round(now - tr["cancelled_at"], 1) if tr.get("cancelled_at") else None)
+            if tr.get("cancelled_at") and cfg.get("reap_children", True) and not seen:
+                try:
+                    out = self.reaper(tr["started"])
+                except Exception as e:  # noqa: BLE001
+                    out = {"error": repr(e)[:120]}
+                if out.get("killed") or out.get("error"):
+                    log(event="reap_children", session=tr["session"], turn=tr["turn"], **out)
         if changed:
             self.save(self.snapshot())
         return changed

@@ -70,8 +70,8 @@ def summarise(recs, since=None, until=None):
     out = {"records": len(recs), "samples": len(samples), "events": len(events)}
     if not samples:
         return out
-    out["from"] = time.strftime("%F %T", time.localtime(samples[0]["t"]))
-    out["to"] = time.strftime("%F %T", time.localtime(samples[-1]["t"]))
+    out["from"] = time.strftime("%F %T UTC", time.gmtime(samples[0]["t"]))
+    out["to"] = time.strftime("%F %T UTC", time.gmtime(samples[-1]["t"]))
     out["span_h"] = round((samples[-1]["t"] - samples[0]["t"]) / 3600, 2)
     change_t = sorted(e["t"] for e in events if e.get("src") in ("display", "uplink"))
     buckets = defaultdict(lambda: {"s": 0.0, "dsoc": 0.0, "slept": 0.0, "n": 0})
@@ -81,7 +81,7 @@ def summarise(recs, since=None, until=None):
         if dt <= 0:
             continue
         if dt > 1800:
-            gaps.append([time.strftime("%F %T", time.localtime(a["t"])), round(dt / 60)])
+            gaps.append([time.strftime("%F %T UTC", time.gmtime(a["t"])), round(dt / 60)])
         ba, bb = a.get("bat") or {}, b.get("bat") or {}
         if ba.get("st") != "Discharging" or bb.get("st") != "Discharging" or ba.get("slate") == "1":
             key = "charging/other"
@@ -149,6 +149,12 @@ def summarise(recs, since=None, until=None):
             ev["trace_starts"] += 1
         if "error" in str(name) or e.get("what") == "error" or name in ("load_failed", "restart_limited"):
             errors["%s:%s" % (src, name or e.get("what"))] += 1
+    boots = []
+    for e in events:
+        if e.get("src") == "trace" and e.get("what") == "start" and e.get("boot_id") not in [x[1] for x in boots]:
+            boots.append((time.strftime("%F %T UTC", time.gmtime(e["t"])), e.get("boot_id")))
+    out["boots_seen"] = len(boots)
+    out["boot_starts"] = [b[0] for b in boots]
     out["network"] = dict(ev)
     out["restarts"] = dict(restarts)
     out["turns"] = dict(turns)
@@ -170,6 +176,7 @@ def text(o):
     s = o.get("suspend") or {}
     lines.append("suspend: %s cycles, %s aborts, %s h asleep; top wakes %s" % (
         s.get("cycles"), s.get("aborts"), s.get("slept_h"), s.get("wake_top")))
+    lines.append("boots seen: %s (trace started at %s)" % (o.get("boots_seen"), o.get("boot_starts")))
     lines.append("network: %s" % o.get("network"))
     lines.append("restarts: %s" % o.get("restarts"))
     lines.append("agent turns: %s" % o.get("turns"))

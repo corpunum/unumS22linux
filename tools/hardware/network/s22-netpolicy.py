@@ -253,7 +253,10 @@ def route_plan(up, lk):
     for dev, via, metric, line in lk["defaults"]:
         drop = (metric == POLICY_METRIC and dev != want_dev) or (dev == "ecm0" and metric != POLICY_METRIC)
         if drop:
-            plan.append(("route", "del") + tuple(line.split()))
+            # built from the parsed fields: the kernel's line can carry flags ("dead linkdown" on a
+            # cable-less ecm0 after boot) that "ip route del" rejects, which repeated every poll
+            args = ("route", "del", "default") + (("via", via) if via else ()) + ("dev", dev)
+            plan.append(args + (("metric", str(metric)) if metric else ()))
     have = any(dev == want_dev and m == POLICY_METRIC and
                (want[1] != "via" or via == want[2]) for dev, via, m, _ in lk["defaults"]) if want else True
     if want and not have:

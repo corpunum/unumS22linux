@@ -115,6 +115,13 @@ def _tmp():
     return os.path.join(tempfile.mkdtemp(), "saver.json")
 
 
+def test_route_del_ignores_kernel_flags():
+    d = [("ecm0", "10.55.0.1", 0, "default via 10.55.0.1 dev ecm0 dead linkdown"),
+         ("rmnet0", None, 50, "default dev rmnet0 scope link metric 50")]
+    plan = N.route_plan("mobile", lk(wifi=False, mobile=True, usb=False, defaults=d))
+    check(plan == [("route", "del", "default", "via", "10.55.0.1", "dev", "ecm0")])
+
+
 def test_saver_eligibility():
     e = lambda **kw: N.saver_eligible(SCFG, kw.get("display", "off"), kw.get("up", "mobile"), kw.get("wifi", False),
                                       kw.get("paused", False), kw.get("killed", False), kw.get("hold", False))

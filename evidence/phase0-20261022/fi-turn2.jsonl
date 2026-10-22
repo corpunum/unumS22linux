@@ -1,0 +1,10 @@
+{"what": "posted", "session": "faultinject-1792675261", "answer": "{\"ok\":true,\"pending\":true,\"sessionId\":\"faultinject-1792675261\",\"startedAt\":\"2026-10-22T13:21:01.563Z\",\"turnId\":\"b9e5c6d9-b153-4fa6-b5c8-5e477ab5b37d\",\"ageMs\":20017,\"hardTimeoutMs\":1728000000,\"timeoutH", "t": 1792675281.58}
+{"what": "poll", "age_s": 0.0, "pending": true, "sleep_pid": 13640, "t": 1792675281.61}
+{"what": "poll", "age_s": 5.0, "pending": true, "sleep_pid": 13640, "t": 1792675286.62}
+{"what": "poll", "age_s": 10.1, "pending": true, "sleep_pid": 13640, "t": 1792675291.67}
+{"what": "poll", "age_s": 15.1, "pending": true, "sleep_pid": 13640, "t": 1792675296.71}
+{"what": "poll", "age_s": 20.2, "pending": true, "sleep_pid": null, "t": 1792675301.77}
+{"what": "poll", "age_s": 25.2, "pending": true, "sleep_pid": null, "t": 1792675306.81}
+{"what": "poll", "age_s": 30.3, "pending": false, "sleep_pid": null, "t": 1792675311.85}
+{"what": "turnguard_events", "events": [{"event": "turn_start", "session": "faultinject-1792675261", "turn": "b9e5c6d9-b153-4fa6-b5c8-5e477ab5b37d", "cls": "faultinject", "limit_s": 45.0, "age_s": 9.9, "t": 1792675271.47}, {"event": "timeout_cancel", "session": "faultinject-1792675261", "turn": "b9e5c6d9-b153-4fa6-b5c8-5e477ab5b37d", "age_s": 49.9, "limit_s": 45.0, "cls": "faultinject", "ok": true, "tries": 1, "answer": "{'ok': True, 'cancelled': True, 'pending': False, 'sessionId': 'faultinject-1792675261', 'cancelledSubagents': []}", "t": 1792675311.504}], "sleep_pid_seen": 13640, "sleep_still_running": null, "t": 1792675314.89}
+{"what": "config_restored", "t": 1792675314.89}
