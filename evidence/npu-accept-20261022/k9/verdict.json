@@ -1,0 +1,161 @@
+{
+  "model": {
+    "name": "k9",
+    "file": "k9.tflite",
+    "sha256": "172d1f0b088b5031089353e8c30627104344fe0893b2a82f17c2faa833b7f410",
+    "bytes": 58600
+  },
+  "started": "2026-10-22T16:51:56Z",
+  "graph_rules": "on",
+  "settings": {
+    "n_random": 5,
+    "seed": 1234,
+    "iters": 20,
+    "tol": [
+      "default int8=1"
+    ]
+  },
+  "graph": {
+    "errors": [],
+    "warnings": [],
+    "op_histogram": {
+      "CONV_2D": 1
+    },
+    "inputs": [
+      {
+        "name": "input",
+        "shape": [
+          1,
+          1,
+          148,
+          100
+        ],
+        "dtype": "INT8",
+        "scale": [
+          0.05000000074505806
+        ],
+        "zero_point": [
+          0
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "output",
+        "shape": [
+          1,
+          1,
+          148,
+          64
+        ],
+        "dtype": "INT8",
+        "scale": [
+          0.3968504071235657
+        ],
+        "zero_point": [
+          -128
+        ]
+      }
+    ]
+  },
+  "compile": {
+    "ok": true,
+    "seconds": 1.5131328105926514,
+    "partitions": 1,
+    "sections": {
+      "DSP_BINARY": false,
+      "NPU_BINARY": true
+    },
+    "nnc_bytes": 74360,
+    "nnc_md5": "f28340d5ec395b7ff8cf164a5b63964f",
+    "buffers": [
+      {
+        "dir": "in",
+        "index": 0,
+        "size": 14800
+      },
+      {
+        "dir": "out",
+        "index": 0,
+        "size": 9472
+      }
+    ]
+  },
+  "numeric": {
+    "n_inputs": 5,
+    "n_random": 5,
+    "n_edge": 0,
+    "n_real": 0,
+    "tensors": {
+      "output": {
+        "max_abs": 1,
+        "hist": {
+          "0": 47138,
+          "1": 222
+        },
+        "n": 47360,
+        "tol": 1,
+        "exact": 47138,
+        "over_tol": 0,
+        "ok": true,
+        "reasons": [],
+        "worst_inputs": [
+          {
+            "input": "random00",
+            "max_abs": 1
+          },
+          {
+            "input": "random01",
+            "max_abs": 1
+          },
+          {
+            "input": "random02",
+            "max_abs": 1
+          }
+        ]
+      }
+    },
+    "problems": [],
+    "notes": [],
+    "argmax_agree": null,
+    "buffer_map": {
+      "in": [
+        0
+      ],
+      "out": [
+        0
+      ]
+    }
+  },
+  "determinism": {
+    "ok": true,
+    "detail": "5 inputs x (cold vs 20-iteration run) and a repeat process: all bit-identical",
+    "hot_iters": 20,
+    "comparisons": 6
+  },
+  "latency": {
+    "processes": 5,
+    "iterations": 100,
+    "p50_ms": 0.64,
+    "p99_ms": 1.33,
+    "max_ms": 1.33,
+    "min_ms": 0.29,
+    "mean_ms": 0.6426000000000001,
+    "first_ms_median": 0.99,
+    "note": "per-process p50/p99 from enn-run (p95 is not reported by the on-phone binary); p99 and max shown instead"
+  },
+  "memory": {
+    "max_rss_kb": 16932,
+    "memavail_before_kb": 5939448,
+    "memavail_after_kb": 5939776,
+    "dmesg_alarms": []
+  },
+  "recovery": {
+    "ok": true,
+    "detail": "canary 81a2bde73ce3dded -> 81a2bde73ce3dded; candidate re-run identical",
+    "canary_before": "81a2bde73ce3dded",
+    "canary_after": "81a2bde73ce3dded"
+  },
+  "reasons": [],
+  "accepted": true
+}

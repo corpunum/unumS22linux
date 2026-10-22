@@ -1,0 +1,296 @@
+{
+  "model": {
+    "name": "k15",
+    "file": "k15.tflite",
+    "sha256": "5b61d3a9a9fe2896dd537432c50a0af7822ec6f6c2ec60846beb9003b5648ac3",
+    "bytes": 97000
+  },
+  "started": "2026-10-22T16:35:41Z",
+  "graph_rules": "on",
+  "settings": {
+    "n_random": 20,
+    "seed": 1234,
+    "iters": 200,
+    "tol": [
+      "default int8=1"
+    ]
+  },
+  "graph": {
+    "errors": [],
+    "warnings": [],
+    "op_histogram": {
+      "CONV_2D": 1
+    },
+    "inputs": [
+      {
+        "name": "input",
+        "shape": [
+          1,
+          1,
+          148,
+          100
+        ],
+        "dtype": "INT8",
+        "scale": [
+          0.05000000074505806
+        ],
+        "zero_point": [
+          0
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "output",
+        "shape": [
+          1,
+          1,
+          148,
+          64
+        ],
+        "dtype": "INT8",
+        "scale": [
+          0.5123316645622253
+        ],
+        "zero_point": [
+          -128
+        ]
+      }
+    ]
+  },
+  "compile": {
+    "ok": true,
+    "seconds": 1.5054986476898193,
+    "partitions": 1,
+    "sections": {
+      "DSP_BINARY": false,
+      "NPU_BINARY": true
+    },
+    "nnc_bytes": 107128,
+    "nnc_md5": "5b7c4b170ec4718bf9327350f8ee0f10",
+    "buffers": [
+      {
+        "dir": "in",
+        "index": 0,
+        "size": 14800
+      },
+      {
+        "dir": "out",
+        "index": 0,
+        "size": 9472
+      }
+    ]
+  },
+  "numeric": {
+    "n_inputs": 20,
+    "n_random": 20,
+    "n_edge": 0,
+    "n_real": 0,
+    "tensors": {
+      "output": {
+        "max_abs": 128,
+        "hist": {
+          "0": 367,
+          "1": 698,
+          "2": 675,
+          "3": 698,
+          "4": 759,
+          "5": 694,
+          "6": 735,
+          "7": 759,
+          "8": 727,
+          "9": 696,
+          "10": 677,
+          "11": 705,
+          "12": 730,
+          "13": 725,
+          "14": 776,
+          "15": 708,
+          "16": 701,
+          "17": 693,
+          "18": 722,
+          "19": 725,
+          "20": 696,
+          "21": 695,
+          "22": 755,
+          "23": 719,
+          "24": 705,
+          "25": 724,
+          "26": 690,
+          "27": 723,
+          "28": 705,
+          "29": 697,
+          "30": 757,
+          "31": 720,
+          "32": 677,
+          "33": 733,
+          "34": 768,
+          "35": 684,
+          "36": 715,
+          "37": 688,
+          "38": 716,
+          "39": 691,
+          "40": 691,
+          "41": 716,
+          "42": 702,
+          "43": 710,
+          "44": 695,
+          "45": 693,
+          "46": 734,
+          "47": 690,
+          "48": 696,
+          "49": 734,
+          "50": 702,
+          "51": 710,
+          "52": 716,
+          "53": 680,
+          "54": 755,
+          "55": 748,
+          "56": 673,
+          "57": 733,
+          "58": 710,
+          "59": 749,
+          "60": 725,
+          "61": 674,
+          "62": 697,
+          "63": 677,
+          "64": 700,
+          "65": 741,
+          "66": 692,
+          "67": 687,
+          "68": 680,
+          "69": 726,
+          "70": 705,
+          "71": 658,
+          "72": 726,
+          "73": 698,
+          "74": 754,
+          "75": 725,
+          "76": 686,
+          "77": 694,
+          "78": 721,
+          "79": 680,
+          "80": 727,
+          "81": 734,
+          "82": 703,
+          "83": 697,
+          "84": 710,
+          "85": 694,
+          "86": 685,
+          "87": 653,
+          "88": 737,
+          "89": 701,
+          "90": 709,
+          "91": 746,
+          "92": 695,
+          "93": 702,
+          "94": 690,
+          "95": 707,
+          "96": 720,
+          "97": 674,
+          "98": 708,
+          "99": 716,
+          "100": 673,
+          "101": 698,
+          "102": 699,
+          "103": 633,
+          "104": 662,
+          "105": 683,
+          "106": 736,
+          "107": 658,
+          "108": 660,
+          "109": 690,
+          "110": 723,
+          "111": 669,
+          "112": 732,
+          "113": 696,
+          "114": 677,
+          "115": 671,
+          "116": 713,
+          "117": 691,
+          "118": 683,
+          "119": 651,
+          "120": 692,
+          "121": 680,
+          "122": 667,
+          "123": 683,
+          "124": 694,
+          "125": 657,
+          "126": 723,
+          "127": 5256,
+          "128": 95071
+        },
+        "n": 189440,
+        "tol": 1,
+        "exact": 367,
+        "over_tol": 188375,
+        "ok": false,
+        "reasons": [
+          "188375 of 189440 values differ by more than 1 (max |delta| 128)"
+        ],
+        "worst_inputs": [
+          {
+            "input": "random00",
+            "max_abs": 128
+          },
+          {
+            "input": "random01",
+            "max_abs": 128
+          },
+          {
+            "input": "random02",
+            "max_abs": 128
+          }
+        ]
+      }
+    },
+    "problems": [
+      "NPU output is constant while the CPU reference is not (20 cases, e.g. random00/output)"
+    ],
+    "notes": [],
+    "argmax_agree": null,
+    "buffer_map": {
+      "in": [
+        0
+      ],
+      "out": [
+        0
+      ]
+    }
+  },
+  "determinism": {
+    "ok": true,
+    "detail": "3 inputs x (cold vs 5-iteration run) and a repeat process: all bit-identical [stalled: only 3 inputs x 5 iterations run]",
+    "hot_iters": 5,
+    "comparisons": 4
+  },
+  "latency": {
+    "processes": 3,
+    "iterations": 15,
+    "p50_ms": 5006.32,
+    "p99_ms": 5007.57,
+    "max_ms": 5007.57,
+    "min_ms": 4994.07,
+    "mean_ms": 5004.421666666666,
+    "first_ms_median": 4996.6,
+    "note": "per-process p50/p99 from enn-run (p95 is not reported by the on-phone binary); p99 and max shown instead"
+  },
+  "memory": {
+    "max_rss_kb": 16964,
+    "memavail_before_kb": 5939116,
+    "memavail_after_kb": 5937528,
+    "dmesg_alarms": []
+  },
+  "recovery": {
+    "ok": true,
+    "detail": "canary 81a2bde73ce3dded -> 81a2bde73ce3dded; candidate re-run identical",
+    "canary_before": "81a2bde73ce3dded",
+    "canary_after": "81a2bde73ce3dded"
+  },
+  "reasons": [
+    "output output: 188375 of 189440 values differ by more than 1 (max |delta| 128)",
+    "NPU output is constant while the CPU reference is not (20 cases, e.g. random00/output)",
+    "execution stall: max 5008 ms (> 1000 ms; the known failure mode is ~4300 ms with all-zero output)"
+  ],
+  "accepted": false
+}

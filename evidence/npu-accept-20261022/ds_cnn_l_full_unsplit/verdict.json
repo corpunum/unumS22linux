@@ -1,0 +1,78 @@
+{
+  "model": {
+    "name": "ds_cnn_l_full_unsplit",
+    "file": "ds_cnn_l_quantized.tflite",
+    "sha256": "fc40799238db5112dbf53c7fa23f5d7c197de83b0ff9de7f40ce0d8073306756",
+    "bytes": 503816
+  },
+  "started": "2026-10-22T16:35:32Z",
+  "graph_rules": "on",
+  "settings": {
+    "n_random": 20,
+    "seed": 1234,
+    "iters": 200,
+    "tol": [
+      "default int8=1"
+    ]
+  },
+  "graph": {
+    "errors": [
+      {
+        "rule": "fc-after-avgpool",
+        "detail": "op 14 FULLY_CONNECTED follows AVERAGE_POOL_2D: crashes the on-device compiler (SIGSEGV in the IR builder); cut the model before the pool/FC tail (tflite-cut.py)"
+      }
+    ],
+    "warnings": [
+      {
+        "rule": "leading-reshape",
+        "detail": "first op is RESHAPE; refused by the stock NpuSkip gate (the patched gates are used)"
+      }
+    ],
+    "op_histogram": {
+      "RESHAPE": 2,
+      "CONV_2D": 6,
+      "DEPTHWISE_CONV_2D": 5,
+      "AVERAGE_POOL_2D": 1,
+      "FULLY_CONNECTED": 1,
+      "SOFTMAX": 1
+    },
+    "inputs": [
+      {
+        "name": "input",
+        "shape": [
+          1,
+          490
+        ],
+        "dtype": "INT8",
+        "scale": [
+          1.1021944284439087
+        ],
+        "zero_point": [
+          96
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "Identity",
+        "shape": [
+          1,
+          12
+        ],
+        "dtype": "INT8",
+        "scale": [
+          0.00390625
+        ],
+        "zero_point": [
+          -128
+        ]
+      }
+    ]
+  },
+  "compile": null,
+  "not_run": "compile and later steps skipped because the graph rules rejected the model",
+  "reasons": [
+    "graph rule fc-after-avgpool: op 14 FULLY_CONNECTED follows AVERAGE_POOL_2D: crashes the on-device compiler (SIGSEGV in the IR builder); cut the model before the pool/FC tail (tflite-cut.py)"
+  ],
+  "accepted": false
+}

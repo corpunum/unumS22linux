@@ -1,0 +1,412 @@
+#!/usr/bin/env python3
+"""npu-accept MODEL.tflite [options]  --  NPU model acceptance harness for the S22 (Exynos 2200)
+
+Runs on the rig and drives the phone over ssh. "It compiled" proves nothing here (issue #64: the
+on-device compiler silently miscompiles some graphs), so a model is only ACCEPTED if every step passes:
+
+  1 graph validation   op list, kernel widths (1-D kernels > 15 rejected), dtypes, known compiler crashers
+  2 compile on phone   tflite-npu-compile (Samsung's own compiler); DSP_BINARY output is refused
+  3 NPU vs CPU         N random (+ optional edge, real) inputs against the TFLite *reference* kernels,
+                       per-tensor tolerance (int8 default max |delta| <= 1), delta histograms
+  4 repeat execution   cold run vs ITERS-iteration run must be bit-identical; latency p50/p99/max
+  5 memory/recovery    ENN process peak RSS, MemAvailable, new kernel-log alarms, canary conv and the
+                       candidate re-run give the same output afterwards (NPU still usable)
+  6 verdict            DIR/verdict.json + DIR/report.md ; exit 0 accepted, 1 rejected, 2 harness error
+
+Needs on the rig: python3 with ai-edge-litert + numpy (e.g. `python3 -m venv v && v/bin/pip install ai-edge-litert numpy`).
+The CPU reference runs on the rig with TFLite's BUILTIN_REF kernels (the same op semantics as the
+phone CPU; the phone has no numpy/TFLite python). The phone needs the usual staging (README in
+evidence/npu-custom-20261022); AIE.bin is staged automatically once per boot.
+
+Options:
+  --out DIR            output dir (default ./npu-accept-<name>)
+  --name NAME          model name (default file stem)
+  --host USER@HOST     phone (default root@100.95.191.103)
+  --n-random N         random inputs (default 20)      --seed S (default 1234)
+  --edge               also run saturated edge inputs (all-min / all-max / mid); stricter than real data,
+                       e.g. MicroNet-L shows one |delta| 2 on all-max, so off by default
+  --real DIR           extra real inputs: DIR/*.bin raw tensor bytes (single-input models)
+  --tol N | NAME=N     tolerance, repeatable; '*' or bare N = all outputs (default int8/uint8: 1)
+  --iters N            repeated-execution iterations (default 200)
+  --graph-rules on|off off = rule violations are only listed, the model is still compiled and run
+                       (shows the numeric check catches them on its own)
+  --keep-nnc           keep the compiled .nnc in DIR (private; never commit)
+  --canary PATH        known-good .nnc inside the phone chroot (default /data/models/custom/conv3x3_s8.nnc)
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import io
+import json
+import os
+import re
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import npu_accept_lib as L  # noqa: E402
+
+ROOTFS = "/srv/s22/enn-rt"               # chroot root as seen from the phone's real root
+CHROOT_TMP = "/data/local/tmp/accept"
+CHROOT_MODELS = "/data/models/accept"
+ENN_CHROOT_RUN = "/srv/s22/npu-trial/enn-chroot-run"
+NNC_CHROOT = [""]                         # set per run (chroot path of the compiled .nnc)
+COMPILE = "/srv/s22/npu-custom/tflite-npu-compile"
+
+
+class HarnessError(Exception):
+    pass
+
+
+class Phone:
+    def __init__(self, host):
+        self.host = host
+        self.base = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ControlMaster=auto",
+                     "-o", "ControlPath=" + os.path.join(tempfile.gettempdir(), "npu-accept-%C"),
+                     "-o", "ControlPersist=120", self.host]
+
+    def run(self, cmd, timeout=600, stdin=None, check=True):
+        p = subprocess.run(self.base + [cmd], input=stdin, capture_output=True, timeout=timeout)
+        if check and p.returncode != 0:
+            raise HarnessError("ssh command failed (%d): %s\n%s" % (p.returncode, cmd[:200], p.stderr.decode(errors="replace")[-600:]))
+        return p
+
+    def sh(self, script, timeout=600, check=True):
+        p = subprocess.run(self.base + ["sh -s"], input=script.encode(), capture_output=True, timeout=timeout)
+        if check and p.returncode != 0:
+            raise HarnessError("phone script failed (%d): %s" % (p.returncode, p.stderr.decode(errors="replace")[-600:]))
+        return p
+
+    def put_files(self, hostdir, files):
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w") as t:
+            for name, data in files.items():
+                ti = tarfile.TarInfo(name); ti.size = len(data); ti.mode = 0o644
+                t.addfile(ti, io.BytesIO(data))
+        self.run("mkdir -p %s && tar -C %s -xf -" % (hostdir, hostdir), stdin=buf.getvalue())
+
+    def get_dir(self, hostdir):
+        p = self.run("tar -C %s -cf - ." % hostdir)
+        out = {}
+        with tarfile.open(fileobj=io.BytesIO(p.stdout)) as t:
+            for m in t.getmembers():
+                if m.isfile():
+                    out[os.path.normpath(m.name)] = t.extractfile(m).read()
+        return out
+
+
+def numpy_litert():
+    try:
+        import numpy as np
+        from ai_edge_litert.interpreter import Interpreter, OpResolverType
+    except ImportError as e:
+        raise HarnessError("needs numpy + ai-edge-litert (%s); try: python3 -m venv v && v/bin/pip install ai-edge-litert numpy" % e)
+    return np, Interpreter, OpResolverType
+
+
+def make_inputs(np, shape, dtype, n_random, seed, edge, real_dir):
+    rng = np.random.default_rng(seed)
+    lo, hi, dt = (-128, 128, np.int8) if dtype == "INT8" else (0, 256, np.uint8)
+    xs = [("random%02d" % i, rng.integers(lo, hi, size=shape, dtype=dt)) for i in range(n_random)]
+    n_edge = 0
+    if edge:
+        for nm, val in (("edge_min", lo), ("edge_max", hi - 1), ("edge_mid", 0 if dtype == "INT8" else 128)):
+            xs.append((nm, np.full(shape, val, dtype=dt))); n_edge += 1
+    n_real = 0
+    if real_dir:
+        size = int(np.prod(shape))
+        for f in sorted(Path(real_dir).glob("*.bin")):
+            raw = f.read_bytes()
+            if len(raw) != size:
+                raise HarnessError("real input %s is %d bytes, model input needs %d" % (f.name, len(raw), size))
+            xs.append(("real_" + f.stem, np.frombuffer(raw, dtype=dt).reshape(shape).copy())); n_real += 1
+    return xs, n_edge, n_real
+
+
+def cpu_reference(np, Interpreter, OpResolverType, model, xs):
+    it = Interpreter(model_path=model, experimental_op_resolver_type=OpResolverType.BUILTIN_REF)
+    it.allocate_tensors()
+    i0 = it.get_input_details()[0]
+    outs = it.get_output_details()
+    refs = []
+    for _, x in xs:
+        it.set_tensor(i0["index"], x); it.invoke()
+        refs.append([it.get_tensor(o["index"]).tobytes() for o in outs])
+    return refs
+
+
+def meminfo_kb(phone):
+    m = re.search(r"MemAvailable:\s+(\d+)", phone.run("cat /proc/meminfo").stdout.decode())
+    return int(m.group(1)) if m else None
+
+
+def dmesg(phone):
+    return phone.run("dmesg", check=False).stdout.decode(errors="replace")
+
+
+def enn_cmd(outprefix, iters, inputs):
+    """Shell command (phone) for one enn-run process; /usr/bin/time -v gives the peak RSS."""
+    return ("ENN_OUT=%s ENN_BIN=/bin/enn-run /usr/bin/time -v timeout 120 %s %s %d %s"
+            % (outprefix, ENN_CHROOT_RUN, NNC_CHROOT[0], iters, " ".join(inputs)))
+
+
+def stage_aie(phone):
+    phone.sh("[ -e /proc/1/root/vendor/firmware/AIE.bin ] || cp /srv/s22/npu-trial/AIE.bin /proc/1/root/vendor/firmware/AIE.bin\n"
+             "[ -e /proc/1/root/vendor/firmware/AIE.bin ]")
+
+
+def run_canary(phone, canary, tag):
+    """Run the known-good conv; returns checksum string or None if the canary is not staged."""
+    if not phone.run("[ -e %s%s ]" % (ROOTFS, canary), check=False).returncode == 0:
+        return None
+    p = phone.run("ENN_BIN=/bin/enn-run timeout 60 %s %s 20 2>&1" % (ENN_CHROOT_RUN, canary), check=False)
+    r = L.parse_enn_run(p.stdout.decode(errors="replace"))
+    if p.returncode != 0 or 0 not in r["checksums"]:
+        return "FAILED(rc=%s)" % p.returncode
+    return r["checksums"][0]["checksum"]
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
+    ap.add_argument("model")
+    ap.add_argument("--out"); ap.add_argument("--name"); ap.add_argument("--host", default="root@100.95.191.103")
+    ap.add_argument("--n-random", type=int, default=20); ap.add_argument("--seed", type=int, default=1234)
+    ap.add_argument("--edge", action="store_true"); ap.add_argument("--real")
+    ap.add_argument("--tol", action="append", default=[]); ap.add_argument("--iters", type=int, default=200)
+    ap.add_argument("--graph-rules", choices=("on", "off"), default="on")
+    ap.add_argument("--keep-nnc", action="store_true")
+    ap.add_argument("--canary", default="/data/models/custom/conv3x3_s8.nnc")
+    a = ap.parse_args()
+
+    model = Path(a.model).resolve()
+    name = re.sub(r"[^A-Za-z0-9_.-]", "_", a.name or model.stem)
+    out = Path(a.out or "npu-accept-" + name); out.mkdir(parents=True, exist_ok=True)
+    blob = model.read_bytes()
+    v = {"model": {"name": name, "file": model.name, "sha256": hashlib.sha256(blob).hexdigest(), "bytes": len(blob)},
+         "started": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "graph_rules": a.graph_rules,
+         "settings": {"n_random": a.n_random, "seed": a.seed, "iters": a.iters, "tol": a.tol or ["default int8=1"]}}
+
+    def finish(code_hint=None):
+        L.build_verdict(v)
+        (out / "verdict.json").write_text(json.dumps(v, indent=2, default=str) + "\n")
+        (out / "report.md").write_text(L.render_markdown(v))
+        print(L.render_markdown(v))
+        print("verdict: %s -> %s" % (name, "ACCEPTED" if v["accepted"] else "REJECTED"))
+        return 0 if v["accepted"] else 1
+
+    # ---- 1 graph
+    desc = L.describe_model(str(model))
+    v["graph"] = L.validate_graph(desc)
+    v["graph"]["inputs"] = desc["inputs"]; v["graph"]["outputs"] = desc["outputs"]
+    if v["graph"]["errors"] and a.graph_rules == "on":
+        v["compile"] = None
+        print("graph rules reject the model; not touching the phone")
+        v["not_run"] = "compile and later steps skipped because the graph rules rejected the model"
+        return finish()
+    in_d, out_d = desc["inputs"], desc["outputs"]
+    if len(in_d) != 1 or in_d[0]["dtype"] not in L.NPU_DTYPES:
+        raise HarnessError("harness drives single-input int8/uint8 models only")
+    np, Interpreter, OpResolverType = numpy_litert()
+    in_size = int(np.prod(in_d[0]["shape"]))
+    out_sizes = [int(np.prod(o["shape"])) for o in out_d]
+    tol = L.parse_tol(a.tol)
+
+    phone = Phone(a.host)
+    run_id = "%s-%d" % (name, int(time.time()))
+    hdir = "%s%s/%s" % (ROOTFS, CHROOT_TMP, run_id)       # phone-root path
+    cdir = "%s/%s" % (CHROOT_TMP, run_id)                  # same dir inside the chroot
+    nnc_host = "%s%s/%s.nnc" % (ROOTFS, CHROOT_MODELS, name)
+    nnc_chroot = "%s/%s.nnc" % (CHROOT_MODELS, name)
+    NNC_CHROOT[0] = nnc_chroot
+    stage_aie(phone)
+    mem_before = meminfo_kb(phone)
+    dm_before = dmesg(phone)
+    canary_pre = run_canary(phone, a.canary, "pre")
+
+    # ---- 2 compile
+    phone.run("mkdir -p %s%s" % (ROOTFS, CHROOT_MODELS))
+    phone.put_files("%s%s" % (ROOTFS, CHROOT_MODELS), {name + ".tflite": blob})
+    t0 = time.time()
+    p = phone.run("%s %s/%s.tflite %s 2>&1; echo rc=$?" % (COMPILE, CHROOT_MODELS, name, nnc_host), timeout=420, check=False)
+    ctext = p.stdout.decode(errors="replace")
+    rc = int((re.findall(r"rc=(\d+)\s*$", ctext) or ["1"])[0])
+    parts = phone.run("ls %s.part*.nnc 2>/dev/null" % nnc_host, check=False).stdout.decode().split()
+    clog = phone.run("tail -c 3000 %s.compile.log 2>/dev/null" % nnc_host, check=False).stdout.decode(errors="replace")
+    (out / "compile.log").write_text(ctext + "\n--- benchmark_model log tail ---\n" + clog)
+    comp = {"ok": rc == 0, "seconds": time.time() - t0, "partitions": 0, "sections": {}, "nnc_bytes": None}
+    v["compile"] = comp
+    if rc == 2 or "DSP_BINARY" in ctext:
+        comp["dsp_binary"] = True; comp["error"] = "DSP_BINARY output refused by tflite-npu-compile"
+    if rc != 0 and not comp.get("dsp_binary"):
+        comp["error"] = "tflite-npu-compile rc=%d: %s" % (rc, (ctext.strip().splitlines() or ["?"])[0][:200])
+    if comp["ok"]:
+        comp["partitions"] = len(parts) if parts else 1
+        if comp["partitions"] == 1:
+            nnc = phone.run("cat %s" % nnc_host).stdout
+            comp["sections"] = L.nnc_sections(nnc); comp["nnc_bytes"] = len(nnc); comp["nnc_md5"] = hashlib.md5(nnc).hexdigest()
+            if comp["sections"]["DSP_BINARY"]:
+                comp["dsp_binary"] = True
+            if a.keep_nnc:
+                (out / (name + ".nnc")).write_bytes(nnc)
+    if not comp["ok"] or comp.get("dsp_binary") or comp["partitions"] != 1:
+        v["not_run"] = "numeric and later steps skipped (compile did not give one safe NPU partition)"
+        return finish()
+
+    # ---- probe buffer layout
+    probe = phone.run("ENN_BIN=/bin/enn-run timeout 120 %s %s 1 2>&1" % (ENN_CHROOT_RUN, nnc_chroot), check=False)
+    pr = L.parse_enn_run(probe.stdout.decode(errors="replace"))
+    if probe.returncode != 0 or not pr["buffers"]:
+        comp["ok"] = False; comp["error"] = "ENN could not open/run the .nnc (rc=%d): %s" % (probe.returncode, probe.stdout.decode(errors="replace")[-300:])
+        return finish()
+    in_map, out_cands, problems, notes = L.map_buffers(pr["buffers"], [in_size], out_sizes)
+    comp["buffers"] = pr["buffers"]
+
+    # ---- 3 inputs + CPU reference
+    xs, n_edge, n_real = make_inputs(np, in_d[0]["shape"], in_d[0]["dtype"], a.n_random, a.seed, a.edge, a.real)
+    refs = cpu_reference(np, Interpreter, OpResolverType, str(model), xs)
+    files = {}
+    for k, (_, x) in enumerate(xs):
+        files["in_%03d.bin" % k] = x.tobytes()
+    for b in pr["buffers"]:
+        if b["dir"] == "in":
+            files["zero_in%d.bin" % b["index"]] = bytes(b["size"])
+    phone.put_files(hdir, files)
+
+    def args_for(k):
+        res = []
+        for b in [b for b in pr["buffers"] if b["dir"] == "in"]:
+            res.append("%s/in_%03d.bin" % (cdir, k) if b["index"] == in_map[0] else "%s/zero_in%d.bin" % (cdir, b["index"]))
+        return res
+
+    def phase(tag, iters, ks):
+        return "\n".join(enn_cmd("%s/%s_%03d" % (cdir, tag, k), iters, args_for(k)) + " > %s/%s_%03d.log 2>&1" % (hdir, tag, k)
+                         for k in ks) + "\n"
+
+    ks = list(range(len(xs)))
+    phone.sh(phase("c", 1, ks), timeout=60 * len(ks) + 120, check=False)           # cold: fresh process, 1 exec each
+    got = phone.get_dir(hdir)
+
+    def read_run(tag, k):
+        log = got.get("%s_%03d.log" % (tag, k), b"").decode(errors="replace")
+        r = L.parse_enn_run(log)
+        r["all_out"] = {b["index"]: got.get("%s_%03d.out%d.bin" % (tag, k, b["index"])) for b in pr["buffers"] if b["dir"] == "out"}
+        m = re.search(r"Maximum resident set size \(kbytes\): (\d+)", log)
+        r["rss_kb"] = int(m.group(1)) if m else None
+        r["log"] = log
+        return r
+    names = [o["name"] or "out%d" % j for j, o in enumerate(out_d)]
+    cold = [read_run("c", k) for k in ks]
+    out_map = []                       # per model output: the nnc output buffer that matches the CPU reference best
+    for j, cands in enumerate(out_cands):
+        tot = {}
+        for c_i in cands:
+            tot[c_i] = 0
+            for k, c in enumerate(cold):
+                d = c["all_out"].get(c_i)
+                st = L.diff_stats(refs[k][j], d, out_d[j]["dtype"]) if d else None
+                tot[c_i] += sum(dd * n for dd, n in st["hist"].items()) if st and st["size_ok"] else 10**12
+        out_map.append(L.pick_output(cands, tot))
+    def sel(r):
+        r["outputs"] = [r["all_out"].get(o) if o is not None else None for o in out_map]
+    for c in cold:
+        sel(c)
+    stalled = any((c["execute"] or {}).get("max_ms", 0) > L.STALL_MS for c in cold)
+    hot_iters = 5 if stalled else a.iters
+    hot_ks = ks if not stalled else ks[:3]
+    phone.sh(phase("h", hot_iters, hot_ks) + phase("r", 1, [0]), timeout=max(300, int(len(hot_ks) * (hot_iters * (4.5 if stalled else 0.05) + 3)) + 120), check=False)
+    got = phone.get_dir(hdir)
+    hot = {k: read_run("h", k) for k in hot_ks}
+    rerun = read_run("r", 0)
+    for r in list(hot.values()) + [rerun]:
+        sel(r)
+    (out / "enn-run-sample.log").write_text(cold[0]["log"][-3000:])
+
+    # ---- compare
+    per = {n: [] for n in names}
+    problems = list(problems)
+    for k, c in enumerate(cold):
+        for j, n in enumerate(names):
+            data = c["outputs"][j] if j < len(c["outputs"]) else None
+            if data is None:
+                problems.append("input %s: no output dump (enn-run rc / log: %s)" % (xs[k][0], (c["errors"] or ["no output"])[0]))
+                per[n].append({"size_ok": False, "n": out_sizes[j], "got_n": 0, "max_abs": None, "hist": {}, "exact": 0})
+                continue
+            per[n].append(L.diff_stats(refs[k][j], data, out_d[j]["dtype"]))
+    tensors, flagged_const = {}, []
+    for j, n in enumerate(names):
+        t = L.tolerance_for(n, out_d[j]["dtype"], tol)
+        ok, summ, why = L.judge_tensor(per[n], t)
+        summ["ok"] = ok; summ["reasons"] = why
+        summ["worst_inputs"] = sorted(({"input": xs[k][0], "max_abs": st["max_abs"]} for k, st in enumerate(per[n])
+                                       if st["max_abs"]), key=lambda e: -e["max_abs"])[:3]
+        summ["hist"] = {str(k): c for k, c in summ["hist"].items()}
+        tensors[n] = summ
+    for k, c in enumerate(cold):               # NPU output constant while the reference is not: the all-zero failure mode
+        for j, n in enumerate(names):
+            d = c["outputs"][j] if j < len(c["outputs"]) else None
+            if d and L.constant_output(d) and not L.constant_output(refs[k][j]):
+                flagged_const.append("%s/%s" % (xs[k][0], n))
+    if flagged_const:
+        problems.append("NPU output is constant while the CPU reference is not (%d cases, e.g. %s)" % (len(flagged_const), flagged_const[0]))
+    agree = None
+    if len(out_d) == 1 and out_sizes[0] <= 4096:
+        sgn = np.int8 if out_d[0]["dtype"] == "INT8" else np.uint8
+        ag = sum(1 for k, c in enumerate(cold) if c["outputs"][0] and
+                 int(np.argmax(np.frombuffer(c["outputs"][0], sgn))) == int(np.argmax(np.frombuffer(refs[k][0], sgn))))
+        agree = "%d/%d" % (ag, len(cold))
+    v["numeric"] = {"n_inputs": len(xs), "n_random": a.n_random, "n_edge": n_edge, "n_real": n_real, "tensors": tensors,
+                    "problems": problems, "notes": notes, "argmax_agree": agree,
+                    "buffer_map": {"in": in_map, "out": out_map}}
+    # tensors' hist keys back to ints for the renderer
+    for t in tensors.values():
+        t["hist"] = {int(k): c for k, c in t["hist"].items()}
+
+    # ---- 4 determinism + latency
+    mism = []
+    for k, h in hot.items():
+        for j in range(len(names)):
+            if h["outputs"][j] != cold[k]["outputs"][j]:
+                mism.append("input %s output %d: %d-iteration run differs from cold run" % (xs[k][0], j, hot_iters))
+    for j in range(len(names)):
+        if rerun["outputs"][j] != cold[0]["outputs"][j]:
+            mism.append("input 0 output %d: later fresh process differs from the first" % j)
+    det_runs = len(hot) + 1
+    v["determinism"] = {"ok": not mism, "detail": ("%d inputs x (cold vs %d-iteration run) and a repeat process: all bit-identical" % (len(hot), hot_iters)
+                                                   if not mism else "; ".join(mism[:3]) + (" (+%d more)" % (len(mism) - 3) if len(mism) > 3 else "")),
+                        "hot_iters": hot_iters, "comparisons": det_runs * len(names)}
+    v["latency"] = L.latency_summary([h["execute"] for h in hot.values()] or [c["execute"] for c in cold])
+    v["latency"]["note"] = "per-process p50/p99 from enn-run (p95 is not reported by the on-phone binary); p99 and max shown instead"
+    if stalled:
+        v["determinism"]["detail"] += " [stalled: only 3 inputs x 5 iterations run]"
+
+    # ---- 5 memory + recovery
+    rss = [r["rss_kb"] for r in list(hot.values()) + cold + [rerun] if r["rss_kb"]]
+    mem_after = meminfo_kb(phone)
+    alarms = L.new_dmesg_alarms(dm_before, dmesg(phone))
+    v["memory"] = {"max_rss_kb": max(rss) if rss else None, "memavail_before_kb": mem_before, "memavail_after_kb": mem_after,
+                   "dmesg_alarms": alarms}
+    canary_post = run_canary(phone, a.canary, "post")
+    ok_c = canary_pre == canary_post and (canary_pre is None or not str(canary_pre).startswith("FAILED"))
+    ok_r = all(rerun["outputs"][j] == cold[0]["outputs"][j] for j in range(len(names)))
+    v["recovery"] = {"ok": ok_c and ok_r,
+                     "detail": "canary %s -> %s%s; candidate re-run %s" % (canary_pre, canary_post, " (canary not staged)" if canary_pre is None else "",
+                                                                          "identical" if ok_r else "DIFFERENT"),
+                     "canary_before": canary_pre, "canary_after": canary_post}
+
+    # cleanup this run's phone files (the .nnc stays in the chroot models dir for reruns)
+    phone.run("rm -rf %s" % hdir, check=False)
+    return finish()
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except HarnessError as e:
+        print("npu-accept: harness error: %s" % e, file=sys.stderr)
+        sys.exit(2)

@@ -1,0 +1,163 @@
+{
+  "model": {
+    "name": "ds_cnn_l_body_split",
+    "file": "ds_cnn_l_body.tflite",
+    "sha256": "2a6f10a33ecf5db03dbc06f599dca33c0585d2f9f18406306261a61996661e1c",
+    "bytes": 503656
+  },
+  "started": "2026-10-22T16:35:22Z",
+  "graph_rules": "on",
+  "settings": {
+    "n_random": 20,
+    "seed": 1234,
+    "iters": 200,
+    "tol": [
+      "default int8=1"
+    ]
+  },
+  "graph": {
+    "errors": [],
+    "warnings": [],
+    "op_histogram": {
+      "CONV_2D": 6,
+      "DEPTHWISE_CONV_2D": 5,
+      "AVERAGE_POOL_2D": 1
+    },
+    "inputs": [
+      {
+        "name": "model/tf.reshape/Reshape",
+        "shape": [
+          1,
+          49,
+          10,
+          1
+        ],
+        "dtype": "INT8",
+        "scale": [
+          1.1021944284439087
+        ],
+        "zero_point": [
+          96
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "model/average_pooling2d/AvgPool",
+        "shape": [
+          1,
+          1,
+          1,
+          276
+        ],
+        "dtype": "INT8",
+        "scale": [
+          0.03972894698381424
+        ],
+        "zero_point": [
+          -128
+        ]
+      }
+    ]
+  },
+  "compile": {
+    "ok": true,
+    "seconds": 2.193488836288452,
+    "partitions": 1,
+    "sections": {
+      "DSP_BINARY": false,
+      "NPU_BINARY": true
+    },
+    "nnc_bytes": 579184,
+    "nnc_md5": "d0f3cbd8ad2d815e21e7bd8782b72118",
+    "buffers": [
+      {
+        "dir": "in",
+        "index": 0,
+        "size": 490
+      },
+      {
+        "dir": "out",
+        "index": 0,
+        "size": 276
+      }
+    ]
+  },
+  "numeric": {
+    "n_inputs": 20,
+    "n_random": 20,
+    "n_edge": 0,
+    "n_real": 0,
+    "tensors": {
+      "model/average_pooling2d/AvgPool": {
+        "max_abs": 1,
+        "hist": {
+          "0": 4942,
+          "1": 578
+        },
+        "n": 5520,
+        "tol": 1,
+        "exact": 4942,
+        "over_tol": 0,
+        "ok": true,
+        "reasons": [],
+        "worst_inputs": [
+          {
+            "input": "random00",
+            "max_abs": 1
+          },
+          {
+            "input": "random01",
+            "max_abs": 1
+          },
+          {
+            "input": "random02",
+            "max_abs": 1
+          }
+        ]
+      }
+    },
+    "problems": [],
+    "notes": [],
+    "argmax_agree": "19/20",
+    "buffer_map": {
+      "in": [
+        0
+      ],
+      "out": [
+        0
+      ]
+    }
+  },
+  "determinism": {
+    "ok": true,
+    "detail": "20 inputs x (cold vs 200-iteration run) and a repeat process: all bit-identical",
+    "hot_iters": 200,
+    "comparisons": 21
+  },
+  "latency": {
+    "processes": 20,
+    "iterations": 4000,
+    "p50_ms": 0.34,
+    "p99_ms": 1.28,
+    "max_ms": 1.33,
+    "min_ms": 0.25,
+    "mean_ms": 0.4254,
+    "first_ms_median": 0.905,
+    "note": "per-process p50/p99 from enn-run (p95 is not reported by the on-phone binary); p99 and max shown instead"
+  },
+  "memory": {
+    "max_rss_kb": 17180,
+    "memavail_before_kb": 5941488,
+    "memavail_after_kb": 5939912,
+    "dmesg_alarms": []
+  },
+  "recovery": {
+    "ok": true,
+    "detail": "canary 81a2bde73ce3dded -> 81a2bde73ce3dded; candidate re-run identical",
+    "canary_before": "81a2bde73ce3dded",
+    "canary_after": "81a2bde73ce3dded"
+  },
+  "reasons": [],
+  "accepted": true
+}

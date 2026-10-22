@@ -1,0 +1,307 @@
+{
+  "model": {
+    "name": "k32_rules_off",
+    "file": "k32.tflite",
+    "sha256": "ebf822b08362f0c764e05fc75473bf5b6230987d63794bcd34cdd5eafe238a92",
+    "bytes": 205800
+  },
+  "started": "2026-10-22T16:42:03Z",
+  "graph_rules": "off",
+  "settings": {
+    "n_random": 20,
+    "seed": 1234,
+    "iters": 200,
+    "tol": [
+      "default int8=1"
+    ]
+  },
+  "graph": {
+    "errors": [
+      {
+        "rule": "kernel-1d-max-15",
+        "detail": "op 0 CONV_2D has a 1-D kernel 1x32 (width 32 > 15): silently miscompiles on the NPU (K=17 wrong output, K=32 compile fails; issue #64)"
+      }
+    ],
+    "warnings": [],
+    "op_histogram": {
+      "CONV_2D": 1
+    },
+    "inputs": [
+      {
+        "name": "input",
+        "shape": [
+          1,
+          1,
+          148,
+          100
+        ],
+        "dtype": "INT8",
+        "scale": [
+          0.05000000074505806
+        ],
+        "zero_point": [
+          0
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "output",
+        "shape": [
+          1,
+          1,
+          148,
+          64
+        ],
+        "dtype": "INT8",
+        "scale": [
+          0.7483083009719849
+        ],
+        "zero_point": [
+          -128
+        ]
+      }
+    ]
+  },
+  "compile": {
+    "ok": true,
+    "seconds": 1.6134579181671143,
+    "partitions": 1,
+    "sections": {
+      "DSP_BINARY": false,
+      "NPU_BINARY": true
+    },
+    "nnc_bytes": 221816,
+    "nnc_md5": "6cf30c26534df07d095a850e7ce44275",
+    "buffers": [
+      {
+        "dir": "in",
+        "index": 0,
+        "size": 14800
+      },
+      {
+        "dir": "out",
+        "index": 0,
+        "size": 9472
+      }
+    ]
+  },
+  "numeric": {
+    "n_inputs": 20,
+    "n_random": 20,
+    "n_edge": 0,
+    "n_real": 0,
+    "tensors": {
+      "output": {
+        "max_abs": 128,
+        "hist": {
+          "0": 354,
+          "1": 766,
+          "2": 683,
+          "3": 663,
+          "4": 719,
+          "5": 716,
+          "6": 718,
+          "7": 709,
+          "8": 723,
+          "9": 718,
+          "10": 689,
+          "11": 697,
+          "12": 722,
+          "13": 718,
+          "14": 718,
+          "15": 750,
+          "16": 720,
+          "17": 737,
+          "18": 768,
+          "19": 716,
+          "20": 674,
+          "21": 722,
+          "22": 681,
+          "23": 700,
+          "24": 700,
+          "25": 700,
+          "26": 692,
+          "27": 701,
+          "28": 699,
+          "29": 711,
+          "30": 690,
+          "31": 711,
+          "32": 708,
+          "33": 669,
+          "34": 739,
+          "35": 699,
+          "36": 736,
+          "37": 677,
+          "38": 726,
+          "39": 707,
+          "40": 688,
+          "41": 731,
+          "42": 706,
+          "43": 741,
+          "44": 719,
+          "45": 673,
+          "46": 754,
+          "47": 693,
+          "48": 701,
+          "49": 764,
+          "50": 725,
+          "51": 704,
+          "52": 717,
+          "53": 713,
+          "54": 733,
+          "55": 694,
+          "56": 711,
+          "57": 707,
+          "58": 691,
+          "59": 757,
+          "60": 718,
+          "61": 678,
+          "62": 706,
+          "63": 729,
+          "64": 744,
+          "65": 712,
+          "66": 757,
+          "67": 703,
+          "68": 732,
+          "69": 750,
+          "70": 752,
+          "71": 737,
+          "72": 721,
+          "73": 708,
+          "74": 662,
+          "75": 717,
+          "76": 710,
+          "77": 712,
+          "78": 711,
+          "79": 679,
+          "80": 724,
+          "81": 672,
+          "82": 690,
+          "83": 689,
+          "84": 700,
+          "85": 693,
+          "86": 749,
+          "87": 738,
+          "88": 701,
+          "89": 704,
+          "90": 686,
+          "91": 784,
+          "92": 700,
+          "93": 738,
+          "94": 700,
+          "95": 736,
+          "96": 696,
+          "97": 720,
+          "98": 727,
+          "99": 646,
+          "100": 707,
+          "101": 752,
+          "102": 690,
+          "103": 687,
+          "104": 734,
+          "105": 692,
+          "106": 675,
+          "107": 682,
+          "108": 678,
+          "109": 688,
+          "110": 705,
+          "111": 686,
+          "112": 696,
+          "113": 694,
+          "114": 647,
+          "115": 676,
+          "116": 683,
+          "117": 752,
+          "118": 702,
+          "119": 686,
+          "120": 663,
+          "121": 679,
+          "122": 699,
+          "123": 709,
+          "124": 657,
+          "125": 662,
+          "126": 682,
+          "127": 4853,
+          "128": 95025
+        },
+        "n": 189440,
+        "tol": 1,
+        "exact": 354,
+        "over_tol": 188320,
+        "ok": false,
+        "reasons": [
+          "188320 of 189440 values differ by more than 1 (max |delta| 128)"
+        ],
+        "worst_inputs": [
+          {
+            "input": "random00",
+            "max_abs": 128
+          },
+          {
+            "input": "random01",
+            "max_abs": 128
+          },
+          {
+            "input": "random02",
+            "max_abs": 128
+          }
+        ]
+      }
+    },
+    "problems": [
+      "NPU output is constant while the CPU reference is not (20 cases, e.g. random00/output)"
+    ],
+    "notes": [],
+    "argmax_agree": null,
+    "buffer_map": {
+      "in": [
+        0
+      ],
+      "out": [
+        0
+      ]
+    }
+  },
+  "determinism": {
+    "ok": true,
+    "detail": "3 inputs x (cold vs 5-iteration run) and a repeat process: all bit-identical [stalled: only 3 inputs x 5 iterations run]",
+    "hot_iters": 5,
+    "comparisons": 4
+  },
+  "latency": {
+    "processes": 3,
+    "iterations": 15,
+    "p50_ms": 5006.78,
+    "p99_ms": 5007.66,
+    "max_ms": 5007.66,
+    "min_ms": 4998.14,
+    "mean_ms": 5005.514666666667,
+    "first_ms_median": 4998.47,
+    "note": "per-process p50/p99 from enn-run (p95 is not reported by the on-phone binary); p99 and max shown instead"
+  },
+  "memory": {
+    "max_rss_kb": 17064,
+    "memavail_before_kb": 5933464,
+    "memavail_after_kb": 5935272,
+    "dmesg_alarms": []
+  },
+  "recovery": {
+    "ok": true,
+    "detail": "canary 81a2bde73ce3dded -> 81a2bde73ce3dded; candidate re-run identical",
+    "canary_before": "81a2bde73ce3dded",
+    "canary_after": "81a2bde73ce3dded"
+  },
+  "ignored_graph_errors": [
+    {
+      "rule": "kernel-1d-max-15",
+      "detail": "op 0 CONV_2D has a 1-D kernel 1x32 (width 32 > 15): silently miscompiles on the NPU (K=17 wrong output, K=32 compile fails; issue #64)"
+    }
+  ],
+  "reasons": [
+    "output output: 188320 of 189440 values differ by more than 1 (max |delta| 128)",
+    "NPU output is constant while the CPU reference is not (20 cases, e.g. random00/output)",
+    "execution stall: max 5008 ms (> 1000 ms; the known failure mode is ~4300 ms with all-zero output)"
+  ],
+  "accepted": false
+}
