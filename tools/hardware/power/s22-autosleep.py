@@ -22,6 +22,8 @@ Policy (all knobs in CONFIG, overridable by /srv/s22/state/autosleep/config.json
   running ALSA PCM (voice loop, s22-say, recording); an active call in
   s22-phoned; recent CPU load above busy_pct; USB data host attached unless
   suspend_on_usb; an active kernel wakeup source (not in ignore_wakeup_sources).
+* After a wake caused only by a modem/Wi-Fi IRQ the minimum awake time is net_awake_s
+  (2.5 s) instead of awake_s, so mobile-data keepalive packets cost little (2026-10-22).
 * Race-free with the kernel: when no ignored source is active it uses the
   /sys/power/wakeup_count handshake, so an SMS/packet that arrives just before
   suspend aborts it instead of being slept on.
@@ -45,6 +47,9 @@ B = "/sys/class/power_supply/battery/"
 CONFIG = {
     "lock_grace_s": 30,        # screen off this long before the first suspend
     "awake_s": 6,              # minimum awake time after every resume
+    "net_awake_s": 2.5,        # ... after a wake caused only by the modem/Wi-Fi IRQ (keepalive-sized
+                               # packet): long enough for tailscaled to answer, then back to sleep.
+                               # Real traffic (ssh session, CPU load, wakeup source) re-inhibits anyway.
     "max_sleep_s": 900,        # RTC housekeeping wake (keepalive, Tailscale, battery)
     "poll_s": 2,
     "busy_pct": 25.0,          # mean CPU busy (all cores) over busy_window_s that inhibits
@@ -254,6 +259,12 @@ def wake_reason(since_mark):
     return rs[:6]
 
 
+def net_only_wake(reasons):
+    """True when every wake reason is a modem/Wi-Fi/mailbox IRQ (an incoming packet, not RTC/power key)."""
+    rs = [x for x in reasons if not x.startswith("ABORT")]
+    return bool(rs) and all(("cp_mbox" in x or "MAILBOX_CP2AP" in x or "wlan_pci_wake" in x) for x in rs)
+
+
 def suspend_once(seconds, state="mem"):
     mark = "s22-autosleep-%d-%d" % (os.getpid(), int(time.time() * 1000))
     try:
@@ -362,7 +373,7 @@ def run():
             fail_backoff = min(cfg["max_fail_backoff_s"], fail_backoff * 2)
         else:
             fail_backoff = 5.0
-            awake_until = time.monotonic() + cfg["awake_s"]
+            awake_until = time.monotonic() + (cfg["net_awake_s"] if net_only_wake(r["why_wake"]) else cfg["awake_s"])
         log(**r)
         hist = []
         write_status({"state": "resumed", "last": r, "t": time.time(), **tot})
