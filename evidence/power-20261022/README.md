@@ -84,7 +84,7 @@ No keepalive restart happened during the whole session. The last restart was bef
 - physical touch;
 - BT traffic;
 - the voice loop;
-- a reboot with keepalive starting `autosleep` itself.
+- a reboot with keepalive starting `autosleep` itself. (Done later on 2026-10-22: it started about 30 s after `s22-reboot recovery`, see `evidence/npu-custom-20261022/reboot-check.txt`.)
 
 ## Mistake made and fixed
 

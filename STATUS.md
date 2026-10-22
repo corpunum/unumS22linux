@@ -40,7 +40,7 @@ Compile on the phone: `/srv/s22/npu-custom/tflite-npu-compile model.tflite out.n
   - **Power key:** not physically tested. It shares the PMIC wake path with the RTC, and wakeup is enabled.
 - **Health after every resume:** Wi-Fi, Tailscale, modem/SMS, ABOX card, hci0, fastshell, the touch evdev and USB ECM were all fine. The panel came back on with DPMS after the cycles.
 
-**`s22-autosleep`** (`tools/hardware/power/`) is a keepalive service. It runs now, and keepalive starts it at the next boot (not yet tested across a reboot).
+**`s22-autosleep`** (`tools/hardware/power/`) is a keepalive service. It runs now, and keepalive starts it at boot: **verified across one `s22-reboot recovery` on 2026-10-22**. It came up about 30 s after boot with nobody touching it; Wi-Fi, Tailscale, modem, BT, ABOX and the shell were all fine ([check](evidence/npu-custom-20261022/reboot-check.txt)). A suspend cycle after that reboot was not observed, because SSH was open the whole time.
 - **Screen off:** the governors go to powersave. After 30 s idle it starts suspend cycles of up to 15 min (RTC housekeeping), with at least 6 s awake after each wake.
 - **It stays awake while any of these holds:**
   - an SSH session is open;
