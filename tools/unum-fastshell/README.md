@@ -4,6 +4,8 @@ A single static Rust binary (aarch64 musl, about 1.3 MB) that runs on the phone'
 
 Measurements and screenshots are in [`evidence/fastshell-20261021/`](../../evidence/fastshell-20261021/README.md).
 
+To run it on another Linux phone (postmarketOS, Mobian, Arch Linux ARM), see [PORTING.md](PORTING.md): config file, auto-detection of the display, touchscreen, battery and thermal sensors, and what needs the S22 services.
+
 ## How it works
 
 | Part | What it does |
@@ -40,7 +42,7 @@ Automatic fallbacks:
 ```sh
 export PATH=$HOME/.cargo/bin:$PATH
 cd tools/unum-fastshell
-cargo test --offline --release                     # 37 tests: button chords/holds/double press + level + Settings section, screen-timeout policy, SSE/chunked parsing, touchd protocol, confirm file, keyboard, gestures, 5G badge, camera line
+cargo test --offline --release                     # button chords/holds/double press + level + Settings section, config + hardware detection, screen-timeout policy, SSE/chunked parsing, touchd protocol, confirm file, keyboard, gestures, 5G badge, camera line
 cargo run --release -- dump /tmp/shots             # offscreen PNG of every screen
 flock ~/.cache/rig-heavy.lock env CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld \
   cargo build --offline --release --target aarch64-unknown-linux-musl

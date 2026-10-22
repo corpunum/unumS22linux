@@ -47,15 +47,11 @@ pub struct TouchDev {
     cancelled: bool,
 }
 
+/// The touchscreen node: config `touch_device`, else by name (S22:
+/// sec_touchscreen), else by multitouch capabilities. See config.rs.
 pub fn find_touchscreen() -> Option<String> {
-    let mut v: Vec<_> = std::fs::read_dir("/sys/class/input").ok()?.flatten().map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.starts_with("event")).collect();
-    v.sort();
-    for n in v {
-        if std::fs::read_to_string(format!("/sys/class/input/{n}/device/name")).map(|s| s.trim() == "sec_touchscreen").unwrap_or(false) {
-            return Some(format!("/dev/input/{n}"));
-        }
-    }
-    None
+    let c = crate::config::get();
+    crate::config::detect_touchscreen(std::path::Path::new("/sys/class/input"), std::path::Path::new("/dev/input"), &c.touch_device, &c.touch_name)
 }
 
 impl TouchDev {
