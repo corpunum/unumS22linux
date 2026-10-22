@@ -86,7 +86,7 @@ PUBLIC_INPUT_SHA256 = {
     "tools/hardware/bt-qca6490-patch-version-probe.c":
         "a32ed1bddc52000a7d36ceee032d55c45a978788868f47c3f0aa3a23ca305984",
     "tools/hardware/bt-version-transport-probe.c":
-        "b3a9a346facc24845655fa63c020687efc30ffd44c2a0a9ae7bf8ed149ec58a9",
+        "b472efa709fec42c76026642903b6f385556b423f1735d2eebc963be6db580be",
 }
 
 PRIVATE_INPUTS = {

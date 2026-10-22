@@ -286,7 +286,7 @@ class SayRenderModeTest(unittest.TestCase):
         end = src.index('\nfi\n', start)
         block = src[start:end]
         first_card_use = min(src.index(k, src.index('TTS=/opt/s22-tts'))
-                             for k in ('batch defaults', 'batch "$ROUTE"', 'play "$WAV"', 'mknod'))
+                             for k in ('batch defaults', 'batch "$ROUTE"', 'aplay -q', 'mknod'))
         self.assertLess(end, first_card_use)
         self.assertIn('exit', block)
         for bad in ('amixer', 'aplay', 'batch', 'play ', '/dev/snd', 'Volume'):
