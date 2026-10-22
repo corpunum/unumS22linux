@@ -1,0 +1,16 @@
+# One `s22-reboot recovery` at 2026-10-22 02:02 UTC (end of the NPU session), all checks over Tailscale SSH
+before: uptime 18311 s; autosleep pid 12614 (enabled); BT "up (pid 2618)"; modem ONLINE / SIM READY / home_3gpp lte
+reboot: SSH back at uptime 21 s (~40 s wall); /proc/reset_reason = RPON (requested reboot, not a watchdog)
+uptime ~30 s: s22-autosleep run (pid 2467) started by keepalive, nobody touched it
+  s22-autosleep status: "autosleep: enabled", state screen-on, since 1792634585 (= ~boot+30 s)
+processes: tailscaled 1582, sway(-pixman) 1669, s22-phoned 2287, s22-touchd 2298, unum-fastshell 2302,
+           s22-sip --voice-loop 2345, wpa_supplicant 2403, s22-autosleep 2467
+wlan0 UP 192.168.50.12/24 (DHCP lease changed: .95 -> .12); tailscale0 100.95.191.103; ping 1.1.1.1 avg 28 ms
+BT: s22-bt status "up (pid 2553)" at uptime ~55 s; /sys/class/bluetooth/hci0
+modem (s22-phoned /status): ONLINE, sim PB_INIT_COMPLETE, reg home_3gpp, act lte
+audio: /proc/abox/failsafe/online = ONLINE, runtime suspended; 3 ALSA cards; sectiongraph_tplg staged in PID1 /vendor/firmware
+cpufreq governors: schedutil x3 (display on)
+NPU after reboot: AIE.bin re-staged (it lives in PID 1's ramdisk, as documented);
+  nnapi-conv-test recompiled the conv -> ann.nnc byte-identical to the pre-reboot conv3x3_u8.nnc (cmp);
+  enn-run conv3x3_u8.nnc checksum 9b995581645257e9 (same as before), p50 0.31 ms; ds_cnn_l_body p50 0.34 ms
+Not tested after this reboot: an actual suspend cycle (an SSH session was open the whole time, so autosleep stays awake by design), sound output.
