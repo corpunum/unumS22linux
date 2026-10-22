@@ -19,8 +19,8 @@ BOOT = [("ecm0", "10.55.0.1", 0, "default via 10.55.0.1 dev ecm0"),
 def lk(wifi=True, mobile=False, usb=True, defaults=BOOT):
     return {"wifi": {"oper": "up" if wifi else "down", "gw": "192.168.50.1" if wifi else None,
                      "dns": ["192.168.50.1"]},
-            "mobile": {"state": "up" if mobile else "down", "ipv4": "<cgnat-ip>" if mobile else None,
-                       "dns": ["<carrier-ip>", "<carrier-ip>"], "modem": "ONLINE"},
+            "mobile": {"state": "up" if mobile else "down", "ipv4": "100.64.33.189" if mobile else None,
+                       "dns": ["203.0.113.15", "203.0.113.12"], "modem": "ONLINE"},
             "usb": {"oper": "up" if usb else "down", "carrier": usb, "udc": "configured"},
             "defaults": defaults}
 
@@ -65,7 +65,7 @@ def test_usb_only_uplink():
 
 def test_dns_follows_uplink():
     check(N.resolv_for("mobile", lk(mobile=True), CFG).startswith(
-        "nameserver <carrier-ip>\nnameserver <carrier-ip>\nnameserver 1.1.1.1\n"))
+        "nameserver 203.0.113.15\nnameserver 203.0.113.12\nnameserver 1.1.1.1\n"))
     check(N.resolv_for("wifi", lk(), CFG).startswith("nameserver 192.168.50.1\nnameserver 1.1.1.1\n"))
     check(N.resolv_for(None, lk(), CFG) is None)
 
