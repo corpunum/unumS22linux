@@ -365,9 +365,13 @@ class Policy:
             want = resolv_for(up, lk, cfg)
             if want and rd(RESOLV) + "\n" != want:
                 try:
-                    with open(RESOLV + ".netpolicy", "w") as f:
+                    # Rewrite in place, never rename: the Arch chroot (/mnt/omarchy-trial) bind-mounts
+                    # this file, and a rename leaves the bind on the old inode with the home router's
+                    # DNS. On 2026-10-22 that broke every cloud model call on mobile data.
+                    with open(RESOLV, "r+" if os.path.exists(RESOLV) else "w") as f:
+                        f.seek(0)
                         f.write(want)
-                    os.replace(RESOLV + ".netpolicy", RESOLV)
+                        f.truncate()
                 except OSError as e:
                     log(event="dns_error", error=str(e))
         if up != self.uplink:
