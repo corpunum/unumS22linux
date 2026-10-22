@@ -6,6 +6,7 @@
 use crate::ctl::{write_confirm, Call};
 use crate::font::{Face, Fonts};
 use crate::gfx::{Canvas, Rect};
+use crate::idle;
 use crate::kbd::{self, Kbd, KeyOut};
 use crate::net::{self, ChatEvent, Msg, Net, Prompt};
 use serde_json::{json, Value};
@@ -105,6 +106,7 @@ pub enum Act {
     Model(&'static str),
     Classic,
     ScreenOff,
+    IdleCycle(bool),
     Capture,
     CamSensor(&'static str),
     Refresh,
@@ -266,6 +268,10 @@ pub struct App {
     pub hold: Option<(Instant, Hit)>,
     stick_bottom: bool,
     dummy: Canvas,
+    pub idle_cfg: idle::Cfg,
+    pub idle_path: String,
+    pub last_touch: Instant,
+    voice_running: bool,
 }
 
 fn now_us() -> u64 {
@@ -342,6 +348,10 @@ impl App {
             hold: None,
             stick_bottom: true,
             dummy: Canvas::new(1, 1),
+            idle_cfg: idle::Cfg::default(),
+            idle_path: String::new(),
+            last_touch: Instant::now(),
+            voice_running: false,
         };
         a.dummy.clip = Rect::new(0, 0, 0, 0);
         a.read_sys();
@@ -507,6 +517,8 @@ impl App {
                 }
             }
             Msg::Assistant(v) => {
+                self.voice_running = false;
+                self.last_touch = Instant::now();
                 let you = v["transcript"].as_str().or(v["text"].as_str()).unwrap_or("").to_string();
                 let ans = v["reply"].as_str().or(v["answer"].as_str()).unwrap_or("").to_string();
                 if !you.is_empty() || !ans.is_empty() {
@@ -731,6 +743,56 @@ impl App {
         }
     }
 
+    /// Why the screen must stay on, if it must (other than s22-say's lock, which main checks).
+    pub fn idle_inhibitor(&self) -> Option<&'static str> {
+        if self.busy {
+            Some("chat streaming")
+        } else if self.confirm.is_some() || self.prompt.is_some() {
+            Some("agent question")
+        } else if self.page == Page::Camera || self.camera_poll.is_some() {
+            Some("camera")
+        } else if self.voice_running {
+            Some("voice turn")
+        } else {
+            None
+        }
+    }
+
+    /// Once a second while the panel is lit. True when it is time to power off.
+    /// An inhibited screen restarts its countdown, so the full timeout runs after the reason ends.
+    pub fn idle_check(&mut self, now: Instant, say_locked: bool) -> bool {
+        if self.idle_inhibitor().is_some() || say_locked {
+            self.last_touch = now;
+            return false;
+        }
+        idle::due(&self.idle_cfg, now.saturating_duration_since(self.last_touch), self.locked, false)
+    }
+
+    /// The Power-press path: lock, hide the keyboard, panel off.
+    pub fn screen_timeout_off(&mut self) {
+        self.locked = true;
+        self.kb.visible = false;
+        self.dirty_all();
+        self.effects.push(Effect::Display(false));
+    }
+
+    pub fn load_idle(&mut self) {
+        if !self.idle_path.is_empty() {
+            if let Ok(t) = std::fs::read_to_string(&self.idle_path) {
+                self.idle_cfg = idle::parse(&t);
+            }
+        }
+    }
+
+    fn save_idle(&self) {
+        if !self.idle_path.is_empty() {
+            let tmp = format!("{}.tmp", self.idle_path);
+            if std::fs::write(&tmp, idle::to_json(&self.idle_cfg)).is_ok() {
+                let _ = std::fs::rename(&tmp, &self.idle_path);
+            }
+        }
+    }
+
     /// Once a second: expire cards and questions, refresh countdowns.
     pub fn tick(&mut self) {
         let now = Instant::now();
@@ -826,6 +888,9 @@ impl App {
     /// One call from s22-touchd (shell.sock). Same functions as the Quickshell `touch` IPC.
     pub fn call(&mut self, c: &Call) -> String {
         let a0 = c.arg(0).to_string();
+        if !matches!(c.function.as_str(), "state" | "perf" | "ping" | "confirmResult") {
+            self.last_touch = Instant::now();
+        }
         if !self.display_on && self.active && ["home", "open", "switcher", "card", "confirm"].contains(&c.function.as_str()) {
             // wake for anything the owner must see; the lock cover stays on top
             self.effects.push(Effect::Display(true));
@@ -1075,6 +1140,7 @@ impl App {
                 self.dirty_all();
             }
             Act::Voice => {
+                self.voice_running = true;
                 let cmd = std::env::var("FASTSHELL_ASSISTANT").unwrap_or_else(|_| "/srv/s22/hardware/bin/s22-assistant".into());
                 self.effects.push(Effect::Spawn(vec!["@assistant".into(), cmd]));
                 self.add_card("Listening…", "Speak now; the answer is spoken and shown here.", 12.0);
@@ -1147,6 +1213,15 @@ impl App {
                 self.kb.visible = false;
                 self.dirty_all();
                 self.effects.push(Effect::Display(false));
+            }
+            Act::IdleCycle(locked) => {
+                if locked {
+                    self.idle_cfg.locked_s = idle::next_preset(self.idle_cfg.locked_s);
+                } else {
+                    self.idle_cfg.unlocked_s = idle::next_preset(self.idle_cfg.unlocked_s);
+                }
+                self.save_idle();
+                self.dirty_content();
             }
             Act::Capture => {
                 self.camera_state = "starting the camera…".into();
@@ -1229,6 +1304,7 @@ impl App {
 
     pub fn touch(&mut self, ev: crate::touch::Touch) {
         use crate::touch::Touch;
+        self.last_touch = Instant::now();
         if !self.display_on {
             return;
         }
@@ -2136,6 +2212,11 @@ impl App {
         self.button(cv, Rect::new(M, y, bw, 140), "Screen off", Act::ScreenOff, SURF2, PRESS, 36);
         self.button(cv, Rect::new(2 * M + bw, y, bw, 140), "Sway desktop", Act::Sway, SURF2, PRESS, 36);
         y += 140 + M;
+        let fmt = |n: u64| if n == 0 { "never".to_string() } else { format!("{n} s") };
+        let (l1, l2) = (format!("Idle off: {}", fmt(self.idle_cfg.unlocked_s)), format!("Lock off: {}", fmt(self.idle_cfg.locked_s)));
+        self.button(cv, Rect::new(M, y, bw, 140), &l1, Act::IdleCycle(false), SURF2, PRESS, 36);
+        self.button(cv, Rect::new(2 * M + bw, y, bw, 140), &l2, Act::IdleCycle(true), SURF2, PRESS, 36);
+        y += 140 + M;
         self.button(cv, Rect::new(M, y, W - 2 * M, 140), "Classic shell (Quickshell) — hold", Act::Classic, 0x3a2a14, 0x55401e, 36);
         self.hold_last(1200);
         y += 140 + M;
@@ -2511,4 +2592,75 @@ mod tests {
         assert_eq!(camera_summary(&json!({"rc": 0})), "captured");
     }
 
+    #[test]
+    fn screen_timeout_policy_in_the_app() {
+        use std::time::Duration;
+        let mut a = app("/nonexistent");
+        let t0 = Instant::now();
+        a.last_touch = t0;
+        let at = |s: u64| t0 + Duration::from_secs(s);
+        assert!(!a.idle_check(at(59), false));
+        assert!(a.idle_check(at(60), false), "unlocked idle 60 s");
+        // a touch resets the countdown
+        a.last_touch = at(50);
+        assert!(!a.idle_check(at(100), false));
+        assert!(a.idle_check(at(110), false));
+        // locked: 15 s
+        a.locked = true;
+        a.last_touch = t0;
+        assert!(!a.idle_check(at(14), false));
+        assert!(a.idle_check(at(15), false));
+        // s22-say lock holds it, and restarts the countdown
+        assert!(!a.idle_check(at(100), true));
+        assert!(!a.idle_check(at(110), false));
+        assert!(a.idle_check(at(115), false));
+        // each inhibitor
+        a.last_touch = t0;
+        a.busy = true;
+        assert!(!a.idle_check(at(500), false));
+        a.busy = false;
+        a.goto(Page::Camera);
+        assert_eq!(a.idle_inhibitor(), Some("camera"));
+        a.goto(Page::Home);
+        assert_eq!(call(&mut a, "confirm", &["c1", "ok?", "30"]), "asking");
+        assert_eq!(a.idle_inhibitor(), Some("agent question"));
+        // never
+        a.confirm = None;
+        a.idle_cfg = idle::Cfg { unlocked_s: 0, locked_s: 0 };
+        a.last_touch = t0;
+        assert!(!a.idle_check(at(100000), false));
+        // power-off path
+        a.screen_timeout_off();
+        assert!(a.locked && a.effects.contains(&Effect::Display(false)));
+    }
+
+    #[test]
+    fn touch_and_calls_reset_the_idle_clock_but_polls_do_not() {
+        let mut a = app("/nonexistent");
+        let old = Instant::now() - std::time::Duration::from_secs(50);
+        a.last_touch = old;
+        call(&mut a, "state", &[]);
+        call(&mut a, "ping", &[]);
+        assert_eq!(a.last_touch, old);
+        a.touch(crate::touch::Touch::Down(500, 1000, 0));
+        assert!(a.last_touch > old);
+        a.last_touch = old;
+        call(&mut a, "display", &["on"]);
+        assert!(a.last_touch > old);
+    }
+
+    #[test]
+    fn idle_cycle_button_saves_the_config() {
+        let dir = std::env::temp_dir().join(format!("fastshell-idle-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let mut a = app("/nonexistent");
+        a.idle_path = dir.join("screen-timeout.json").to_str().unwrap().into();
+        a.activate(Act::IdleCycle(false), 0);
+        assert_eq!(a.idle_cfg.unlocked_s, 120);
+        let mut b = app("/nonexistent");
+        b.idle_path = a.idle_path.clone();
+        b.load_idle();
+        assert_eq!(b.idle_cfg, a.idle_cfg);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

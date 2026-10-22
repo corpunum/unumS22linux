@@ -3279,3 +3279,32 @@ Details: `evidence/npu-custom-20261022/README.md`. Tools: `tools/hardware/npu/nn
   inhibitor (`suspend_on_usb: false`) while the Ally is attached. Autosleep
   now reports locked-grace/post-wake and logs inhibitor changes; the policy
   knobs are left to the owner.
+
+### 2026-10-22 — unum-fastshell: automatic screen-off timeout
+
+- Why: a locked or idle screen stayed lit forever, so s22-autosleep never saw `/run/s22-display-state` = off.
+- Change (`tools/unum-fastshell/src/idle.rs`, wiring in ui.rs/main.rs): no touch for 60 s while unlocked -> lock + panel
+  off through the Power-press path; lock cover lit with no touch for 15 s -> panel off. Touches and touchd calls (not
+  state/perf/ping/confirmResult polls) reset the clock. Held off while: chat streaming, agent question/confirm, Camera
+  page or capture, Talk turn, or `/run/s22-say.lock` flock held (probed with a non-blocking LOCK_SH; the countdown
+  restarts when the reason ends). Config `/srv/s22/state/fastshell/screen-timeout.json`
+  `{"unlocked_s":60,"locked_s":15}`, 0 = never, re-read every 10 s; Settings has "Idle off" / "Lock off" buttons
+  cycling 0/15/30/60/120/300 s.
+- Tests: 17 pass (7 new: parse/defaults/0, thresholds, preset cycle, flock probe, policy incl. every inhibitor, reset
+  rules, Settings button persists the file).
+- Deployed: binary sha256 acb765b0…, old binary backed up in `/srv/s22/state/fastshell/backup-idle-20261022-053601/`;
+  shell restarted by exact PID (TERM), s22-touchd restarted it (pid 26239), no reboot, no flashing.
+- Verified on the phone (injected Power press / tap, shell.log timestamps):
+  - unlocked idle: panel off exactly 60 s after start (`screen timeout: idle 60 s ... -> panel off`, dpms off Ok),
+    `/run/s22-display-state` = off;
+  - Power press wakes (dpms on); lock cover lit: off after 15 s;
+  - tap 10 s into the countdown: off 15 s after the tap (not after 5 s), i.e. the touch reset it;
+  - `/run/s22-say.lock` held 30 s (flock sleep, no audio): panel stayed lit, went off ~14 s after release;
+  - s22-autosleep: `locked-grace` right after the timeout; after closing SSH it really suspended
+    (`suspend_on_usb` true): 5 cycles, 54 s slept in ~90 s, 2 aborts (cnss_pci error -11, the known Wi-Fi one), see
+    `/srv/s22/state/autosleep/autosleep.jsonl`;
+  - tap -> page, Settings tile, 20 taps: p50 12.3 ms (max 21.5), highlight p50 10.0 ms, down->page 73.6 ms
+    (before 12.1 / 11.1 / 74.1): no regression. `evidence/fastshell-20261021/screen-timeout-tap-latency.json`.
+- Not verified on the phone: Camera-page, streaming-chat, agent-question and Talk inhibitors (covered by unit tests
+  only; Talk plays audio); the Settings buttons by touch (rendered offscreen only); the 0 = never setting live; a real
+  finger. The "9.4 ms" page figure from earlier today was not reproduced (12.3 ms measured with the 10-21 method).
