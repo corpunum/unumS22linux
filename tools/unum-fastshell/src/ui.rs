@@ -107,6 +107,7 @@ pub enum Act {
     Classic,
     ScreenOff,
     IdleCycle(bool),
+    ButtonsToggle,
     Capture,
     CamSensor(&'static str),
     Refresh,
@@ -149,6 +150,23 @@ pub enum Effect {
     Activate,
     Display(bool),
     Spawn(Vec<String>),
+    /// Run a native-root command detached (s22-display when sway shows).
+    Native(Vec<String>),
+    /// Run the voice assistant (`cmd`) with this environment; its last reply becomes a card.
+    Assistant(String, Vec<(String, String)>),
+    /// Push-to-talk released: tell the running assistant (held ms).
+    PttRelease(u32),
+    /// Speaker level changed (store it; set the amps if something is playing).
+    Level(i32),
+    /// Save the screen to the gallery (after the next frame), then flash.
+    Screenshot,
+}
+
+/// The on-screen level / notice overlay (volume keys, keep-awake).
+pub struct Osd {
+    pub title: String,
+    pub level: Option<i32>,
+    pub until: Instant,
 }
 
 #[derive(Default, Clone)]
@@ -272,7 +290,24 @@ pub struct App {
     pub idle_path: String,
     pub last_touch: Instant,
     voice_running: bool,
+    // ---- physical buttons (buttons.rs)
+    /// Speaker level 0-10 (s22-say's level).
+    pub level: i32,
+    level_before: i32,
+    muted_from: Option<i32>,
+    pub osd: Option<Osd>,
+    pub flash_until: Option<Instant>,
+    /// Power + volume up: the screen timeout is suspended.
+    pub keep_awake: bool,
+    /// Settings toggle: the shell handles the keys (else s22-buttons does).
+    pub buttons_enabled: bool,
+    pub buttons_cfg: String,
+    /// Latencies measured outside a page flip (modeset after a wake), for latency.jsonl.
+    pub lat_unlogged: Vec<(&'static str, f64)>,
 }
+
+pub const GALLERY: &str = "/root/.openunum/assets/generated";
+const PTT_HOOK: &str = "/srv/s22/buttons/hooks/assistant";
 
 fn now_us() -> u64 {
     crate::drm::now_us()
@@ -352,6 +387,15 @@ impl App {
             idle_path: String::new(),
             last_touch: Instant::now(),
             voice_running: false,
+            level: crate::buttons::DEFAULT_LEVEL,
+            level_before: crate::buttons::DEFAULT_LEVEL,
+            muted_from: None,
+            osd: None,
+            flash_until: None,
+            keep_awake: false,
+            buttons_enabled: true,
+            buttons_cfg: String::new(),
+            lat_unlogged: vec![],
         };
         a.dummy.clip = Rect::new(0, 0, 0, 0);
         a.read_sys();
@@ -753,6 +797,8 @@ impl App {
             Some("camera")
         } else if self.voice_running {
             Some("voice turn")
+        } else if self.keep_awake {
+            Some("keep screen on (Power + Volume up)")
         } else {
             None
         }
@@ -774,6 +820,172 @@ impl App {
         self.kb.visible = false;
         self.dirty_all();
         self.effects.push(Effect::Display(false));
+    }
+
+    // ------------------------------------------------------------ physical buttons
+
+    /// Apply what the button recogniser decided (buttons::Machine). `t_in` is the
+    /// key event's CLOCK_MONOTONIC µs, for the key -> flip latency log.
+    pub fn button_actions(&mut self, acts: &[crate::buttons::Action], t_in: u64) {
+        use crate::buttons::{Action, LEVELS};
+        if acts.is_empty() {
+            return;
+        }
+        self.last_touch = Instant::now();
+        for a in acts {
+            match *a {
+                Action::Wake => {
+                    if self.active {
+                        self.effects.push(Effect::Display(true));
+                    } else {
+                        self.effects.push(Effect::Native(vec!["/srv/s22/hardware/bin/s22-display".into(), "on".into()]));
+                    }
+                }
+                Action::Lock => {
+                    if self.active {
+                        self.locked = true;
+                        self.kb.visible = false;
+                        self.osd = None;
+                        self.dirty_all();
+                        self.effects.push(Effect::Display(false));
+                    } else {
+                        self.effects.push(Effect::Native(vec!["/srv/s22/hardware/bin/s22-display".into(), "off".into()]));
+                    }
+                }
+                Action::Step(d) => {
+                    self.level_before = self.level;
+                    self.level = (self.level + d).clamp(0, LEVELS);
+                    if self.level > 0 {
+                        self.muted_from = None;
+                    }
+                    self.effects.push(Effect::Level(self.level));
+                    self.show_level();
+                }
+                Action::Revert => {
+                    self.level = self.level_before;
+                    self.effects.push(Effect::Level(self.level));
+                    self.hide_osd();
+                }
+                Action::Mute => {
+                    if self.level == 0 {
+                        self.level = self.muted_from.take().unwrap_or(crate::buttons::DEFAULT_LEVEL).max(1);
+                    } else {
+                        self.muted_from = Some(self.level);
+                        self.level = 0;
+                    }
+                    self.level_before = self.level;
+                    self.effects.push(Effect::Level(self.level));
+                    self.show_level();
+                }
+                Action::PttStart(held) => {
+                    self.voice_running = true;
+                    self.effects.push(Effect::Assistant(
+                        PTT_HOOK.into(),
+                        vec![
+                            ("S22_BUTTON".into(), "volup".into()),
+                            ("S22_HELD_MS".into(), held.to_string()),
+                            ("S22_PTT".into(), "hold".into()),
+                            ("S22_PTT_STOP".into(), format!("{}/ptt-release", crate::buttons::BUTTONS_BASE)),
+                        ],
+                    ));
+                    self.add_card("Listening…", "Speak while you hold Volume up; release to send.", 12.0);
+                }
+                Action::PttRelease(held) => self.effects.push(Effect::PttRelease(held)),
+                Action::Assistant(held) => {
+                    self.voice_running = true;
+                    self.effects.push(Effect::Assistant(PTT_HOOK.into(), vec![("S22_BUTTON".into(), "volup".into()), ("S22_HELD_MS".into(), held.to_string())]));
+                    self.add_card("Listening…", "Speak now; the answer is spoken and shown here.", 12.0);
+                }
+                Action::Camera => {
+                    if !self.active {
+                        self.effects.push(Effect::Activate);
+                    }
+                    self.locked = false;
+                    self.goto(Page::Camera);
+                    self.effects.push(Effect::Display(true));
+                }
+                Action::Screenshot => {
+                    self.hide_osd();
+                    self.effects.push(Effect::Screenshot);
+                }
+                Action::KeepAwake => {
+                    self.keep_awake = !self.keep_awake;
+                    let t = if self.keep_awake { "Screen stays on" } else { "Screen timeout on" };
+                    self.show_osd(t, None, 1500);
+                }
+            }
+        }
+        if !self.damage.is_empty() || acts.contains(&Action::Wake) {
+            self.mark = Some((t_in, "button"));
+        }
+    }
+
+    fn osd_rect() -> Rect {
+        Rect::new(M, STATUS_H + 24, W - 2 * M, 170)
+    }
+
+    fn show_osd(&mut self, title: &str, level: Option<i32>, ms: u64) {
+        self.osd = Some(Osd { title: title.into(), level, until: Instant::now() + std::time::Duration::from_millis(ms) });
+        self.dirty(Self::osd_rect());
+    }
+
+    fn show_level(&mut self) {
+        let t = if self.level == 0 { "Muted".to_string() } else { format!("Volume {}", self.level) };
+        self.show_osd(&t, Some(self.level), 1500);
+    }
+
+    fn hide_osd(&mut self) {
+        if self.osd.take().is_some() {
+            self.dirty(Self::osd_rect());
+        }
+    }
+
+    /// The screenshot was taken (the flash shows now); `name` is the gallery file.
+    pub fn screenshot_taken(&mut self, name: &str) {
+        self.flash_until = Some(Instant::now() + std::time::Duration::from_millis(140));
+        self.dirty(Rect::new(0, 0, W, H));
+        self.add_card("Screenshot saved", &format!("Gallery and Files: {GALLERY}/{name}"), 5.0);
+        self.files_dir = GALLERY.into();
+        self.files.clear();
+    }
+
+    /// When an overlay must change next (OSD timeout, end of the flash).
+    pub fn overlay_deadline(&self) -> Option<Instant> {
+        [self.osd.as_ref().map(|o| o.until), self.flash_until].into_iter().flatten().min()
+    }
+
+    pub fn expire_overlays(&mut self, now: Instant) {
+        if self.osd.as_ref().is_some_and(|o| o.until <= now) {
+            self.hide_osd();
+        }
+        if self.flash_until.is_some_and(|t| t <= now) {
+            self.flash_until = None;
+            self.dirty_all();
+        }
+    }
+
+    fn draw_osd(&mut self, cv: &mut Canvas) {
+        let Some(o) = self.osd.as_ref() else { return };
+        let r = Self::osd_rect();
+        if self.layout_pass || !r.hits(&cv.clip) {
+            return;
+        }
+        let (title, level) = (o.title.clone(), o.level);
+        cv.rrect(&Rect::new(r.x - 2, r.y - 2, r.w + 4, r.h + 4), 34, 0x3b4656);
+        cv.rrect(&r, 32, 0x1b2533);
+        match level {
+            Some(l) => {
+                self.txt(cv, Face::Bold, 40, r.x + 36, r.y + 62, &title, TEXT);
+                let n = crate::buttons::LEVELS;
+                let gap = 10;
+                let sw = (r.w - 72 - gap * (n - 1)) / n;
+                for i in 0..n {
+                    let seg = Rect::new(r.x + 36 + i * (sw + gap), r.y + 98, sw, 40);
+                    cv.rrect(&seg, 10, if i < l { ACCENT } else { 0x34404f });
+                }
+            }
+            None => self.txt_center(cv, Face::Bold, 44, r, &title, TEXT),
+        }
     }
 
     pub fn load_idle(&mut self) {
@@ -879,7 +1091,7 @@ impl App {
         let s = |v: Vec<f64>| json!({"n": v.len(), "p50_ms": (pct(&v, 0.5) * 100.0).round() / 100.0, "p95_ms": (pct(&v, 0.95) * 100.0).round() / 100.0, "max_ms": (pct(&v, 1.0) * 100.0).round() / 100.0});
         json!({
             "frames": self.stats.frames,
-            "touch_to_flip": {"press": s(by("press")), "page": s(by("page")), "key": s(by("key")), "action": s(by("action")), "scroll": s(by("scroll"))},
+            "touch_to_flip": {"press": s(by("press")), "page": s(by("page")), "key": s(by("key")), "action": s(by("action")), "scroll": s(by("scroll")), "button": s(by("button"))},
             "render_ms": s(self.stats.render.clone()),
             "copy_ms": s(self.stats.copy.clone()),
         })
@@ -1142,7 +1354,7 @@ impl App {
             Act::Voice => {
                 self.voice_running = true;
                 let cmd = std::env::var("FASTSHELL_ASSISTANT").unwrap_or_else(|_| "/srv/s22/hardware/bin/s22-assistant".into());
-                self.effects.push(Effect::Spawn(vec!["@assistant".into(), cmd]));
+                self.effects.push(Effect::Assistant(cmd, vec![("S22_BUTTON".into(), "fastshell".into())]));
                 self.add_card("Listening…", "Speak now; the answer is spoken and shown here.", 12.0);
             }
             Act::Terminal => {
@@ -1221,6 +1433,14 @@ impl App {
                     self.idle_cfg.unlocked_s = idle::next_preset(self.idle_cfg.unlocked_s);
                 }
                 self.save_idle();
+                self.dirty_content();
+            }
+            Act::ButtonsToggle => {
+                self.buttons_enabled = !self.buttons_enabled;
+                if !self.buttons_cfg.is_empty() {
+                    crate::buttons::save_enabled(&self.buttons_cfg, self.buttons_enabled);
+                }
+                self.note = if self.buttons_enabled { "Buttons: handled by the shell".into() } else { "Buttons: handed to s22-buttons".into() };
                 self.dirty_content();
             }
             Act::Capture => {
@@ -1580,7 +1800,7 @@ impl App {
         let cur = self.scroll_rect.map(|r| (self.page, self.viewer.is_some(), r, self.scroll[self.page.idx()] as i32));
         if let (Some((p, v, r, s)), Some((rp, rv, rs))) = (cur, self.rendered_scroll) {
             if p == rp && v == rv && s != rs {
-                let overlay = self.confirm.is_some() || !self.cards.is_empty() && self.cards_rect().hits(&r);
+                let overlay = self.confirm.is_some() || self.osd.is_some() || self.flash_until.is_some() || !self.cards.is_empty() && self.cards_rect().hits(&r);
                 let whole_damaged = render.iter().any(|d| d.intersect(&r).is_some_and(|i| i.area() * 10 >= r.area() * 9));
                 if !overlay && !whole_damaged && (s - rs).abs() < r.h {
                     if let Some(strip) = cv.scroll(&r, s - rs) {
@@ -1661,6 +1881,10 @@ impl App {
         }
         if self.confirm.is_some() {
             self.draw_confirm(cv);
+        }
+        self.draw_osd(cv);
+        if self.flash_until.is_some() && !self.layout_pass {
+            cv.fill_alpha(&Rect::new(0, 0, W, H), 0xffffff, 200);
         }
         cv.clip = clip;
     }
@@ -2220,6 +2444,7 @@ impl App {
         self.button(cv, Rect::new(M, y, W - 2 * M, 140), "Classic shell (Quickshell) — hold", Act::Classic, 0x3a2a14, 0x55401e, 36);
         self.hold_last(1200);
         y += 140 + M;
+        y = self.draw_buttons_section(cv, y);
         if !self.layout_pass && Rect::new(0, y, W, 400).hits(&cv.clip) {
             let note = self.note.clone();
             if !note.is_empty() {
@@ -2232,9 +2457,36 @@ impl App {
             );
             let lines = self.fonts.wrap(Face::Regular, 28, &line, W - 2 * M);
             for (k, l) in lines.iter().enumerate() {
-                self.txt(cv, Face::Regular, 28, M, y + 100 + k as i32 * 40, l, DIM);
+                self.txt(cv, Face::Regular, 28, M, y + 80 + k as i32 * 36, l, DIM);
             }
         }
+    }
+
+    /// Settings → Buttons: every physical-button binding (buttons::BINDINGS) and
+    /// the hold-toggle that hands the keys back to s22-buttons. Returns the next y.
+    fn draw_buttons_section(&mut self, cv: &mut Canvas, y: i32) -> i32 {
+        let rows = crate::buttons::BINDINGS;
+        let row_h = 40;
+        let h = 84 + rows.len() as i32 * row_h + 16;
+        let r = Rect::new(M, y, W - 2 * M, h);
+        let tog = Rect::new(r.right() - 330, r.y + 14, 302, 64);
+        if !self.layout_pass && r.hits(&cv.clip) {
+            cv.rrect(&r, 28, SURF);
+            self.txt(cv, Face::Bold, 34, r.x + 28, r.y + 58, "Buttons", TEXT);
+            let on = self.buttons_enabled;
+            cv.rrect(&tog, 20, if self.is_pressed(&Act::ButtonsToggle) { PRESS } else if on { ACCENT_P } else { SURF2 });
+            self.txt_center(cv, Face::Regular, 26, tog, if on { "shell · hold: off" } else { "s22-buttons · hold: on" }, TEXT);
+            let mut yy = r.y + 84 + 28;
+            for (k, v) in rows.iter() {
+                self.txt(cv, Face::Bold, 27, r.x + 28, yy, k, TEXT);
+                let vv = self.fonts.ellipsize(Face::Regular, 27, v, r.w - 420);
+                self.txt(cv, Face::Regular, 27, r.x + 390, yy, &vv, DIM);
+                yy += row_h;
+            }
+        }
+        self.hit(tog, Act::ButtonsToggle);
+        self.hold_last(800);
+        y + h + M / 2
     }
 
     fn hold_last(&mut self, ms: u32) {
@@ -2590,6 +2842,104 @@ mod tests {
         let v = json!({"rc": 0, "sensor": "rear", "exposure_us": 20000, "gain": 8.0, "develop_ok": false, "develop_error": "no s22-develop"});
         assert!(camera_summary(&v).contains("raw preview only (no s22-develop)"));
         assert_eq!(camera_summary(&json!({"rc": 0})), "captured");
+    }
+
+    #[test]
+    fn button_actions_level_overlay_lock_and_wake() {
+        use crate::buttons::Action as B;
+        let mut a = app("/nonexistent");
+        a.level = 4;
+        a.damage.clear();
+        a.button_actions(&[B::Step(1)], 1000);
+        assert_eq!(a.level, 5);
+        assert_eq!(a.effects, vec![Effect::Level(5)]);
+        assert_eq!(a.osd.as_ref().map(|o| (o.title.as_str(), o.level)), Some(("Volume 5", Some(5))));
+        assert_eq!(a.mark, Some((1000, "button")), "the overlay frame is timed from the key event");
+        // hold: the step is undone, the overlay goes, and mute keeps the old level for unmute
+        a.effects.clear();
+        a.button_actions(&[B::Revert, B::Mute], 2000);
+        assert_eq!(a.level, 0);
+        assert_eq!(a.effects, vec![Effect::Level(4), Effect::Level(0)]);
+        assert_eq!(a.osd.as_ref().unwrap().title, "Muted");
+        a.button_actions(&[B::Mute], 3000);
+        assert_eq!(a.level, 4, "unmute restores");
+        for _ in 0..20 {
+            a.button_actions(&[B::Step(1)], 4000);
+        }
+        assert_eq!(a.level, 10, "clamped");
+        // the overlay expires
+        let until = a.overlay_deadline().unwrap();
+        a.expire_overlays(until);
+        assert!(a.osd.is_none());
+        // Power: lock + panel off; wake keeps the lock cover
+        a.effects.clear();
+        a.button_actions(&[B::Lock], 5000);
+        assert!(a.locked);
+        assert_eq!(a.effects, vec![Effect::Display(false)]);
+        a.display_on = false;
+        a.effects.clear();
+        a.button_actions(&[B::Wake], 6000);
+        assert_eq!(a.effects, vec![Effect::Display(true)]);
+        assert!(a.locked);
+        // sway has the panel: s22-display does it
+        a.active = false;
+        a.effects.clear();
+        a.button_actions(&[B::Lock], 7000);
+        assert_eq!(a.effects, vec![Effect::Native(vec!["/srv/s22/hardware/bin/s22-display".into(), "off".into()])]);
+    }
+
+    #[test]
+    fn button_chords_camera_screenshot_keep_awake_and_ptt() {
+        use crate::buttons::Action as B;
+        let mut a = app("/nonexistent");
+        a.locked = true;
+        a.button_actions(&[B::Wake, B::Camera], 1);
+        assert!(!a.locked && a.page == Page::Camera);
+        a.goto(Page::Home);
+        a.effects.clear();
+        a.button_actions(&[B::Step(-1), B::Revert, B::Screenshot], 2);
+        assert!(a.osd.is_none(), "no level overlay in the screenshot");
+        assert_eq!(a.effects.last(), Some(&Effect::Screenshot));
+        a.screenshot_taken("screenshot-1.png");
+        assert!(a.flash_until.is_some());
+        assert_eq!(a.files_dir, GALLERY);
+        assert!(a.cards.iter().any(|c| c.title == "Screenshot saved"));
+        a.expire_overlays(a.flash_until.unwrap());
+        assert!(a.flash_until.is_none());
+        // keep awake inhibits the screen timeout
+        a.button_actions(&[B::KeepAwake], 3);
+        assert_eq!(a.idle_inhibitor(), Some("keep screen on (Power + Volume up)"));
+        a.button_actions(&[B::KeepAwake], 4);
+        assert_eq!(a.idle_inhibitor(), None);
+        // push-to-talk goes to the same hook with the same environment as s22-buttons
+        a.effects.clear();
+        a.button_actions(&[B::Revert, B::PttStart(1000)], 5);
+        let Some(Effect::Assistant(cmd, env)) = a.effects.iter().find(|e| matches!(e, Effect::Assistant(..))).cloned() else { panic!("no assistant") };
+        assert_eq!(cmd, "/srv/s22/buttons/hooks/assistant");
+        assert!(env.contains(&("S22_PTT".into(), "hold".into())));
+        assert!(env.contains(&("S22_PTT_STOP".into(), "/srv/s22/buttons/ptt-release".into())));
+        assert_eq!(a.idle_inhibitor(), Some("voice turn"));
+        a.button_actions(&[B::PttRelease(2500)], 6);
+        assert_eq!(a.effects.last(), Some(&Effect::PttRelease(2500)));
+    }
+
+    #[test]
+    fn settings_lists_every_button_binding_and_the_toggle() {
+        let mut a = app("/nonexistent");
+        a.goto(Page::Settings);
+        a.layout();
+        let tog = a.hits.iter().find(|h| h.act == Act::ButtonsToggle).expect("toggle").clone();
+        assert_eq!(tog.hold_ms, 800);
+        assert!(tog.r.bottom() < H - EDGE_B, "fits above the bottom edge");
+        let d = std::env::temp_dir().join(format!("fs-buttons-{}.json", std::process::id()));
+        a.buttons_cfg = d.to_string_lossy().into();
+        a.activate(Act::ButtonsToggle, 0);
+        assert!(!a.buttons_enabled);
+        assert!(!crate::buttons::load_enabled(&a.buttons_cfg));
+        a.activate(Act::ButtonsToggle, 0);
+        assert!(crate::buttons::load_enabled(&a.buttons_cfg));
+        let _ = std::fs::remove_file(&d);
+        assert_eq!(crate::buttons::BINDINGS.len(), 9);
     }
 
     #[test]
