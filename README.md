@@ -53,6 +53,7 @@ Two days of agent work, every item measured on the phone:
 | 👆 **UI** | 63–120 ms per page | Rust KMS shell, ~9 ms; Samsung's Vulkan driver can also scan out with zero copy |
 | 📷 **Camera** | raw Bayer frames | software ISP: demosaic, white balance, stock colour matrix, burst denoise |
 | 📶 **Mobile** | "LTE only" | 5G NSA was already on (n78, 97 Mbit/s down); our modem daemon now sees it |
+| 🔌 **Untethered** | internet through the USB cable | own SIM data with automatic Wi-Fi ⇄ mobile failover (~3 s); USB unplugged and Wi-Fi gone, still reachable over Tailscale (35–56 ms), even asleep |
 | 🧠 **NPU** | one stock model | 16/17 stock models + our own TFLite models compiled on the phone (keyword spotting in 0.5 ms) |
 | 🔋 **Battery** | 5.8 %/h locked | deep suspend: 1.1 %/h, still reachable over Tailscale |
 | 🛰️ **GPS** | never powered | GNSS core runs in a sandbox, tracks real satellites (no fix indoors yet) |
@@ -64,7 +65,7 @@ Two days of agent work, every item measured on the phone:
 |---|---|
 | ✅ **Boot** | Native Linux from RECOVERY with our own `/init`; no Android services; reboots without touching the phone (`s22-reboot recovery`) |
 | ✅ **System** | Persistent Arch Linux ARM + sway (under the Rust shell) on internal storage; starts by itself after a reboot |
-| ✅ **Network** | Wi-Fi with autostart, Tailscale, USB SSH; mobile data over the modem with 5G NSA (LTE + NR n78, ~97 Mbit/s down measured) |
+| ✅ **Network** | Wi-Fi with autostart, Tailscale, USB SSH; mobile data over the modem with 5G NSA (LTE + NR n78, ~97 Mbit/s down measured); `s22-netpolicy` picks Wi-Fi > mobile > USB with automatic failover, so the phone works and stays reachable over Tailscale with no USB and no Wi-Fi (verified with the cable really unplugged) |
 | ✅ **AI** | Stock Samsung NPU models (`.nnc`) run on the NPU through ENN (16/17 stock models, e.g. face parsing in 3.7 ms); our own TFLite models are compiled on the phone with Samsung's NPU compiler (keyword spotting in 0.34 ms, verified against the CPU); local 2B model on the GPU (Samsung's Vulkan driver in an isolated runtime) and 4B on the CPU; OpenUnum agent with GPT Luna by default and the local model as offline fallback |
 | ✅ **Phone stack** | SIM and SMS ready through our own modem daemon (`s22-phoned`, outbound off by default) |
 | ✅ **Voice** | The phone talks through its own speaker (English + two Greek voices); push-to-talk or the Talk button; while the agent thinks it plays short "hmm, let me check…" clips and speaks its thinking |

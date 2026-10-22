@@ -3308,3 +3308,35 @@ Details: `evidence/npu-custom-20261022/README.md`. Tools: `tools/hardware/npu/nn
 - Not verified on the phone: Camera-page, streaming-chat, agent-question and Talk inhibitors (covered by unit tests
   only; Talk plays audio); the Settings buttons by touch (rendered offscreen only); the 0 = never setting live; a real
   finger. The "9.4 ms" page figure from earlier today was not reproduced (12.3 ms measured with the 10-21 method).
+
+### 2026-10-22 (morning) — Network independence: own SIM data, no Wi-Fi, no USB; `s22-netpolicy`
+
+- **Safety:**
+  - The Ally reaches the phone over USB ECM with `ssh -J rog root@10.55.0.2`. The Ally's own key is not authorised, but the jump works.
+  - The new `s22-net-deadman` (setsid, wall-clock timer) was armed before every link-removing test. It was self-tested with a marker route: it fired after 20 s, and a cancel was tested too.
+  - Its restore was changed during the session so that it never pauses the policy and never forces the USB route. Restore now means "best available link"; if no default route is left, it adds ecm0 when it has carrier, else a mobile data call.
+- **Mobile data alone:** the data call came up in < 1 s. HTTP 204 with the socket and DNS bound to rmnet0 (carrier DNS and 1.1.1.1); public IP <carrier-ip>; ping 28 ms; 2 MB at 46 Mbit/s.
+- **Before:** the boot-time `default via 10.55.0.1 dev ecm0` (metric 0) sent all internet and Tailscale through the Ally's NAT.
+- **`s22-netpolicy`:** a keepalive service that picks Wi-Fi > mobile > USB.
+  - The chosen uplink gets a metric-50 default; the link routes stay as fallbacks. The ecm0 default is removed.
+  - Mobile is dialled through phoned when Wi-Fi is unusable and released 120 s after Wi-Fi returns.
+  - resolv.conf follows the uplink.
+  - **First bug — flapping:** the Wi-Fi probe failed on single lost packets, which made the uplink flap once. The probe is now `-4`, two tries, 3 failures.
+  - **Second bug — lost route:** `ip link set wlan0 down/up` drops the kernel default route and udhcpc does not notice. A manual `kill -USR1` renew made udhcpc decline its own address (ARP check) and take a new one. netpolicy now re-adds the lease route itself.
+  - 8 host tests, added to the host runner.
+- **Wi-Fi down:**
+  - With mobile already up, failover took 3 s.
+  - From cold (dial included), failover also took 3 s. The rig lost about 6 s of Tailscale pings, then got a **direct** path via <carrier-ip> at 35–56 ms. SSH took 0.8 s.
+  - Failback took 8.5 s after `wlan0 up` (re-association); the Tailscale path returned to the LAN once mobile was released.
+- **USB:**
+  - **Simulated unplug:** `echo disconnect > /sys/class/udc/10b00000.dwc3/soft_connect`; the Ally logged "USB disconnect". Everything stayed healthy.
+  - **Worst case** (+ wlan0 down): reachable over mobile + Tailscale, 0 % loss, avg 46 ms.
+  - **Finding:** after a soft disconnect the UDC state still reads `configured`, so autosleep's usb-host check would be fooled. That is harmless now, because `suspend_on_usb` is true.
+  - The owner then **unplugged for real** (`udc=not attached`) and left home; the phone stays reachable on mobile.
+- **Suspend on mobile only:** the phone sleeps. A rig `tailscale ping` woke it through the modem (`cp_mbox_irq`) in 0.42 s and 0.54 s. Sleep is shallower than on Wi-Fi: frequent CP wakes, a rough ~5 %/h. No cap was needed because reachability was verified.
+- **Data:**
+  - Total use about 6.1 MB.
+  - Idle while awake on mobile: about 1.9 MB/h.
+  - Mobile up as an unused backup: ~0 bytes.
+- **Rules kept:** no calls, no SMS, no package installs, no flashing. The shell, audio, voice and GNSS were not touched.
+- **Evidence:** `evidence/network-independence-20261022/`.
