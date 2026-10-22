@@ -12,7 +12,11 @@ the rig's ~/.openunum/assets/voice-fillers:
   <out>/<lang>/<category>/<n>.wav      (n starts at 1)
   <out>/manifest.json                  {"version":1,"generatedAt":..,"clips":{lang:{cat:[{n,phrase,durationSec}]}}}
 
-  s22-render-fillers [--phrases FILE] [--out DIR] [--only en|el] [--force]
+  s22-render-fillers [--phrases FILE] [--out DIR] [--only en|el] [--force] [--renorm]
+
+Every clip is loudness-normalised (s22_loudnorm: -16 LUFS, peak <= -2 dBFS), the same target
+s22-say applies to answers, so a filler and the answer after it play at one volume.
+--renorm only re-normalises the clips that exist (no synthesis; the voice is unchanged).
 """
 from __future__ import annotations
 
@@ -29,6 +33,13 @@ CHROOT = Path('/mnt/omarchy-trial')
 DEFAULT_OUT = CHROOT / 'root/.openunum/assets/voice-fillers'
 DEFAULT_PHRASES = Path(__file__).resolve().parent / 'filler-phrases.json'
 SAY = '/srv/s22/hardware/bin/s22-say'
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'bin'))
+sys.path.insert(0, '/srv/s22/hardware/bin')
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+try:
+    import s22_loudnorm as LN
+except ImportError:          # old install: s22-say normalises renders itself
+    LN = None
 
 
 def wav_seconds(path: Path) -> float:
@@ -50,11 +61,12 @@ def main(argv=None) -> int:
     ap.add_argument('--out', default=str(DEFAULT_OUT))
     ap.add_argument('--only', choices=['en', 'el'])
     ap.add_argument('--force', action='store_true', help='re-render clips that already exist')
+    ap.add_argument('--renorm', action='store_true', help='only loudness-normalise existing clips')
     args = ap.parse_args(argv)
     bank = json.loads(Path(args.phrases).read_text())['phrases']
     out = Path(args.out)
     manifest = {'version': 1, 'generatedAt': time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime()),
-                'voice': 'phone s22-say default engine (en) / el-antonis (el)', 'clips': {}}
+                'voice': 'phone s22-say supertonic sid0 F1 (en) / el-antonis (el), -16 LUFS', 'clips': {}}
     done = skipped = 0
     for lang, cats in bank.items():
         if args.only and lang != args.only:
@@ -63,7 +75,14 @@ def main(argv=None) -> int:
             entries = []
             for i, phrase in enumerate(phrases, 1):
                 wav = out / lang / cat / f'{i}.wav'
-                if args.force or not wav.is_file():
+                if args.renorm:
+                    if not wav.is_file():
+                        raise SystemExit(f'--renorm: missing clip {wav}')
+                    if LN is None:
+                        raise SystemExit('--renorm needs s22_loudnorm.py')
+                    LN.normalise_file(wav)
+                    skipped += 1
+                elif args.force or not wav.is_file():
                     render(phrase, wav)
                     done += 1
                 else:

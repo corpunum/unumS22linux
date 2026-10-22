@@ -707,6 +707,100 @@ class FastVoiceTests(unittest.TestCase):
             M.WsClient('wss://example.com/x')
 
 
+class FillerTests(unittest.TestCase):
+    """Pre-rendered filler clips and the loudness leveler on the call audio (2026-10-22)."""
+
+    class Bank:
+        def __init__(self, path):
+            self.path, self.asked = path, []
+
+        def pick(self, question, second=False):
+            self.asked.append((question, second))
+            return self.path, {'lang': 'en', 'category': 'general', 'n': 1, 'phrase': 'Hmm...'}
+
+    class PlayRtp(FakeRtp):
+        def play_wav(self, path):
+            rate, s = M.read_wav(path)
+            self.play(M.resample(s, rate, M.RATE))
+            return len(s) / rate
+
+    def make_clip(self, d):
+        clip = str(Path(d) / 'f.wav')
+        M.write_wav(clip, 8000, M.tone(500, 0.3, amp=4000))
+        return clip
+
+    def test_leveler_raises_quiet_and_limits_loud_speech(self):
+        def active_rms_db(x):
+            frames = [x[i:i + 160] for i in range(0, len(x) - 160, 160)]
+            r = [math.sqrt(sum(v * v for v in f) / 160) for f in frames]
+            r = [v for v in r if v > 30]
+            return 20 * math.log10(math.sqrt(sum(v * v for v in r) / len(r)) / 32768)
+        for amp in (1500, 4000, 30000):
+            lv = M.Leveler()
+            tone_ = M.tone(300, 6.0, amp=amp)
+            out = lv.process(tone_)
+            tail = out[-8000:]
+            self.assertAlmostEqual(active_rms_db(tail), -16.0, delta=1.5, msg=amp)
+            self.assertLessEqual(max(abs(v) for v in out), 32767 * 10 ** (-2.0 / 20) + 1)
+        silent = M.Leveler().process(array.array('h', [0] * 800))
+        self.assertEqual(max(silent), 0)
+
+    def test_classic_loop_plays_filler_clip_while_agent_thinks(self):
+        with tempfile.TemporaryDirectory() as d:
+            bank = self.Bank(self.make_clip(d))
+            rtp = self.PlayRtp()
+
+            def chat(text):
+                time.sleep(0.9)
+                return 'done'
+            loop = M.VoiceLoop(rtp, lambda w: 'x', chat, lambda t, o: M.write_wav(o, 8000, M.tone(700, 0.1)), d,
+                               fillers=bank, filler_delay_s=0.2, filler_second_s=0.5, filler_repeat_s=5, log=quiet)
+            self.assertEqual(loop._chat_with_filler('what is the weather', 'turn-001'), 'done')
+            self.assertEqual(bank.asked, [('what is the weather', False), ('what is the weather', True)])
+            self.assertEqual(len(rtp.played), 2)
+            self.assertEqual(len(loop.turn_fillers), 2)
+
+    def test_classic_loop_without_bank_keeps_spoken_one_moment(self):
+        with tempfile.TemporaryDirectory() as d:
+            rtp = self.PlayRtp()
+            spoken = []
+            loop = M.VoiceLoop(rtp, lambda w: 'x', lambda t: (time.sleep(0.4), 'ok')[1],
+                               lambda t, o: (spoken.append(t), M.write_wav(o, 8000, M.tone(700, 0.1)))[0], d,
+                               still_working_s=0.1, log=quiet)
+            self.assertEqual(loop._chat_with_filler('hi', 'turn-001'), 'ok')
+            self.assertEqual(spoken, ['One moment.'])
+
+    def test_fast_voice_fills_the_silence_until_the_rig_answers(self):
+        srv = MiniWsServer(); self.addCleanup(srv.close)
+        with tempfile.TemporaryDirectory() as d:
+            bank = self.Bank(self.make_clip(d))
+            rtp = self.PlayRtp()
+            loop = M.FastVoiceLoop(rtp, f'ws://127.0.0.1:{srv.port}', snapshot_fn=None, log=quiet, fillers=bank,
+                                   leveler=M.Leveler(), filler_delay_s=0.2, filler_second_s=0.5, filler_repeat_s=5)
+            loop.attach()
+            try:
+                self.assertTrue(srv.up.wait(2))
+                srv.push(0x1, json.dumps({'type': 'asr_final', 'text': 'tell me a story'}).encode())
+                self.assertTrue(wait_for(lambda: len(rtp.played) == 1, 3))       # filler after the delay
+                reply = M.tone(700, 0.3, amp=900)
+                srv.push(0x2, reply.tobytes() if sys.byteorder == 'little' else M._le(reply).tobytes())
+                self.assertTrue(wait_for(lambda: len(rtp.played) == 2, 3))
+                self.assertGreater(max(rtp.played[1]), 900)                      # leveled up toward the target
+                time.sleep(0.8)
+                self.assertEqual(len(rtp.played), 2)                             # answered: no second filler
+                srv.push(0x1, json.dumps({'type': 'metrics', 'turn': 1, 'spoken': ['Once.']}).encode())
+                self.assertTrue(wait_for(lambda: loop.turns, 3))
+                self.assertEqual(loop.turns[0]['fillers'], ['en/general/1'])
+            finally:
+                loop.stop()
+
+    def test_preset_tts_uses_s22_say_render_only(self):
+        argv = M.fill_template(M.PRESETS['s22-outer']['tts'], '/mnt/omarchy-trial',
+                               text='Γεια σου', out='/mnt/omarchy-trial/tmp/s22-sip/a.wav')
+        self.assertEqual(argv[:3], ['env', 'S22_SAY_OUT=/mnt/omarchy-trial/tmp/s22-sip/a.wav', '/srv/s22/hardware/bin/s22-say'])
+        self.assertEqual(argv[-2:], ['--', 'Γεια σου'])
+
+
 class CliTests(unittest.TestCase):
     def test_tone_and_voice_loop_guard(self):
         with tempfile.TemporaryDirectory() as d:

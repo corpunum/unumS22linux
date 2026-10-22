@@ -30,10 +30,10 @@ done <<LIST
 sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8 17f945007b52ccd8b7200ffc7c5652e9e8e961dfdf479cefcabd06cf5703630b
 sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27 9ec31b342d8fa3240c3b81b8f82e1cf7e3ac467c93ca5a999b741d5887164f8d
 LIST
-# Earcons: rising two-tone = listening, falling = got it (48 kHz stereo).
+# Earcons: rising two-tone = listening, falling = got it (48 kHz stereo, level matched to speech at -16 LUFS).
 chroot /mnt/omarchy-trial /usr/bin/python3 - <<'PY'
 import array, math, wave
-def tone(freqs, path, d=0.11, amp=9000, sr=48000):
+def tone(freqs, path, d=0.11, amp=7500, sr=48000):
     a = array.array('h')
     for f in freqs:
         n = int(sr * d)

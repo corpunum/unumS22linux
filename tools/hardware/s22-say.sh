@@ -65,6 +65,14 @@ run() { chroot "$CHROOT" /usr/bin/env LD_LIBRARY_PATH=$OPT/usr/lib ESPEAK_DATA_P
 batch() { run $OPT/usr/bin/amixer -c0 -q -s < "$MIX/$1.amixer"; }
 
 TTS=/opt/s22-tts
+# Loudness (2026-10-22): every synthesized answer is normalised at render time to one target
+# (-16 LUFS, peak <= -2 dBFS) so all engines/voices and the pre-rendered filler clips play at the
+# same volume (Supertonic rendered ~-26 LUFS, Piper/Greek ~-21, the earcons ~-14). --wav inputs are
+# played as given (clips are normalised when they are made). S22_LOUDNORM=off disables it.
+LOUDNORM_PY=${S22_LOUDNORM_PY:-/srv/s22/hardware/bin/s22_loudnorm.py}
+loudnorm() {   # $1 = WAV path on the outer filesystem; never fails
+  [ "${S22_LOUDNORM:-on}" = off ] || [ ! -f "$LOUDNORM_PY" ] || python3 -I -B "$LOUDNORM_PY" "$1" >/dev/null 2>&1 || :
+}
 # Greek letters are U+0370-03FF (UTF-8 lead bytes 0xCE/0xCF). Checked byte-wise with tr: busybox ash matches
 # case patterns per character, so a lone lead byte never matches there.
 if [ -z "$ENGINE_SET" ] && [ -n "$TEXT" ]; then
@@ -129,6 +137,7 @@ if [ -n "${S22_SAY_OUT:-}" ]; then   # render only: never touches the sound card
     [ "$ENGINE" = espeak ] || echo "s22-say: $ENGINE failed, falling back to espeak-ng" >&2
     run $OPT/usr/bin/espeak-ng -a "$AMP" -s 150 -w "$R" "$TEXT" || { rm -f "$CHROOT$R"; exit 1; }
   fi
+ loudnorm "$CHROOT$R"
   cp "$CHROOT$R" "$S22_SAY_OUT.tmp" && mv "$S22_SAY_OUT.tmp" "$S22_SAY_OUT"; rc=$?
   rm -f "$CHROOT$R"; exit $rc
 fi
@@ -159,12 +168,13 @@ if [ -z "$WAV" ]; then
     run $OPT/usr/bin/espeak-ng -a "$AMP" -s 150 -w "$WAV" "$TEXT" || exit 1
   fi
   CLEANWAV=1
+  loudnorm "$CHROOT$WAV"
 fi
 
 # Speech level (2026-10-21, owner wants the phone to talk): the resting state
 # stays muted (s22-keepalive enforce_mute; it skips the check while this
 # script holds /run/s22-say.lock). If the amps are at 0, raise them to
-# S22_SAY_LEVEL (s22-buttons scale 0-10, default 4 = -24 dB) for this playback
+# S22_SAY_LEVEL (s22-buttons scale 0-10, default 6 = -16 dB; 4 before the loudness normalisation) for this playback
 # only and put the previous raw value back on exit. A non-zero level chosen
 # with the volume keys is left as it is. S22_SAY_LEVEL=0 plays silently.
 amx() { run $OPT/usr/bin/amixer -c0 -q "$@"; }
@@ -176,8 +186,8 @@ trap 'exit 130' INT TERM
 batch "$ROUTE" || exit 1
 # Runtime override without touching callers (quiet hours, tests): a level in
 # /run/s22-say.level applies when S22_SAY_LEVEL is not set.
-LVL=${S22_SAY_LEVEL:-$(cat /run/s22-say.level 2>/dev/null || echo 4)}
-case "$LVL" in ''|*[!0-9]*) LVL=4;; esac
+LVL=${S22_SAY_LEVEL:-$(cat /run/s22-say.level 2>/dev/null || echo 6)}
+case "$LVL" in ''|*[!0-9]*) LVL=6;; esac
 if [ "${OLDL:-0}" = 0 ] && [ "${OLDR:-0}" = 0 ] && [ "$LVL" -gt 0 ] 2>/dev/null; then
   [ "$LVL" -le 10 ] || LVL=10
   RAW=$((817 - (10 - LVL) * 32))
