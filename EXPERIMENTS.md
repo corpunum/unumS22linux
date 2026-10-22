@@ -3165,3 +3165,60 @@ Evidence: `evidence/modem-5g-20261021/`.
 - **After stop:** Kepler HOLD_RESET. Modem ONLINE, SIM READY, registered, SMS ready, Wi-Fi/Tailscale/BT fine, no reboot.
 - **Evidence:** `evidence/gnss-20261022/run-*.txt`.
 
+
+### 2026-10-22 (early morning) — Power: baseline drain, powersave governor, deep suspend works, s22-autosleep
+
+**Measurement method:**
+- **Setup:** the phone was locked with the fastshell Power-key lock (DPMS off). USB went to the Ally host.
+- **Battery only:** Samsung slate mode (`batt_slate_mode=1`, which votes the charger to BUCK_OFF) took the USB input away, so the battery fed the phone. ECM and SSH stayed up.
+- **Restored:** slate went back to 0 at the end, and the phone charges again.
+- **Awake drain:** `current_now`, sampled every 5 s.
+- **Drain while suspended:** the fuel gauge `batt_read_raw_soc` (0.01 % steps). Its slope matched `current_now` on an awake control run: 160 vs 172 mA.
+- **Not used:** `charge_counter` (SOC-derived, units don't match mAh).
+
+**Baseline:** locked, schedutil, every service running: **192 mA, 5.8 %/h** over 15 min.
+- **CPU:** 0.9 % busy.
+- **Wakers:** schedutil `fast_switch_pos` at 82 wakes/s was the top one.
+- **D-state threads:** the TZ `tz_worker_threa`×8 and `tz_iwlog_thread` keep load at about 14, but use no CPU.
+- **Active wakeup sources:** with the screen off, only `dwc3-otg` and `usb_notify` remain.
+
+**Cheap win:** the `powersave` governor on all clusters gives **171 mA** (−11 %). The fast-switch wakeups stop. No services were stopped: they were all idle, and the remaining wakers (tailscaled, OpenUnum node, phoned, unumsearch) are each at 5–30/s.
+
+**Suspend, step by step:**
+- **pm_test ladder:** freezer, devices, platform, processors and core all resumed cleanly. On the first core try, `cnss_pci` returned −EAGAIN because WLAN was busy; the retry was ok.
+- **Real deep suspend:**
+  - mode 8;
+  - the AP SoC went down (apsoc_count 0→1) and MIF went down 5 times;
+  - the wake came from `wlan_pci_wake_irq`;
+  - everything was healthy afterwards.
+- **QCA6490 WoW:** it works out of the box. qcacld enables WoW on system suspend, and the PCIe wake IRQ resumes the AP.
+- **RTC wake:** verified with the `s2mps25` PMIC (`SYSINT vGPIO2PMU_EINT1`).
+- **Not tested:** the Power key and a modem-originated SMS/call wake. Physical presence or an external sender would be needed.
+
+**`s22-autosleep`** (`tools/hardware/power/`) is a keepalive service.
+- **Screen off:** the governors go to powersave. After 30 s idle, it runs suspend cycles with the RTC set to 15 min, staying awake at least 6 s after each wake.
+- **Race-free:** the `wakeup_count` handshake is used when no USB source is active.
+- **Inhibitors:** SSH session, running PCM, active call, CPU above 25 %, inhibit files, USB host (default), and active kernel wakeup sources.
+- **Kill switch:** `s22-autosleep off` (persistent).
+- **Clean 20-min run:** **36 mA, 1.1 %/h**, 89 % of the time asleep, 18 cycles, 2 aborts (WLAN -EAGAIN, retried).
+- **Wake rate:** Tailscale disco UDP from the rig wakes the phone about every 113 s (decoded from the qcacld wake-packet dump).
+- **SSH:** it reaches the sleeping phone in 5.6 s.
+
+**Health after about 60 cycles:**
+- Wi-Fi, Tailscale, modem/SIM/SMS registered, ABOX card, hci0, fastshell, touch evdev and USB ECM were all ok.
+- The panel came back on via `s22-touchd power` (`dpms on: Ok`).
+- There were no keepalive restarts.
+
+**Mistake:** busybox `timeout` did not stop the first test daemon. Two daemons then raced during the second window, so its cycle counts are invalid. The energy figure still holds. The daemon now takes a flock.
+
+**Restored:**
+- slate 0;
+- the test config was removed, so the phone stays awake while a USB host is attached;
+- the governors follow the screen.
+
+**Not tested:**
+- reboot autostart;
+- audio playback, BT traffic or voice after resume;
+- physical touch.
+
+**Evidence:** `evidence/power-20261022/`.

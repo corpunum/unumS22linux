@@ -1,0 +1,22 @@
+window 45s, total switches 11199 (248.9/s)
+  wake/s  cpu_t     pid     tid  process/thread
+   30.18      7    1579    1580  tailscaled/tailscaled
+   18.22     10      12      12  rcu_preempt/rcu_preempt
+   18.18      2      59      59  kworker/7:0-uether/kworker/7:0-uether
+   12.96      5    6806    6806  kworker/u16:1-events_unbound/kworker/u16:1-events_unbound
+   11.02      0      58      58  ksoftirqd/7/ksoftirqd/7
+    9.96      2    2618    2618  bt-qca6490-hci-/bt-qca6490-hci-
+    9.69      1    1508    1508  irq/244-dwc3/irq/244-dwc3
+    7.98     29    6455    6456  unumsearch/unumsearch
+    7.40      2   15605   15605  kworker/0:0-events/kworker/0:0-events
+    6.31      2      11      11  ksoftirqd/0/ksoftirqd/0
+    6.00     26    1678    1678  node/node
+    5.40      4    4394    4397  python3/Thread-1 (serve
+    5.02      4    2716    2716  python3/python3
+    5.02      2    6455    6465  unumsearch/notify-rs inoti
+    4.98      3    7612    7612  kworker/u16:2-wmi_rx_diag_event_work_/kworker/u16:2-wmi_rx_diag_event_work_
+    4.98      3    4394    4398  python3/Thread-2 (serve
+    4.36     15    1579    1581  tailscaled/tailscaled
+    4.36     14    1579    1584  tailscaled/tailscaled
+    4.22     11    1579    1583  tailscaled/tailscaled
+    4.13      3     252     252  simpleinteracti/simpleinteracti

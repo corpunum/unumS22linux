@@ -1,7 +1,40 @@
 # S22 native Linux status
 
-Updated 2026-10-22 (camera ISP, 5G badge, GNSS plan); 2026-10-21 (fast touch shell); earlier sections updated 2026-10-06 by the Claude lead session.
+Updated 2026-10-22 (suspend-to-RAM + autosleep; camera ISP, 5G badge, GNSS plan); 2026-10-21 (fast touch shell); earlier sections updated 2026-10-06 by the Claude lead session.
 The 2026-10-02 task board and earlier checkpoints below are historical.
+
+## Suspend-to-RAM and autosleep — 2026-10-22 (early morning)
+
+**The phone now really sleeps when locked.** It goes into deep suspend (`mem_sleep` = deep, the AP SoC and MIF power down) on the stock Samsung kernel, with no Android suspend daemon.
+
+| Locked, screen off, battery only | Drain |
+|---|---|
+| Before (schedutil, everything running) | **192 mA = 5.8 %/h** |
+| `powersave` governor only | 171 mA = 5.1 %/h |
+| **s22-autosleep** | **36 mA = 1.1 %/h** (20 min run, 89 % of the time asleep) |
+
+- **How it was measured:** USB input was switched off with Samsung slate mode, so the battery fed the phone. The slate mode was restored afterwards.
+- **Wake sources:**
+  - **Wi-Fi WoW:** verified. SSH over Tailscale reaches the sleeping phone in about 5.6 s. Tailscale disco packets from the rig wake it about every 113 s.
+  - **RTC alarm:** verified.
+  - **Modem:** stayed ONLINE, registered and SMS-ready over about 60 cycles. A wake by an incoming SMS or call itself was not tested.
+  - **Power key:** not physically tested. It shares the PMIC wake path with the RTC, and wakeup is enabled.
+- **Health after every resume:** Wi-Fi, Tailscale, modem/SMS, ABOX card, hci0, fastshell, the touch evdev and USB ECM were all fine. The panel came back on with DPMS after the cycles.
+
+**`s22-autosleep`** (`tools/hardware/power/`) is a keepalive service. It runs now, and keepalive starts it at the next boot (not yet tested across a reboot).
+- **Screen off:** the governors go to powersave. After 30 s idle it starts suspend cycles of up to 15 min (RTC housekeeping), with at least 6 s awake after each wake.
+- **It stays awake while any of these holds:**
+  - an SSH session is open;
+  - a PCM is running (voice, `s22-say`);
+  - a call is active;
+  - CPU is above 25 %;
+  - an inhibit file exists in `/run/s22-autosleep/inhibit.d/`;
+  - the USB data host is attached (`suspend_on_usb`, default false);
+  - a kernel wakeup source is active.
+- **Commands:** `s22-autosleep off` / `on` is the one-command kill switch (persistent). `s22-autosleep status` shows the state.
+- **No shell changes were needed:** it follows `/run/s22-display-state`.
+
+[Evidence](evidence/power-20261022/README.md).
 
 ## Processed camera photos, 5G badge, GNSS tracking — 2026-10-22 (late)
 

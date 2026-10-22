@@ -1,0 +1,6 @@
+{"slept_s": 0.5, "wall_s": 0.9, "err": null, "why_wake": ["IRQ 515, wlan_pci_wake_irq", "IRQ 401, cp_mbox_irq_0"], "soc0": "8072", "soc1": "8072"}
+{"slept_s": 5.5, "wall_s": 5.9, "err": null, "why_wake": ["SYSINT: vGPIO2PMU_EINT1", "IRQ 401, cp_mbox_irq_0", "IRQ 427, s2mps25-irq@13-001f"], "soc0": "8072", "soc1": "8072"}
+{"slept_s": 5.3, "wall_s": 5.9, "err": "[Errno 11] write could not complete without blocking", "why_wake": ["ABORT cnss_pci 0000:01:00.0: PM: failed to suspend: error -11", "ABORT PM: Some devices failed to suspend, or early wake event detected", "ABORT Abort: Device 0000:01:00.0 failed to suspend: error -11", "SYSINT: vGPIO2PMU_EINT1", "IRQ 401, cp_mbox_irq_0", "IRQ 427, s2mps25-irq@13-001f"], "soc0": "8071", "soc1": "8071"}
+{"slept_s": 5.5, "wall_s": 5.9, "err": null, "why_wake": ["SYSINT: vGPIO2PMU_EINT1", "IRQ 401, cp_mbox_irq_0", "IRQ 427, s2mps25-irq@13-001f"], "soc0": "8069", "soc1": "8069"}
+{"slept_s": 4.2, "wall_s": 4.6, "err": null, "why_wake": ["IRQ 515, wlan_pci_wake_irq", "IRQ 401, cp_mbox_irq_0"], "soc0": "8069", "soc1": "8069"}
+{"slept_s": 5.7, "wall_s": 6.2, "err": null, "why_wake": ["SYSINT: vGPIO2PMU_EINT1", "IRQ 401, cp_mbox_irq_0", "IRQ 427, s2mps25-irq@13-001f"], "soc0": "8068", "soc1": "8068"}
