@@ -3,6 +3,7 @@
 //! every primitive is clipped to the current damage rectangle, so a frame
 //! costs roughly the damaged area. `layout` runs the same code with an empty
 //! clip to collect the hit regions.
+use crate::config;
 use crate::ctl::{write_confirm, Call};
 use crate::font::{Face, Fonts};
 use crate::gfx::{Canvas, Rect};
@@ -353,7 +354,7 @@ impl App {
             card_seq: 0,
             confirm: None,
             prompt: None,
-            files_dir: "/root".into(),
+            files_dir: config::get().files_dir.clone(),
             files: vec![],
             viewer: None,
             phone: None,
@@ -427,41 +428,36 @@ impl App {
 
     pub fn read_sys(&mut self) {
         let rd = |p: &str| std::fs::read_to_string(p).map(|s| s.trim().to_string()).unwrap_or_default();
-        let b = "/sys/class/power_supply/battery";
+        let (cfg, sys) = (config::get(), config::sys());
+        let b = sys.battery.as_ref().map(|p| p.display().to_string()).unwrap_or_default();
         self.st.battery = rd(&format!("{b}/capacity")).parse().ok();
         self.st.bat_state = rd(&format!("{b}/status"));
         self.st.bat_temp = rd(&format!("{b}/temp")).parse::<f32>().ok().map(|t| t / 10.0);
         let mut mx = 0.0f32;
         let mut parts = vec![];
-        if let Ok(rdir) = std::fs::read_dir("/sys/class/thermal") {
-            let mut zones: Vec<_> = rdir.flatten().map(|e| e.path()).collect();
-            zones.sort();
-            for z in zones {
-                let ty = rd(&format!("{}/type", z.display()));
-                if !["BIG", "MID", "LITTLE", "G3D"].contains(&ty.as_str()) {
-                    continue;
-                }
-                if let Ok(t) = rd(&format!("{}/temp", z.display())).parse::<f32>() {
-                    let c = t / 1000.0;
-                    if c > 0.0 {
-                        mx = mx.max(c);
-                        parts.push(format!("{ty} {c:.0}"));
-                    }
+        for (ty, temp) in &sys.thermal {
+            if let Ok(t) = rd(&temp.display().to_string()).parse::<f32>() {
+                let c = t / 1000.0;
+                if c > 0.0 {
+                    mx = mx.max(c);
+                    parts.push(format!("{ty} {c:.0}"));
                 }
             }
         }
         self.st.thermal = (mx > 0.0).then_some(mx);
         self.st.thermal_detail = parts.join(" · ");
         let up = |n: &str| matches!(rd(&format!("/sys/class/net/{n}/operstate")).as_str(), "up" | "unknown");
-        let link = if up("wlan0") { "wifi" } else if up("ecm0") { "usb" } else if up("rmnet0") { "cell" } else { "" };
-        let ts = std::path::Path::new("/sys/class/net/tailscale0").exists();
+        let any_up = |v: &[String]| v.iter().any(|n| up(n));
+        let link = if any_up(&cfg.net_wifi) { "wifi" } else if any_up(&cfg.net_usb) { "usb" } else if any_up(&cfg.net_cell) { "cell" } else { "" };
+        let ts = !cfg.net_vpn.is_empty() && std::path::Path::new(&format!("/sys/class/net/{}", cfg.net_vpn)).exists();
         self.st.net = match (link, ts) {
             ("", true) => "ts".into(),
             ("", false) => "offline".into(),
             (l, true) => format!("{l} · ts"),
             (l, false) => l.into(),
         };
-        if let (Ok(b), Ok(m)) = (rd("/sys/class/backlight/panel/brightness").parse::<i32>(), rd("/sys/class/backlight/panel/max_brightness").parse::<i32>()) {
+        let bl = sys.backlight.as_ref().map(|p| p.display().to_string()).unwrap_or_default();
+        if let (Ok(b), Ok(m)) = (rd(&format!("{bl}/brightness")).parse::<i32>(), rd(&format!("{bl}/max_brightness")).parse::<i32>()) {
             self.brightness = (b, m.max(1));
         }
         self.update_clock();
@@ -1353,7 +1349,7 @@ impl App {
             }
             Act::Voice => {
                 self.voice_running = true;
-                let cmd = std::env::var("FASTSHELL_ASSISTANT").unwrap_or_else(|_| "/srv/s22/hardware/bin/s22-assistant".into());
+                let cmd = std::env::var("FASTSHELL_ASSISTANT").unwrap_or_else(|_| config::get().assistant.clone());
                 self.effects.push(Effect::Assistant(cmd, vec![("S22_BUTTON".into(), "fastshell".into())]));
                 self.add_card("Listening…", "Speak now; the answer is spoken and shown here.", 12.0);
             }
@@ -1415,8 +1411,8 @@ impl App {
                 self.dirty_content();
             }
             Act::Classic => {
-                let _ = std::fs::write("/srv/s22/state/touchui/ui-backend.tmp", "quickshell\n")
-                    .and_then(|_| std::fs::rename("/srv/s22/state/touchui/ui-backend.tmp", "/srv/s22/state/touchui/ui-backend"));
+                let f = &config::get().ui_backend_file;
+                let _ = std::fs::write(format!("{f}.tmp"), "quickshell\n").and_then(|_| std::fs::rename(format!("{f}.tmp"), f));
                 self.note = "Switching to the classic desktop…".into();
                 self.dirty_content();
             }

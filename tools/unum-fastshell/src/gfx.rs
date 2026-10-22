@@ -235,6 +235,28 @@ pub fn copy_rects(c: &Canvas, dst: *mut u8, pitch: usize, rects: &[Rect]) -> usi
     bytes
 }
 
+/// `copy_rects` for a panel that is not the canvas size: the canvas is placed
+/// at (ox, oy) on a dw x dh buffer (negative offsets crop it). Only used when
+/// the panel differs from 1080x2340; the S22 path stays `copy_rects`.
+pub fn copy_rects_at(c: &Canvas, dst: *mut u8, pitch: usize, dw: i32, dh: i32, ox: i32, oy: i32, rects: &[Rect]) -> usize {
+    let mut bytes = 0usize;
+    // the part of the canvas that lands on the buffer
+    let vis = Rect::new(0, 0, c.w, c.h).intersect(&Rect::new(-ox, -oy, dw, dh));
+    let Some(vis) = vis else { return 0 };
+    for r in rects {
+        let Some(r) = r.intersect(&vis) else { continue };
+        for y in r.y..r.y + r.h {
+            let src = &c.px[(y * c.w + r.x) as usize..(y * c.w + r.x + r.w) as usize];
+            unsafe {
+                let d = dst.add((y + oy) as usize * pitch + (r.x + ox) as usize * 4) as *mut u32;
+                std::ptr::copy_nonoverlapping(src.as_ptr(), d, r.w as usize);
+            }
+            bytes += r.w as usize * 4;
+        }
+    }
+    bytes
+}
+
 /// Merge overlapping or near rectangles so a frame has few, non-overlapping-ish copies.
 pub fn merge_rects(v: &mut Vec<Rect>) {
     let mut changed = true;

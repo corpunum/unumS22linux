@@ -13,6 +13,9 @@
 //! env: S22_TOUCH_RUN (touchd run dir, native path), FASTSHELL_CHROOT,
 //!      S22_SHELL_API, S22_SHELL_S22D, S22_SHELL_PHONED, S22_SHELL_SESSION.
 mod buttons;
+// config: FASTSHELL_CONFIG (JSON; see config.rs and PORTING.md). The
+//      built-in defaults are the S22's, so the S22 needs no config file.
+mod config;
 mod ctl;
 mod drm;
 mod font;
@@ -58,6 +61,8 @@ struct Presenter {
     pending: bool,
     pending_mark: Option<(u64, &'static str)>,
     need_modeset: bool,
+    /// canvas offset on the panel; None when the panel is 1080x2340 (S22)
+    off: Option<(i32, i32)>,
 }
 
 /// Paths and environment of the sway session underneath (for wtype / swaymsg).
@@ -76,6 +81,12 @@ impl Sway {
         let (wl, sock) = self.session();
         let mut c = std::process::Command::new("chroot");
         c.arg(&self.chroot).arg("/usr/bin/env").arg("-i").arg("HOME=/root").arg("PATH=/usr/local/bin:/usr/bin:/bin").arg("XDG_RUNTIME_DIR=/run/user/0").arg("LANG=C.UTF-8");
+        if self.chroot.is_empty() {
+            // no chroot: sway (if any) runs on the host
+            c = std::process::Command::new("/usr/bin/env");
+            c.arg("-i").arg(format!("HOME={}", std::env::var("HOME").unwrap_or_else(|_| "/root".into()))).arg("PATH=/usr/local/bin:/usr/bin:/bin");
+            c.arg(format!("XDG_RUNTIME_DIR={}", std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/run/user/0".into()))).arg("LANG=C.UTF-8");
+        }
         if !wl.is_empty() {
             c.arg(format!("WAYLAND_DISPLAY={wl}"));
         }
@@ -137,29 +148,46 @@ fn run() -> std::io::Result<()> {
         libc::signal(libc::SIGHUP, on_signal as *const () as usize);
         libc::signal(libc::SIGPIPE, libc::SIG_IGN);
     }
-    let chroot = env("FASTSHELL_CHROOT", "/mnt/omarchy-trial");
+    let (cfg, cfg_path, cfg_err) = config::Config::load();
+    config::init(cfg);
+    let cfg = config::get();
+    if let Some(e) = cfg_err {
+        log(&format!("config: {e}"));
+    }
+    let chroot = cfg.chroot.clone();
     // musl reads zoneinfo from /usr/share/zoneinfo, which the native root may lack:
-    // use the chroot's copy by absolute path, else the POSIX rule for Athens.
-    let tz = env("TZ", "Europe/Athens");
+    // use the chroot's copy by absolute path, else the POSIX fallback rule (Athens on the S22).
+    let tz = cfg.tz.clone();
     if !tz.starts_with('/') && !tz.contains(',') && !std::path::Path::new(&format!("/usr/share/zoneinfo/{tz}")).exists() {
         let alt = format!("{chroot}/usr/share/zoneinfo/{tz}");
-        std::env::set_var("TZ", if std::path::Path::new(&alt).exists() { alt } else { "EET-2EEST,M3.5.0/3,M10.5.0/4".into() });
+        std::env::set_var("TZ", if std::path::Path::new(&alt).exists() { alt } else { cfg.tz_fallback.clone() });
     }
     unsafe { tzset() };
-    let run_dir = env("S22_TOUCH_RUN", &format!("{chroot}/run/s22-touch"));
-    let state_dir = env("FASTSHELL_STATE", "/srv/s22/state/fastshell");
+    let run_dir = cfg.run_dir();
+    let state_dir = cfg.state_dir.clone();
     let _ = std::fs::create_dir_all(&state_dir);
-    let _ = std::fs::write("/run/s22-fastshell.pid", format!("{}\n", std::process::id()));
+    let _ = std::fs::write(&cfg.pid_file, format!("{}\n", std::process::id()));
+    let drm_card = config::detect_drm_card(std::path::Path::new("/sys/class/drm"), std::path::Path::new("/dev/dri"), &cfg.drm_card).unwrap_or_else(|| "/dev/dri/card1".into());
+    let sys = config::sys();
+    log(&format!(
+        "config {}: drm {drm_card}, touch {}, battery {}, backlight {}, thermal {:?}",
+        cfg_path.as_deref().unwrap_or("(built-in defaults)"),
+        touch::find_touchscreen().unwrap_or_else(|| "none".into()),
+        sys.battery.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "none".into()),
+        sys.backlight.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "none".into()),
+        sys.thermal.iter().map(|z| z.0.as_str()).collect::<Vec<_>>()
+    ));
+    let display_state = cfg.display_state_file.as_str();
     let mut pipe = [0 as RawFd; 2];
     unsafe { libc::pipe2(pipe.as_mut_ptr(), libc::O_CLOEXEC | libc::O_NONBLOCK) };
     let (tx, rx) = std::sync::mpsc::channel::<Msg>();
     let netw = Net {
         tx,
         wake_fd: pipe[1],
-        api: env("S22_SHELL_API", "http://127.0.0.1:18880"),
-        s22d: env("S22_SHELL_S22D", "http://127.0.0.1:8766"),
-        phoned: env("S22_SHELL_PHONED", "http://127.0.0.1:8095"),
-        session: env("S22_SHELL_SESSION", "touch"),
+        api: cfg.api.clone(),
+        s22d: cfg.s22d.clone(),
+        phoned: cfg.phoned.clone(),
+        session: cfg.session.clone(),
         touchd_sock: format!("{run_dir}/ctl.sock"),
         turn: Arc::new(AtomicU64::new(0)),
     };
@@ -172,7 +200,7 @@ fn run() -> std::io::Result<()> {
     net::fetch_history(&netw);
 
     let sway = Arc::new(Sway { chroot: chroot.clone() });
-    let mut seat = Seat::connect(&format!("{chroot}/run/seatd.sock"))?;
+    let mut seat = Seat::connect(&cfg.seatd_socket())?;
     seat.open_seat()?;
     let active_flag = Arc::new(AtomicBool::new(false));
     let my_session = Arc::new(AtomicI32::new(0));
@@ -224,6 +252,7 @@ fn run() -> std::io::Result<()> {
     let mut pres: Option<Presenter> = None;
     let mut cv = Canvas::new(W, H);
     let mut tdev = touch::find_touchscreen().and_then(|p| touch::TouchDev::open(&p, W as u32, H as u32).ok());
+    let mut tmap = cfg.touch_map();
     let mut evs = Vec::new();
     let mut sevs = Vec::new();
     let mut next_tick = Instant::now();
@@ -307,14 +336,14 @@ fn run() -> std::io::Result<()> {
                         active_flag.store(true, Ordering::SeqCst);
                         app.active = true;
                         if !opened_device {
-                            seat.open_device("/dev/dri/card1")?;
+                            seat.open_device(&drm_card)?;
                             opened_device = true;
                         } else if let Some(p) = pres.as_mut() {
                             p.need_modeset = true;
                             p.pending = false;
                             p.prev = vec![Rect::new(0, 0, W, H)];
                             app.display_on = true;
-                            write_state("/run/s22-display-state", "on");
+                            write_state(display_state, "on");
                             app.dirty_all();
                         }
                         // drain touches that happened under sway
@@ -338,10 +367,18 @@ fn run() -> std::io::Result<()> {
                             continue;
                         }
                         let card = Card::from_fd(fd)?;
-                        log(&format!("card1 crtc {} conn {} mode {} {}x{}", card.crtc_id, card.connector_id, card.mode_name(), card.width, card.height));
+                        log(&format!("{drm_card} crtc {} conn {} mode {} {}x{}", card.crtc_id, card.connector_id, card.mode_name(), card.width, card.height));
+                        let (pw, ph) = (card.width as i32, card.height as i32);
+                        let off = if (pw, ph) == (W, H) {
+                            None
+                        } else {
+                            tmap = cfg.touch_map().with_panel(pw, ph);
+                            log(&format!("panel {pw}x{ph} is not {W}x{H}: canvas centred at {},{}", tmap.ox, tmap.oy));
+                            Some((tmap.ox, tmap.oy))
+                        };
                         let bufs = vec![card.create_dumb()?, card.create_dumb()?];
-                        pres = Some(Presenter { card, bufs, back: 0, prev: vec![Rect::new(0, 0, W, H)], pending: false, pending_mark: None, need_modeset: true });
-                        write_state("/run/s22-display-state", "on");
+                        pres = Some(Presenter { card, bufs, back: 0, prev: vec![Rect::new(0, 0, W, H)], pending: false, pending_mark: None, need_modeset: true, off });
+                        write_state(display_state, "on");
                         app.dirty_all();
                     }
                     SeatEvent::Error(c) => log(&format!("seatd error {c}")),
@@ -360,7 +397,7 @@ fn run() -> std::io::Result<()> {
                 t.read(&mut evs);
                 if app.active {
                     for e in evs.drain(..) {
-                        app.touch(e);
+                        app.touch(tmap.apply(e));
                     }
                 }
             }
@@ -428,7 +465,7 @@ fn run() -> std::io::Result<()> {
             next_tick = now + Duration::from_secs(1);
             app.tick();
             if app.display_on && app.active {
-                let say = idle::flock_held(&env("FASTSHELL_SAY_LOCK", "/run/s22-say.lock"));
+                let say = idle::flock_held(&cfg.say_lock);
                 if app.idle_check(now, say) {
                     log(&format!("screen timeout: idle {} s, locked {} -> panel off", now.saturating_duration_since(app.last_touch).as_secs(), app.locked));
                     app.screen_timeout_off();
@@ -487,7 +524,7 @@ fn run() -> std::io::Result<()> {
                                 app.display_on = true;
                                 app.dirty_all();
                             }
-                            write_state("/run/s22-display-state", "on");
+                            write_state(display_state, "on");
                         } else {
                             // draw the lock cover first so it is what comes back
                             if app.display_on && app.active {
@@ -506,7 +543,7 @@ fn run() -> std::io::Result<()> {
                             let r = p.card.dpms(false);
                             log(&format!("dpms off: {r:?}"));
                             p.pending = false;
-                            write_state("/run/s22-display-state", "off");
+                            write_state(display_state, "off");
                         }
                     }
                 }
@@ -525,7 +562,7 @@ fn run() -> std::io::Result<()> {
                             .stderr(std::process::Stdio::null())
                             .status();
                         log(&format!("assistant exited: {st:?}"));
-                        let last = std::fs::read_to_string("/srv/s22/buttons/assistant.jsonl").ok().and_then(|s| s.lines().last().map(String::from)).unwrap_or_default();
+                        let last = std::fs::read_to_string(&config::get().assistant_log).ok().and_then(|s| s.lines().last().map(String::from)).unwrap_or_default();
                         n.send(Msg::Assistant(serde_json::from_str(&last).unwrap_or(serde_json::Value::Null)));
                     });
                 }
@@ -621,7 +658,7 @@ fn run() -> std::io::Result<()> {
     log("stopping");
     buttons::claim(false);
     let _ = seat.close_seat();
-    let _ = std::fs::remove_file("/run/s22-fastshell.pid");
+    let _ = std::fs::remove_file(&cfg.pid_file);
     Ok(())
 }
 
@@ -646,7 +683,14 @@ fn frame(app: &mut App, cv: &mut Canvas, p: &mut Presenter) -> std::io::Result<(
     cp.extend(p.prev.iter().copied());
     gfx::merge_rects(&mut cp);
     let b = &p.bufs[p.back];
-    copy_rects(cv, b.map, b.pitch as usize, &cp);
+    match p.off {
+        None => {
+            copy_rects(cv, b.map, b.pitch as usize, &cp);
+        }
+        Some((ox, oy)) => {
+            gfx::copy_rects_at(cv, b.map, b.pitch as usize, p.card.width as i32, p.card.height as i32, ox, oy, &cp);
+        }
+    }
     let t2 = now_us();
     gfx::merge_rects(&mut all);
     p.prev = all;
