@@ -40,8 +40,10 @@ pub fn request_on<S: Read + Write>(
         );
     }
     head += "\r\n";
+    // One write for headers and body: a peer that answers after its first read would
+    // otherwise close the socket under the second write ("Broken pipe").
+    head += &payload;
     s.write_all(head.as_bytes())
-        .and_then(|_| s.write_all(payload.as_bytes()))
         .map_err(|e| HttpError::Io(e.to_string()))?;
     let mut raw = Vec::new();
     let mut buf = [0u8; 4096];

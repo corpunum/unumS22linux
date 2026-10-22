@@ -181,9 +181,33 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             while let Ok((mut c, _)) = l.accept() {
+                // Read the whole request (headers + Content-Length body): the client may send the
+                // body in a second write, and answering after the first read closed the socket
+                // under it (CI: "Broken pipe" on 2026-10-22).
+                let mut req = Vec::new();
                 let mut buf = [0u8; 4096];
-                let n = c.read(&mut buf).unwrap_or(0);
-                let _ = tx.send(String::from_utf8_lossy(&buf[..n]).to_string());
+                loop {
+                    let n = c.read(&mut buf).unwrap_or(0);
+                    if n == 0 {
+                        break;
+                    }
+                    req.extend_from_slice(&buf[..n]);
+                    let text = String::from_utf8_lossy(&req);
+                    if let Some(end) = text.find("\r\n\r\n") {
+                        let want = text[..end]
+                            .lines()
+                            .find_map(|l| {
+                                l.to_ascii_lowercase()
+                                    .strip_prefix("content-length:")
+                                    .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                            })
+                            .unwrap_or(0);
+                        if req.len() >= end + 4 + want {
+                            break;
+                        }
+                    }
+                }
+                let _ = tx.send(String::from_utf8_lossy(&req).to_string());
                 let _ = write!(
                     c,
                     "HTTP/1.1 {status} X\r\nContent-Length: {}\r\n\r\n{body}",
