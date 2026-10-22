@@ -1,0 +1,16 @@
+[package]
+name = "s22-campreview"
+version = "0.1.0"
+edition = "2021"
+description = "S22 live camera preview spike: continuous V4L2 stream, 2x2 bin-to-RGB, shared-memory ring, stills from the live stream"
+license = "Apache-2.0"
+
+[dependencies]
+libc = "0.2"
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

@@ -334,3 +334,17 @@ cd s22-develop && cargo test --offline --release      # 9 tests (demosaic per pa
 ```
 
 Evidence: [`evidence/camera-develop-20261022/`](../../../evidence/camera-develop-20261022/README.md).
+
+## Live preview spike: `s22-campreview` (2026-10-22)
+
+A continuous stream works. Both sensors run at 30 fps for minutes, given **4 leader (shot) buffers**; with 2,
+about 30 % of frames are lost. `s22-campreview` (Rust) develops each frame in place from the VC0 dma-buf:
+- the rear 2040x1532 becomes a 1020x766 XRGB8888 preview by 2x2 bin, with LUT white balance, gain and gamma;
+- the develop takes 6–9 ms on a big core, about 30 % of one core;
+- frames go to a shared-memory triple buffer, published 15–18 ms after the CSI frame start (rear);
+- sensor AE runs through `S_EXT_CTRLS` while streaming;
+- raw stills are taken from the running stream.
+
+Do **not** use the SMFC hardware JPEG with MMAP buffers. The compressed queue gets only 4 KiB, and the encoder
+overran it and rebooted the phone. Numbers, video results and the recommended Camera-page architecture:
+[`evidence/camera-preview-20261022/`](../../../evidence/camera-preview-20261022/README.md).
