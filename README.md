@@ -132,6 +132,14 @@ including an S22+ or Ultra. A researched list of phones with existing native Lin
 
 </details>
 
+## Try it on your phone
+
+Want to do this on your own S22, a similar phone, or another Android phone? Read the
+[porting guide](docs/PORTING.md) first: the warnings, which phones are close enough, the method we
+used (agents reusing the phone's own vendor drivers, with a review loop before anything touches the
+phone), and per-subsystem playbooks. Our Rust touch shell also runs on other Linux phones:
+[tools/unum-fastshell/PORTING.md](tools/unum-fastshell/PORTING.md).
+
 ---
 
 <sub>Built by AI agents with [OpenUnum](https://corpunum.com) · sibling projects:
