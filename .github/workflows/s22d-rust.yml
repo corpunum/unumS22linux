@@ -3,7 +3,7 @@ on:
   pull_request:
     paths: ["tools/s22d/**", ".github/workflows/s22d-rust.yml"]
   push:
-    branches: [master]
+    branches: [main]
     paths: ["tools/s22d/**", ".github/workflows/s22d-rust.yml"]
   workflow_dispatch:
 permissions:
