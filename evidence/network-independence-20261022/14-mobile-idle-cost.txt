@@ -1,0 +1,4 @@
+idle-start t=1792649169 rx=4731701 tx=568603
+idle-end t=1792649476 rx=4796173 tx=662626
+cancelled
+-520

@@ -13,7 +13,8 @@
     "wifi_dhcp",
     "lightpanda_proxy",
     "bluetooth",
-    "autosleep"
+    "autosleep",
+    "netpolicy"
   ],
   "pin_model": true,
   "pin": {
@@ -219,6 +220,17 @@
       "needle": "/srv/s22/hardware/bin/s22-autosleep run",
       "requires": "/srv/s22/hardware/bin/s22-autosleep",
       "log": "/srv/s22/state/autosleep/daemon.out",
+      "start_wait_s": 5
+    },
+    "netpolicy": {
+      "argv": [
+        "/usr/bin/python3",
+        "/srv/s22/hardware/bin/s22-netpolicy",
+        "run"
+      ],
+      "needle": "/srv/s22/hardware/bin/s22-netpolicy run",
+      "requires": "/srv/s22/hardware/bin/s22-netpolicy",
+      "log": "/srv/s22/state/netpolicy/daemon.out",
       "start_wait_s": 5
     }
   },

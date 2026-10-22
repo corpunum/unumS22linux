@@ -1,0 +1,31 @@
+not attached
+0
+[14822.765320] [5:    kworker/5:2:  334] exynos_usbdrd_get_struct: get the 10aa0000.phy platform_device
+[14822.765333] [5:    kworker/5:2:  334] exynos_usbdrd_ldo_external_control ldo = 0
+[14822.765344] [5:    kworker/5:2:  334] phy_exynos_usbdrd 10aa0000.phy: Turn off LDO
+armed: 17483 1792650715 mobile-suspend
+{
+ "suspend_on_usb": true
+}06:11:56
+06:14:01 took=.543941201s pong from s22-linux (100.95.191.103) via <carrier-ip>:12373 in 532ms
+06:14:03 took=.069296793s pong from s22-linux (100.95.191.103) via <carrier-ip>:12373 in 56ms
+06:14:05 took=.065132242s pong from s22-linux (100.95.191.103) via <carrier-ip>:12373 in 48ms
+06:14:08 took=.371919264s pong from s22-linux (100.95.191.103) via <carrier-ip>:12373 in 361ms
+{"slept_s": 0.4, "wall_s": 0.6, "err": null, "why_wake": ["SYSINT: MAILBOX_CP2AP", "IRQ 401, cp_mbox_irq_0", "IRQ 402, cp_mbox_irq_1"], "soc0": "9932", "soc1": "9932", "event": "cycle", "handshake": true, "busy": 3.3, "t": 1792649541.861}
+{"event": "inhibit", "why": ["wakeup:rmnet0"], "t": 1792649548.039}
+{"event": "inhibit", "why": [], "t": 1792649550.141}
+{"slept_s": 0.3, "wall_s": 0.6, "err": null, "why_wake": ["SYSINT: MAILBOX_CP2AP", "IRQ 401, cp_mbox_irq_0", "IRQ 402, cp_mbox_irq_1"], "soc0": "9931", "soc1": "9931", "event": "cycle", "handshake": true, "busy": 5.5, "t": 1792649550.847}
+{"event": "inhibit", "why": ["wakeup:rmnet0"], "t": 1792649557.119}
+{"event": "inhibit", "why": ["wakeup:umts_ipc0"], "t": 1792649559.21}
+{"event": "inhibit", "why": [], "t": 1792649563.386}
+{"slept_s": 43.5, "wall_s": 43.8, "err": null, "why_wake": ["SYSINT: MAILBOX_CP2AP", "IRQ 401, cp_mbox_irq_0"], "soc0": "9930", "soc1": "9926", "event": "cycle", "handshake": true, "busy": 3.7, "t": 1792649607.267}
+{"event": "inhibit", "why": ["pcm:card0/pcm100p/sub0", "wakeup:rmnet0"], "t": 1792649613.427}
+{"event": "inhibit", "why": [], "t": 1792649615.532}
+{"slept_s": 25.5, "wall_s": 25.9, "err": "[Errno 16] Resource busy", "why_wake": ["ABORT Abort: Pending Wakeup Sources: umts_ipc0 ", "SYSINT: MAILBOX_CP2AP", "IRQ 401, cp_mbox_irq_0", "IRQ 402, cp_mbox_irq_1"], "soc0": "9924", "soc1": "9923", "event": "cycle", "handshake": true, "busy": 16.0, "t": 1792649641.505}
+{"slept_s": 2.1, "wall_s": 2.5, "err": "[Errno 16] Resource busy", "why_wake": ["ABORT PM: Some devices failed to suspend, or early wake event detected", "ABORT Abort: Pending Wakeup Sources: rmnet0 ", "SYSINT: MAILBOX_CP2AP", "IRQ 401, cp_mbox_irq_0", "IRQ 402, cp_mbox_irq_1"], "soc0": "9921", "soc1": "9921", "event": "cycle", "handshake": true, "busy": 3.0, "t": 1792649650.422}
+{"state": "post-wake", "t": 1792649652.4326386, "cycles": 33, "slept_s": 219.8, "aborts": 11, "since": 1792647130.3636117}ssh=0.80s
+06:16:00 tailscale-ping took=.424872908s pong from s22-linux (100.95.191.103) via <carrier-ip>:12373 in 365ms
+{"slept_s": 3.8, "wall_s": 4.1, "err": null, "why_wake": ["SYSINT: MAILBOX_CP2AP", "IRQ 401, cp_mbox_irq_0", "IRQ 402, cp_mbox_irq_1"], "soc0": "9908", "soc1": "9907", "event": "cycle", "handshake": true, "busy": 2.6, "t": 1792649725.175}
+{"slept_s": 28.7, "wall_s": 29.0, "err": null, "why_wake": ["SYSINT: MAILBOX_CP2AP", "IRQ 401, cp_mbox_irq_0", "IRQ 402, cp_mbox_irq_1"], "soc0": "9905", "soc1": "9900", "event": "cycle", "handshake": true, "busy": 4.2, "t": 1792649760.469}
+rx=4885657 tx=764830 t=1792649761
+ssh=1.53s

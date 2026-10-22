@@ -1,0 +1,16 @@
+06:00:25 netpolicy: active  uplink=mobile for 26s  mobile_mode=failover  (status 1s old)
+06:00:30 netpolicy: active  uplink=mobile for 30s  mobile_mode=failover  (status 5s old)
+06:00:35 netpolicy: active  uplink=wifi for 5s  mobile_mode=failover  (status 0s old)
+06:00:21.
+{"event": "uplink", "old": "wifi", "new": "mobile", "after_s": 137.7, "fails": {"wifi": 0, "mobile": 0}, "mobile": "down", "t": 1792648799.009}
+{"event": "wifi_route_repair", "args": ["route", "replace", "default", "via", "192.168.50.1", "dev", "wlan0", "metric", "600"], "ok": true, "out": "", "t": 1792648829.464}
+{"event": "route", "args": ["route", "del", "default", "dev", "rmnet0", "scope", "link", "metric", "50"], "ok": true, "out": "", "t": 1792648829.728}
+{"event": "route", "args": ["route", "replace", "default", "via", "192.168.50.1", "dev", "wlan0", "metric", "50"], "ok": true, "out": "", "t": 1792648829.743}
+{"event": "uplink", "old": "mobile", "new": "wifi", "after_s": 30.6, "fails": {"wifi": 0, "mobile": 0}, "mobile": "up", "t": 1792648829.749}
+netpolicy: active  uplink=wifi for 6s  mobile_mode=failover  (status 1s old)
+  wifi   wlan0  up      gw=192.168.50.1 dns=192.168.50.1 fails=0
+  mobile rmnet0 up      ip=<cgnat-ip> dns=<carrier-ip>,<carrier-ip> act=lte+5G rx=4463277 tx=432865 fails=0
+  usb    ecm0   up      carrier=True udc=configured (local link)
+  routes: default via 192.168.50.1 dev wlan0 metric 50 | default via 192.168.50.1 dev wlan0 metric 600 | default dev rmnet0 scope link metric 9000
+  dns:    192.168.50.1 1.1.1.1
+  tailscale: online=False relay=fra addrs=192.168.1.190:57141,<carrier-ip>:6564,<carrier-ip>:1427,<carrier-ip>:1432,<carrier-ip>:5417,<carrier-ip>:13253,<carrier-ip>:13

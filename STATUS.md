@@ -3,6 +3,25 @@
 Updated 2026-10-22 (own models on the NPU; suspend-to-RAM + autosleep; camera ISP, 5G badge, GNSS plan); 2026-10-21 (fast touch shell); earlier sections updated 2026-10-06 by the Claude lead session.
 The 2026-10-02 task board and earlier checkpoints below are historical.
 
+## Works on its own SIM: no Wi-Fi, no USB — 2026-10-22 (morning)
+
+**The phone no longer needs the USB cable or Wi-Fi.** It was unplugged for real and taken out of the house, and it stays reachable over Tailscale on mobile data.
+- **Mobile data:** internet over rmnet0 alone (socket and DNS bound to it), 2 MB at 46 Mbit/s, ping 28 ms.
+- **Tailscale over mobile:** the rig reaches it directly (no DERP relay): `tailscale ping` 35–56 ms, SSH 0.8 s.
+- **Failover:** about 3 s when Wi-Fi drops (including dialing the data call), and about 8 s back to Wi-Fi when it returns. Mobile data is released 120 s later.
+- **USB unplug:** first simulated, then done physically by the owner. Wi-Fi, Tailscale, the shell, voice listener, BT, ABOX and modem/SMS were all fine.
+- **Asleep on mobile:** an incoming Tailscale packet wakes the phone through the modem in about 0.5 s.
+- **`s22-netpolicy`** (keepalive service) picks the uplink in the order Wi-Fi > mobile > USB, and DNS follows the uplink.
+  - USB ECM is now a local link, with no default route unless it is the only one left.
+  - `s22-netpolicy status` shows everything; `off`/`on` is the kill switch.
+- **`s22-net-deadman arm SECONDS`** must be armed before any test that takes a link away.
+- **Costs:**
+  - The whole test run used about 6 MB of data.
+  - Idle on mobile with the agents running uses about 1.9 MB/h.
+  - Sleep on mobile is shallower than on Wi-Fi (rough ~5 %/h vs 1.1 %/h, not yet measured cleanly).
+
+[Evidence](evidence/network-independence-20261022/README.md).
+
 ## Our own models on the NPU — 2026-10-22
 
 **Samsung's on-device NPU compiler now works from Linux.** The vendor NNAPI support library

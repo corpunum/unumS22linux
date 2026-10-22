@@ -1,0 +1,12 @@
+05:52:17 no reply
+05:52:23 pong from s22-linux (100.95.191.103) via <carrier-ip>:1458 in 35ms
+05:52:24 pong from s22-linux (100.95.191.103) via <carrier-ip>:1458 in 44ms
+05:52:25 pong from s22-linux (100.95.191.103) via <carrier-ip>:1458 in 46ms
+05:52:26 pong from s22-linux (100.95.191.103) via <carrier-ip>:1458 in 51ms
+05:52:28 pong from s22-linux (100.95.191.103) via <carrier-ip>:1458 in 40ms
+05:52:29 pong from s22-linux (100.95.191.103) via <carrier-ip>:1458 in 47ms
+05:52:30 pong from s22-linux (100.95.191.103) via <carrier-ip>:1458 in 45ms
+05:52:31 pong from s22-linux (100.95.191.103) via <carrier-ip>:1458 in 46ms
+05:52:32 pong from s22-linux (100.95.191.103) via <carrier-ip>:1458 in 47ms
+05:52:33 pong from s22-linux (100.95.191.103) via <carrier-ip>:1458 in 56ms
+05:52:34 pong from s22-linux (100.95.191.103) via <carrier-ip>:1458 in 36ms

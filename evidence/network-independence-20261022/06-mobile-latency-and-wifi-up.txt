@@ -1,0 +1,9 @@
+== rig ping over tailscale (mobile)
+10 packets transmitted, 10 received, 0% packet loss, time 9013ms
+rtt min/avg/max/mdev = 36.318/41.900/58.489/6.323 ms
+== ssh x3
+0.81s
+0.75s
+0.80s
+05:53:05
+05:53:06.

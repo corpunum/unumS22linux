@@ -1,0 +1,32 @@
+armed: 31917 1792649273 wifi-down-cold
+netpolicy: active  uplink=wifi for 132s  mobile_mode=failover  (status 0s old)
+  wifi   wlan0  up      gw=192.168.50.1 dns=192.168.50.1 fails=0
+  mobile rmnet0 down    ip=None dns= act=lte rx=4041215 tx=299506 fails=0
+rmnet rx=4041215 tx=299506
+05:59:54 pong from s22-linux (100.95.191.103) via 192.168.50.14:57140 in 5ms
+05:59:55 pong from s22-linux (100.95.191.103) via 192.168.50.14:57140 in 111ms
+05:59:56 no reply
+06:00:02 pong from s22-linux (100.95.191.103) via <carrier-ip>:6561 in 36ms
+06:00:03 pong from s22-linux (100.95.191.103) via <carrier-ip>:6561 in 42ms
+06:00:04 pong from s22-linux (100.95.191.103) via <carrier-ip>:6561 in 47ms
+06:00:05 pong from s22-linux (100.95.191.103) via <carrier-ip>:6561 in 40ms
+06:00:06 pong from s22-linux (100.95.191.103) via <carrier-ip>:6561 in 36ms
+06:00:07 pong from s22-linux (100.95.191.103) via <carrier-ip>:6561 in 40ms
+06:00:08 pong from s22-linux (100.95.191.103) via <carrier-ip>:6561 in 45ms
+06:00:09 pong from s22-linux (100.95.191.103) via <carrier-ip>:6561 in 48ms
+06:00:10 pong from s22-linux (100.95.191.103) via <carrier-ip>:6561 in 45ms
+06:00:11 pong from s22-linux (100.95.191.103) via <carrier-ip>:6561 in 45ms
+06:00:12 pong from s22-linux (100.95.191.103) via <carrier-ip>:6561 in 46ms
+06:00:13 pong from s22-linux (100.95.191.103) via <carrier-ip>:6561 in 38ms
+05:59:56.
+{"event": "uplink", "old": null, "new": "wifi", "after_s": 0.0, "fails": {"wifi": 0, "mobile": 0}, "mobile": "up", "t": 1792648661.279}
+{"event": "mobile_down", "ok": true, "rx": 4041215, "tx": 299506, "error": null, "t": 1792648783.646}
+{"event": "mobile_up", "ok": true, "ipv4": "<cgnat-ip>", "error": null, "t": 1792648798.95}
+{"event": "uplink", "old": "wifi", "new": "mobile", "after_s": 137.7, "fails": {"wifi": 0, "mobile": 0}, "mobile": "down", "t": 1792648799.009}
+netpolicy: active  uplink=mobile for 22s  mobile_mode=failover  (status 2s old)
+  wifi   wlan0  down    gw=None dns=192.168.50.1 fails=0
+  mobile rmnet0 up      ip=<cgnat-ip> dns=<carrier-ip>,<carrier-ip> act=lte+5G rx=4432908 tx=400277 fails=0
+  usb    ecm0   up      carrier=True udc=configured (local link)
+  routes: default dev rmnet0 scope link metric 50 | default dev rmnet0 scope link metric 9000
+  dns:    <carrier-ip> <carrier-ip> 1.1.1.1
+  tailscale: online=True relay=fra addrs=192.168.1.190:57141,<carrier-ip>:13253,<carrier-ip>:1427,<carrier-ip>:1432,<carrier-ip>:5417,<home-public-ip>:57140,10.55.0.2:5714

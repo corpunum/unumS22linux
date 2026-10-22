@@ -1,0 +1,31 @@
+05:52:41
+05:52:15.
+wlan0            DOWN           00:03:7f:12:04:21 <BROADCAST,MULTICAST> 
+netpolicy: active  uplink=mobile for 24s  mobile_mode=failover  (status 5s old)
+  wifi   wlan0  down    gw=None dns=192.168.50.1 fails=0
+  mobile rmnet0 up      ip=<cgnat-ip> dns=<carrier-ip>,<carrier-ip> act=lte+5G rx=2151477 tx=56634 fails=0
+  usb    ecm0   up      carrier=True udc=configured (local link)
+  routes: default dev rmnet0 scope link metric 50 | default dev rmnet0 scope link metric 9000
+  dns:    <carrier-ip> <carrier-ip> 1.1.1.1
+  tailscale: online=True relay=fra addrs=<carrier-ip>:1432,<home-public-ip>:2116,192.168.1.190:57140,<carrier-ip>:50621,<carrier-ip>:50623,<carrier-ip>:1433,10.55.0.2:5714
+{"event": "start", "pid": 29492, "t": 1792648317.707}
+{"event": "resumed", "t": 1792648317.707}
+{"event": "uplink", "old": null, "new": "wifi", "after_s": 0.0, "fails": {"wifi": 0, "mobile": 0}, "mobile": "up", "t": 1792648317.995}
+{"event": "uplink", "old": "wifi", "new": "mobile", "after_s": 20.4, "fails": {"wifi": 0, "mobile": 0}, "mobile": "up", "t": 1792648338.208}
+default dev rmnet0 scope link metric 50 
+default dev rmnet0 scope link metric 9000 
+10.55.0.0/24 dev ecm0 scope link 
+== default-route internet
+http=204 tot=0.301030s
+<carrier-ip>
+Name:	example.com
+Address: 2606:4700:10::6814:179a
+
+100.95.191.103  s22-linux                           corpunumgmail@  linux    -                                                       
+100.125.99.48   corp-unum-rog-ally-x-rc72la-rc72la  corpunumgmail@  linux    -                                                       
+100.76.5.104    corpunumrig                         corpunumgmail@  linux    active; direct <home-public-ip>:41641, tx 1745148 rx 3091300  
+100.71.71.50    ip-172-31-32-235                    corpunumgmail@  linux    offline, last seen 132d ago                             
+	* IPv4: yes, <carrier-ip>:1422
+	* Nearest DERP: Amsterdam
+		- fra: 72.1ms  (Frankfurt)
+ssh_roundtrip=4.73s

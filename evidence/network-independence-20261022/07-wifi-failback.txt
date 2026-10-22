@@ -1,0 +1,25 @@
+05:53:06.
+{"event": "resumed", "t": 1792648317.707}
+{"event": "uplink", "old": null, "new": "wifi", "after_s": 0.0, "fails": {"wifi": 0, "mobile": 0}, "mobile": "up", "t": 1792648317.995}
+{"event": "uplink", "old": "wifi", "new": "mobile", "after_s": 20.4, "fails": {"wifi": 0, "mobile": 0}, "mobile": "up", "t": 1792648338.208}
+netpolicy: active  uplink=mobile for 57s  mobile_mode=failover  (status 1s old)
+  wifi   wlan0  up      gw=None dns=192.168.50.1 fails=0
+  mobile rmnet0 up      ip=<cgnat-ip> dns=<carrier-ip>,<carrier-ip> act=lte+5G rx=2498787 tx=137052 fails=0
+  usb    ecm0   up      carrier=True udc=configured (local link)
+  routes: default dev rmnet0 scope link metric 50 | default dev rmnet0 scope link metric 9000
+  dns:    <carrier-ip> <carrier-ip> 1.1.1.1
+  tailscale: online=True relay=fra addrs=<carrier-ip>:1432,<home-public-ip>:2116,192.168.1.190:57140,<carrier-ip>:50621,<carrier-ip>:50623,<carrier-ip>:1433,<carrier-ip>:14
+tail: can't open '/srv/s22/hardware/wifi-private/udhcpc-keepalive.log': No such file or directory
+tail: no files
+pong from s22-linux (100.95.191.103) via 192.168.50.12:57140 in 7ms
+cancelled
+netpolicy: active  uplink=wifi for 18s  mobile_mode=failover  (status 3s old)
+  wifi   wlan0  up      gw=192.168.50.1 dns=192.168.50.1 fails=0
+  mobile rmnet0 up      ip=<cgnat-ip> dns=<carrier-ip>,<carrier-ip> act=lte+5G rx=4040662 tx=299458 fails=0
+  usb    ecm0   up      carrier=True udc=configured (local link)
+  routes: default via 192.168.50.1 dev wlan0 metric 50 | default via 192.168.50.1 dev wlan0 metric 600 | default dev rmnet0 scope link metric 9000
+  dns:    192.168.50.1 1.1.1.1
+  tailscale: online=True relay=fra addrs=192.168.1.190:57141,<home-public-ip>:57140,192.168.1.190:57140,<carrier-ip>:1433,<carrier-ip>:5380,<carrier-ip>:1427,<carrier-ip>:
+{"event": "uplink", "old": null, "new": "wifi", "after_s": 0.0, "fails": {"wifi": 0, "mobile": 0}, "mobile": "up", "t": 1792648317.995}
+{"event": "uplink", "old": "wifi", "new": "mobile", "after_s": 20.4, "fails": {"wifi": 0, "mobile": 0}, "mobile": "up", "t": 1792648338.208}
+{"event": "uplink", "old": "mobile", "new": "wifi", "after_s": 273.8, "fails": {"wifi": 0, "mobile": 0}, "mobile": "up", "t": 1792648612.19}

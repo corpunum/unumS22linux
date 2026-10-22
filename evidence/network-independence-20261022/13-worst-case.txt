@@ -1,0 +1,38 @@
+armed: 10581 1792649693 worst-case
+rmnet rx=4500454 tx=432961 t=1792649094
+06:04:54 pong from s22-linux (100.95.191.103) via 192.168.1.190:57141 in 7ms
+06:04:55 pong from s22-linux (100.95.191.103) via 192.168.1.190:57141 in 49ms
+06:04:56 no reply
+06:05:02 direct connection not established
+06:05:04 pong from s22-linux (100.95.191.103) via <carrier-ip>:13301 in 48ms
+06:05:05 pong from s22-linux (100.95.191.103) via <carrier-ip>:13301 in 44ms
+06:05:06 pong from s22-linux (100.95.191.103) via <carrier-ip>:13301 in 44ms
+06:05:07 pong from s22-linux (100.95.191.103) via <carrier-ip>:13301 in 44ms
+06:05:08 pong from s22-linux (100.95.191.103) via <carrier-ip>:13301 in 54ms
+06:05:09 pong from s22-linux (100.95.191.103) via <carrier-ip>:13301 in 49ms
+06:05:18
+06:04:56.
+== 06:05:19 health
+netpolicy: active  uplink=mobile for 19s  mobile_mode=failover  (status 4s old)
+  wifi   wlan0  down    gw=None dns=192.168.50.1 fails=0
+  mobile rmnet0 up      ip=<cgnat-ip> dns=<carrier-ip>,<carrier-ip> act=lte+5G rx=4691379 tx=519459 fails=0
+  usb    ecm0   down    carrier=False udc=configured (local link)
+  routes: default dev rmnet0 scope link metric 50 | default dev rmnet0 scope link metric 9000
+  dns:    <carrier-ip> <carrier-ip> 1.1.1.1
+  tailscale: online=True relay=fra addrs=192.168.1.190:57141,<carrier-ip>:10166,<carrier-ip>:13276,<carrier-ip>:13253,<carrier-ip>:6564,<home-public-ip>:57140,10.55.0.2:57
+-- usb: udc=configured ecm0=down/carrier=0 usb_online=0 batt=Full/100%
+-- modem: ONLINE sms_ready= True reg= home_3gpp calls= 0
+-- hci0: DEVTYPE=host 
+-- asound:  0 [RainbowPrince  ]: Rainbow-Prince - Rainbow-Prince                       Rainbow-Prince 
+unum-fastshell=1 s22-sip=2 s22-touchd=1 s22-phoned=1 s22-keepalive=1 tailscaled=1 bt-qca6490-hci-hold=1 s22-autosleep=1 s22-netpolicy=1 wpa_supplicant=1 udhcpc=1 
+-- sip 5060: 1  ssh22: 2
+-- internet: 204 0.126962s  ip=<carrier-ip>
+-- autosleep: {"state": "awake", "inhibit": ["file:netpolicy-test", "ssh:1", "wakeup:rmnet0"], "t": 1792649151.265484, "cycles": 26, "slept_s": 144.6, "aborts": 9, "since": 1792647130.3636117}
+{"event": "mobile_up", "ok": true, "ipv4": "<cgnat-ip>", "error": null, "t": 1792649100.746}
+{"event": "uplink", "old": "wifi", "new": "mobile", "after_s": 271.2, "fails": {"wifi": 0, "mobile": 0}, "mobile": "down", "t": 1792649100.802}
+100.76.5.104    corpunumrig                         corpunumgmail@  linux    active; direct <home-public-ip>:41641, tx 2283052 rx 3577036  
+	* IPv4: yes, <carrier-ip>:10171
+	* Nearest DERP: Warsaw
+ssh=35.32s
+rtt min/avg/max/mdev = 37.962/46.266/54.940/4.242 ms
+ally: no USB ECM interface (unplugged)

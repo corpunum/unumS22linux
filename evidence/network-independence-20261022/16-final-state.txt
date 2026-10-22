@@ -1,0 +1,22 @@
+== 06:17:50 health
+netpolicy: active  uplink=mobile for 769s  mobile_mode=failover  (status 1s old)
+  wifi   wlan0  down    gw=None dns=192.168.50.1 fails=0
+  mobile rmnet0 up      ip=<cgnat-ip> dns=<carrier-ip>,<carrier-ip> act=lte+5G rx=5029511 tx=931887 fails=0
+  usb    ecm0   down    carrier=False udc=not attached (local link)
+  routes: default dev rmnet0 scope link metric 50 | default dev rmnet0 scope link metric 9000
+  dns:    <carrier-ip> <carrier-ip> 1.1.1.1
+  tailscale: online=True relay=par addrs=<carrier-ip>:53289,<carrier-ip>:12403,<carrier-ip>:53298,<carrier-ip>:12368,<carrier-ip>:53248,10.55.0.2:57140,192.168.50.14:
+-- usb: udc=not attached ecm0=down/carrier=0 usb_online=0 batt=Discharging/100%
+-- modem: ONLINE sms_ready= True reg= home_3gpp calls= 0
+-- hci0: DEVTYPE=host 
+-- asound:  0 [RainbowPrince  ]: Rainbow-Prince - Rainbow-Prince                       Rainbow-Prince 
+unum-fastshell=1 s22-sip=2 s22-touchd=1 s22-phoned=1 s22-keepalive=1 tailscaled=1 bt-qca6490-hci-hold=1 s22-autosleep=1 s22-netpolicy=1 wpa_supplicant=1 udhcpc=1 
+-- sip 5060: 1  ssh22: 2
+-- internet: 204 0.113713s  ip=<carrier-ip>
+-- autosleep: {"state": "awake", "inhibit": ["ssh:1"], "t": 1792649901.9610872, "cycles": 46, "slept_s": 262.5, "aborts": 13, "since": 1792647130.3636117}
+{"event": "mobile_down", "ok": true, "rx": 4500454, "tx": 432961, "error": null, "t": 1792648954.433}
+{"event": "mobile_up", "ok": true, "ipv4": "<cgnat-ip>", "error": null, "t": 1792649100.746}
+{"event": "uplink", "old": "wifi", "new": "mobile", "after_s": 271.2, "fails": {"wifi": 0, "mobile": 0}, "mobile": "down", "t": 1792649100.802}
+2026-10-22T06:11:18Z cancelled label=worst-case
+2026-10-22T06:11:56Z armed pid 17483 label=mobile-suspend deadline=1792650715
+2026-10-22T06:16:12Z cancelled label=mobile-suspend

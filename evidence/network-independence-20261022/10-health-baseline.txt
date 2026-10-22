@@ -1,0 +1,16 @@
+== 06:03:15 health
+netpolicy: active  uplink=wifi for 166s  mobile_mode=failover  (status 3s old)
+  wifi   wlan0  up      gw=192.168.50.1 dns=192.168.50.1 fails=0
+  mobile rmnet0 down    ip=None dns= act=lte rx=4500454 tx=432961 fails=0
+  usb    ecm0   up      carrier=True udc=configured (local link)
+  routes: default via 192.168.50.1 dev wlan0 metric 50 | default via 192.168.50.1 dev wlan0 metric 600
+  dns:    192.168.50.1 1.1.1.1
+  tailscale: online=True relay=fra addrs=192.168.1.190:57141,<home-public-ip>:57140,<carrier-ip>:13276,<carrier-ip>:13253,<carrier-ip>:6564,10.55.0.2:57140,192.168.50.14:
+-- usb: udc=configured ecm0=up/carrier=1 usb_online=0 batt=Full/100%
+-- modem: ONLINE sms_ready= True reg= home_3gpp calls= 0
+-- hci0: DEVTYPE=host 
+-- asound:  0 [RainbowPrince  ]: Rainbow-Prince - Rainbow-Prince                       Rainbow-Prince 
+unum-fastshell=1 s22-sip=2 s22-touchd=1 s22-phoned=1 s22-keepalive=1 tailscaled=1 bt-qca6490-hci-hold=1 s22-autosleep=1 s22-netpolicy=1 wpa_supplicant=1 udhcpc=1 
+-- sip 5060: 1  ssh22: 2
+-- internet: 204 0.102614s  ip=<home-public-ip>
+-- autosleep: {"state": "awake", "inhibit": ["file:netpolicy-test", "ssh:1"], "t": 1792649029.1079235, "cycles": 26, "slept_s": 144.6, "aborts": 9, "since": 1792647130.3636117}

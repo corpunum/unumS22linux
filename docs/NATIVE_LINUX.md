@@ -71,8 +71,12 @@ workflow until it is resolved.
 USB networking uses phone `10.55.0.2`, host `10.55.0.1`. The host NetworkManager
 profile `s22-linux-usb` shares internet over the MAC-specific ECM interface
 `enx027322000001`. Wi-Fi now passes association, DHCP, DNS and HTTPS after
-automatic recovery startup. Physical USB-disconnected use is not yet tested.
-Cellular, suspend, usable audio, cameras, GPU compute and NPU inference remain
+automatic recovery startup. Since 2026-10-22 `s22-netpolicy` (keepalive service)
+picks the uplink Wi-Fi > mobile data (rmnet0) > USB; ecm0 is a local link with no
+default route unless nothing else works. Physical USB unplug was verified the same
+day: Tailscale + SSH stay reachable over Wi-Fi or mobile data alone
+(`evidence/network-independence-20261022/`). Before tests that take a link away,
+arm `s22-net-deadman arm SECONDS`. Usable audio, cameras, GPU compute and NPU inference remain
 unaccepted features of this Linux installation.
 
 ## Boot image and evidence

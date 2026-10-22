@@ -1,0 +1,15 @@
+rx0=0 tx0=96
+== DNS via carrier over rmnet0
+http=204 ip=142.251.150.120 total=0.134044s dns=0.052527s
+== DNS via 1.1.1.1 over rmnet0
+http=204 ip=142.251.152.119 total=0.340536s dns=0.045568s
+== public IP via rmnet0
+<carrier-ip>
+== public IP via default
+<home-public-ip>
+== ping 1.1.1.1 via rmnet0
+5 packets transmitted, 5 packets received, 0% packet loss
+round-trip min/avg/max = 17.500/28.437/44.205 ms
+== 2 MB download via rmnet0
+size=2000000 speed=5740923B/s t=0.348410
+rx1=2099223 tx1=14043
