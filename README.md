@@ -4,7 +4,7 @@
 
 **A Galaxy S22 that boots its own Linux. No Android underneath. AI agents wrote the drivers.**
 
-<img src="docs/media/hero.svg" alt="Power on, unlocked Samsung bootloader, our kernel and init in the RECOVERY partition, a guardian as PID 1 with no Android services, Alpine and Arch Linux ARM, a Hyprland touch desktop with local AI models, and the OpenUnum agent running on the phone" width="900">
+<img src="docs/media/hero.svg" alt="Power on, unlocked Samsung bootloader, our kernel and init in the RECOVERY partition, a guardian as PID 1 with no Android services, Alpine and Arch Linux ARM, our own Rust touch shell with local AI models, and the OpenUnum agent running on the phone" width="900">
 
 </div>
 
@@ -20,45 +20,55 @@ every step**, adversarially, before anything touched the phone. Every claim belo
 measurement or a screenshot behind it, and the failures are written down too: the
 [experiment log](EXPERIMENTS.md) is 2,800 lines long.
 
-Today the phone boots from its RECOVERY partition into Linux, joins Wi-Fi and Tailscale, runs a
-touch desktop, keeps two local language models loaded, and runs my agent, which can text, talk
-and drive its own screen.
+Today the phone boots from its RECOVERY partition into Linux and runs **our own Rust touch shell**
+that draws straight to the display. It talks through its own speaker in English and Greek, takes
+photos, is on 5G, runs AI models on Samsung's NPU and GPU, sleeps when locked, and runs my agent,
+which can text, talk and drive its own screen.
 
 ## See it
 
-<table>
-<tr>
-<td width="34%"><img src="docs/media/tour.gif" alt="Walkthrough of real screenshots: home, keyboard, agent reply, agent confirmation, phone, camera, files, switcher, lock" width="300"></td>
-<td>
+<img src="docs/media/fastshell-screens.png" alt="Six real screens of the Rust shell: home with live cards, agent chat with the EN/GR keyboard, an agent question card, the camera page with a processed photo, the app switcher, and the lock screen" width="900">
 
-**A walkthrough of real screenshots**, taken on the phone with `grim` (2026-10-09):
+**unum-fastshell**, our Rust shell (screenshots from the phone, 2026-10-21/22):
 
-- **Home:** big tiles plus live cards for the agent model, sessions, battery and temperature.
-- **Agent chat:** tap the field, the on-screen keyboard appears; type "hi", the agent replies.
-- **The agent drives the screen:** an OpenUnum tool shows a card and asks a question; a tap on
-  *Yes* goes back to the agent.
-- **Phone, camera, files, settings** (the camera screenshot predates the working capture path), edge swipes for home / back / switcher, and a Power-key
-  lock cover.
+- **Fast:** a tap opens a page in **~9 ms** (the previous QML shell: 63 ms; the first desktop drew
+  at ~3 frames/s). 11 MB of memory, 0.4% CPU when idle.
+- **Agent chat** streams the answer as it arrives, with our own English/Greek keyboard; the **Talk**
+  button runs the voice loop.
+- **The agent drives the screen:** an OpenUnum tool asks a question, a tap on *Yes* goes back to it.
+- **Camera** takes a 4-frame burst and shows a processed full-resolution photo in ~2 s.
+- **5G / 4G badge**, app switcher, Power-key lock, and Power held 1 s to fall back to the old shell.
 
-All screenshots: [evidence/touchui-20261009](evidence/touchui-20261009/README.md).
+Older desktop walkthrough (10-09): [tour.gif](docs/media/tour.gif) ·
+[evidence/touchui-20261009](evidence/touchui-20261009/README.md).
 
-</td>
-</tr>
-</table>
+## What changed on 2026-10-21/22
 
-<img src="docs/media/screens.png" alt="Five real screens: home, agent reply, agent confirmation, phone, switcher" width="900">
+Two days of agent work, every item measured on the phone:
+
+| | Before | After |
+|---|---|---|
+| 🔊 **Audio** | "playback stalls, no DMA progress" | Speaker + mic work through Samsung's DSP graph. The bug: Android plays into virtual *calliope* devices, we wrote straight into the DSP's output end. Found by disassembling the stock audio library |
+| 🗣️ **Voice** | render only, muted | The phone speaks (Whisper transcribes its own speaker exactly in Greek); fillers like "hmm, let me check…" while the agent thinks, and it speaks its thinking |
+| 👆 **UI** | 63–120 ms per page | Rust KMS shell, ~9 ms; Samsung's Vulkan driver can also scan out with zero copy |
+| 📷 **Camera** | raw Bayer frames | software ISP: demosaic, white balance, stock colour matrix, burst denoise |
+| 📶 **Mobile** | "LTE only" | 5G NSA was already on (n78, 97 Mbit/s down); our modem daemon now sees it |
+| 🧠 **NPU** | one stock model | 16/17 stock models + our own TFLite models compiled on the phone (keyword spotting in 0.5 ms) |
+| 🔋 **Battery** | 5.8 %/h locked | deep suspend: 1.1 %/h, still reachable over Tailscale |
+| 🛰️ **GPS** | never powered | GNSS core runs in a sandbox, tracks real satellites (no fix indoors yet) |
+| 📡 **Bluetooth** | manual start | comes up by itself after boot |
 
 ## What works, and what doesn't (yet)
 
 | | |
 |---|---|
 | ✅ **Boot** | Native Linux from RECOVERY with our own `/init`; no Android services; reboots without touching the phone (`s22-reboot recovery`) |
-| ✅ **System** | Persistent Arch Linux ARM + Hyprland on internal storage; starts by itself after a reboot |
+| ✅ **System** | Persistent Arch Linux ARM + sway (under the Rust shell) on internal storage; starts by itself after a reboot |
 | ✅ **Network** | Wi-Fi with autostart, Tailscale, USB SSH; mobile data over the modem with 5G NSA (LTE + NR n78, ~97 Mbit/s down measured) |
 | ✅ **AI** | Stock Samsung NPU models (`.nnc`) run on the NPU through ENN (16/17 stock models, e.g. face parsing in 3.7 ms); our own TFLite models are compiled on the phone with Samsung's NPU compiler (keyword spotting in 0.34 ms, verified against the CPU); local 2B model on the GPU (Samsung's Vulkan driver in an isolated runtime) and 4B on the CPU; OpenUnum agent with GPT Luna by default and the local model as offline fallback |
 | ✅ **Phone stack** | SIM and SMS ready through our own modem daemon (`s22-phoned`, outbound off by default) |
 | ✅ **Voice** | The phone talks through its own speaker (English + two Greek voices); push-to-talk or the Talk button; while the agent thinks it plays short "hmm, let me check…" clips and speaks its thinking |
-| ✅ **Touch UI** | Our own Rust shell drawing straight to the display: a tap opens a page in ~10–12 ms (the old shell: 63 ms), 11 MB of memory; home, agent chat with streaming, phone, files, camera, settings, EN/GR keyboard, lock, agent cards, 5G/4G badge. Samsung's GPU driver can also draw to the screen with zero copy |
+| ✅ **Touch UI** | Our own Rust shell drawing straight to the display: a tap opens a page in ~9–12 ms (the old shell: 63 ms), 11 MB of memory; home, agent chat with streaming, phone, files, camera, settings, EN/GR keyboard, lock, agent cards, 5G/4G badge. Samsung's GPU driver can also draw to the screen with zero copy |
 | 🟡 **Bluetooth** | Controller comes up by itself after boot; no pairing or audio yet |
 | 🟡 **Sensors** | Accelerometer, gyro, magnetometer and light frames read; no calibration or auto-rotate |
 | ✅ **Camera** | Rear and front cameras through our own capture path (no Android camera stack). Photos are processed by our own software ISP (demosaic, white balance, stock colour matrix, multi-frame noise reduction); the shell's Camera page takes and shows them in ~2 s. Short videos under 1 frame/s |
@@ -70,8 +80,8 @@ All screenshots: [evidence/touchui-20261009](evidence/touchui-20261009/README.md
 Full hardware table and every earlier checkpoint: [docs/HISTORY.md](docs/HISTORY.md).
 Current details: [STATUS.md](STATUS.md).
 
-**Driver people: help is very welcome**, especially on camera image processing, the
-NPU and calls. Open an issue, or read the [driver task board](docs/S22_LUNA_TASK_BOARD_2026-10-02.md) first.
+**Driver people: help is very welcome**, especially on calls (IMS/VoLTE audio), wide-kernel
+models on the NPU, camera colour tuning, GPS fix and Bluetooth audio. Open an issue, or read the [driver task board](docs/S22_LUNA_TASK_BOARD_2026-10-02.md) first.
 
 <details>
 <summary><b>🔧 How it boots, and the safety rules</b></summary>
