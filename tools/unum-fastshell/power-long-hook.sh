@@ -1,5 +1,5 @@
 #!/bin/sh
-# s22-buttons hook "power-long" (Power held >= 1 s), installed as
+# s22-buttons hook "power-long" (Power held >= 3 s), installed as
 # /srv/s22/buttons/hooks/power-long by install-fastshell.sh.
 # The way back that does not depend on the fast shell itself: select the classic
 # shell (Quickshell on sway) and stop unum-fastshell by its exact PID. seatd then

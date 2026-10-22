@@ -3025,7 +3025,7 @@ Real-finger latency, photon time and power were not measured. The phone was rest
 **Switch.** `s22-desktop-profile fastshell` or `sway-pixman`. The touch shell is chosen in `/srv/s22/state/touchui/ui-backend`; `/etc/s22-desktop` stays `sway-pixman`.
 
 **Ways back:**
-- hold Power 1 s (`hooks/power-long`);
+- hold Power 3 s (`hooks/power-long`; was 1 s until 2026-10-22, which fired by accident);
 - touchd's ping watchdog;
 - after a crash loop, touchd falls back to Quickshell for 15 minutes;
 - seatd hands the panel to sway if the shell dies.
@@ -3360,7 +3360,7 @@ Details: `evidence/npu-custom-20261022/README.md`. Tools: `tools/hardware/npu/nn
 - Design: the shell reads the key nodes itself (found by capabilities), no grab, and runs a pure recogniser
   (`tools/unum-fastshell/src/buttons.rs`, unit-tested). Taking over in the shell beats forwarding from s22-buttons:
   one hop fewer, and no python scheduling under load ~15. s22-buttons is the fallback: the shell writes its pid to
-  `/run/s22-fastshell.buttons`; s22-buttons then only logs, and still runs **Power ≥ 1 s alone → hooks/power-long**,
+  `/run/s22-fastshell.buttons`; s22-buttons then only logs, and still runs **Power ≥ 3 s alone → hooks/power-long**,
   so the safety path does not depend on the shell. A Power press overlapping a volume key never runs power-long.
 - Bindings: volume ±1 on key-down with a level overlay; hold Volume up = push-to-talk (same hook/env as
   s22-buttons); hold Volume down = mute/unmute; Power = lock / wake (wake on key-down); Power twice = camera;

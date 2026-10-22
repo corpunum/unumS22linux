@@ -13,7 +13,7 @@
 # fastshell keeps /etc/s22-desktop = sway-pixman (sway is the base compositor
 # for foot and the recovery target) and selects the touch shell in
 # /srv/s22/state/touchui/ui-backend. Back: `s22-desktop-profile sway-pixman`,
-# or hold Power >= 1 s (hooks/power-long).
+# or hold Power >= 3 s (hooks/power-long).
 #
 # start-persistent-desktop reads /etc/s22-desktop once at startup (boot or a
 # supervisor restart). A missing/unknown value means Hyprland, and a sway
@@ -38,7 +38,7 @@ case "${1:-status}" in
     [ -x $FASTSHELL ] || { echo "missing $FASTSHELL (tools/unum-fastshell/install-fastshell.sh)" >&2; exit 1; }
     [ "$(cat $SEL 2>/dev/null)" = sway-pixman ] || { echo "fastshell runs on top of sway-pixman; select that first" >&2; exit 1; }
     shell_sel fastshell
-    echo "selected fastshell on sway-pixman (s22-touchd switches within seconds; back: $0 sway-pixman or hold Power 1 s)" ;;
+    echo "selected fastshell on sway-pixman (s22-touchd switches within seconds; back: $0 sway-pixman or hold Power 3 s)" ;;
   sway-pixman)
     [ -x $C/usr/bin/sway ] || { echo "sway is not installed in $C" >&2; exit 1; }
     [ -f $C/root/s22-sway-pixman.conf ] || { echo "missing $C/root/s22-sway-pixman.conf" >&2; exit 1; }

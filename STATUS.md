@@ -178,7 +178,7 @@ The default touch shell is now **unum-fastshell** (`tools/unum-fastshell`).
 - **Cost:** 0.4 % idle CPU, 11 MB RSS.
 - **Reboot:** it survived `s22-reboot recovery`.
 - **Switch:** `s22-desktop-profile fastshell|sway-pixman`. `/etc/s22-desktop` stays `sway-pixman`.
-- **Ways back:** hold Power 1 s → Quickshell. touchd also falls back by itself after a crash loop or a hung shell.
+- **Ways back:** hold Power 3 s → Quickshell. touchd also falls back by itself after a crash loop or a hung shell.
 - **Not tested:** the voice button, camera capture and real finger latency.
 
 [Evidence](evidence/fastshell-20261021/README.md).

@@ -7,7 +7,7 @@
 //!
 //! Ownership: while the shell handles the keys it writes its pid to
 //! `/run/s22-fastshell.buttons`; s22-buttons then only logs, and keeps the one
-//! binding that must not depend on the shell: Power held >= 1 s alone ->
+//! binding that must not depend on the shell: Power held >= 3 s alone ->
 //! hooks/power-long (back to Quickshell). Without the marker (shell stopped,
 //! crashed, or button handling switched off in Settings) s22-buttons does
 //! everything as before.
@@ -37,7 +37,7 @@ pub const BINDINGS: [(&str, &str); 9] = [
     ("Power twice", "camera"),
     ("Power + Volume down", "screenshot → gallery, Files"),
     ("Power + Volume up", "keep screen on (toggle)"),
-    ("Hold Power 1 s", "classic shell (safety, s22-buttons)"),
+    ("Hold Power 3 s", "classic shell (safety, s22-buttons)"),
     ("Any key, screen off", "wakes the screen"),
 ];
 
@@ -93,12 +93,18 @@ pub enum Action {
     Screenshot,
     /// Power + volume up.
     KeepAwake,
+    /// Power alone held 1 s: show "keep holding" (the classic-shell fallback is 3 s away).
+    PowerHint,
+    /// Power released before the fallback hold time: drop the hint.
+    PowerHintClear,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Timing {
     /// Hold threshold (same as s22-buttons LONG_MS and hooks/power-long).
     pub long_us: u64,
+    /// Power alone held this long: s22-buttons runs hooks/power-long (classic shell).
+    pub power_long_us: u64,
     /// The second key of a chord must go down this soon after the first.
     pub chord_us: u64,
     /// Second Power press this soon after the first release = double press.
@@ -107,7 +113,7 @@ pub struct Timing {
 
 impl Default for Timing {
     fn default() -> Timing {
-        Timing { long_us: 1_000_000, chord_us: 400_000, double_us: 400_000 }
+        Timing { long_us: 1_000_000, power_long_us: 3_000_000, chord_us: 400_000, double_us: 400_000 }
     }
 }
 
@@ -210,9 +216,10 @@ impl Machine {
                 if p.consumed {
                     vec![]
                 } else if long {
-                    // s22-buttons runs hooks/power-long (the safety path) itself
+                    // s22-buttons runs hooks/power-long (the safety path) itself at
+                    // power_long_us; a 1 s .. 3 s hold does nothing but drop the hint
                     self.last_tap = None;
-                    vec![]
+                    if p.long_fired { vec![Action::PowerHintClear] } else { vec![] }
                 } else {
                     self.last_tap = Some(t);
                     if p.woke { vec![] } else { vec![Action::Lock] }
@@ -237,12 +244,16 @@ impl Machine {
     pub fn tick(&mut self, now: u64, ctx: Ctx) -> Vec<Action> {
         let mut out = vec![];
         let long = self.timing.long_us;
-        for k in [Key::VolUp, Key::VolDown] {
+        for k in [Key::VolUp, Key::VolDown, Key::Power] {
             let Some(p) = self.down[k.idx()].as_mut() else { continue };
             if p.consumed || p.long_fired || now.saturating_sub(p.t) < long {
                 continue;
             }
             p.long_fired = true;
+            if k == Key::Power {
+                out.push(Action::PowerHint);
+                continue;
+            }
             if p.stepped {
                 p.stepped = false;
                 out.push(Action::Revert);
@@ -259,9 +270,9 @@ impl Machine {
         out
     }
 
-    /// When `tick` next has something to decide (a volume key reaching the hold threshold).
+    /// When `tick` next has something to decide (a key reaching the hold threshold).
     pub fn next_deadline(&self) -> Option<u64> {
-        [Key::VolUp, Key::VolDown]
+        [Key::VolUp, Key::VolDown, Key::Power]
             .iter()
             .filter_map(|k| self.down[k.idx()])
             .filter(|p| !p.consumed && !p.long_fired)
@@ -523,13 +534,34 @@ mod tests {
     }
 
     #[test]
-    fn power_hold_is_left_to_the_safety_hook() {
+    fn power_hold_hints_at_1s_and_is_left_to_the_safety_hook_at_3s() {
         let mut b = m();
         b.press(Key::Power, 0, ON);
-        assert_eq!(b.tick(1500 * MS, ON), vec![]);
-        assert_eq!(b.release(Key::Power, 1500 * MS, ON), vec![], "no lock: s22-buttons runs hooks/power-long");
+        assert_eq!(b.next_deadline(), Some(1000 * MS));
+        assert_eq!(b.tick(900 * MS, ON), vec![], "no hint before 1 s");
+        assert_eq!(b.tick(1000 * MS, ON), vec![Action::PowerHint]);
+        assert_eq!(b.tick(2000 * MS, ON), vec![], "hint only once");
+        assert_eq!(b.next_deadline(), None);
+        assert_eq!(b.release(Key::Power, 3200 * MS, ON), vec![Action::PowerHintClear], "no lock: s22-buttons runs hooks/power-long at 3 s");
         // and a following quick press is not a double press
-        assert_eq!(b.press(Key::Power, 1700 * MS, ON), vec![]);
+        assert_eq!(b.press(Key::Power, 3400 * MS, ON), vec![]);
+    }
+
+    #[test]
+    fn power_released_between_1_and_3s_cancels_the_hint_and_does_nothing() {
+        let mut b = m();
+        b.press(Key::Power, 0, ON);
+        assert_eq!(b.tick(1000 * MS, ON), vec![Action::PowerHint]);
+        assert_eq!(b.release(Key::Power, 1500 * MS, ON), vec![Action::PowerHintClear], "no lock, no classic shell");
+        assert_eq!(b.press(Key::Power, 1700 * MS, ON), vec![], "not a double press");
+    }
+
+    #[test]
+    fn power_tap_under_1s_has_no_hint() {
+        let mut b = m();
+        b.press(Key::Power, 0, ON);
+        assert_eq!(b.tick(500 * MS, ON), vec![]);
+        assert_eq!(b.release(Key::Power, 500 * MS, ON), vec![Action::Lock]);
     }
 
     #[test]

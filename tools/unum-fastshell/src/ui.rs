@@ -969,7 +969,7 @@ impl App {
             return;
         }
         self.last_touch = Instant::now();
-        if acts.iter().any(|a| matches!(a, Action::Step(_) | Action::Mute | Action::Lock | Action::Camera | Action::Screenshot | Action::KeepAwake | Action::PttStart(_) | Action::Assistant(_))) {
+        if acts.iter().any(|a| matches!(a, Action::Step(_) | Action::Mute | Action::Lock | Action::Camera | Action::Screenshot | Action::KeepAwake | Action::PttStart(_) | Action::Assistant(_) | Action::PowerHint)) {
             self.haptic("tick");
         }
         for a in acts {
@@ -1048,6 +1048,8 @@ impl App {
                     self.hide_osd();
                     self.effects.push(Effect::Screenshot);
                 }
+                Action::PowerHint => self.show_osd("Keep holding Power to switch to the classic shell…", None, 2200),
+                Action::PowerHintClear => self.hide_osd(),
                 Action::KeepAwake => {
                     self.keep_awake = !self.keep_awake;
                     let t = if self.keep_awake { "Screen stays on" } else { "Screen timeout on" };

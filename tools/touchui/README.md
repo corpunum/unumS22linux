@@ -124,4 +124,4 @@ sway with the wlroots pixman renderer reached 62.6 panel fps at about 10% CPU on
 - `display` and `power` go to the shell, which uses DPMS on its own DRM fd.
 - A ping watchdog stops the shell if it hangs. After 6 starts in 10 minutes, touchd falls back to Quickshell for 15 minutes.
 
-Select it with `s22-desktop-profile fastshell`. Go back with `s22-desktop-profile sway-pixman` or by holding Power for 1 s.
+Select it with `s22-desktop-profile fastshell`. Go back with `s22-desktop-profile sway-pixman` or by holding Power for 3 s.
