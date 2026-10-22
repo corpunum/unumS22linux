@@ -8,11 +8,15 @@ points at it, so holding volume up starts it (see s22-buttons).
   2. record: while volume up is held (S22_PTT=hold, S22_PTT_STOP from the
      daemon); a release within EARLY_S of the cue, or a hook started on
      release (no S22_PTT), records a fixed FIXED_S window instead
-  3. speech to text on the phone: sherpa-onnx offline ASR (NeMo Parakeet TDT
-     CTC 110M int8 by default, Moonshine tiny selectable), big cores only
+  3. speech to text: the rig's whisper large-v3-turbo over Tailscale (Greek or English, auto-detected;
+     s22_rigvoice.py), else on the phone: sherpa-onnx offline ASR (NeMo Parakeet TDT CTC 110M int8,
+     English only; Moonshine tiny selectable), big cores only
   4. agent: the phone's OpenUnum (started if needed), session "voice",
      POST /api/chat then GET /api/chat/pending until the reply arrives
-  5. speak the reply with s22-say (markdown stripped, long replies shortened)
+  5. speak the reply with s22-say (markdown stripped, long replies shortened) in the owner's own voice
+     (the rig's VoxCPM "antonis", Piper el-antonis on the phone when the rig is unreachable), sentence by
+     sentence: the next sentence renders while the previous one plays. A Greek question gets a Greek
+     answer (a reply-language hint goes with every turn) and Greek fillers.
 
 One interaction at a time (flock); a trigger while busy is ignored.  Every
 interaction is appended to /srv/s22/buttons/assistant.jsonl.
@@ -51,6 +55,10 @@ try:                                   # natural-voice helpers installed next to
     import s22_voice as V
 except ImportError:                    # old install: plain markdown stripping, no fillers
     V = None
+try:                                   # the rig's Greek/English ASR (and owner voice, used by s22-say)
+    import s22_rigvoice as RV
+except ImportError:
+    RV = None
 
 CHROOT = Path('/mnt/omarchy-trial')
 ASR_DIR = '/opt/s22-asr'                       # inside the chroot
@@ -68,7 +76,8 @@ HAPTIC_SOCK = '/run/s22-haptic.sock'
 API = 'http://127.0.0.1:18880'
 
 DEFAULTS = {
-    'engine': 'parakeet',      # parakeet | moonshine
+    'engine': 'parakeet',      # phone ASR: parakeet | moonshine (English only)
+    'asr': 'rig',              # rig = whisper on the rig first (Greek + English), phone engine as fallback | phone
     'session': 'voice',
     'fixed_s': 6.0,            # fixed window when the key is not held
     'max_s': 30.0,             # longest hold recording
@@ -86,15 +95,56 @@ DEFAULTS = {
     'filler_repeat_s': 25.0,     # ... and another this often (max 3 more)
     'filler_dir': '/root/.openunum/assets/voice-fillers',   # inside the chroot
     'split_chars': 120,          # answers longer than this: first sentence is spoken while the rest renders
+    'chunk_chars': 220,          # later sentences are grouped into chunks of about this size (render || play)
+    'gap_filler_s': 1.5,         # first answer chunk still rendering this long after the last clip -> a filler
+    'gap_fillers_max': 2,
     'speak_thinking': True,      # speak short reasoning chunks if the agent streams any
 }
 
 VOICE_CONTEXT = (
     'This message was spoken to the owner\'s Galaxy S22 phone with push-to-talk and '
-    'transcribed by on-device speech recognition, so it may contain recognition errors. '
+    'transcribed by speech recognition, so it may contain recognition errors. '
     'Your reply will be read aloud by text-to-speech: answer in one to three short, '
     'plain spoken sentences unless asked for more. No markdown, lists, tables, code '
     'or URLs in the spoken answer.')
+
+# The owner speaks Greek or English; the answer must be in the language he used (owner 2026-10-22).
+REPLY_LANGUAGE = {
+    'el': 'The owner spoke GREEK. Reply in Greek (Modern Greek, Greek script), even if earlier messages '
+          'in this session were in English.',
+    'en': 'The owner spoke English. Reply in English, even if earlier messages in this session were in Greek.',
+}
+# Fixed phrases the assistant speaks itself, per language.
+PHRASES = {
+    'en': {'moment': 'One moment.', 'not_caught': "Sorry, I didn't catch that.",
+           'unreachable': "Sorry, I couldn't reach the assistant.",
+           'failed': 'Sorry, something went wrong with the assistant.',
+           'empty': 'The assistant returned an empty answer.', 'more': ' The full answer is in the voice chat.',
+           'goodbye': 'Goodbye.'},
+    'el': {'moment': 'Μισό λεπτό.', 'not_caught': 'Συγγνώμη, δεν σε άκουσα καλά.',
+           'unreachable': 'Συγγνώμη, δεν μπόρεσα να φτάσω τον βοηθό.',
+           'failed': 'Συγγνώμη, κάτι πήγε στραβά με τον βοηθό.',
+           'empty': 'Ο βοηθός δεν έδωσε απάντηση.', 'more': ' Η πλήρης απάντηση είναι στη φωνητική συνομιλία.',
+           'goodbye': 'Αντίο.'},
+}
+_GREEK = re.compile('[\u0370-\u03ff\u1f00-\u1fff]')
+
+
+def text_lang(text: str) -> str:
+    """'el' when the text is mostly Greek script, else 'en'."""
+    s = str(text or '')
+    g = len(_GREEK.findall(s))
+    latin = len(re.findall(r'[A-Za-z]', s))
+    return 'el' if g and g > latin * 0.25 else 'en'
+
+
+def phrase(key: str, lang: str | None) -> str:
+    return PHRASES.get(lang or 'en', PHRASES['en'])[key]
+
+
+def language_context(lang: str | None) -> dict | None:
+    return {'title': 'reply language', 'content': REPLY_LANGUAGE[lang]} if lang in REPLY_LANGUAGE else None
+
 
 ENGINES = {
     'parakeet': ['--model-type=nemo_ctc',
@@ -192,7 +242,7 @@ def clean_for_speech(text: str) -> str:
     return re.sub(r'\s+', ' ', out).replace(' ,', ',').strip()
 
 
-def summarize(text: str, limit: int) -> tuple[str, bool]:
+def summarize(text: str, limit: int, lang: str | None = None) -> tuple[str, bool]:
     """Whole sentences up to `limit` characters; (spoken, truncated)."""
     if len(text) <= limit:
         return text, False
@@ -204,7 +254,7 @@ def summarize(text: str, limit: int) -> tuple[str, bool]:
         out = (out + ' ' + s).strip()
     if len(out) > limit:                 # one very long sentence
         out = out[:limit].rsplit(' ', 1)[0].rstrip(',;:') + '.'
-    return out + ' The full answer is in the voice chat.', True
+    return out + phrase('more', lang or text_lang(text)), True
 
 
 def split_first_chunk(text: str, min_total: int = 120, first_max: int = 110, first_min: int = 40) -> tuple[str, str]:
@@ -229,6 +279,51 @@ def split_first_chunk(text: str, min_total: int = 120, first_max: int = 110, fir
     return text, ''
 
 
+def _clauses(sentence: str, limit: int) -> list[str]:
+    """A sentence longer than `limit`, cut after commas/semicolons/colons into parts of at most about `limit`."""
+    if len(sentence) <= limit:
+        return [sentence]
+    parts, cur = [], ''
+    for piece in re.split(r'(?<=[,;:])\s+', sentence):
+        if cur and len(cur) + 1 + len(piece) > limit:
+            parts.append(cur)
+            cur = piece
+        else:
+            cur = f'{cur} {piece}'.strip()
+    if cur:
+        parts.append(cur)
+    return parts
+
+
+def speech_chunks(text: str, split_chars: int = 120, chunk_chars: int = 220, first_max: int = 70,
+                  min_chunk: int = 50) -> list[str]:
+    """The spoken answer as chunks to render and play in turn (render of chunk k+1 overlaps playback of k).
+
+    The owner voice renders at about real time (RTF ~0.9 on the rig), so a chunk may be at most as long as the
+    one playing before it, or there is a silent gap: a short first chunk (first sentence or clause, <= first_max
+    characters) so audio starts fast, then whole sentences (long ones cut at clauses) grouped up to the length
+    of the previous chunk (at least min_chunk, at most chunk_chars).
+    """
+    first, rest = split_first_chunk(text, split_chars, first_max=max(first_max, 25), first_min=min(20, first_max))
+    if not rest and len(first) > max(split_chars, first_max):     # no early break found: cut at a clause
+        parts = _clauses(first, first_max)
+        first, rest = parts[0], ' '.join(parts[1:])
+    out = [first] if first else []
+    cur = ''
+    limit = min(chunk_chars, max(min_chunk, len(first)))
+    for sent in re.split(r'(?<=[.!?;…])\s+', rest) if rest else []:
+        for piece in _clauses(sent, limit):
+            if cur and len(cur) + 1 + len(piece) > limit:
+                out.append(cur)
+                limit = min(chunk_chars, max(min_chunk, len(cur)))
+                cur = piece
+            else:
+                cur = f'{cur} {piece}'.strip()
+    if cur:
+        out.append(cur)
+    return out
+
+
 # ---------------------------------------------------------------- side effects
 
 class Assistant:
@@ -239,6 +334,7 @@ class Assistant:
         self.rec = {'t': round(time.time(), 3), 'engine': cfg['engine'],
                     'mode': os.environ.get('S22_PTT') or 'release'}
         self.agent_ready: dict = {}
+        self.lang: str | None = None      # language of the last utterance (rig ASR), else from the text
 
     # -- audio
     def say(self, text: str = '', wav: str | None = None, wait: bool = True, filler: bool = False):
@@ -310,6 +406,17 @@ class Assistant:
         return round(time.time() - cue, 2)
 
     def transcribe(self, wav_chroot: str) -> str:
+        """The rig's whisper (Greek or English) when reachable, else the phone's English ASR."""
+        self.lang = None
+        if self.cfg.get('asr', 'rig') == 'rig' and RV is not None:
+            try:
+                r = RV.transcribe(CHROOT / wav_chroot.lstrip('/'), RV.load_config())
+                self.lang = r['lang']
+                self.rec.update(asr_engine='rig-whisper', asr_lang=r['lang'], asr_ms=r['ms'])
+                return r['text']
+            except (RV.RigUnavailable, OSError) as error:
+                self.rec['asr_rig_error'] = str(error)[:200]
+        self.rec['asr_engine'] = self.cfg['engine']
         t = time.time()
         r = subprocess.run(['chroot', str(CHROOT)] + asr_argv(self.cfg['engine'], wav_chroot),
                            capture_output=True, text=True, timeout=120)
@@ -350,12 +457,19 @@ class Assistant:
             ok = self.healthy()
         self.agent_ready.update(ok=ok, ms=int((time.time() - t) * 1000))
 
+    def reply_lang(self, text: str = '') -> str:
+        """The language to answer in: what the rig ASR heard, else the script of the text."""
+        return self.lang if self.lang in REPLY_LANGUAGE else text_lang(text)
+
     def ask(self, text: str, still_working: bool = True) -> str:
         session = self.cfg['session']
         since = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(time.time() - 2))
+        lang = self.reply_lang(text)
+        self.rec['reply_lang'] = lang
+        context = [{'title': 'voice input', 'content': VOICE_CONTEXT}, language_context(lang)]
         status, out = self._http('POST', '/api/chat', {
             'sessionId': session, 'message': text,
-            'context': [{'title': 'voice input', 'content': VOICE_CONTEXT}]}, timeout=60)
+            'context': [c for c in context if c]}, timeout=60)
         start = time.time()
         warned = False
         while out.get('pending') and not out.get('reply'):
@@ -363,7 +477,7 @@ class Assistant:
                 raise TimeoutError('assistant reply timed out')
             if still_working and not warned and time.time() - start > self.cfg['still_working_s']:
                 warned = True
-                self.say('One moment.', wait=False)
+                self.say(phrase('moment', lang), wait=False)
             time.sleep(float(self.cfg.get('poll_s', 1.0)))
             _, out = self._http('GET', f'/api/chat/pending?sessionId={session}', timeout=15)
             if not out.get('pending') and not out.get('reply'):
@@ -380,6 +494,7 @@ class Assistant:
     # -- natural voice: speakable text, filler clips, spoken thinking
     prerender = True      # synthesize the answer while a filler plays (off for --silent-verify)
     filler_proc = None    # a filler/thinking clip still playing when the reply arrived
+    question = ''         # the question being answered (gap fillers are picked for it)
 
     def finish_filler(self) -> None:
         """Let the clip that is playing finish (never cut off) before the real answer starts."""
@@ -397,7 +512,7 @@ class Assistant:
             text = V.reply_to_speech(reply, style=style)
         else:
             text = clean_for_speech(reply)
-        return summarize(text, int(self.cfg['max_spoken_chars']))
+        return summarize(text, int(self.cfg['max_spoken_chars']), text_lang(text))
 
     def filler_bank(self):
         if V is None or not self.cfg.get('fillers', True):
@@ -446,6 +561,7 @@ class Assistant:
         """
         cfg = self.cfg
         bank = self.filler_bank() if self.speak_enabled else None
+        self.question = text
         result: dict = {}
 
         def work():
@@ -482,7 +598,7 @@ class Assistant:
                     playing = self.say(chunk, wait=False, filler=True)
                     events.append({'kind': 'thinking', 'at_s': round(now, 2), 'text': chunk})
                 elif bank is not None and now >= next_filler and played <= 4:
-                    wav, info = bank.pick(text, second=played > 0)
+                    wav, info = bank.pick(text, second=played > 0, lang=self.reply_lang(text))
                     if wav:
                         playing = self.say(wav=wav, wait=False, filler=True)
                         events.append({'kind': 'filler', 'at_s': round(now, 2), **info})
@@ -513,36 +629,65 @@ class Assistant:
             pass
         return None
 
-    def speak_answer(self, spoken: str) -> None:
-        """Speak the answer, synthesizing before playing so a long answer starts sooner.
+    def _render_covered(self, text: str, name: str) -> str | None:
+        """_render(), with filler clips (the question's language, "still thinking" category) covering the
+        silence when the render is slow (the rig's voice shares the GPU with the main model: RTF 0.9 idle,
+        2+ under load). A clip that is playing is never cut; finish_filler() lets it end first."""
+        bank = self.filler_bank() if self.speak_enabled else None
+        if bank is None:
+            return self._render(text, name)
+        out: dict = {}
+        th = threading.Thread(target=lambda: out.update(wav=self._render(text, name)), daemon=True)
+        th.start()
+        t0 = time.time()
+        last_audio = t0
+        played = 0
+        while th.is_alive():
+            th.join(0.05)
+            proc = self.filler_proc
+            if proc is not None and proc.poll() is None:
+                last_audio = time.time()
+                continue
+            if (th.is_alive() and played < int(self.cfg.get('gap_fillers_max', 2))
+                    and time.time() - last_audio >= float(self.cfg.get('gap_filler_s', 1.5))):
+                wav, info = bank.pick(self.question or text, second=True, lang=self.reply_lang(self.question or text))
+                played += 1
+                if wav:
+                    self.filler_proc = self.say(wav=wav, wait=False, filler=True)
+                    self.rec.setdefault('fillers', []).append(
+                        {'kind': 'gap', 'at_s': round(time.time() - t0, 2), **info})
+                last_audio = time.time()
+        return out.get('wav')
 
-        A longer answer is split after its first sentence: sentence one is rendered and starts
-        playing while the rest renders (each s22-say call loads the TTS model, ~2 s, so rendering
-        the whole answer first left several silent seconds after the filler). Playback calls
-        queue on s22-say's own lock, so the order is kept.
+    def speak_answer(self, spoken: str) -> None:
+        """Speak the answer chunk by chunk: each chunk is rendered while the previous one plays.
+
+        The first chunk is short (first sentence or clause) so audio starts fast; it is rendered while any filler
+        is still playing. Renders (render-only s22-say, the rig's owner voice) take no sound-card lock, so the
+        next chunk renders during playback; playback calls queue on s22-say's own lock, so the order is kept.
         """
         if not (self.speak_enabled and self.prerender):
             self.finish_filler()
             self.say(spoken)
             return
         t = time.time()
-        first, rest = split_first_chunk(spoken, int(self.cfg.get('split_chars', 120)))
-        w1 = self._render(first, 'answer1.wav')   # synthesized while any filler is still playing
+        chunks = speech_chunks(spoken, int(self.cfg.get('split_chars', 120)), int(self.cfg.get('chunk_chars', 220)))
+        self.rec['chunks'] = len(chunks)
+        wav = self._render_covered(chunks[0], 'answer1.wav') if chunks else None
         self.finish_filler()
-        if not w1:
+        if not wav:
             self.say(spoken)
             return
         self.rec['render_ms'] = int((time.time() - t) * 1000)
         self.rec['answer_launch_t'] = round(time.time(), 3)
-        p1 = self.say(wav=w1, wait=False)
-        w2 = self._render(rest, 'answer2.wav') if rest else None
-        if p1 is not None:
-            p1.wait(timeout=180)
-        if rest:
-            if w2:
-                self.say(wav=w2)
-            else:
-                self.say(rest)
+        playing = self.say(wav=wav, wait=False)
+        for i, chunk in enumerate(chunks[1:], 2):
+            nxt = self._render(chunk, f'answer{i}.wav')     # renders while the previous chunk plays
+            if playing is not None:
+                playing.wait(timeout=180)
+            playing = self.say(wav=nxt, wait=False) if nxt else self.say(chunk, wait=False)
+        if playing is not None:
+            playing.wait(timeout=180)
         self.rec['render_total_ms'] = int((time.time() - t) * 1000)
 
     def log(self) -> None:
@@ -572,7 +717,7 @@ class Assistant:
             self.rec['transcript'] = text
             if not re.search(r'\w', text):
                 self.rec['result'] = 'empty'
-                self.say("Sorry, I didn't catch that.")
+                self.say(phrase('not_caught', self.lang))
                 return 0
             agent.join(timeout=150)
             self.rec['agent_start_ms'] = self.agent_ready.get('ms')
@@ -584,7 +729,7 @@ class Assistant:
             self.rec['reply_chars'] = len(reply)
             spoken, cut = self.speakable(reply)
             if not spoken:
-                spoken = 'The assistant returned an empty answer.'
+                spoken = phrase('empty', self.reply_lang(text))
             self.rec.update(spoken_chars=len(spoken), truncated=cut, reply=reply[:2000],
                             result='ok')
             self.rec['to_speech_ms'] = int((time.time() - t0) * 1000)
@@ -596,8 +741,8 @@ class Assistant:
         except Exception as error:   # every failure is spoken, then logged
             self.rec.update(result='error', error=f'{type(error).__name__}: {error}'[:500])
             reach = isinstance(error, (ConnectionError, urllib.error.URLError, TimeoutError, OSError))
-            self.say("Sorry, I couldn't reach the assistant." if reach
-                     else 'Sorry, something went wrong with the assistant.')
+            lang = self.reply_lang(self.rec.get('transcript') or '')
+            self.say(phrase('unreachable' if reach else 'failed', lang))
             return 1
         finally:
             self.rec['total_ms'] = int((time.time() - t0) * 1000)
@@ -686,7 +831,8 @@ def card_listen(cfg: dict, stop_file: str) -> int:
             pass
         a.rec['transcript'] = text
         a.rec['result'] = 'ok' if re.search(r'\w', text) else 'empty'
-        emit(transcript=text, record_s=a.rec['record_s'], asr_ms=a.rec.get('asr_ms'))
+        emit(transcript=text, record_s=a.rec['record_s'], asr_ms=a.rec.get('asr_ms'),
+             lang=a.lang or text_lang(text), asr=a.rec.get('asr_engine'))
         return 0
     except Exception as error:
         a.rec.update(result='error', error=f'{type(error).__name__}: {error}'[:500])
@@ -720,7 +866,7 @@ def card_turn(cfg: dict, text: str) -> int:
         a.rec['agent_ms'] = int((time.time() - t0) * 1000)
         spoken, cut = a.speakable(reply)
         if not spoken:
-            spoken = 'The assistant returned an empty answer.'
+            spoken = phrase('empty', text_lang(text))
         a.rec.update(reply=reply[:2000], spoken=spoken[:2000], truncated=cut, result='ok')
         stop.set()
         emit(state='reply', text=reply[:4000])
@@ -732,7 +878,7 @@ def card_turn(cfg: dict, text: str) -> int:
         a.rec.update(result='error', error=f'{type(error).__name__}: {error}'[:500])
         emit(state='error', error=a.rec['error'])
         reach = isinstance(error, (ConnectionError, urllib.error.URLError, TimeoutError, OSError))
-        a.say("Sorry, I couldn't reach the assistant." if reach else 'Sorry, something went wrong with the assistant.')
+        a.say(phrase('unreachable' if reach else 'failed', text_lang(text)))
         return 1
     finally:
         stop.set()

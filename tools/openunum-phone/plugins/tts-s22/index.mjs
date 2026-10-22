@@ -6,12 +6,15 @@
 // s22-say --wav: firmware-graph audio path, a temporary speech level, and the
 // amps back at the resting mute afterwards (owner 2026-10-21: the phone talks).
 // Select it with runtime.mediaBackends.text_to_speech = ["tts-s22"].
+// Voice (owner 2026-10-22: ONE voice, his own): engine "antonis" = the rig's VoxCPM owner voice for Greek and
+// English (Piper el-antonis on the phone when the rig is unreachable). A model-chosen engine is ignored unless
+// config.allow_engine_override is true, so the voice never switches between turns.
 import { execFile } from 'node:child_process';
 import { PluginBase, pluginBaseSource } from './lib/plugin-base.mjs';
 
 export { pluginBaseSource };
 
-export const ENGINES = ['supertonic', 'paradee', 'kitten', 'piper', 'kokoro', 'el-antonis', 'el-female', 'espeak'];
+export const ENGINES = ['antonis', 'supertonic', 'paradee', 'kitten', 'piper', 'kokoro', 'el-antonis', 'el-female', 'espeak'];
 export const OUTPUTS = ['speaker', 'earpiece', 'top', 'bottom'];
 
 export function runCli(cli, args, timeoutMs) {
@@ -34,12 +37,12 @@ export default class TtsS22Plugin extends PluginBase {
   getTools() {
     return [{
       name: 'text_to_speech',
-      description: 'Speak text aloud through the phone speaker with on-device neural TTS (Greek text: engine el-antonis or el-female). Returns the WAV path and whether it was played; play=false only renders the file.',
+      description: "Speak text aloud through the phone speaker in the owner's own voice (Greek or English). Returns the WAV path and whether it was played; play=false only renders the file.",
       parameters: {
         type: 'object',
         properties: {
           text: { type: 'string', description: 'Text to synthesize' },
-          engine: { type: 'string', enum: ENGINES, description: 'TTS engine (default supertonic; Greek: el-antonis / el-female)' },
+          engine: { type: 'string', enum: ENGINES, description: "Ignored unless the plugin config allows overrides: the voice is always the owner's (antonis)" },
           play: { type: 'boolean', description: 'Speak it on the phone (default true)' },
           out: { type: 'string', enum: OUTPUTS, description: 'Output: speaker (default), earpiece, top, bottom' },
           filler: { type: 'boolean', description: 'Play a pre-rendered "hmm, let me think" clip (same voice and loudness) while the speech renders (default: config.filler, off)' },
@@ -52,7 +55,8 @@ export default class TtsS22Plugin extends PluginBase {
       execute: async ({ args } = {}) => {
         const text = String(args?.text || '').trim();
         if (!text) return { ok: false, error: 'empty_text' };
-        const engine = ENGINES.includes(args?.engine) ? args.engine : (this.config.engine || 'supertonic');
+        const engine = this.config.allow_engine_override === true && ENGINES.includes(args?.engine)
+          ? args.engine : (this.config.engine || 'antonis');
         const play = typeof args?.play === 'boolean' ? args.play : this.config.play !== false;
         const out = OUTPUTS.includes(args?.out) ? args.out : (this.config.out || 'speaker');
         const filler = play && (typeof args?.filler === 'boolean' ? args.filler : this.config.filler === true);

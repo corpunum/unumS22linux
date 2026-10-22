@@ -1,0 +1,21 @@
+[Unit]
+Description=Whisper large-v3-turbo ASR for the S22 phone (Greek + English, Tailscale IP only, :8891)
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Bound to the rig's Tailscale address only: reachable from the tailnet (the phone), never from the LAN.
+# Vulkan iGPU, ~1.6 GB weights; shares the GPU with Halogen (an utterance takes well under a second).
+# --convert: the phone uploads its recording as-is (48 kHz) and ffmpeg resamples it here.
+ExecStartPre=/bin/sh -c 'for i in $(seq 30); do ip -4 addr show tailscale0 2>/dev/null | grep -q 100.76.5.104 && exit 0; sleep 2; done; exit 1'
+ExecStart=%h/whisper.cpp/build/bin/whisper-server -m %h/model-library/speech/whisper/ggml-large-v3-turbo.bin --host 100.76.5.104 --port 8891 -l auto -t 4 --convert --inference-path /inference
+WorkingDirectory=%t
+MemoryHigh=3G
+MemoryMax=4G
+Nice=5
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

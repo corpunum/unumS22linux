@@ -50,7 +50,7 @@ LOG = Path('/srv/s22/state/touchui/touchd.log')
 DISPLAY = '/srv/s22/hardware/bin/s22-display'
 BACKLIGHT = Path('/sys/class/backlight/panel')
 SAY = '/srv/s22/hardware/bin/s22-say'
-TTS_ENGINES = {'supertonic', 'paradee', 'kitten', 'piper', 'kokoro', 'el-antonis', 'el-female', 'espeak'}
+TTS_ENGINES = {'antonis', 'supertonic', 'paradee', 'kitten', 'piper', 'kokoro', 'el-antonis', 'el-female', 'espeak'}
 TTS_OUTPUTS = {'speaker', 'earpiece', 'top', 'bottom'}
 DISPLAY_STATE = Path('/run/s22-display-state')
 CAMERA = '/srv/s22/hardware/bin/s22-camera'   # reviewed client (sha256 3f1375f6...) since 2026-10-09
@@ -773,7 +773,7 @@ class Daemon:
             return {'ok': False, 'error': 'empty_text'}
         if len(text) > 4000:
             return {'ok': False, 'error': 'text_too_long', 'max': 4000}
-        engine = str(req.get('engine') or 'supertonic')
+        engine = str(req.get('engine') or 'antonis')   # the owner's own voice (rig VoxCPM, Piper fallback)
         if engine not in TTS_ENGINES:
             return {'ok': False, 'error': 'bad_engine', 'engines': sorted(TTS_ENGINES)}
         play = bool(req.get('play'))

@@ -2361,7 +2361,7 @@ PRESETS = {
 PRESETS['s22-outer'] = {   # run in the outer recovery userland; tools via chroot
     'asr': ['chroot', '/mnt/omarchy-trial'] + PRESETS['s22']['asr'],
     # The call speaks with the SAME voice as every other path: s22-say in render-only mode picks the engine
-    # (Supertonic F1 for English, the el-antonis Piper voice for Greek text) and loudness-normalises the
+    # (the owner's own voice: the rig's VoxCPM antonis, Piper el-antonis when the rig is down) and loudness-normalises the
     # render to -16 LUFS.  {out} is chroot-relative here (root strips the prefix), s22-say wants the outer path.
     'tts': ['env', 'S22_SAY_OUT=/mnt/omarchy-trial{out}', '/srv/s22/hardware/bin/s22-say', '--', '{text}'],
     'tts_legacy': ['chroot', '/mnt/omarchy-trial'] + PRESETS['s22']['tts'],

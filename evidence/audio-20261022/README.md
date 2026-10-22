@@ -44,3 +44,55 @@ robotic, kept only as an opt-in engine), Greek = el-antonis. Both everywhere exc
 See the commit message / report: assistant (verified live), converse (shared code, host tests), SIP classic
 (verified live, real call), SIP fast voice (host tests only; rig service was down), agent text_to_speech/touchd
 (host tests; deploy pending a touchd restart).
+
+## Later on 10-22: the owner's own voice everywhere + Greek speech input
+
+Owner: "the default voice must be my own voice everywhere, stop switching between voices"; "I want to speak Greek
+to the phone and get the replies in Greek".
+
+### Voice: one voice, his own (VoxCPM2 + LoRA "antonis" on the rig)
+
+| Path | Before (this morning) | Now |
+|---|---|---|
+| s22-assistant / Talk button / Agent card / s22-converse / s22-buttons speech | Supertonic F1 (EN), Piper el-antonis (EL) | s22-say engine `antonis` (default): rig VoxCPM antonis, EN + EL |
+| spoken thinking chunks | same as answers | same as answers (antonis) |
+| filler clips (66 EN + 66 EL) | Supertonic F1 / el-antonis | re-rendered in antonis (strict: no fallback voice), -15.8..-16.8 LUFS, peak -2.0 |
+| agent text_to_speech (tts-s22 -> s22-ui -> touchd) | `--engine supertonic` forced | `antonis`; a model-chosen engine is ignored unless `allow_engine_override` |
+| SIP call, fast voice (rig unum-voice) | Supertonic-3 F1 + Piper el-antonis | VoxCPM antonis streamed per clause (unum-voice 780698c), Piper el-antonis fallback |
+| SIP call, classic loop (rig down) | s22-say | s22-say -> antonis, or Piper el-antonis when the rig is down |
+| offline / rig slow (no first audio in 2 s, clause over 3 s + 0.12 s/char) | n/a | Piper el-antonis on the phone (same voice distilled), rig skipped for 60 s |
+
+Rig side (tools/hardware/voice/rig/install-rig.sh): `s22-voxcpm-tailnet.service` relays 100.76.5.104:8890 -> the
+loopback-only voxcpm-greek :8890 (no restart of the voice server), `s22-whisper.service` serves whisper
+large-v3-turbo on 100.76.5.104:8891 (Vulkan, MemoryMax 4G, `--convert`). Both bind the Tailscale address only.
+
+English in the owner's voice (VoxCPM antonis, whisper large-v3-turbo round trip, 3 EN + 3 EL sentences): every
+sentence transcribed word for word ("Hello, I am your phone assistant. The battery is at 42% and charging.").
+English through the offline Piper el-antonis fallback is only partly intelligible (1 of 2 sentences correct,
+"Tomorrow the weather in Athens will be sunny" -> "The mode of weather in Athens is a sign"): acceptable only as
+the rare fallback; `S22_TTS_OFFLINE_EN=supertonic` trades the voice for clarity if the owner prefers.
+
+Rig voice speed depends on the main model's GPU load: idle RTF 0.89-0.95, first audio 0.16-0.22 s; under Halogen
+load (flash_serve decoding) RTF 1.3-2.1. Phone render of one clause (rig + fast -16 LUFS normalisation, 0.4-0.5 s):
+2.7-4 s idle, 4-6 s loaded. Slow first chunks are now covered by "still thinking" gap fillers (same language).
+Answers are spoken in chunks (short first clause <= 70 chars, each next chunk no longer than the one playing,
+rendered while it plays).
+
+### Greek speech input
+
+The phone sends the recording to the rig's whisper (language auto-detect narrowed to el/en; a guess outside them
+is redone with the likelier of the two), and falls back to Parakeet (English only) when the rig is unreachable.
+Every turn carries a reply-language hint ("The owner spoke GREEK. Reply in Greek ..."); fixed phrases ("One
+moment", "Sorry, I didn't catch that", ...) and fillers follow the language.
+
+Live on the phone (assistant fed a WAV of the question synthesized in the owner's voice, speaker level 4):
+
+| Test | Transcript (ASR, ms) | Reply | Voice | Question end -> first audio (filler) | -> answer audio |
+|---|---|---|---|---|---|
+| EL, rig up | "Πες μου σε μία πρόταση ποια είναι η πρωτεύουσα της Γαλλίας" (whisper el, 1241) | "Η πρωτεύουσα της Γαλλίας είναι το Παρίσι." | antonis-rig | 2.45 s (EL filler) | 11.9 s (agent 5.9 s, render 4.8 s, GPU loaded) |
+| EN, rig up | "In one sentence, what is the capital of Italy?" (whisper en, 1057) | "Rome is the capital of Italy." | antonis-rig | 2.32 s (EN filler) | 8.7 s (agent 3.2 s, render 4.4 s) |
+| EL, rig TTS blocked (wrong port) | same, whisper el | same Greek reply | el-antonis-fallback | 2.5 s | 14.2 s (Piper render 9.8 s, 2 EL gap fillers) |
+| EN, rig TTS + ASR blocked | "In one sentence, what is the capital of Italy?" (Parakeet, 5000) | "Rome is the capital of Italy." | el-antonis-fallback | ~6 s | 15.9 s |
+
+Calls (unum-voice client, real-time WebSocket turns): TTS first audio 392-415 ms, endpoint -> first audio
+569-647 ms with a fast LLM, reply -15.7 LUFS, whisper reads the reply back word for word.

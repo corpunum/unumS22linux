@@ -370,13 +370,14 @@ class FillerBank:
         except (OSError, ValueError):
             return {}
 
-    def pick(self, question: str, second: bool = False):
+    def pick(self, question: str, second: bool = False, lang: str | None = None):
         """(wav_path_in_chroot, info) or (None, info). Never the previous clip of the same lang/category.
 
         second=True (a "still thinking" clip) uses the general category, which
-        also never repeats the clip just played.
+        also never repeats the clip just played. lang ('el'/'en', e.g. what the
+        rig ASR heard) overrides the guess from the question's script.
         """
-        lang = filler_lang(question)
+        lang = lang if lang in ('el', 'en') else filler_lang(question)
         category = 'general' if second else classify_question(question)
         clips = (self.manifest.get('clips', {}).get(lang, {}) or {}).get(category) or []
         clips = [c for c in clips if (self.root / lang / category / f"{c['n']}.wav").is_file()]

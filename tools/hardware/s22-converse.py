@@ -11,7 +11,7 @@ context carries; the model is OpenUnum's default, never overridden):
      (S22_REC_RAW) and an energy VAD on 20 ms frames finds the start and the
      end of an utterance (end = END_SILENCE_S of quiet after speech)
   2. the utterance (plus a short pre-roll) is written as a 16-bit WAV and
-     transcribed on the phone (same sherpa-onnx command as s22-assistant)
+     transcribed like s22-assistant does (the rig's whisper for Greek/English, else on the phone)
   3. OpenUnum answers (POST /api/chat, poll /api/chat/pending)
   4. s22-say speaks the cleaned, shortened reply; the mic is closed meanwhile
   5. repeat until an exit phrase ("stop", "goodbye", "τέλος", ...), IDLE_S
@@ -96,7 +96,7 @@ EXIT_PHRASES = (
 
 CONVERSE_CONTEXT = (
     'This is a hands-free spoken conversation with the owner through the Galaxy S22 phone. '
-    'Each message was transcribed by on-device speech recognition, so it may contain '
+    'Each message was transcribed by speech recognition, so it may contain '
     'recognition errors. Your reply will be read aloud by text-to-speech: answer in one to '
     'three short, plain spoken sentences unless asked for more, and keep the conversation '
     'going naturally. No markdown, lists, tables, code or URLs in the spoken answer.')
@@ -481,14 +481,16 @@ class Converser(A.Assistant):
             write_wav(self.out_dir / f'turn{self.turn:02d}-heard.wav', utterance, rate)
         text = self.transcribe(wav_chroot)
         rec['asr_ms'] = self.rec.get('asr_ms')
+        rec['asr_engine'] = self.rec.get('asr_engine')
+        rec['lang'] = self.lang
         rec['transcript'] = text
         if not re.search(r'\w', text):
             rec['result'] = 'empty'
-            self.say("Sorry, I didn't catch that.")
+            self.say(A.phrase('not_caught', self.lang))
             return rec
         if is_exit_phrase(text):
             rec['result'] = 'exit'
-            self.say('Goodbye.')
+            self.say(A.phrase('goodbye', self.reply_lang(text)))
             return rec
         t = time.time()
         reply = self.ask_with_fillers(text)
@@ -497,7 +499,7 @@ class Converser(A.Assistant):
         rec['fillers'] = self.rec.get('fillers')
         spoken, cut = self.speakable(reply)
         if not spoken:
-            spoken = 'The assistant returned an empty answer.'
+            spoken = A.phrase('empty', self.reply_lang(text))
         rec.update(reply=reply[:2000], spoken=spoken, truncated=cut, result='ok')
         t = time.time()
         self.speak_answer(spoken)

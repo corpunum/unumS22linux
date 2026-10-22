@@ -228,6 +228,7 @@ class LoopTests(unittest.TestCase):
     def run_conv(self, transcripts, inputs, **conv):
         self.script.write_text(json.dumps(transcripts))
         c = MOD.load_config(self.base)
+        c['asr'] = 'phone'                         # the fake ASR; never the rig over the network
         c['converse'].update(conv)
         conv_obj = MOD.Converser(c, inputs=inputs, out_dir=self.root / 'out', base=self.base)
         with mock.patch.object(MOD.Converser, '_http', side_effect=self.fake_http):

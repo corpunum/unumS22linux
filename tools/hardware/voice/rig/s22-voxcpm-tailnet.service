@@ -1,0 +1,16 @@
+[Unit]
+Description=Owner-voice TTS (voxcpm-greek :8890) on the Tailscale address for the S22 phone
+After=network-online.target tailscaled.service voxcpm-greek.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStartPre=/bin/sh -c 'for i in $(seq 30); do ip -4 addr show tailscale0 2>/dev/null | grep -q 100.76.5.104 && exit 0; sleep 2; done; exit 1'
+# Installed copy of tools/hardware/voice/rig/tcp-forward.py (s22-linux).
+ExecStart=/usr/bin/python3 -I -B %h/.local/lib/s22-voice/tcp-forward.py 100.76.5.104:8890 127.0.0.1:8890
+MemoryMax=128M
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
