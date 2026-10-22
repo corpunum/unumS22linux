@@ -117,6 +117,25 @@ class GuardTest(unittest.TestCase):
         self.g.step([{'sessionId': 'voice', 'turnId': 'z', 'ageMs': 250000}], 1051)
         check(self.cancels == ['voice', 'voice'])
 
+    def test_tool_children_selection(self):
+        table = {1: (0, 0, 'init'), 50: (1, 10, 'node src/server.mjs'), 60: (50, 20, 'mcp-server old'),
+                 70: (50, 105, '/bin/bash -c sleep 150; echo finished'), 71: (70, 105, 'sleep 150'),
+                 80: (1, 110, 'unrelated')}
+        check(G.tool_children(table, 100) == [71, 70], G.tool_children(table, 100))
+        check(G.tool_children(table, 200) == [])
+
+    def test_reap_only_when_no_other_turn_is_pending(self):
+        reaped = []
+        g = G.Guard(dict(G.CONFIG), None, cancel=self.cancel, escalate=lambda: {}, save=lambda st: None,
+                    reaper=lambda since: reaped.append(since) or {'killed': [70], 'kill9': []})
+        g.step([pend('voice', 'a', 0), pend('mission', 'm', 0)], 301)
+        g.step([pend('mission', 'm', 0)], 305)              # another turn still pending: leave processes
+        check(reaped == [])
+        g.step([pend('voice', 'b', 400)], 701)
+        g.step([], 705)
+        check(len(reaped) == 1 and abs(reaped[0] - 400) < 1, reaped)
+        check('reap_children' in self.events())
+
     def test_cancel_errors_are_logged_not_raised(self):
         g = G.Guard(dict(G.CONFIG), None, cancel=lambda sid: (_ for _ in ()).throw(OSError('down')),
                     escalate=lambda: {}, save=lambda st: None)

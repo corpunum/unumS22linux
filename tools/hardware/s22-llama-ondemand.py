@@ -1244,7 +1244,7 @@ def main(argv=None) -> int:
     kw = {}
     if test:
         kw = dict(argv=[str(x) for x in json.loads(a.backend_argv)], backend_port=a.backend_port,
-                  state=Path(a.state), mid_cap=None, preexec=None)
+                  state=Path(a.state), mid_cap=None, preexec=None, hold=Path(a.state) / 'hold')
     OnDemand(idle_s=a.idle_s, first_s=a.first_s, max_s=a.max_s, **kw).serve(
         listen=(LISTEN[0], a.port), warm_start=a.warm_on_start and not test)
     return 0

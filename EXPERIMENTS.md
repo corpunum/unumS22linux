@@ -3382,3 +3382,35 @@ Details: `evidence/npu-custom-20261022/README.md`. Tools: `tools/hardware/npu/nn
 - Not verified on the phone: PTT hold (it would start a voice turn), Volume-down mute, grim screenshot under sway,
   the Settings toggle by touch, real finger, Power wake from a real suspend.
 
+
+### 2026-10-22 — Phase 0 (stabilise): Wi-Fi saver (#71), hard per-turn limits (#75), 72 h trace
+
+- **Wi-Fi saver** in `s22-netpolicy`: screen off + mobile uplink + Wi-Fi not connected for 60 s → `wpa_cli disconnect`
+  (or `wlan0 down`), one discovery scan every 15 min, unpark on screen on / uplink change / kill switch
+  (`s22-netpolicy saver off`) / dead-man hold / daemon exit. Locked on mobile: Wi-Fi wakes 102 of 130 cycles (#71)
+  → **0** in every parked window; mean sleep 2.8 s → 19–27 s; asleep 27 % → 76–79 %; drain 3.9 %/h (#71) and
+  5.0 %/h (today unparked, 11 min) → 2.7 %/h (disconnect, 17 min), 1.9 and 3.4 %/h (down, 14 and 16 min, the
+  latter right after a charge). No window reached a clean 20 min (owner using/charging the phone); wake numbers
+  solid, drain indicative. Tailscale answered while parked (rig pings 10:09, 10:35, 11:35, 12:20 UTC).
+- Bugs fixed on the way: `s22-net-deadman` ran `wpa_cli` without the phone's control path (its reconnect never
+  worked); netpolicy's `ip route del` failed every 5 s on `default via 10.55.0.1 dev ecm0 dead linkdown` after a
+  cable-less boot. netpolicy now takes a flock.
+- **Hard limits:** OpenUnum's own turn timeouts are 20 days on the phone (owner policy) and global, so
+  `s22-turnguard` (new keepalive service) enforces voice 300 s / touch 900 s through `/api/chat/diagnostics` +
+  `/api/chat/cancel`, re-cancels, then aborts the proxy; per-message retry budget; state survives restarts.
+  OpenUnum's cancel leaves the shell tool's child running (`bash -c sleep 150` seen), so the guard now stops the
+  server's children started after a cancelled turn began (only when no other turn is pending).
+  `s22-llama-ondemand`: first output ≤ 150 s (streamed), ≤ 420 s total, CPU check after an abort (stuck backend
+  unloaded), retry budget, restart-safe state (a new proxy kills the old one's orphan backend). Fault injection on
+  the phone: fake hung backend cut at 30.3/30.1 s (limit 30), CPU 100 % → 0 % within 4 s, 3rd attempt refused in
+  0.0 s, proxy SIGKILL mid-request → orphan (108 % CPU) killed by the next proxy; real turn with a 45 s test limit
+  cancelled at 50 s and its `sleep` child reaped. Not run on the phone: real llama-server oversized prompt (model
+  held by s22-guardian, thermal, all afternoon).
+- **s22-trace** (keepalive service "trace") + rig `tools/hardware/power/s22-trace-summary.py --pull`: started 09:50,
+  survived the 12:20 reboot, ≈0.13 % of a core.
+- Incidents: unexplained reboot ~12:20 (after 27 min of local-model turns); since 12:27 an OpenUnum shell turn's
+  `gst-inspect-1.0 x264enc` spins in the kernel (`alloc_contig_range`, CMA full), ignores SIGKILL, blocks every
+  suspend and keeps BIG at 76–79 °C — needs a reboot (not done: owner using the phone).
+- Rules kept: exact-PID kills only (keepalive 1679 → restarted detached, proxy 2279, gst 3636 attempted), dead-man
+  armed for each network change, backups `*.bak-*` next to every replaced binary, no reboot, no calls/SMS/audio.
+  Details: `evidence/phase0-20261022/README.md`.

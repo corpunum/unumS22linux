@@ -1,0 +1,7 @@
+# Wi-Fi saver windows, phone locked + discharging + mobile data only (UTC, 2026-10-22); raw SOC from s22-trace samples, cycles from autosleep.jsonl
+segment | minutes | raw SOC drop | %/h | mA | asleep % | cycles | mean sleep s | first wake reason
+saver=disconnect (parked) | 16.9 | 0.77 % | 2.73 | 90 | 76 | 40 | 19.4 | {'modem': 39, 'abort': 1}
+saver=down (parked) a | 15.7 | 0.88 % | 3.37 | 112 | 79 | 28 | 26.6 | {'modem': 26, 'abort': 2}
+saver=down (parked) b | 14.3 | 0.44 % | 1.85 | 61 | 79 | 31 | 21.8 | {'modem': 30, 'abort': 1}
+saver off (Wi-Fi scanning) | 11.3 | 0.95 % | 5.02 | 167 | 56 | 28 | 13.5 | {'modem': 19, 'wlan': 6, 'rtc/pmic': 2, 'abort': 1}
+reference #71 06:55-07:17 (no saver) | 22.0 | 1.44 % (from issue) | 3.9 | 130 | 27 | 130 | 2.8 | {'modem': 19, 'abort': 9, 'wlan': 102}

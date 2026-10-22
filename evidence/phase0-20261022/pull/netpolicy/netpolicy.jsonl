@@ -1,0 +1,59 @@
+{"event": "start", "pid": 28394, "t": 1792662794.26}
+{"event": "resumed", "t": 1792662794.261}
+{"event": "uplink", "old": null, "new": "mobile", "after_s": 0.0, "fails": {"wifi": 0, "mobile": 0}, "mobile": "up", "t": 1792662794.349}
+{"event": "wifi_saver_park", "method": "disconnect", "ok": true, "out": "OK", "t": 1792662857.412}
+{"event": "wifi_saver_unpark", "reason": "method_change", "was": "disconnect", "ok": true, "out": " OK", "t": 1792662872.816}
+{"event": "wifi_saver_park", "method": "down", "ok": true, "out": "", "t": 1792662939.142}
+{"event": "wifi_saver_unpark", "reason": "daemon_start", "was": "down", "ok": true, "out": " OK", "t": 1792662975.795}
+{"event": "wifi_saver_unpark", "reason": "disabled", "was": "down", "ok": true, "out": " OK", "t": 1792662976.062}
+{"event": "wifi_saver_park", "method": "disconnect", "ok": true, "out": "OK", "t": 1792663044.838}
+{"event": "wifi_saver_discover", "method": "disconnect", "ok": true, "out": "OK", "t": 1792664002.246}
+{"event": "wifi_saver_discover_done", "method": "disconnect", "found": false, "n_seen": 5, "t": 1792664055.664}
+{"event": "wifi_saver_unpark", "reason": "screen_on", "was": "disconnect", "ok": true, "out": " OK", "t": 1792664129.185}
+{"event": "probe", "link": "mobile", "ok": false, "fails": 1, "t": 1792664248.688}
+{"event": "mobile_redial", "ok": true, "error": null, "t": 1792664278.912}
+{"event": "route", "args": ["route", "replace", "default", "dev", "rmnet0", "metric", "50"], "ok": true, "out": "", "t": 1792664283.937}
+{"event": "probe", "link": "mobile", "ok": false, "fails": 1, "t": 1792664309.034}
+{"event": "probe", "link": "mobile", "ok": true, "fails": 0, "t": 1792664411.76}
+{"event": "wifi_saver_park", "method": "down", "ok": true, "out": "", "t": 1792664604.101}
+{"event": "wifi_saver_unpark", "reason": "screen_on", "was": "down", "ok": true, "out": " OK", "t": 1792664897.913}
+{"event": "probe", "link": "mobile", "ok": false, "fails": 1, "t": 1792664933.035}
+{"event": "probe", "link": "mobile", "ok": true, "fails": 0, "t": 1792664953.487}
+{"event": "wifi_saver_park", "method": "down", "ok": true, "out": "", "t": 1792665168.669}
+{"event": "wifi_saver_discover", "method": "down", "ok": true, "out": "", "t": 1792666074.52}
+{"event": "wifi_saver_discover_done", "method": "down", "found": false, "ok": true, "t": 1792666114.786}
+{"event": "wifi_saver_discover", "method": "down", "ok": true, "out": "", "t": 1792667018.481}
+{"event": "wifi_saver_discover_done", "method": "down", "found": false, "ok": true, "t": 1792667074.225}
+{"event": "wifi_saver_unpark", "reason": "screen_on", "was": "down", "ok": true, "out": " OK", "t": 1792667866.444}
+{"event": "wifi_saver_park", "method": "down", "ok": true, "out": "", "t": 1792667947.429}
+{"event": "wifi_saver_discover", "method": "down", "ok": true, "out": "", "t": 1792668869.344}
+{"event": "wifi_saver_discover_done", "method": "down", "found": false, "ok": true, "t": 1792668901.486}
+{"event": "wifi_saver_unpark", "reason": "disabled", "was": "down", "ok": true, "out": " OK", "t": 1792668979.389}
+{"event": "wifi_saver_park", "method": "disconnect", "ok": true, "out": "OK", "t": 1792671103.363}
+{"event": "start", "pid": 2448, "t": 1792671674.305}
+{"event": "resumed", "t": 1792671674.306}
+{"event": "mobile_up", "ok": true, "ipv4": "10.205.144.105", "error": null, "t": 1792671674.346}
+{"event": "route", "args": ["route", "replace", "default", "dev", "rmnet0", "metric", "50"], "ok": true, "out": "", "t": 1792671674.354}
+{"event": "uplink", "old": null, "new": "mobile", "after_s": 0.0, "fails": {"wifi": 0, "mobile": 0}, "mobile": "down", "t": 1792671674.354}
+{"event": "wifi_saver_park", "method": "disconnect", "ok": true, "out": "OK", "t": 1792671910.993}
+{"event": "probe", "link": "mobile", "ok": false, "fails": 1, "t": 1792672485.467}
+{"event": "probe", "link": "mobile", "ok": true, "fails": 0, "t": 1792672498.496}
+{"event": "probe", "link": "mobile", "ok": false, "fails": 1, "t": 1792672533.826}
+{"event": "mobile_redial", "ok": true, "error": null, "t": 1792672564.284}
+{"event": "route", "args": ["route", "replace", "default", "dev", "rmnet0", "metric", "50"], "ok": true, "out": "", "t": 1792672569.359}
+{"event": "probe", "link": "mobile", "ok": false, "fails": 1, "t": 1792672594.588}
+{"event": "probe", "link": "mobile", "ok": true, "fails": 0, "t": 1792672630.142}
+{"event": "wifi_saver_unpark", "reason": "screen_on", "was": "disconnect", "ok": true, "out": " OK", "t": 1792672635.18}
+{"event": "probe", "link": "mobile", "ok": false, "fails": 1, "t": 1792672670.422}
+{"event": "wifi_saver_park", "method": "disconnect", "ok": true, "out": "OK", "t": 1792672776.265}
+{"event": "probe", "link": "mobile", "ok": true, "fails": 0, "t": 1792672786.046}
+{"event": "wifi_saver_unpark", "reason": "screen_on", "was": "disconnect", "ok": true, "out": " OK", "t": 1792673096.345}
+{"event": "probe", "link": "mobile", "ok": false, "fails": 1, "t": 1792673161.817}
+{"event": "probe", "link": "mobile", "ok": true, "fails": 0, "t": 1792673187.132}
+{"event": "probe", "link": "mobile", "ok": false, "fails": 1, "t": 1792673222.237}
+{"event": "probe", "link": "mobile", "ok": true, "fails": 0, "t": 1792673230.73}
+{"event": "probe", "link": "mobile", "ok": false, "fails": 1, "t": 1792673270.853}
+{"event": "probe", "link": "mobile", "ok": true, "fails": 0, "t": 1792673291.143}
+{"event": "wifi_saver_park", "method": "disconnect", "ok": true, "out": "OK", "t": 1792673414.549}
+{"event": "wifi_saver_discover", "method": "disconnect", "ok": true, "out": "OK", "t": 1792674315.3}
+{"event": "wifi_saver_discover_done", "method": "disconnect", "found": false, "n_seen": 3, "t": 1792674330.384}

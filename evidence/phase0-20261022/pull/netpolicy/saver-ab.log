@@ -1,0 +1,9 @@
+1792662982 2026-10-22T09:56:22Z start windows=disconnect down off disconnect down off minutes=25 pid=29031 raw=7354 disp=off cyc=310
+1792662982 2026-10-22T09:56:22Z window disconnect begin raw=7354 disp=off cyc=310
+1792664436 2026-10-22T10:20:36Z window disconnect end (sequencer restarted: wall-clock windows) raw=7123 disp=on
+1792664436 2026-10-22T10:20:36Z start windows=down off disconnect down off disconnect minutes=25 pid=31735 raw=7123 disp=on cyc=358
+1792664436 2026-10-22T10:20:36Z window down begin raw=7123 disp=on cyc=358
+1792668948 2026-10-22T11:35:48Z window down end raw=8194 disp=off cyc=521
+1792668948 2026-10-22T11:35:48Z window off begin raw=8194 disp=off cyc=521
+1792671037 2026-10-22T12:10:37Z window off end raw=7628 disp=off cyc=577
+1792671037 2026-10-22T12:10:37Z window disconnect begin raw=7628 disp=off cyc=577
