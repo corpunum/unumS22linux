@@ -7,7 +7,8 @@
 #   s22-net-deadman cancel                cancel the armed timer
 #   s22-net-deadman status
 #   s22-net-deadman restore               restore now (what the timer runs)
-# Restore = USB D+ reconnect, ecm0 up + 10.55.0.2/24, wlan0 up + wpa reconnect,
+# Restore = USB D+ reconnect, ecm0 up + 10.55.0.2/24, wlan0 up + wpa reconnect (and a 1 h
+# hold on s22-netpolicy's Wi-Fi saver),
 # Wi-Fi lease route back,
 # drop the 192.0.2.0/24 test marker, un-pause s22-netpolicy (it then picks the
 # best available uplink: Wi-Fi > mobile > USB). If there is still no default
@@ -27,8 +28,12 @@ restore() {
     ip link set ecm0 up 2>/dev/null
     ip addr replace 10.55.0.2/24 dev ecm0 2>/dev/null
     ip route replace 10.55.0.0/24 dev ecm0 2>/dev/null
+    # s22-netpolicy's Wi-Fi saver must not park Wi-Fi again for an hour (it reads this file's mtime)
+    mkdir -p /run/s22-netpolicy && touch /run/s22-netpolicy/saver-hold
     ip link set wlan0 up 2>/dev/null
-    wpa_cli -i wlan0 reconnect >/dev/null 2>&1
+    # the phone's wpa_supplicant uses ctrl_interface=/run/wpa_supplicant-s22 (the default path
+    # /var/run/wpa_supplicant does not exist, so a bare "wpa_cli reconnect" silently did nothing)
+    wpa_cli -p /run/wpa_supplicant-s22 -i wlan0 reconnect >/dev/null 2>&1
     # a link down/up drops the kernel default route; put back the DHCP hook's route
     L=/srv/s22/hardware/wifi-private/lease.json
     gw=$(sed -n 's/.*"gateway": *"\([0-9.]*\)".*/\1/p' "$L" 2>/dev/null)

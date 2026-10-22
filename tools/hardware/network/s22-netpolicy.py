@@ -6,6 +6,7 @@
     s22-netpolicy off|on    pause/resume (persistent flag); "off" also puts the
                             boot-time routes back (ecm0 default, metric 0)
     s22-netpolicy probe IF  one connectivity probe bound to IF (wlan0/rmnet0/ecm0)
+    s22-netpolicy saver off|on|status   Wi-Fi saver kill switch (persistent flag)
 
 Policy (knobs in CONFIG, overridable by /srv/s22/state/netpolicy/config.json):
 * Wi-Fi is usable when wlan0 is operstate "up", has a DHCP default route and its
@@ -21,6 +22,17 @@ Policy (knobs in CONFIG, overridable by /srv/s22/state/netpolicy/config.json):
   routes stay as fallbacks (wlan0 600 from the DHCP hook, rmnet0 9000 from
   phoned). /etc/resolv.conf follows the uplink (its DNS first, then fallback).
 Tailscale follows the kernel routes by itself (netmon); nothing to do there.
+
+Wi-Fi saver (2026-10-22, issue #71). Out of Wi-Fi range wpa_supplicant keeps scanning for the
+home SSID, and those scans wake the suspended phone (wlan_pci_wake_irq) every few seconds.
+While the screen is off AND mobile data is the uplink AND Wi-Fi is not connected, for
+wifi_saver_grace_s, Wi-Fi is "parked" (wifi_saver_method "disconnect": wpa_cli disconnect, so
+wpa_supplicant stops scanning; "down": ip link set wlan0 down). Every wifi_saver_discover_every_s
+one bounded discovery runs (disconnect: one manual scan, checked for a configured SSID;
+down: link up for wifi_saver_discover_s); a known network found -> unpark. Screen on, uplink
+not mobile, the kill switch, "off", a deadman restore (hold file) or daemon exit -> unpark
+at once (wpa_cli reconnect + link up). Kill switch: s22-netpolicy saver off (or
+"wifi_saver": false in config.json).
 Logs transitions as JSON lines to /srv/s22/state/netpolicy/netpolicy.jsonl.
 """
 import json, os, subprocess, sys, time, urllib.request
@@ -36,6 +48,12 @@ NET = "/sys/class/net/"
 PHONED = "http://127.0.0.1:8095"
 USB_GW = "10.55.0.1"
 POLICY_METRIC = 50
+DISPLAY = "/run/s22-display-state"
+WPA_CTRL = "/run/wpa_supplicant-s22"
+SAVER_OFF = STATE_DIR + "/wifi-saver-off"
+SAVER_HOLD = "/run/s22-netpolicy/saver-hold"   # s22-net-deadman restore: no parking for SAVER_HOLD_S
+SAVER_HOLD_S = 3600
+SAVER_STATE = "/run/s22-netpolicy/saver.json"
 
 CONFIG = {
     "poll_s": 5,
@@ -50,6 +68,11 @@ CONFIG = {
     "redial_min_s": 300,
     "dns_fallback": ["1.1.1.1"],
     "manage_dns": True,
+    "wifi_saver": True,
+    "wifi_saver_method": "disconnect",   # disconnect | down
+    "wifi_saver_grace_s": 60,            # screen off + mobile uplink this long before parking
+    "wifi_saver_discover_every_s": 900,  # one bounded look for a known network while parked
+    "wifi_saver_discover_s": 15,         # how long a discovery waits for scan results / association
 }
 
 
@@ -275,6 +298,184 @@ def legacy_routes():
         ip("route", "replace", "default", "via", USB_GW, "dev", "ecm0")
 
 
+def wpa(*args, timeout=8):
+    """wpa_cli on the phone's control socket; (ok, output)."""
+    try:
+        r = subprocess.run(("wpa_cli", "-p", WPA_CTRL, "-i", "wlan0") + args, capture_output=True, text=True,
+                           timeout=timeout)
+        out = (r.stdout + r.stderr).strip()
+        return r.returncode == 0 and "FAIL" not in out, out
+    except Exception as e:  # noqa: BLE001
+        return False, str(e)[:120]
+
+
+def known_ssids(list_networks_out):
+    """SSIDs configured in wpa_supplicant (wpa_cli list_networks: id / ssid / bssid / flags)."""
+    out = set()
+    for line in list_networks_out.splitlines()[1:]:
+        f = line.split("\t")
+        if len(f) >= 2 and f[0].strip().isdigit() and f[1]:
+            out.add(f[1])
+    return out
+
+
+def seen_ssids(scan_results_out):
+    """SSIDs in wpa_cli scan_results (bssid / freq / signal / flags / ssid)."""
+    out = set()
+    for line in scan_results_out.splitlines()[1:]:
+        f = line.split("\t")
+        if len(f) >= 5 and f[4]:
+            out.add(f[4])
+    return out
+
+
+def saver_hold_active(now=None):
+    try:
+        return (now or time.time()) - os.path.getmtime(SAVER_HOLD) < SAVER_HOLD_S
+    except OSError:
+        return False
+
+
+def saver_eligible(cfg, display, up, wifi_up, paused, killed, hold):
+    """Pure: should Wi-Fi be parked now (before the grace period)? (bool, reason-if-not)."""
+    if not cfg.get("wifi_saver", True) or killed:
+        return False, "disabled"
+    if paused:
+        return False, "paused"
+    if hold:
+        return False, "deadman_hold"
+    if display != "off":
+        return False, "screen_on"
+    if up != "mobile":
+        return False, "uplink_%s" % up
+    if wifi_up:
+        return False, "wifi_up"
+    return True, ""
+
+
+class WifiSaver:
+    """Park/unpark Wi-Fi scanning (see module doc). Commands go through self.run_wpa / self.run_ip
+    so host tests can record them."""
+
+    def __init__(self, run_wpa=None, run_ip=None, state_file=SAVER_STATE):
+        self.run_wpa = run_wpa or wpa
+        self.run_ip = run_ip or ip
+        self.state_file = state_file
+        self.parked = False
+        self.method = None
+        self.parked_at = None
+        self.eligible_since = None
+        self.next_discover = 0.0
+        self.discover_until = None
+        self.discoveries = 0
+        self.reason = ""
+
+    def snapshot(self):
+        return {"parked": self.parked, "method": self.method, "parked_at": self.parked_at,
+                "next_discover": round(self.next_discover, 1) if self.parked else None,
+                "discovering": self.discover_until is not None, "discoveries": self.discoveries,
+                "reason": self.reason}
+
+    def save(self):
+        try:
+            os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
+            tmp = self.state_file + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(self.snapshot(), f)
+            os.replace(tmp, self.state_file)
+        except OSError:
+            pass
+
+    def park(self, method, now, cfg):
+        if method == "down":
+            ok, out = self.run_ip("link", "set", "wlan0", "down")
+        else:
+            method = "disconnect"
+            ok, out = self.run_wpa("disconnect")
+        self.parked, self.method, self.parked_at = True, method, now
+        self.next_discover = now + cfg["wifi_saver_discover_every_s"]
+        self.discover_until = None
+        log(event="wifi_saver_park", method=method, ok=ok, out=out[:120])
+        self.save()
+
+    def unpark(self, reason, now=None):
+        """Always restore both ways (link up + reconnect), whatever parked it."""
+        ok1, out1 = self.run_ip("link", "set", "wlan0", "up")
+        ok2, out2 = self.run_wpa("reconnect")
+        was = self.method
+        self.parked, self.method, self.parked_at = False, None, None
+        self.discover_until = None
+        self.eligible_since = None
+        self.reason = reason
+        log(event="wifi_saver_unpark", reason=reason, was=was, ok=ok1 and ok2, out=(out1 + " " + out2)[:120])
+        self.save()
+
+    def start_discovery(self, now, cfg):
+        self.discoveries += 1
+        if self.method == "down":
+            ok, out = self.run_ip("link", "set", "wlan0", "up")      # wpa_supplicant scans + connects by itself
+        else:
+            ok, out = self.run_wpa("scan")                           # one manual scan; disconnected = no autoconnect
+        self.discover_until = now + cfg["wifi_saver_discover_s"]
+        log(event="wifi_saver_discover", method=self.method, ok=ok, out=out[:80])
+
+    def finish_discovery(self, now, cfg, wifi_up):
+        self.discover_until = None
+        self.next_discover = now + cfg["wifi_saver_discover_every_s"]
+        if self.method == "down":
+            if wifi_up or rd(NET + "wlan0/carrier") == "1":
+                self.unpark("discovered", now)
+                return
+            ok, out = self.run_ip("link", "set", "wlan0", "down")
+            log(event="wifi_saver_discover_done", method="down", found=False, ok=ok)
+        else:
+            _, nets = self.run_wpa("list_networks")
+            _, res = self.run_wpa("scan_results")
+            found = sorted(known_ssids(nets) & seen_ssids(res))
+            log(event="wifi_saver_discover_done", method="disconnect", found=bool(found), n_seen=len(seen_ssids(res)))
+            if found:
+                self.unpark("discovered", now)
+                return
+            self.run_wpa("disconnect")      # idempotent; re-asserts the park if wpa_supplicant was restarted
+        self.save()
+
+    def step(self, now, cfg, eligible, why_not, wifi_up):
+        """One policy tick. eligible/why_not from saver_eligible()."""
+        if not eligible:
+            self.eligible_since = None
+            if self.parked:
+                self.unpark(why_not, now)
+            return
+        if not self.parked:
+            if self.eligible_since is None:
+                self.eligible_since = now
+            if now - self.eligible_since >= cfg["wifi_saver_grace_s"]:
+                self.park(cfg.get("wifi_saver_method", "disconnect"), now, cfg)
+            return
+        if cfg.get("wifi_saver_method", "disconnect") != self.method and self.discover_until is None:
+            self.unpark("method_change", now)      # re-parks with the new method after the grace period
+            return
+        if self.discover_until is not None:
+            if now >= self.discover_until:
+                self.finish_discovery(now, cfg, wifi_up)
+        elif now >= self.next_discover:
+            self.start_discovery(now, cfg)
+
+
+def saver_recover_at_start(run_wpa=None, run_ip=None, state_file=SAVER_STATE):
+    """A previous daemon died while Wi-Fi was parked (SIGKILL, crash): give Wi-Fi back."""
+    try:
+        st = json.load(open(state_file))
+    except (OSError, ValueError):
+        return False
+    if st.get("parked"):
+        s = WifiSaver(run_wpa, run_ip, state_file)
+        s.method = st.get("method")
+        s.unpark("daemon_start")
+        return True
+    return False
+
+
 class Policy:
     def __init__(self):
         self.fails = {"wifi": 0, "mobile": 0}
@@ -285,6 +486,7 @@ class Policy:
         self.last_dial = 0.0
         self.last_redial = 0.0
         self.paused_seen = None
+        self.saver = WifiSaver()
 
     def probe_due(self, name, cfg, now):
         return now - self.last_probe.get(name, 0) >= cfg["probe_every_s"]
@@ -313,6 +515,8 @@ class Policy:
                 log(event="wifi_route_repair", args=list(fix), ok=ok, out=out[:160])
                 lk = links(mobile)
         if paused:
+            if self.saver.parked:
+                self.saver.unpark("paused", now)
             st = {"paused": True, "t": now, "links": lk}
             write_status(st)
             return st
@@ -374,21 +578,43 @@ class Policy:
                         f.truncate()
                 except OSError as e:
                     log(event="dns_error", error=str(e))
+        try:
+            eligible, why_not = saver_eligible(cfg, rd(DISPLAY, "on"), up, wifi_present(lk), False,
+                                               os.path.exists(SAVER_OFF), saver_hold_active(now))
+            self.saver.step(now, cfg, eligible, why_not, wifi_present(lk))
+        except Exception as e:  # noqa: BLE001  the saver must never stop the uplink policy
+            log(event="wifi_saver_error", error=repr(e)[:200])
         if up != self.uplink:
             log(event="uplink", old=self.uplink, new=up, after_s=round(now - self.since, 1),
                 fails=dict(self.fails), mobile=mstate)
             self.uplink, self.since = up, now
         st = {"paused": False, "t": now, "uplink": up, "since": self.since, "want_mobile": want_mobile,
               "fails": dict(self.fails), "last_probe": dict(self.last_probe), "links": lk,
-              "mobile_mode": cfg["mobile_mode"]}
+              "mobile_mode": cfg["mobile_mode"], "wifi_saver": self.saver.snapshot()}
         write_status(st)
         return st
 
 
 def run():
     os.makedirs(STATE_DIR, exist_ok=True)
+    import fcntl, signal
+    os.makedirs(os.path.dirname(STATUS), exist_ok=True)
+    lockf = open(os.path.dirname(STATUS) + "/lock", "w")
+    try:
+        fcntl.flock(lockf, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print("s22-netpolicy: another daemon holds the lock", file=sys.stderr)
+        return 1
     log(event="start", pid=os.getpid())
+    if saver_recover_at_start():
+        log(event="wifi_saver_recovered")
     p = Policy()
+
+    def _term(*_):
+        if p.saver.parked:
+            p.saver.unpark("daemon_exit")
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, _term)
     while True:
         cfg = load_cfg()
         try:
@@ -416,6 +642,11 @@ def status():
         m["state"], m["ipv4"], ",".join(m["dns"]), m["act"], "+5G" if m.get("nr") else "", m["rx"], m["tx"],
         (st.get("fails") or {}).get("mobile")))
     print("  usb    ecm0   %-7s carrier=%s udc=%s (local link)" % (u["oper"], u["carrier"], u["udc"]))
+    sv = st.get("wifi_saver") or {}
+    print("  wifi saver: %s%s parked=%s method=%s discoveries=%s last=%s" % (
+        "OFF (kill switch) " if os.path.exists(SAVER_OFF) else "",
+        "HOLD (deadman) " if saver_hold_active() else "", sv.get("parked"), sv.get("method"),
+        sv.get("discoveries"), sv.get("reason")))
     print("  routes: " + " | ".join(line for *_, line in defaults()))
     print("  dns:    " + " ".join(l.split()[1] for l in rd(RESOLV).splitlines() if l.startswith("nameserver")))
     try:
@@ -432,12 +663,13 @@ def status():
 def main(argv):
     cmd = argv[1] if len(argv) > 1 else "status"
     if cmd == "run":
-        run()
+        return run() or 0
     elif cmd == "status":
         return status()
     elif cmd == "off":
         os.makedirs(STATE_DIR, exist_ok=True)
         open(FLAG, "w").close()
+        saver_recover_at_start()
         legacy_routes()
         print("paused; boot-time routes restored")
     elif cmd == "on":
@@ -446,6 +678,21 @@ def main(argv):
         except FileNotFoundError:
             pass
         print("resumed")
+    elif cmd == "saver" and len(argv) > 2 and argv[2] in ("off", "on", "status"):
+        if argv[2] == "off":
+            os.makedirs(STATE_DIR, exist_ok=True)
+            open(SAVER_OFF, "w").close()
+            # the daemon unparks within one poll; do it here too in case it is not running
+            saver_recover_at_start()
+            print("wifi saver off (persistent); Wi-Fi scanning restored")
+        elif argv[2] == "on":
+            try:
+                os.unlink(SAVER_OFF)
+            except FileNotFoundError:
+                pass
+            print("wifi saver on")
+        else:
+            print(rd(SAVER_STATE, "{}"), "kill switch" if os.path.exists(SAVER_OFF) else "")
     elif cmd == "probe" and len(argv) > 2:
         dev = argv[2]
         lk = links(phoned("/data/status"))

@@ -56,6 +56,8 @@ if [ "${1:-}" = --remove ]; then
 fi
 
 mkdir -p /srv/s22/state/netpolicy
+STAMP=$(date +%Y%m%dT%H%M%S)
+for f in "$BIN" /srv/s22/hardware/bin/s22-net-deadman; do [ -f "$f" ] && cp "$f" "$f.bak-$STAMP"; done
 install -m 0755 "$HERE/s22-netpolicy.py" "$BIN"
 install -m 0755 "$HERE/s22-net-deadman.sh" /srv/s22/hardware/bin/s22-net-deadman
 ln -sf /srv/s22/hardware/bin/s22-net-deadman /usr/local/bin/s22-net-deadman
