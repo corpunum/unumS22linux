@@ -142,6 +142,10 @@ impl Machine {
         Machine { timing, down: [None; 3], last_tap: None }
     }
 
+    pub fn any_down(&self) -> bool {
+        self.down.iter().any(|p| p.is_some())
+    }
+
     pub fn press(&mut self, k: Key, t: u64, ctx: Ctx) -> Vec<Action> {
         let mut out = vec![];
         if self.down[k.idx()].is_some() {

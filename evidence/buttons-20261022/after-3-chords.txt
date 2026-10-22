@@ -1,0 +1,31 @@
+--- screenshot from screen-off
+{"keys": ["power", "voldown"], "hold_ms": 120.0, "up_at_ms": 181.6, "before": {"amp": 0, "level": "1", "saved": "0", "pcm": false, "display": "off", "crtc": "0", "fb": "204"}, "after": {"amp": 0, "level": "1", "saved": "0", "pcm": false, "display": "on", "crtc": "1", "fb": "202"}, "display": {"from_down_ms": 177.0, "from_up_ms": -4.7, "changes": [[177.0, "on"]]}, "crtc": {"from_down_ms": 177.0, "from_up_ms": -4.7, "changes": [[177.0, "1"]]}, "fb": {"from_down_ms": 199.1, "from_up_ms": 17.5, "changes": [[199.1, "202"], [269.0, "204"], [395.5, "202"]]}}
+-rw-rw-rw-    1 root     root         99821 Oct 22 09:36 screenshot-1792661783.png
+--- chord held 1.4 s (must not fall back)
+{"keys": ["power", "voldown"], "hold_ms": 1400.0, "up_at_ms": 1402.3, "before": {"amp": 0, "level": "1", "saved": "0", "pcm": false, "display": "on", "crtc": "1", "fb": "202"}, "after": {"amp": 0, "level": "1", "saved": "0", "pcm": false, "display": "on", "crtc": "1", "fb": "202"}, "fb": {"from_down_ms": 168.7, "from_up_ms": -1233.6, "changes": [[168.7, "204"], [279.6, "202"]]}}
+fastshell
+24256
+2
+--- power+volup x2
+{"keys": ["power", "volup"], "hold_ms": 120.0, "up_at_ms": 121.4, "before": {"amp": 0, "level": "1", "saved": "0", "pcm": false, "display": "on", "crtc": "1", "fb": "204"}, "after": {"amp": 0, "level": "1", "saved": "0", "pcm": false, "display": "on", "crtc": "1", "fb": "202"}, "fb": {"from_down_ms": 6.2, "from_up_ms": -115.2, "changes": [[6.2, "202"]]}}
+{"keys": ["power", "volup"], "hold_ms": 120.0, "up_at_ms": 121.6, "before": {"amp": 0, "level": "1", "saved": "0", "pcm": false, "display": "on", "crtc": "1", "fb": "202"}, "after": {"amp": 0, "level": "1", "saved": "0", "pcm": false, "display": "on", "crtc": "1", "fb": "202"}, "fb": {"from_down_ms": 6.2, "from_up_ms": -115.4, "changes": [[6.2, "204"], [95.8, "202"]]}}
+--- double power
+{"keys": ["power"], "hold_ms": 80.0, "up_at_ms": 81.1, "before": {"amp": 0, "level": "1", "saved": "0", "pcm": false, "display": "on", "crtc": "1", "fb": "202"}, "after": {"amp": 0, "level": "1", "saved": "0", "pcm": false, "display": "off", "crtc": "0", "fb": "204"}, "display": {"from_down_ms": 249.1, "from_up_ms": 168.0, "changes": [[249.1, "off"]]}, "crtc": {"from_down_ms": 249.1, "from_up_ms": 168.0, "changes": [[249.1, "0"]]}, "fb": {"from_down_ms": 92.0, "from_up_ms": 10.9, "changes": [[92.0, "204"]]}}
+{"keys": ["power"], "hold_ms": 80.0, "up_at_ms": 212.0, "before": {"amp": 0, "level": "1", "saved": "0", "pcm": false, "display": "off", "crtc": "0", "fb": "204"}, "after": {"amp": 0, "level": "1", "saved": "0", "pcm": false, "display": "on", "crtc": "1", "fb": "202"}, "display": {"from_down_ms": 210.9, "from_up_ms": -1.1, "changes": [[210.9, "on"]]}, "crtc": {"from_down_ms": 210.9, "from_up_ms": -1.1, "changes": [[210.9, "1"]]}, "fb": {"from_down_ms": 244.3, "from_up_ms": 32.3, "changes": [[244.3, "202"]]}}
+
+1792661763.153 fastshell: dpms on: Ok(())
+1792661763.701 fastshell: key voldown down -> [Step(-1)]
+1792661768.466 fastshell: key power up -> [Lock]
+1792661768.612 fastshell: dpms off: Ok(())
+1792661783.774 fastshell: key power down -> [Wake]
+1792661783.774 fastshell: key voldown down -> [Wake, Screenshot]
+1792661783.947 fastshell: dpms on: Ok(())
+1792661784.098 fastshell: screenshot /mnt/omarchy-trial/root/.openunum/assets/generated/screenshot-1792661783.png: Ok(()) in 102 ms
+1792661786.366 fastshell: key voldown down -> [Screenshot]
+1792661786.412 fastshell: screenshot /mnt/omarchy-trial/root/.openunum/assets/generated/screenshot-1792661786.png: Ok(()) in 28 ms
+1792661790.469 fastshell: key volup down -> [KeepAwake]
+1792661791.661 fastshell: key volup down -> [KeepAwake]
+1792661792.421 fastshell: key power up -> [Lock]
+1792661792.583 fastshell: dpms off: Ok(())
+1792661792.677 fastshell: key power down -> [Wake, Camera]
+1792661792.885 fastshell: dpms on: Ok(())
