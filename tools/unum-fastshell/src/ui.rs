@@ -1253,6 +1253,14 @@ impl App {
                 self.effects.push(Effect::Display(on));
                 if on { "on".into() } else { "off".into() }
             }
+            "screenshot" => {
+                // s22d's device API (`screenshot`): the same capture as Power + Volume down.
+                if !self.display_on {
+                    return "screen is off".into();
+                }
+                self.effects.push(Effect::Screenshot);
+                "ok".into()
+            }
             "state" => self.state_json().to_string(),
             "perf" => self.perf_json().to_string(),
             other => format!("unknown function: {other}"),
@@ -2902,6 +2910,15 @@ mod tests {
         assert!(a.cards.iter().any(|c| c.title == "Screenshot saved"));
         a.expire_overlays(a.flash_until.unwrap());
         assert!(a.flash_until.is_none());
+        // the device API's screenshot call queues the same effect
+        a.effects.clear();
+        a.display_on = true;
+        assert_eq!(a.call(&Call { function: "screenshot".into(), args: vec![] }), "ok");
+        assert_eq!(a.effects.last(), Some(&Effect::Screenshot));
+        a.display_on = false;
+        a.effects.clear();
+        assert_eq!(a.call(&Call { function: "screenshot".into(), args: vec![] }), "screen is off");
+        assert!(a.effects.is_empty() || a.effects.iter().all(|e| *e != Effect::Screenshot));
         // keep awake inhibits the screen timeout
         a.button_actions(&[B::KeepAwake], 3);
         assert_eq!(a.idle_inhibitor(), Some("keep screen on (Power + Volume up)"));

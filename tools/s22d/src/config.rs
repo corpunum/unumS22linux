@@ -40,6 +40,39 @@ pub struct Config {
     pub modem_up: PathBuf,
     pub reboot_tool: PathBuf,
     pub reboot_delay_s: u64,
+    // ---- device API (`/v1/device`, src/device.rs)
+    /// The audit file is renamed to `<name>.1` once it grows past this size.
+    pub audit_max_bytes: u64,
+    /// s22-say's speech level 0-10 (tmpfs; the shell writes it too).
+    pub say_level: PathBuf,
+    /// Pre-mute level, so unmute restores it.
+    pub audio_state: PathBuf,
+    pub haptics_config: PathBuf,
+    pub haptic_sock: PathBuf,
+    pub autosleep_flag: PathBuf,
+    pub autosleep_status: PathBuf,
+    pub screen_timeout: PathBuf,
+    /// Private call/SMS allowlist (`{"numbers": [...]}`); lives only on the phone.
+    pub allowlist: PathBuf,
+    /// `{"enabled": bool}` gate for call.dial (missing = enabled).
+    pub calls_flag: PathBuf,
+    /// One-shot grants s22d leaves for s22-phoned after its own policy passed.
+    pub phoned_grants: PathBuf,
+    pub bt_tool: PathBuf,
+    pub bt_hci: PathBuf,
+    pub netpolicy_status: PathBuf,
+    pub netpolicy_config: PathBuf,
+    pub usb_carrier: PathBuf,
+    /// s22-netpolicy's Wi-Fi saver kill switch and state (issue #71): while the owner has Wi-Fi
+    /// off, s22d holds the kill switch so the saver never "unparks" (reconnects) Wi-Fi.
+    pub saver_off: PathBuf,
+    pub saver_state: PathBuf,
+    /// tmpfs marker: Wi-Fi was switched off through s22d (gone after a reboot).
+    pub wifi_off_marker: PathBuf,
+    /// unum-fastshell's control socket (screenshot).
+    pub shell_sock: PathBuf,
+    /// How long wifi.set on waits for an association before answering.
+    pub wifi_wait: Duration,
 }
 
 impl Config {
@@ -48,7 +81,7 @@ impl Config {
         let p = |rel: &str| root.join(rel);
         Self {
             root: root.to_path_buf(),
-            audit_path: p("srv/s22/state/s22d/audit.jsonl"),
+            audit_path: p("srv/s22/state/audit/s22d.jsonl"),
             tcp_addr: "127.0.0.1:8766".into(),
             socket_path: p("run/s22d.sock"),
             audio_flag: p("etc/s22-audio-unmuted"),
@@ -79,6 +112,27 @@ impl Config {
             modem_up: p("srv/s22/hardware/bin/s22-modem-up"),
             reboot_tool: p("usr/local/sbin/s22-reboot"),
             reboot_delay_s: 3,
+            audit_max_bytes: 1 << 20,
+            say_level: p("run/s22-say.level"),
+            audio_state: p("srv/s22/state/audio/volume.json"),
+            haptics_config: p("srv/s22/state/haptics/config.json"),
+            haptic_sock: p("run/s22-haptic.sock"),
+            autosleep_flag: p("srv/s22/state/autosleep/disabled"),
+            autosleep_status: p("run/s22-autosleep/status.json"),
+            screen_timeout: p("srv/s22/state/fastshell/screen-timeout.json"),
+            allowlist: p("srv/s22/state/phone/allowlist.json"),
+            calls_flag: p("srv/s22/state/phone/calls.json"),
+            phoned_grants: p("srv/s22/state/phoned/grants"),
+            bt_tool: p("usr/local/bin/s22-bt"),
+            bt_hci: p("sys/class/bluetooth/hci0"),
+            netpolicy_status: p("run/s22-netpolicy/status.json"),
+            netpolicy_config: p("srv/s22/state/netpolicy/config.json"),
+            usb_carrier: p("sys/class/net/ecm0/carrier"),
+            saver_off: p("srv/s22/state/netpolicy/wifi-saver-off"),
+            saver_state: p("run/s22-netpolicy/saver.json"),
+            wifi_off_marker: p("run/s22d-wifi-off"),
+            shell_sock: p("mnt/omarchy-trial/run/s22-touch/shell.sock"),
+            wifi_wait: Duration::from_secs(20),
         }
     }
 

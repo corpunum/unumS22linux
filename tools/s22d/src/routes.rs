@@ -2,13 +2,14 @@
 //! confirmation, audio policy, allowlists, camera lock), call one backend, audit the outcome.
 //! `API.md` documents every route here; `catalog.rs` is its machine-readable twin.
 
-use crate::app::{tcp_guard, Shared};
+use crate::app::{caller_scope, tcp_guard, Shared};
 use crate::backends::{Answer, CaptureReq, RecordReq, TopSort, WifiConnect};
 use crate::catalog::{self, Risk, BT_REASON};
 use crate::error::{ApiError, ApiResult};
 use crate::real::camera::{validate as validate_capture, validate_record};
 use crate::real::phoned::valid_number;
 use crate::real::services::ALLOWLIST;
+use crate::real::settings;
 use axum::{
     extract::{rejection::QueryRejection, FromRequest, Path, Query, Request, State},
     http::StatusCode,
@@ -47,7 +48,7 @@ fn query<T>(q: Result<Query<T>, QueryRejection>) -> Result<T, ApiError> {
         .map_err(|e| ApiError::bad_request(e.body_text()))
 }
 
-async fn blocking<T: Send + 'static>(
+pub(crate) async fn blocking<T: Send + 'static>(
     f: impl FnOnce() -> ApiResult<T> + Send + 'static,
 ) -> ApiResult<T> {
     tokio::task::spawn_blocking(f)
@@ -85,7 +86,7 @@ fn reading(r: ApiResult) -> Reply {
 }
 
 /// Ask the owner on the phone's screen. Anything but an explicit yes is a refusal.
-async fn owner_confirm(app: &Shared, question: String) -> Result<(), ApiError> {
+pub(crate) async fn owner_confirm(app: &Shared, question: String) -> Result<(), ApiError> {
     let _slot = app.confirm_lock.clone().try_lock_owned().map_err(|_| {
         ApiError::busy(
             "confirm_busy",
@@ -177,10 +178,20 @@ async fn wifi_status(State(app): State<Shared>) -> Reply {
     reading(blocking(move || w.status()).await)
 }
 
-async fn bt_status() -> Reply {
-    Ok(Json(
-        json!({"ok": true, "available": false, "reason": BT_REASON}),
-    ))
+async fn bt_status(State(app): State<Shared>) -> Reply {
+    let cfg = app.cfg.clone();
+    reading(blocking(move || settings::bt_status(&cfg)).await)
+}
+
+#[derive(Deserialize)]
+struct BtPower {
+    on: bool,
+}
+
+async fn bt_power(State(app): State<Shared>, Body(b): Body<BtPower>) -> Reply {
+    let cfg = app.cfg.clone();
+    let r = blocking(move || settings::bt_set(&cfg, b.on)).await;
+    finish(&app, "bt.power", Risk::Reversible, json!({"on": b.on}), r)
 }
 
 async fn bt_disabled() -> Reply {
@@ -273,6 +284,36 @@ async fn wifi_reconnect(State(app): State<Shared>) -> Reply {
 
 // ---------------------------------------------------------------- phone: SMS and calls (risky)
 
+/// The owner's call/SMS policy (2026-10-22): a number on the private allowlist goes through
+/// without a question; any other number needs the owner's yes on the phone's screen. Then s22d
+/// leaves s22-phoned a one-shot grant for exactly this number and kind (phoned still enforces
+/// `tx_enabled`, the emergency-number refusal and its rate limits). Returns whether the owner
+/// was asked.
+pub(crate) async fn phone_policy(
+    app: &Shared,
+    kind: &'static str,
+    number: &str,
+    question: String,
+) -> Result<bool, ApiError> {
+    let listed = settings::allowlisted(&app.cfg, number);
+    if !listed {
+        owner_confirm(app, format!("{question}\n(not on the allowlist)")).await?;
+    }
+    settings::grant(&app.cfg, number, kind)?;
+    Ok(!listed)
+}
+
+pub(crate) fn calls_gate(app: &Shared) -> Result<(), ApiError> {
+    if settings::calls_enabled(&app.cfg) {
+        Ok(())
+    } else {
+        Err(ApiError::denied(
+            "calls_disabled",
+            "calls are switched off on the phone (calls.set on:true)",
+        ))
+    }
+}
+
 #[derive(Deserialize)]
 struct SmsSend {
     number: String,
@@ -293,8 +334,10 @@ async fn sms_send(State(app): State<Shared>, Body(b): Body<SmsSend>) -> Reply {
             return Err(ApiError::unavailable(why));
         }
         let preview: String = b.text.chars().take(120).collect();
-        owner_confirm(
+        phone_policy(
             &app,
+            "sms",
+            &b.number,
             format!("Send this text to {}?\n\"{preview}\"", b.number),
         )
         .await?;
@@ -316,10 +359,17 @@ async fn call_dial(State(app): State<Shared>, Body(b): Body<Dial>) -> Reply {
         if !valid_number(&b.number) {
             return Err(ApiError::bad_request("number must look like +306900000000"));
         }
+        calls_gate(&app)?;
         if let Some(why) = app.b.phoned.availability() {
             return Err(ApiError::unavailable(why));
         }
-        owner_confirm(&app, format!("Place a call to {}?", b.number)).await?;
+        phone_policy(
+            &app,
+            "dial",
+            &b.number,
+            format!("Place a call to {}?", b.number),
+        )
+        .await?;
         let p = app.b.phoned.clone();
         blocking(move || p.dial(&b.number)).await
     }
@@ -389,20 +439,22 @@ async fn mobile_data_down(State(app): State<Shared>) -> Reply {
 
 // ---------------------------------------------------------------- camera
 
+/// One still through the camera lock and cooldown (shared with the device API).
+pub(crate) async fn capture_still(app: &Shared, req: CaptureReq) -> ApiResult {
+    validate_capture(&req)?;
+    if let Some(why) = app.b.camera.availability() {
+        return Err(ApiError::unavailable(why));
+    }
+    let permit = app.camera.acquire()?;
+    let c = app.b.camera.clone();
+    let out = blocking(move || c.capture(&req)).await;
+    permit.finish(out.is_ok());
+    out
+}
+
 async fn camera_capture(State(app): State<Shared>, Body(req): Body<CaptureReq>) -> Reply {
     let detail = json!({"sensor": req.sensor, "exposure_us": req.exposure_us, "gain": req.gain, "develop": req.develop});
-    let r = async {
-        validate_capture(&req)?;
-        if let Some(why) = app.b.camera.availability() {
-            return Err(ApiError::unavailable(why));
-        }
-        let permit = app.camera.acquire()?;
-        let c = app.b.camera.clone();
-        let out = blocking(move || c.capture(&req)).await;
-        permit.finish(out.is_ok());
-        out
-    }
-    .await;
+    let r = capture_still(&app, req).await;
     finish(&app, "camera.capture", Risk::Reversible, detail, r)
 }
 
@@ -544,7 +596,7 @@ pub fn router(app: Shared, transport: Transport) -> Router {
         .route("/v1/wifi/disconnect", post(wifi_disconnect))
         .route("/v1/wifi/reconnect", post(wifi_reconnect))
         .route("/v1/bt/status", get(bt_status))
-        .route("/v1/bt/power", post(bt_disabled))
+        .route("/v1/bt/power", post(bt_power))
         .route("/v1/bt/scan", post(bt_disabled))
         .route("/v1/modem/status", get(modem_status))
         .route("/v1/sms", get(sms_list))
@@ -565,9 +617,15 @@ pub fn router(app: Shared, transport: Transport) -> Router {
         .route("/v1/audio/volume", get(audio_get).post(audio_set))
         .route("/v1/services/{name}/restart", post(service_restart))
         .route("/v1/system/reboot-recovery", post(reboot_recovery))
+        .route("/v1/device", get(crate::device::list))
+        .route(
+            "/v1/device/{id}",
+            get(crate::device::invoke_get).post(crate::device::invoke),
+        )
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed)
         .with_state(app);
+    let r = r.layer(middleware::from_fn(caller_scope));
     match transport {
         Transport::Tcp => r.layer(middleware::from_fn(tcp_guard)),
         Transport::Unix => r,

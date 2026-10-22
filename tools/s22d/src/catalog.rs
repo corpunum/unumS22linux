@@ -5,7 +5,34 @@
 
 use serde_json::{json, Value};
 
-pub const BT_REASON: &str = "HCI raw-socket kernel panic: disabled";
+pub const BT_REASON: &str =
+    "raw HCI scanning from s22d is disabled (kernel panic risk); use s22-bt-scan in the chroot";
+
+/// Legacy capabilities the device API (`/v1/device`, the `phone_device` tool) covers. The plugin
+/// hides their tools when it exposes `phone_device`, to keep the agent's tool list short.
+pub const SUPERSEDED: &[&str] = &[
+    "status",
+    "battery",
+    "thermal",
+    "wifi.status",
+    "wifi.disconnect",
+    "wifi.reconnect",
+    "bt.status",
+    "bt.power",
+    "bt.scan",
+    "sms.send",
+    "call.list",
+    "call.dial",
+    "call.hangup",
+    "mobile_data.status",
+    "mobile_data.up",
+    "mobile_data.down",
+    "camera.capture",
+    "display.status",
+    "display.brightness",
+    "audio.volume.get",
+    "audio.volume.set",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Risk {
@@ -98,23 +125,23 @@ pub fn defs() -> Vec<CapDef> {
         def("wifi.reconnect", "wifi_reconnect", "POST", "/v1/wifi/reconnect", Reversible, 20,
             "Re-enable saved Wi-Fi profiles and reconnect.", none()),
         def("bt.status", "bt_status", "GET", "/v1/bt/status", Read, 15,
-            "Bluetooth availability. Currently always unavailable (HCI kernel panic fix pending).", none()),
-        def("bt.power", "bt_power", "POST", "/v1/bt/power", Reversible, 15,
-            "Bluetooth power. Unavailable: raw HCI sockets panic the kernel.", obj(json!({"on": {"type": "boolean"}}), &["on"])),
+            "Bluetooth controller on/off (s22-bt) and whether hci0 exists.", none()),
+        def("bt.power", "bt_power", "POST", "/v1/bt/power", Reversible, 140,
+            "Turn the Bluetooth controller on or off with s22-bt (on waits for Wi-Fi and hci0, up to 2 minutes).", obj(json!({"on": {"type": "boolean"}}), &["on"])),
         def("bt.scan", "bt_scan", "POST", "/v1/bt/scan", Read, 15,
-            "Bluetooth scan. Unavailable: raw HCI sockets panic the kernel.", none()),
+            "Bluetooth scan. Unavailable from s22d: raw HCI scanning risks a kernel panic.", none()),
         def("modem.status", "modem_status", "GET", "/v1/modem/status", Read, 25,
             "Modem, SIM, registration and signal from s22-phoned.", none()),
         def("sms.list", "device_sms_inbox", "GET", "/v1/sms", Read, 25,
             "Received (inbox) or sent (outbox) text messages.",
             obj(json!({"box": {"type": "string", "enum": ["inbox", "outbox"]}, "since": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}), &[])),
         def("sms.send", "device_sms_send", "POST", "/v1/sms/send", Risky, 95,
-            "Send a text message. The owner must confirm on the phone; s22-phoned still enforces its number allowlist and rate limits.",
+            "Send a text message. Numbers not on the phone's private allowlist need the owner's yes on the screen; s22-phoned still enforces tx_enabled and its rate limits.",
             obj(json!({"number": {"type": "string", "description": "E.164 number such as +306900000000"}, "text": {"type": "string", "minLength": 1, "maxLength": 1000}}), &["number", "text"])),
         def("call.list", "device_call_list", "GET", "/v1/calls", Read, 25,
             "Current and recent calls.", none()),
         def("call.dial", "device_call_dial", "POST", "/v1/call/dial", Risky, 95,
-            "Place a call. The owner must confirm on the phone; s22-phoned still enforces its allowlist. Call audio is not available yet.",
+            "Place a call. Numbers not on the phone's private allowlist need the owner's yes on the screen; refused when calls are switched off. Call audio is not available yet.",
             obj(json!({"number": {"type": "string"}}), &["number"])),
         def("call.hangup", "device_call_hangup", "POST", "/v1/call/hangup", Reversible, 25,
             "End the current call.", none()),
@@ -168,7 +195,12 @@ pub fn capabilities(avail: &dyn Fn(&str) -> Option<String>) -> Value {
                 "method": d.method,
                 "path": d.path,
                 "risk": d.risk.as_str(),
-                "confirm": if d.risk == Risk::Risky { "owner" } else { "none" },
+                "confirm": match d.id {
+                    "sms.send" | "call.dial" => "unlisted_number",
+                    _ if d.risk == Risk::Risky => "owner",
+                    _ => "none",
+                },
+                "superseded_by": SUPERSEDED.contains(&d.id).then_some("phone_device"),
                 "timeout_s": d.timeout_s,
                 "available": reason.is_none(),
                 "reason": reason,
@@ -179,7 +211,7 @@ pub fn capabilities(avail: &dyn Fn(&str) -> Option<String>) -> Value {
     json!({"ok": true, "api_version": 1, "capabilities": rows})
 }
 
-/// Availability with every backend present: only Bluetooth power and scan are permanently off.
+/// Availability with every backend present: only the Bluetooth scan is permanently off.
 pub fn static_availability(id: &str) -> Option<String> {
-    matches!(id, "bt.power" | "bt.scan").then(|| BT_REASON.to_string())
+    (id == "bt.scan").then(|| BT_REASON.to_string())
 }

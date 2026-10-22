@@ -11,7 +11,9 @@ Message layouts follow libsamsung-ipc (IPC 4.0 era). The S22 runs IPC 4.1
 JSON (payload starting with '{'), logs raw hex and never raises.
 
 Safety: SMS send and dial are refused unless state-dir/tx_enabled exists AND
-the destination is listed in state-dir/allowlist; emergency/short numbers are
+the destination is listed in state-dir/allowlist (or s22d left a fresh one-shot
+grant for exactly this number and kind in state-dir/grants/, after its own
+allowlist or the owner's on-screen yes); emergency/short numbers are
 always refused; outbound is rate limited. PWR_PHONE_STATE is sent only with
 --radio-normal. Experimental data IPC requires explicit operator commands. The one automatic
 radio-side SET is the LTE initial-attach profile (0D,14), sent once per modem start after the SIM
@@ -1469,7 +1471,23 @@ class Phone:
             return set()
         return {normalize_number(x.split("#", 1)[0]) for x in lines if x.split("#", 1)[0].strip()}
 
-    def gate(self, number):
+    def take_grant(self, n, kind):
+        """Consume s22d's one-shot grant grants/<n>.<kind> ({"expires": epoch}); True if fresh."""
+        if kind not in ("sms", "dial"):
+            return False
+        p = self.dir / "grants" / f"{n}.{kind}"
+        try:
+            g = json.loads(p.read_text())
+            p.unlink()
+        except (OSError, ValueError):
+            return False
+        try:
+            return (isinstance(g, dict) and normalize_number(g.get("number")) == n
+                    and g.get("kind") == kind and float(g.get("expires", 0)) >= time.time())
+        except (TypeError, ValueError):
+            return False
+
+    def gate(self, number, kind=None):
         """Safety gates for outbound actions. Returns (normalized, error-or-None)."""
         n = normalize_number(number)
         if not re.fullmatch(r"\+?[0-9]{1,20}", n):
@@ -1478,7 +1496,7 @@ class Phone:
             return n, "refused: emergency or short number"
         if not self.tx_enabled():
             return n, "refused: tx disabled (no tx_enabled file)"
-        if n not in self.allowlist():
+        if n not in self.allowlist() and not self.take_grant(n, kind):
             return n, "refused: number not in allowlist"
         return n, None
 
@@ -1487,7 +1505,7 @@ class Phone:
         text = str(text or "")
         if not text:
             return 400, {"ok": False, "status": "refused", "error": "empty text", "id": None, "parts": 0}
-        n, err = self.gate(to)
+        n, err = self.gate(to, "sms")
         mid = self.new_id("out")
         if err is None:
             try:
@@ -1825,7 +1843,7 @@ class Phone:
         return out
 
     def dial(self, number):
-        n, err = self.gate(number)
+        n, err = self.gate(number, "dial")
         if err is None and (self.link is None or not self.link.is_open):
             err = "modem not open"
         if err is None and not self.dial_rate.take():

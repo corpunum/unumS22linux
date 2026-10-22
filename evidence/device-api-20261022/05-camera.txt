@@ -1,0 +1,4 @@
+13:24:20
+{"ok": true, "cap": "camera.capture", "code": null, "error": null}
+{"sensor": "rear", "path": "/srv/s22/state/s22d/camera/cap-1792675460-rear.png", "width": 510, "height": 383, "ms": 1018, "gallery_path": "/mnt/omarchy-trial/root/.openunum/assets/generated/cam-1792675460-rear.png"}
+13:24:21

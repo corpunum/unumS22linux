@@ -1,6 +1,6 @@
 [package]
 name = "s22d"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Local JSON device daemon for the Galaxy S22 native Linux phone"

@@ -1,0 +1,488 @@
+{
+  "api": "device/1",
+  "capabilities": [
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Battery, temperature, network (uplink, Wi-Fi, mobile data, 5G badge), Bluetooth and the main settings in one read.",
+      "effect": "read",
+      "id": "device.status",
+      "reason": null,
+      "timeout_s": 30
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Wi-Fi on/off, connection, SSID, IP, signal and the active uplink.",
+      "effect": "read",
+      "id": "wifi.get",
+      "reason": null,
+      "timeout_s": 20
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "force": {
+            "description": "skip the would_strand guard",
+            "type": "boolean"
+          },
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on"
+        ],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Turn Wi-Fi on or off. Off drops the connection until it is turned on (or the phone restarts); mobile data takes over when it is enabled. Refused with would_strand when no other uplink is enabled, unless force.",
+      "effect": "set",
+      "id": "wifi.set",
+      "reason": null,
+      "timeout_s": 40
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Bluetooth controller on/off (s22-bt) and whether hci0 exists.",
+      "effect": "read",
+      "id": "bluetooth.get",
+      "reason": null,
+      "timeout_s": 15
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on"
+        ],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Turn the Bluetooth controller on or off (s22-bt up/down; on needs Wi-Fi up and can take a minute). No pairing.",
+      "effect": "set",
+      "id": "bluetooth.set",
+      "reason": null,
+      "timeout_s": 140
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Mobile data enabled (netpolicy mode), data call state, IPv4 and the active uplink.",
+      "effect": "read",
+      "id": "mobile_data.get",
+      "reason": null,
+      "timeout_s": 25
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "force": {
+            "description": "skip the would_strand guard",
+            "type": "boolean"
+          },
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on"
+        ],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Enable or disable mobile data. On = used whenever Wi-Fi is not usable (brought up now if Wi-Fi is down). Off = data call released and never redialled. Refused with would_strand when nothing else is connected, unless force.",
+      "effect": "set",
+      "id": "mobile_data.set",
+      "reason": null,
+      "timeout_s": 80
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Whether placing calls is enabled, current calls, and the call-audio caveat.",
+      "effect": "read",
+      "id": "calls.get",
+      "reason": null,
+      "timeout_s": 25
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on"
+        ],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Enable or disable placing calls (a gate for call.dial).",
+      "effect": "set",
+      "id": "calls.set",
+      "reason": null,
+      "timeout_s": 10
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "number": {
+            "description": "E.164, e.g. +306900000000",
+            "type": "string"
+          }
+        },
+        "required": [
+          "number"
+        ],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "unlisted_number",
+      "description": "Dial a number. Numbers not on the phone's allowlist need the owner's tap on the screen (else needs_confirmation). Two-way call audio does not work yet.",
+      "effect": "action",
+      "id": "call.dial",
+      "reason": null,
+      "timeout_s": 95
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "End the current call.",
+      "effect": "action",
+      "id": "call.hangup",
+      "reason": null,
+      "timeout_s": 25
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "number": {
+            "description": "E.164, e.g. +306900000000",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "text"
+        ],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "unlisted_number",
+      "description": "Send a text message. Numbers not on the phone's allowlist need the owner's tap on the screen (else needs_confirmation).",
+      "effect": "action",
+      "id": "sms.send",
+      "reason": null,
+      "timeout_s": 95
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Speech volume level 0-10 and mute.",
+      "effect": "read",
+      "id": "volume.get",
+      "reason": null,
+      "timeout_s": 10
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "muted": {
+            "type": "boolean"
+          },
+          "value": {
+            "maximum": 10,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Set the speech volume (value 0-10, 0 = mute) or mute/unmute (muted; unmute restores the previous level).",
+      "effect": "set",
+      "id": "volume.set",
+      "reason": null,
+      "timeout_s": 10
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Screen state and backlight brightness in percent.",
+      "effect": "read",
+      "id": "brightness.get",
+      "reason": null,
+      "timeout_s": 10
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "value": {
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Set the backlight brightness in percent (value 1-100).",
+      "effect": "set",
+      "id": "brightness.set",
+      "reason": null,
+      "timeout_s": 15
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Whether vibration/haptic feedback is enabled.",
+      "effect": "read",
+      "id": "vibration.get",
+      "reason": null,
+      "timeout_s": 10
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on"
+        ],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Enable or disable vibration and haptic feedback.",
+      "effect": "set",
+      "id": "vibration.set",
+      "reason": null,
+      "timeout_s": 10
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "pattern": {
+            "maxLength": 100,
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Vibrate once: pattern tick, buzz, stop, or ON,OFF,... milliseconds (e.g. 40,80,40).",
+      "effect": "action",
+      "id": "haptic.play",
+      "reason": null,
+      "timeout_s": 10
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Whether the phone suspends while locked and idle, and its current state.",
+      "effect": "read",
+      "id": "autosleep.get",
+      "reason": null,
+      "timeout_s": 10
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on"
+        ],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Enable or disable suspend while locked and idle (applies within 2 s).",
+      "effect": "set",
+      "id": "autosleep.set",
+      "reason": null,
+      "timeout_s": 10
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Screen-off timeouts in seconds (unlocked, locked; 0 = never).",
+      "effect": "read",
+      "id": "screen_timeout.get",
+      "reason": null,
+      "timeout_s": 10
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "locked": {
+            "maximum": 3600,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "value": {
+            "maximum": 3600,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Set the screen-off timeout: value = seconds while unlocked, locked = seconds on the lock screen (0-3600, 0 = never).",
+      "effect": "set",
+      "id": "screen_timeout.set",
+      "reason": null,
+      "timeout_s": 10
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "sensor": {
+            "enum": [
+              "rear",
+              "front"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Take a photo (sensor rear or front, default rear); it lands in the gallery.",
+      "effect": "action",
+      "id": "camera.capture",
+      "reason": null,
+      "timeout_s": 330
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Save a screenshot of the shell to the gallery (as Power + Volume down). The screen must be on.",
+      "effect": "action",
+      "id": "screenshot",
+      "reason": null,
+      "timeout_s": 15
+    }
+  ],
+  "ok": true
+}

@@ -1,9 +1,9 @@
 {
   "name": "s22-device",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "tool",
   "entrypoint": "index.mjs",
-  "description": "Mobile-edition S22 hardware tools generated from s22d's /v1/capabilities.",
+  "description": "Mobile-edition S22 hardware tools generated from s22d: phone_device (the device API, /v1/device) plus the legacy /v1/capabilities tools it does not cover.",
   "capabilities": [],
   "dependencies": [],
   "config": {
@@ -11,6 +11,7 @@
     "discovery_timeout_ms": 8000,
     "refresh_interval_s": 60,
     "mobile_marker": "/srv/s22",
-    "enabled": false
+    "enabled": false,
+    "legacy_tools": "uncovered"
   }
 }

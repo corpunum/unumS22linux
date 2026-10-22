@@ -3,6 +3,10 @@
 This file is the contract between `s22d` (the device daemon), the `s22-device` OpenUnum plugin and
 `unum-shell`. If the code and this file disagree, the code is wrong.
 
+**New clients should use the device API, [`DEVICE_API.md`](DEVICE_API.md)** (`/v1/device`: typed
+get/set capabilities that answer with the state read back). This per-endpoint API stays for what the
+device API does not cover; rows it covers carry `superseded_by: "phone_device"` in `/v1/capabilities`.
+
 Two things are generated from the same table in `src/catalog.rs`:
 
 - `GET /v1/capabilities` serves it live, with `available` and `reason` filled in from the phone.
@@ -60,15 +64,22 @@ Clients must not retry around a 403. A refusal is the answer.
 
 Risky capabilities: `sms.send`, `call.dial`, `system.reboot-recovery`.
 
+Owner policy 2026-10-22: `sms.send` and `call.dial` ask only when the number is **not** on the private
+allowlist `/srv/s22/state/phone/allowlist.json` (their `confirm` is `unlisted_number`); an allowlisted
+number goes straight through. `call.dial` is refused with 403 `calls_disabled` while the call gate
+(`/srv/s22/state/phone/calls.json`) is off. After the policy passes s22d leaves s22-phoned a one-shot grant
+(details in `DEVICE_API.md`). `system.reboot-recovery` always asks.
+
 How the owner is asked: `s22d` sends `{"cmd":"ui","args":["confirm", <id>, <question>, <seconds>]}` to
 `s22-touchd`'s `ctl.sock` (inside the chroot `/run/s22-touch/ctl.sock`, from the native root
 `/mnt/omarchy-trial/run/s22-touch/ctl.sock`) and then waits for `/run/s22-touch/confirm/<id>.json` containing
 `{"answer":"yes"|"no"}`. This is the protocol `s22-ui confirm` and the `s22-ui` plugin already use. Only one question can be
 pending; a second risky request gets `confirm_busy`.
 
-Every request that changes state appends one JSON line to `/srv/s22/state/s22d/audit.jsonl`:
-`{ts, action, risk, outcome: ok|refused|failed, detail}`. Passwords and message text are never written there.
-If the audit file cannot be opened at start, `s22d` does not start.
+Every request that changes state appends one JSON line to `/srv/s22/state/audit/s22d.jsonl` (size-capped at
+1 MiB, then `s22d.jsonl.1`): `{ts, caller, action, risk, outcome: ok|refused|failed, detail}`. `caller` comes
+from the `X-S22-Caller` header (`agent`, `shell`, else `cli`). Passwords and message text are never written
+there and phone numbers are masked. If the audit file cannot be opened at start, `s22d` does not start.
 
 ## Capabilities
 
@@ -77,8 +88,8 @@ If the audit file cannot be opened at start, `s22d` does not start.
 ```json
 { "ok": true, "api_version": 1, "capabilities": [
   { "id": "sms.send", "tool": "sms_send", "description": "...", "method": "POST", "path": "/v1/sms/send",
-    "risk": "risky", "confirm": "owner", "timeout_s": 95,
-    "available": true, "reason": null,
+    "risk": "risky", "confirm": "unlisted_number", "timeout_s": 95,
+    "available": true, "reason": null, "superseded_by": "phone_device",
     "input_schema": { "type": "object", "properties": { "...": {} }, "required": ["number", "text"], "additionalProperties": false } } ] }
 ```
 
@@ -102,7 +113,7 @@ If the audit file cannot be opened at start, `s22d` does not start.
 | `wifi.disconnect` | `wifi_disconnect` | POST `/v1/wifi/disconnect` | reversible | 20 s |
 | `wifi.reconnect` | `wifi_reconnect` | POST `/v1/wifi/reconnect` | reversible | 20 s |
 | `bt.status` | `bt_status` | GET `/v1/bt/status` | read | 15 s |
-| `bt.power` | `bt_power` | POST `/v1/bt/power` | reversible | 15 s |
+| `bt.power` | `bt_power` | POST `/v1/bt/power` | reversible | 140 s |
 | `bt.scan` | `bt_scan` | POST `/v1/bt/scan` | read | 15 s |
 | `modem.status` | `modem_status` | GET `/v1/modem/status` | read | 25 s |
 | `sms.list` | `device_sms_inbox` | GET `/v1/sms` | read | 25 s |
@@ -150,8 +161,9 @@ If the audit file cannot be opened at start, `s22d` does not start.
 
 | Capability | Request | Answer |
 |---|---|---|
-| `bt.status` | `GET /v1/bt/status` | `{available:false, reason:"HCI raw-socket kernel panic: disabled"}` |
-| `bt.power`, `bt.scan` | `POST /v1/bt/power`, `POST /v1/bt/scan` | Always 503 with the same reason. Raw HCI sockets panic the kernel. |
+| `bt.status` | `GET /v1/bt/status` | `{on, hci0, detail}` from `s22-bt status` |
+| `bt.power` | `POST /v1/bt/power {on}` | same, after `s22-bt up\|down` (up waits for Wi-Fi/CNSS and hci0, up to ~2 min) |
+| `bt.scan` | `POST /v1/bt/scan` | Always 503: raw HCI scanning from s22d risks a kernel panic; use `s22-bt-scan` in the chroot. |
 
 ### Modem, SMS and calls (proxy to `s22-phoned`)
 
@@ -247,4 +259,4 @@ report `available:false` with the reason in `/v1/capabilities` and fail with `50
 | Display | `/srv/s22/hardware/bin/s22-display` |
 | Service restart | `/srv/s22/state/keepalive/enabled` |
 | Reboot | `/usr/local/sbin/s22-reboot` |
-| Bluetooth | never (kernel panic) |
+| Bluetooth | `/usr/local/bin/s22-bt` (scan: never) |

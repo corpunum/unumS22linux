@@ -213,6 +213,7 @@ impl H {
         let mut cfg = Config::rooted(tmp.path());
         cfg.camera_min_interval = Duration::ZERO;
         cfg.camera_failure_cooldown = Duration::from_secs(60);
+        cfg.wifi_wait = Duration::ZERO;
         let cfg = Arc::new(cfg);
         let fake = Arc::new(Fake::default());
         let b = Backends {
@@ -307,6 +308,22 @@ fn catalog_snapshot_is_current() {
 }
 
 #[test]
+fn device_catalog_snapshot_is_current() {
+    let want = serde_json::to_string_pretty(&crate::device::capabilities(&|_| None)).unwrap();
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/device-capabilities.json");
+    if std::env::var("UPDATE_CAPABILITIES").is_ok() {
+        std::fs::write(path, format!("{want}\n")).unwrap();
+    }
+    let have = std::fs::read_to_string(path)
+        .expect("device-capabilities.json missing; run UPDATE_CAPABILITIES=1 cargo test");
+    assert_eq!(
+        have.trim(),
+        want.trim(),
+        "device-capabilities.json is stale: UPDATE_CAPABILITIES=1 cargo test"
+    );
+}
+
+#[test]
 fn api_md_documents_every_capability() {
     let md = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/API.md")).unwrap();
     for d in catalog::defs() {
@@ -373,12 +390,12 @@ async fn capabilities_report_live_availability() {
     assert_eq!(get("status")["available"], true);
     assert_eq!(get("sms.send")["available"], false);
     assert_eq!(get("sms.send")["reason"], "s22-phoned socket missing");
-    assert_eq!(get("sms.send")["confirm"], "owner");
+    assert_eq!(get("sms.send")["confirm"], "unlisted_number");
+    assert_eq!(get("system.reboot-recovery")["confirm"], "owner");
+    assert_eq!(get("sms.send")["superseded_by"], "phone_device");
+    assert!(get("wifi.scan")["superseded_by"].is_null());
     assert_eq!(get("bt.scan")["available"], false);
-    assert_eq!(
-        get("bt.scan")["reason"],
-        "HCI raw-socket kernel panic: disabled"
-    );
+    assert_eq!(get("bt.scan")["reason"], catalog::BT_REASON);
     assert_eq!(get("wifi.connect")["input_schema"]["required"][0], "ssid");
 }
 
@@ -589,25 +606,33 @@ async fn backend_failures_become_json_errors_with_their_status() {
 }
 
 #[tokio::test]
-async fn bluetooth_stays_disabled_with_the_exact_reason() {
+async fn bluetooth_goes_through_s22_bt_and_scan_stays_disabled() {
     let h = H::new();
     let (s, v) = h.send("GET", "/v1/bt/status", None).await;
     assert_eq!(
-        (s, v["available"].clone(), v["reason"].clone()),
-        (
-            StatusCode::OK,
-            json!(false),
-            json!("HCI raw-socket kernel panic: disabled")
-        )
+        (s, code(&v)),
+        (StatusCode::SERVICE_UNAVAILABLE, "unavailable")
     );
-    for p in ["/v1/bt/power", "/v1/bt/scan"] {
-        let (s, v) = h.send("POST", p, Some(json!({"on": true}))).await;
-        assert_eq!(
-            (s, code(&v)),
-            (StatusCode::SERVICE_UNAVAILABLE, "unavailable")
-        );
-        assert_eq!(v["error"], "HCI raw-socket kernel panic: disabled");
-    }
+    let state = h.tmp.path().join("bt-state");
+    h.tmp.script(
+        "usr/local/bin/s22-bt",
+        &format!(
+            "case \"$1\" in up) echo up > {s};; down) echo down > {s};; status) cat {s} 2>/dev/null || echo down;; esac",
+            s = state.display()
+        ),
+    );
+    let (s, v) = h
+        .send("POST", "/v1/bt/power", Some(json!({"on": true})))
+        .await;
+    assert_eq!((s, v["on"].clone()), (StatusCode::OK, json!(true)), "{v}");
+    let (_, v) = h.dev("bluetooth.set", json!({"on": false})).await;
+    assert_eq!(v["state"]["on"], false, "{v}");
+    let (s, v) = h.send("POST", "/v1/bt/scan", None).await;
+    assert_eq!(
+        (s, code(&v)),
+        (StatusCode::SERVICE_UNAVAILABLE, "unavailable")
+    );
+    assert_eq!(v["error"], catalog::BT_REASON);
 }
 
 // ------------------------------------------------------------ Wi-Fi
@@ -1322,4 +1347,260 @@ async fn startup_audit_file_is_append_only_json_lines() {
         before + 1,
         "reopening must append, not truncate"
     );
+}
+
+// ------------------------------------------------------------ device API (/v1/device)
+
+impl H {
+    async fn dev(&self, id: &str, body: Value) -> (StatusCode, Value) {
+        let req = Request::builder()
+            .method("POST")
+            .uri(format!("/v1/device/{id}"))
+            .header("content-type", "application/json")
+            .header("x-s22-caller", "agent")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        self.run(req, Transport::Unix).await
+    }
+}
+
+#[tokio::test]
+async fn device_catalog_lists_every_capability_with_effect_and_schema() {
+    let h = H::new();
+    let (s, v) = h.send("GET", "/v1/device", None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(v["api"], "device/1");
+    let caps = v["capabilities"].as_array().unwrap();
+    assert_eq!(caps.len(), crate::device::defs().len());
+    for c in caps {
+        assert!(
+            ["read", "set", "action"].contains(&c["effect"].as_str().unwrap()),
+            "{c}"
+        );
+        assert_eq!(c["args"]["type"], "object");
+        let confirm = if c["id"] == "sms.send" || c["id"] == "call.dial" {
+            "unlisted_number"
+        } else {
+            "none"
+        };
+        assert_eq!(c["confirm"], confirm, "{c}");
+    }
+    let md =
+        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/DEVICE_API.md")).unwrap();
+    for d in crate::device::defs() {
+        assert!(
+            md.contains(&format!("`{}`", d.id)),
+            "DEVICE_API.md misses {}",
+            d.id
+        );
+    }
+}
+
+#[tokio::test]
+async fn device_set_returns_state_read_back_and_audits_the_caller() {
+    let h = H::new();
+    let (s, v) = h.dev("volume.set", json!({"value": 7})).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(
+        (v["cap"].clone(), v["effect"].clone()),
+        (json!("volume.set"), json!("set"))
+    );
+    assert_eq!(v["state"]["level"], 7);
+    assert_eq!(
+        std::fs::read_to_string(&h.app.cfg.say_level).unwrap(),
+        "7\n"
+    );
+    let (_, v) = h.dev("volume.set", json!({"muted": "true"})).await;
+    assert_eq!(
+        v["state"]["muted"], true,
+        "string booleans from small models are accepted"
+    );
+    let (s, v) = h.dev("brightness.set", json!({"value": 40})).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(h.fake.called("display_brightness 40"), 1);
+    let l = h.audit_lines();
+    assert_eq!(l[0]["caller"], "agent");
+    assert_eq!(l[0]["action"], "volume.set");
+    assert_eq!(l[0]["detail"]["args"]["value"], 7);
+    assert_eq!(l[2]["outcome"], "ok");
+}
+
+#[tokio::test]
+async fn device_rejects_unknown_args_and_bad_values_before_acting() {
+    let h = H::new();
+    for (id, body) in [
+        ("brightness.set", json!({"value": 0})),
+        ("brightness.set", json!({"percent": 40})),
+        ("wifi.set", json!({})),
+        ("wifi.set", json!({"on": "maybe"})),
+        ("screen_timeout.set", json!({"value": 99999})),
+    ] {
+        let (s, v) = h.dev(id, body.clone()).await;
+        assert_eq!(
+            (s, code(&v)),
+            (StatusCode::BAD_REQUEST, "bad_request"),
+            "{id} {body}"
+        );
+    }
+    assert_eq!(h.fake.called("display_brightness"), 0);
+    assert_eq!(h.fake.called("wifi_"), 0);
+    let (s, v) = h.dev("nope.set", json!({})).await;
+    assert_eq!((s, code(&v)), (StatusCode::NOT_FOUND, "not_found"));
+    let (s, _) = h.send("GET", "/v1/device/wifi.set", None).await;
+    assert_eq!(s, StatusCode::METHOD_NOT_ALLOWED);
+    let (s, v) = h.send("GET", "/v1/device/volume.get", None).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+}
+
+#[tokio::test]
+async fn sms_to_an_allowlisted_number_needs_no_question_and_leaves_a_grant() {
+    let h = H::new();
+    h.tmp.write(
+        "srv/s22/state/phone/allowlist.json",
+        r#"{"numbers": ["+306900000000"]}"#,
+    );
+    let (s, v) = h
+        .dev(
+            "sms.send",
+            json!({"number": "+30 690 000 0000", "text": "hello there"}),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(h.fake.called("ask"), 0);
+    assert_eq!(h.fake.called("sms_send"), 1);
+    assert_eq!(v["result"]["owner_confirmed"], false);
+    assert!(h.app.cfg.phoned_grants.join("+306900000000.sms").exists());
+    let log = std::fs::read_to_string(&h.app.cfg.audit_path).unwrap();
+    assert!(!log.contains("hello there"), "text is not audited");
+    assert!(!log.contains("6900000000"), "numbers are masked: {log}");
+    // The legacy route follows the same policy.
+    let (s, _) = h
+        .send(
+            "POST",
+            "/v1/sms/send",
+            Some(json!({"number": "+306900000000", "text": "x"})),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(h.fake.called("ask"), 0);
+}
+
+#[tokio::test]
+async fn unlisted_numbers_need_the_owner_and_silence_is_needs_confirmation() {
+    for (answer, status, want) in [
+        (Answer::No, StatusCode::FORBIDDEN, "owner_denied"),
+        (Answer::Timeout, StatusCode::CONFLICT, "needs_confirmation"),
+        (Answer::Busy, StatusCode::CONFLICT, "needs_confirmation"),
+        (
+            Answer::Unavailable("x".into()),
+            StatusCode::CONFLICT,
+            "needs_confirmation",
+        ),
+    ] {
+        let h = H::new();
+        h.answer(answer);
+        let (s, v) = h
+            .dev("sms.send", json!({"number": "+306911111111", "text": "x"}))
+            .await;
+        assert_eq!((s, code(&v)), (status, want));
+        let (s, v) = h.dev("call.dial", json!({"number": "+306911111111"})).await;
+        assert_eq!((s, code(&v)), (status, want));
+        assert_eq!(h.fake.called("sms_send") + h.fake.called("dial"), 0);
+        assert!(!h.app.cfg.phoned_grants.exists(), "no grant without a yes");
+    }
+    let h = H::new();
+    h.answer(Answer::Yes);
+    let (s, v) = h.dev("call.dial", json!({"number": "+306911111111"})).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(v["result"]["owner_confirmed"], true);
+    assert!(v["note"].as_str().unwrap().contains("audio"));
+    assert!(h.app.cfg.phoned_grants.join("+306911111111.dial").exists());
+}
+
+#[tokio::test]
+async fn calls_gate_blocks_dial_on_both_apis() {
+    let h = H::new();
+    h.answer(Answer::Yes);
+    let (s, v) = h.dev("calls.set", json!({"on": false})).await;
+    assert_eq!(
+        (s, v["state"]["enabled"].clone()),
+        (StatusCode::OK, json!(false))
+    );
+    let (s, v) = h.dev("call.dial", json!({"number": "+306900000000"})).await;
+    assert_eq!((s, code(&v)), (StatusCode::FORBIDDEN, "calls_disabled"));
+    let (s, v) = h
+        .send(
+            "POST",
+            "/v1/call/dial",
+            Some(json!({"number": "+306900000000"})),
+        )
+        .await;
+    assert_eq!((s, code(&v)), (StatusCode::FORBIDDEN, "calls_disabled"));
+    assert_eq!(h.fake.called("ask") + h.fake.called("dial"), 0);
+}
+
+#[tokio::test]
+async fn wifi_and_mobile_off_refuse_to_strand_the_phone() {
+    let h = H::new();
+    // Wi-Fi not connected (fake status), no USB: mobile data off would strand.
+    let (s, v) = h.dev("mobile_data.set", json!({"on": false})).await;
+    assert_eq!((s, code(&v)), (StatusCode::CONFLICT, "would_strand"));
+    assert_eq!(h.fake.called("mobile_data_down"), 0);
+    // With USB carrier it goes through and pins netpolicy's mode.
+    h.tmp.write("sys/class/net/ecm0/carrier", "1\n");
+    let (s, v) = h.dev("mobile_data.set", json!({"on": false})).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(v["state"]["mode"], "off");
+    assert_eq!(h.fake.called("mobile_data_down"), 1);
+    // Mobile off and no USB: Wi-Fi off would strand.
+    std::fs::remove_file(h.tmp.path().join("sys/class/net/ecm0/carrier")).unwrap();
+    let (s, v) = h.dev("wifi.set", json!({"on": false})).await;
+    assert_eq!((s, code(&v)), (StatusCode::CONFLICT, "would_strand"));
+    let (s, v) = h.dev("wifi.set", json!({"on": false, "force": true})).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(h.fake.called("wifi_disconnect"), 1);
+    assert_eq!(v["state"]["enabled"], false);
+    assert!(
+        h.app.cfg.saver_off.exists(),
+        "netpolicy's saver must not reconnect it"
+    );
+    let (_, v) = h.dev("wifi.set", json!({"on": true})).await;
+    assert_eq!(v["state"]["enabled"], true);
+    assert!(!h.app.cfg.saver_off.exists());
+    assert_eq!(h.fake.called("wifi_reconnect"), 1);
+    // Mobile on again: back to failover, and brought up now because Wi-Fi is down.
+    let (s, v) = h.dev("mobile_data.set", json!({"on": true})).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(v["state"]["mode"], "failover");
+    assert_eq!(h.fake.called("mobile_data_up None"), 1);
+}
+
+#[tokio::test]
+async fn device_status_survives_failing_sources() {
+    let h = H::new();
+    h.unavailable("phoned", "s22-phoned is not running");
+    h.fail("battery", ApiError::unavailable("no battery"));
+    let (s, v) = h.dev("device.status", json!({})).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert!(v["state"]["battery"]["percent"].is_null());
+    assert!(v["state"]["network"]["radio"].is_null());
+    assert_eq!(v["state"]["calls_enabled"], true);
+    // A capability whose backend is missing says why instead of failing inside.
+    let (s, v) = h.dev("mobile_data.get", json!({})).await;
+    assert_eq!(
+        (s, code(&v)),
+        (StatusCode::SERVICE_UNAVAILABLE, "unavailable")
+    );
+}
+
+#[tokio::test]
+async fn vibration_off_turns_haptic_play_into_a_reported_no_op() {
+    let h = H::new();
+    std::fs::create_dir_all(h.app.cfg.haptic_sock.parent().unwrap()).unwrap();
+    let _d = std::os::unix::net::UnixDatagram::bind(&h.app.cfg.haptic_sock).unwrap();
+    let (_, v) = h.dev("vibration.set", json!({"on": false})).await;
+    assert_eq!(v["state"]["enabled"], false);
+    let (s, v) = h.dev("haptic.play", json!({"pattern": "tick"})).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(v["state"]["played"], false);
 }
