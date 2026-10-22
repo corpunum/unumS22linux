@@ -1,0 +1,14 @@
+# Thu Oct 22 02:00:40 UTC 2026 verify rerun
+stage=dlopen t=0.073
+device[0] name=npu_sl type=4 version=A0.0.1 feature_level=31
+shape in=[1,32,32,8] k=3x3 out_ch=16
+stage=model_finish supported_on_device=1 t=0.112
+stage=compile ms=54.1
+compile-only: done
+stage=execute n=1000 first_ms=0.75 mean_ms=0.445 p50_ms=0.33 p99_ms=1.26 min_ms=0.29 max_ms=1.99 per_s=2248.9
+output[0] checksum=9b995581645257e9 nonzero_bytes=8202
+conv3x3 u8 NPU vs CPU-ref: n 16384 exact 16027 off_by_1 357 worse 0
+ds_cnn_l_body: stage=execute n=3000 first_ms=1.18 mean_ms=0.426 p50_ms=0.34 p99_ms=1.20 min_ms=0.25 max_ms=2.21 per_s=2345.2
+kws_micronet_l: stage=execute n=3000 first_ms=0.69 mean_ms=0.647 p50_ms=0.58 p99_ms=1.42 min_ms=0.36 max_ms=2.99 per_s=1546.5
+dsp-check done
+schedutil schedutil schedutil on

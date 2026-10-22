@@ -1,7 +1,26 @@
 # S22 native Linux status
 
-Updated 2026-10-22 (suspend-to-RAM + autosleep; camera ISP, 5G badge, GNSS plan); 2026-10-21 (fast touch shell); earlier sections updated 2026-10-06 by the Claude lead session.
+Updated 2026-10-22 (own models on the NPU; suspend-to-RAM + autosleep; camera ISP, 5G badge, GNSS plan); 2026-10-21 (fast touch shell); earlier sections updated 2026-10-06 by the Claude lead session.
 The 2026-10-02 task board and earlier checkpoints below are historical.
+
+## Our own models on the NPU — 2026-10-22
+
+**Samsung's on-device NPU compiler now works from Linux.** The vendor NNAPI support library
+(`neuralnetworks_npu_sl_driver_prebuilt.so`) is dlopened in `/srv/s22/enn-rt`. It compiles NNAPI and TFLite graphs
+into `.nnc` files, and those run on the NPU through ENN (`enn-run`).
+- **Own int8 conv:** bit-checked against a CPU reference (16 384 values, max ±1). NPU time 0.32 ms.
+- **Keyword spotting:** trained ARM ML-zoo models (DS-CNN-L, MicroNet-L) run on the NPU in 0.34 / 0.58 ms.
+  - Results match TFLite's CPU reference within ±1.
+  - On 60 TTS-spoken command words, NPU and CPU give the same prediction 60/60.
+- **The catch:** Samsung's SL only compiles multi-op graphs from an AI-Benchmark whitelist. We bypass that by
+  patching 3 functions in *private copies* of two GraphGen libs.
+- **Speed:** for tiny KWS nets the NPU is about as fast as 1–3 CPU cores. The gain is CPU offload.
+- **Not working yet:** the wav2letter ASR encoder (1-D kernels 48/32 wide). The NPU handles kernels up to
+  15 wide correctly; 17 gives wrong output with no error, and 32 fails to compile.
+- **The SL's own execute path segfaults**, so the SL is used to compile only.
+
+Compile on the phone: `/srv/s22/npu-custom/tflite-npu-compile model.tflite out.nnc`.
+[Evidence](evidence/npu-custom-20261022/README.md).
 
 ## Suspend-to-RAM and autosleep — 2026-10-22 (early morning)
 

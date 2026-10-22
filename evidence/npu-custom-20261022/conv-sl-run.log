@@ -1,0 +1,13 @@
+stage=dlopen t=0.081
+device[0] name=npu_sl type=4 version=A0.0.1 feature_level=31
+stage=model_finish supported_on_device=1 t=0.180
+I20261022 01:28:48.901190 16341 nnc_export.cpp:280] store nnc to .//ann.nnc
+10-22 01:28:48.901 16341 16341 I [GRAPHGEN]    : store nnc to .//ann.nnc
+I20261022 01:28:48.901202 16341 model_util.cpp:206] NNC size = 24184
+10-22 01:28:48.901 16341 16341 I [GRAPHGEN]    : NNC size = 24184
+stage=compile ms=62.7
+10-22 01:28:48.926 16341 16341 D ENN     : [Exynos][ENN][v1.6.9-1][EnnDriver::UEnnServiceDelegatorLib] uennExecuteModel:95: uennExecuteModel(+)
+10-22 01:28:48.926 16341 16341 I ENN_FRAMEWORK: 2.0.27: * ExecuteModel: 0x3FD501000000
+10-22 01:28:48.927 16341 16341 D ENN     : [Exynos][ENN][v1.6.9-1][EnnDriver::UEnnServiceDelegatorLib] uennExecuteModel:103: uennExecuteModel(-)
+libc: Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0 in tid 16341 (nnapi-conv-test), pid 16341 (nnapi-conv-test)
+Segmentation fault

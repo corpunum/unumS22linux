@@ -1,0 +1,15 @@
+#!/bin/sh
+# nnapi-chroot-run BIN [args...]: run a Bionic NNAPI-SL client inside /srv/s22/enn-rt
+# (same private-namespace chroot as enn-chroot-run) after making the Android
+# ashmem node name exist: Bionic libcutils opens /dev/ashmem<boot_id>
+# (Android's ueventd creates it; plain Linux only has /dev/ashmem).
+R=${ENN_ROOT:-/srv/s22/enn-rt}
+B=$(cat /proc/sys/kernel/random/boot_id)
+[ -e /dev/ashmem$B ] || ln -s ashmem /dev/ashmem$B
+BIN=$1; shift
+exec unshare -m sh -c '
+  R=$0; BIN=$1; shift 1
+  mount --make-rprivate / 2>/dev/null
+  mount --rbind /dev "$R/dev" && mount --bind /proc "$R/proc" && mount --bind /sys "$R/sys" || exit 9
+  exec chroot "$R" "$BIN" "$@"
+' "$R" "$BIN" "$@"

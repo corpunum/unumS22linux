@@ -3222,3 +3222,28 @@ Evidence: `evidence/modem-5g-20261021/`.
 - physical touch.
 
 **Evidence:** `evidence/power-20261022/`.
+
+### 2026-10-22 — Our own models on the NPU: Samsung's on-device compiler via the NNAPI support library
+
+Details: `evidence/npu-custom-20261022/README.md`. Tools: `tools/hardware/npu/nnapi/`.
+- The vendor image ships `neuralnetworks_npu_sl_driver_prebuilt.so`, an NNAPI **support library**
+  (in-process runtime plus driver, device `npu_sl`, FL5). We dlopen it in `/srv/s22/enn-rt`.
+  - Staged: its closure from the stock vendor image and recovery ramdisk, a `libnativewindow` stub,
+    and a `/dev/ashmem<boot_id>` symlink.
+  - Compiling an NNAPI graph runs GraphGen and the NPU compiler, which write `.//ann.nnc`
+    (NPU_BINARY only). That `.nnc` runs with `enn-run`.
+  - The SL's own execute path runs the NPU but then segfaults on the output copy-back.
+- Own int8 3×3 conv (8→16 channels, 32×32): 16 384 values vs a CPU integer reference, 16 027 exact,
+  357 off by 1, 0 worse (signed int8 the same). NPU 0.32 ms.
+- Multi-op graphs are gated by an AI-Benchmark whitelist (`isSupportedAIBANNModel`, ResNet/IV3/MNV2/
+  MNV3/VGG/DPED/PyNET/CRNN/LSTM/SRCNN checkers) and by a first-layer-type skip.
+  `patch-graphgen-gates.py` patches 3 functions in private lib copies (`/data/nn/patched`).
+  With that patch, TFLite `benchmark_model --nnapi_support_library_path` compiles real models on the phone.
+- KWS **MicroNet-L** (whole graph): ±1 vs the TFLite CPU reference, 0.58 ms.
+- KWS **DS-CNN-L** (body on the NPU, FC + softmax on the CPU): ±1, 0.34 ms. On 60 Kokoro TTS words,
+  the CPU got 47/60, the NPU got 47/60, and they agreed on 60/60.
+- CPU XNNPACK: DS-CNN 0.39 ms on X2, 0.24 ms on 3×A710. So the NPU ≈ CPU speed for tiny KWS; the gain is offload.
+- wav2letter ASR, after the LEAKY_RELU→PRELU rewrite: it compiles as one graph but runs 4.3 s and returns zeros.
+  The kernel sweep shows K≤15 correct, K=17 silently wrong, K=32 compile fail. The model's 48/32-wide
+  kernels exceed the limit, so ASR on the NPU is **not working**.
+- No DSP sections. The DSP is "not allowed" in GraphGen's config. No crash or watchdog reset; the NPU recovered after every timeout.

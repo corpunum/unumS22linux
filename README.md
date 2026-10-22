@@ -55,7 +55,7 @@ All screenshots: [evidence/touchui-20261009](evidence/touchui-20261009/README.md
 | ✅ **Boot** | Native Linux from RECOVERY with our own `/init`; no Android services; reboots without touching the phone (`s22-reboot recovery`) |
 | ✅ **System** | Persistent Arch Linux ARM + Hyprland on internal storage; starts by itself after a reboot |
 | ✅ **Network** | Wi-Fi with autostart, Tailscale, USB SSH; mobile data over the modem with 5G NSA (LTE + NR n78, ~97 Mbit/s down measured) |
-| ✅ **AI** | Stock Samsung NPU models (`.nnc`) run on the NPU through ENN (16/17 stock models, e.g. face parsing in 3.7 ms); local 2B model on the GPU (Samsung's Vulkan driver in an isolated runtime) and 4B on the CPU; OpenUnum agent with GPT Luna by default and the local model as offline fallback |
+| ✅ **AI** | Stock Samsung NPU models (`.nnc`) run on the NPU through ENN (16/17 stock models, e.g. face parsing in 3.7 ms); our own TFLite models are compiled on the phone with Samsung's NPU compiler (keyword spotting in 0.34 ms, verified against the CPU); local 2B model on the GPU (Samsung's Vulkan driver in an isolated runtime) and 4B on the CPU; OpenUnum agent with GPT Luna by default and the local model as offline fallback |
 | ✅ **Phone stack** | SIM and SMS ready through our own modem daemon (`s22-phoned`, outbound off by default) |
 | ✅ **Voice** | The phone talks through its own speaker (English + two Greek voices); push-to-talk or the Talk button; while the agent thinks it plays short "hmm, let me check…" clips and speaks its thinking |
 | ✅ **Touch UI** | Our own Rust shell drawing straight to the display: a tap opens a page in ~10–12 ms (the old shell: 63 ms), 11 MB of memory; home, agent chat with streaming, phone, files, camera, settings, EN/GR keyboard, lock, agent cards, 5G/4G badge. Samsung's GPU driver can also draw to the screen with zero copy |
@@ -65,7 +65,7 @@ All screenshots: [evidence/touchui-20261009](evidence/touchui-20261009/README.md
 | ✅ **Audio** | Speaker and microphone work, both directly and through Samsung's DSP graph (the phone's mic hears its own speaker: a 1 kHz test tone at ~1000× the noise floor); earpiece and calls not yet |
 | 🟡 **GPS** | The GNSS chip runs under Linux with Samsung's own engine and tracks real satellites (indoors so far: 1–2 satellites, no position fix yet) |
 | ✅ **Battery / suspend** | Locked, the phone suspends to RAM by itself (`s22-autosleep`) and still answers SSH over Wi-Fi/Tailscale: **36 mA (1.1 %/h) instead of 192 mA (5.8 %/h)** measured; wakes on Wi-Fi and the RTC alarm (Power key and incoming SMS not yet tested physically) |
-| ❌ **Calls, custom NPU models** | Not working yet |
+| ❌ **Calls, NPU speech recognition** | Not working yet (the ASR model's wide kernels exceed the NPU compiler's limit) |
 
 Full hardware table and every earlier checkpoint: [docs/HISTORY.md](docs/HISTORY.md).
 Current details: [STATUS.md](STATUS.md).
