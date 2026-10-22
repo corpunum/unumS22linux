@@ -206,6 +206,71 @@ class TtsPlayTest(unittest.TestCase):
     def test_bad_out_rejected(self):
         self.assertEqual(self.d.cmd_tts({'text': 'x', 'play': True, 'out': 'hdmi'})['error'], 'bad_out')
 
+class FillerTest(unittest.TestCase):
+    """`filler` and tts "filler": true play a pre-rendered clip from the shared bank before the answer."""
+    def setUp(self):
+        import json, stat
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        bank = root / 'chroot/root/.openunum/assets/voice-fillers'
+        (bank / 'en/general').mkdir(parents=True)
+        (bank / 'en/general/1.wav').write_bytes(b'RIFF')
+        (bank / 'manifest.json').write_text(json.dumps({'version': 1, 'clips': {'en': {'general': [
+            {'n': 1, 'phrase': 'Hmm, give me a second', 'durationSec': 1.0}]}}}))
+        self.log = root / 'say.log'
+        say = root / 'say'
+        say.write_text(f'#!/bin/sh\necho "$@" >> {self.log}\n')
+        say.chmod(say.stat().st_mode | stat.S_IXUSR)
+        self.env = {'S22_CHROOT': str(root / 'chroot'), 'S22_FILLER_DIR': str(bank),
+                    'S22_FILLER_STATE': str(root / 'last.json')}
+        self.saved = {k: os.environ.get(k) for k in self.env}
+        os.environ.update(self.env)
+        for m in ('s22_filler',):
+            sys.modules.pop(m, None)
+        self.orig = (td.SAY, td.RUN, td.subprocess.run)
+        td.SAY = str(say)
+        td.RUN = root
+        def fake_run(argv, env=None, **kw):
+            if env and env.get('S22_SAY_OUT'):
+                Path(env['S22_SAY_OUT']).write_bytes(b'RIFF')
+            class R:
+                returncode, stdout, stderr = 0, '', ''
+            return R()
+        td.subprocess.run = fake_run
+        self.d = td.Daemon(gestures=False, ui=False)
+
+    def tearDown(self):
+        td.SAY, td.RUN, td.subprocess.run = self.orig
+        for k, v in self.saved.items():
+            os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
+        sys.modules.pop('s22_filler', None)
+        self.tmp.cleanup()
+
+    def said(self):
+        import time
+        for _ in range(50):
+            if self.log.exists() and self.log.read_text().strip():
+                break
+            time.sleep(0.05)
+        return self.log.read_text().splitlines() if self.log.exists() else []
+
+    def test_filler_command_plays_a_clip(self):
+        r = self.d.cmd_filler({'text': 'do the thing', 'out': 'speaker'})
+        self.assertTrue(r['ok'], r)
+        self.assertEqual((r['lang'], r['category']), ('en', 'general'))
+        self.assertTrue(self.said()[0].startswith('--out speaker --wav /root/.openunum/assets/voice-fillers/en/general/1.wav'))
+
+    def test_tts_with_filler_starts_the_clip_then_plays_the_answer(self):
+        r = self.d.cmd_tts({'text': 'It is noon.', 'play': True, 'filler': True, 'thinking_for': 'what time is it'})
+        self.assertTrue(r['played'])
+        self.assertTrue(r['filler']['ok'])
+
+    def test_no_filler_unless_asked_and_bad_out_rejected(self):
+        r = self.d.cmd_tts({'text': 'x', 'play': True})
+        self.assertNotIn('filler', r)
+        self.assertEqual(self.d.cmd_filler({'out': 'hdmi'})['error'], 'bad_out')
+
+
 class SessionEnvTest(unittest.TestCase):
     """Hyprland is preferred; the opt-in sway-pixman desktop is found via its session file."""
 

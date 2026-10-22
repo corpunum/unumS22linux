@@ -782,6 +782,9 @@ class Daemon:
             return {'ok': False, 'error': 'bad_out', 'outputs': sorted(TTS_OUTPUTS)}
         out_dir = RUN / 'tts'
         out_dir.mkdir(exist_ok=True)
+        # "filler": true -> a pre-rendered "hmm, let me think" clip plays while the answer renders
+        # (the render takes seconds); "thinking_for" is the question it is classified by.
+        filler = self._filler(str(req.get('thinking_for') or text), out=out) if play and req.get('filler') else None
         old = sorted(out_dir.glob('*.wav'), key=lambda f: f.stat().st_mtime)
         for f in old[:-20]:                       # keep the newest 20 renders
             f.unlink(missing_ok=True)
@@ -804,7 +807,29 @@ class Daemon:
                            **({} if p.returncode == 0 else {'play_tail': (p.stdout + p.stderr)[-400:]}))
             except subprocess.TimeoutExpired:
                 res.update(played=False, play_rc=None, out=out, play_error='timeout')
+        if filler is not None:
+            res['filler'] = filler
         log(event='tts', engine=engine, chars=len(text), ok=ok, play=play, played=res['played'])
+        return res
+
+    def _filler(self, question: str, second: bool = False, out: str = 'speaker') -> dict:
+        """Play one pre-rendered filler clip (shared bank, same voices and loudness as the answers)."""
+        try:
+            for d in ('/srv/s22/hardware/bin', str(Path(__file__).resolve().parent.parent / 'hardware')):
+                if d not in sys.path:
+                    sys.path.append(d)
+            import s22_filler
+            proc, info = s22_filler.play(question, second=second, out=out, say=SAY)
+        except Exception as e:          # a filler must never break speech
+            return {'ok': False, 'error': f'filler_unavailable: {e!r}'[:200]}
+        return {'ok': proc is not None, **{k: info[k] for k in ('lang', 'category', 'n', 'phrase') if k in info}}
+
+    def cmd_filler(self, req: dict) -> dict:
+        out = str(req.get('out') or 'speaker')
+        if out not in TTS_OUTPUTS:
+            return {'ok': False, 'error': 'bad_out', 'outputs': sorted(TTS_OUTPUTS)}
+        res = self._filler(str(req.get('text') or ''), bool(req.get('second')), out)
+        log(event='filler', ok=res.get('ok'))
         return res
 
     def cmd_gesture(self, req: dict) -> dict:
@@ -939,6 +964,7 @@ COMMANDS = {
     'model': Daemon.cmd_model,
     'brightness': Daemon.cmd_brightness,
     'tts': Daemon.cmd_tts,
+    'filler': Daemon.cmd_filler,
 }
 UI_FUNCS = {'home', 'hide', 'back', 'switcher', 'open', 'card', 'confirm', 'confirmResult',
             'lock', 'unlock', 'keyboard', 'state', 'perf', 'send'}

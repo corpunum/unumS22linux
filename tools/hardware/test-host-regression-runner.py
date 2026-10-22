@@ -103,6 +103,8 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/network/test_s22_netpolicy.py",
     "tools/hardware/voip/test_s22_sip.py",
     "tools/hardware/test_s22_converse.py",
+    "tools/hardware/test_s22_loudnorm.py",
+    "tools/hardware/test_s22_filler.py",
     "tools/openunum-phone/test_check_model_pin.py",
     "tools/openunum-phone/test_phone_plugin.py",
     "tools/openunum-phone/test_ui_plugin.py",

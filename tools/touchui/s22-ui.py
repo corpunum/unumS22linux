@@ -13,7 +13,10 @@ Runs INSIDE the Arch chroot (as /usr/local/bin/s22-ui). Talks to s22-touchd on
   s22-ui status                                   (mute state, display, keepalive)
   s22-ui model current|luna|local
   s22-ui brightness [N]                           (read, or set the backlight to N)
-  s22-ui tts [--engine E] [--play] [--out O] TEXT (render speech to a WAV; --play also speaks it)
+  s22-ui tts [--engine E] [--play] [--filler [--for QUESTION]] [--out O] TEXT
+                                                  (render speech to a WAV; --play also speaks it; --filler plays a
+                                                   pre-rendered "hmm, let me think" clip while it renders)
+  s22-ui filler [--second] [--out O] [QUESTION]   (play one pre-rendered filler clip on the speaker)
   s22-ui camera                                   (starts a rear still; result in /run/s22-touch/camera.json)
   s22-ui screenshot PATH                          (grim, PNG)
   s22-ui perf [SECONDS]                           (frame-time probe -> /run/s22-touch/perf.json)
@@ -131,10 +134,18 @@ def main(argv: list[str]) -> dict:
     if cmd == 'tts':
         rest, engine = opt(rest, '--engine', 'supertonic')
         rest, out = opt(rest, '--out', 'speaker')
+        rest, thinking_for = opt(rest, '--for', '')
         play = '--play' in rest
-        rest = [a for a in rest if a != '--play']
-        return request({'cmd': 'tts', 'text': ' '.join(rest), 'engine': engine, 'play': play, 'out': out},
+        filler = '--filler' in rest
+        rest = [a for a in rest if a not in ('--play', '--filler')]
+        return request({'cmd': 'tts', 'text': ' '.join(rest), 'engine': engine, 'play': play, 'out': out,
+                        **({'filler': True, 'thinking_for': thinking_for} if filler else {})},
                        500 if play else 200)
+    if cmd == 'filler':
+        rest, out = opt(rest, '--out', 'speaker')
+        second = '--second' in rest
+        rest = [a for a in rest if a != '--second']
+        return request({'cmd': 'filler', 'text': ' '.join(rest), 'second': second, 'out': out})
     if cmd == 'camera':
         return request({'cmd': 'camera_capture'})
     if cmd == 'screenshot':

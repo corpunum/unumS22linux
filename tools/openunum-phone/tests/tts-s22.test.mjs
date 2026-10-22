@@ -47,3 +47,13 @@ test('reports a playback failure', async () => {
   assert.equal(r.played, false);
   assert.match(r.playError, /EIO/);
 });
+
+test('filler option adds --filler (and --for) to s22-ui tts only when playing', async () => {
+  const f = fakeCli({ ok: true, path: '/x.wav', engine: 'supertonic', played: true, out: 'speaker', filler: { ok: true, category: 'general' } });
+  const t = await tool({ ui_cli: f.cli });
+  const r = await t.execute({ args: { text: 'It is noon.', filler: true, thinking_for: 'what time is it' } });
+  assert.deepEqual(f.args(), ['tts', '--engine', 'supertonic', '--play', '--out', 'speaker', '--filler', '--for', 'what time is it', 'It is noon.']);
+  assert.equal(r.filler.ok, true);
+  await t.execute({ args: { text: 'x', filler: true, play: false } });
+  assert.deepEqual(f.args(), ['tts', '--engine', 'supertonic', 'x']);
+});

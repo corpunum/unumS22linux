@@ -1587,6 +1587,85 @@ class SipUA:
             interval = min(interval * 2, T2)
 
 
+# ------------------------------------------------------------------ loudness + filler clips
+
+class Leveler:
+    """Streaming loudness leveler for audio that arrives already synthesised (the rig's fast voice).
+
+    Active-speech RMS is tracked with a slow envelope and the gain steers it to TARGET_DB (about the
+    -16 LUFS every other phone voice is normalised to, see s22_loudnorm.py); a smooth limiter keeps
+    peaks under CEIL_DB.  Silence does not move the gain.  The gain is slewed so there are no jumps.
+    """
+    TARGET_DB = -16.0
+    CEIL_DB = -2.0
+    GATE_DB = -45.0
+    MAX_GAIN_DB = 18.0
+    MIN_GAIN_DB = -12.0
+
+    def __init__(self, target_db: float | None = None):
+        self.target_db = self.TARGET_DB if target_db is None else target_db
+        self.env_db: float | None = None
+        self.gain_db = 0.0
+
+    def process(self, samples) -> array.array:
+        s = array.array('h', samples)
+        ceil = 32767 * 10 ** (self.CEIL_DB / 20)
+        knee = 0.7 * ceil
+        out = array.array('h', s)
+        for i in range(0, len(s), FRAME):
+            fr = s[i:i + FRAME]
+            if not fr:
+                continue
+            rms_db = 20 * math.log10(max(math.sqrt(sum(x * x for x in fr) / len(fr)), 1.0) / 32768)
+            if rms_db > self.GATE_DB:
+                self.env_db = rms_db if self.env_db is None else self.env_db + 0.15 * (rms_db - self.env_db)
+                want = max(self.MIN_GAIN_DB, min(self.MAX_GAIN_DB, self.target_db - self.env_db))
+                self.gain_db += max(-0.5, min(0.5, want - self.gain_db))     # slew 0.5 dB per 20 ms frame
+            g = 10 ** (self.gain_db / 20)
+            for j, x in enumerate(fr):
+                v = x * g
+                a = abs(v)
+                if a > knee:
+                    o = knee + (ceil - knee) * math.tanh((a - knee) / (ceil - knee))
+                    v = o if v > 0 else -o
+                out[i + j] = int(v)
+        return out
+
+
+def load_filler_bank(root: str | None = None, state_file: str | None = None):
+    """The shared pre-rendered filler clips (s22_voice.FillerBank) or None when unavailable.
+
+    Same clips as s22-assistant/s22-converse use (phone voice, -16 LUFS).  Paths returned by pick() are
+    outer-filesystem paths (the SIP daemon runs outside the chroot).
+    """
+    root = root or os.environ.get('S22_FILLER_DIR', '/mnt/omarchy-trial/root/.openunum/assets/voice-fillers')
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import s22_voice as V                       # installed next to this script
+    except ImportError:
+        return None
+    if not (Path(root) / 'manifest.json').is_file():
+        return None
+    return V.FillerBank(root, chroot_prefix='', state_file=state_file or os.environ.get('S22_FILLER_STATE')
+                        or '/srv/s22/state/voice-filler-last.json')
+
+
+def play_filler(rtp, bank, question: str, second: bool = False, log=_log) -> dict | None:
+    """Queue one filler clip for `question` into the call audio. Returns its info or None."""
+    if bank is None:
+        return None
+    try:
+        wav, info = bank.pick(question, second=second)
+        if not wav:
+            return None
+        info['seconds'] = round(rtp.play_wav(wav), 2)
+        log(f"filler: {info.get('lang')}/{info.get('category')}/{info.get('n')} {info.get('phrase')!r}")
+        return info
+    except Exception as e:                 # a filler must never break the call
+        log(f'filler failed {e!r}')
+        return None
+
+
 # ------------------------------------------------------------------ voice loop
 
 SPOKEN_CONTEXT = (
@@ -1704,8 +1783,12 @@ class VoiceLoop:
     def __init__(self, rtp: RtpSession, asr, chat, tts, work_dir, asr_rate: int = 16000,
                  vad: EnergyVad | None = None, barge_in: bool = False, greeting: str | None = None,
                  pin: str | None = None, still_working_s: float = 12.0,
-                 still_working_text: str = 'One moment.', log=_log):
+                 still_working_text: str = 'One moment.', log=_log, fillers=None,
+                 filler_delay_s: float = 1.2, filler_second_s: float = 6.0, filler_repeat_s: float = 25.0):
         self.rtp, self.asr, self.chat, self.tts = rtp, asr, chat, tts
+        self.turn_fillers: list = []
+        self.fillers = fillers                      # s22_voice.FillerBank (pre-rendered clips) or None
+        self.filler_schedule = (filler_delay_s, filler_second_s, filler_repeat_s)
         self.work = Path(work_dir)
         self.work.mkdir(parents=True, exist_ok=True)
         self.asr_rate, self.barge_in, self.greeting = asr_rate, barge_in, greeting
@@ -1798,6 +1881,8 @@ class VoiceLoop:
                     t1 = time.monotonic()
                     reply = self._chat_with_filler(text, tag)
                     rec['chat_ms'] = int((time.monotonic() - t1) * 1000)
+                    if self.turn_fillers:
+                        rec['fillers'] = [f"{f.get('lang')}/{f.get('category')}/{f.get('n')}" for f in self.turn_fillers]
                     spoken = clean_for_speech(reply) or 'I have no answer for that.'
                     rec['reply'] = spoken
                     self.log(f'voice: reply {spoken!r}')
@@ -1818,6 +1903,9 @@ class VoiceLoop:
                     pass
 
     def _chat_with_filler(self, text: str, tag: str) -> str:
+        """chat(text) while the agent thinks: pre-rendered filler clips ("hmm, let me think") are queued
+        into the call audio after filler_delay_s, again at filler_second_s and every filler_repeat_s
+        (max 4); without clips a spoken still_working_text after still_working_s (old behaviour)."""
         box: dict = {}
 
         def run():
@@ -1827,13 +1915,28 @@ class VoiceLoop:
                 box['error'] = e
         t = threading.Thread(target=run, daemon=True)
         t.start()
-        t.join(self.still_working_s)
-        if t.is_alive() and self.still_working_text:
-            try:
-                self._speak(self.still_working_text, tag + '-wait')
-            except Exception as e:
-                self.log(f'voice: filler failed {e!r}')
+        events = []
+        if self.fillers is not None:
+            d1, d2, rep = self.filler_schedule
+            at = d1
+            t0 = time.monotonic()
+            while len(events) < 4:
+                t.join(max(0.0, at - (time.monotonic() - t0)))
+                if not t.is_alive():
+                    break
+                info = play_filler(self.rtp, self.fillers, text, second=bool(events), log=self.log)
+                if info:
+                    events.append(info)
+                at = (d2 if len(events) == 1 else at + rep)
+        elif self.still_working_text:
+            t.join(self.still_working_s)
+            if t.is_alive():
+                try:
+                    self._speak(self.still_working_text, tag + '-wait')
+                except Exception as e:
+                    self.log(f'voice: filler failed {e!r}')
         t.join()
+        self.turn_fillers = events
         if 'error' in box:
             raise box['error']
         return box.get('reply', '')
@@ -2043,7 +2146,17 @@ class FastVoiceLoop:
                  pin: str | None = None, barge_in: bool = True, lang: str = 'auto',
                  fallback: Callable | None = None, connect_timeout: float = 2.0,
                  reconnect_s: float = 1.0, client_factory=WsClient, snapshot_fn: Callable | None = device_snapshot,
-                 snapshot_s: float = 30.0, log=_log):
+                 snapshot_s: float = 30.0, log=_log, fillers=None, leveler: 'Leveler | None' = None,
+                 filler_delay_s: float = 1.2, filler_second_s: float = 6.0, filler_repeat_s: float = 25.0):
+        # fillers: pre-rendered clips (s22_voice.FillerBank). When the rig has not started answering
+        # filler_delay_s after the transcript arrives, a "hmm, let me think" clip is queued into the call
+        # (again at filler_second_s and every filler_repeat_s, max 4); the rig's own audio queues behind it.
+        # leveler: brings the rig's TTS to the phone's one loudness target.
+        self.fillers, self.leveler = fillers, leveler
+        self.filler_schedule = (filler_delay_s, filler_second_s, filler_repeat_s)
+        self.turn_gen = 0                  # bumped by every transcript; an audio chunk marks the turn answered
+        self.answered_gen = 0
+        self.filler_events: list = []
         self.rtp, self.url, self.token, self.greeting = rtp, url, token, greeting
         self.pin, self.digits, self.locked = pin, '', bool(pin)
         self.barge_in, self.lang, self.fallback = barge_in, lang, fallback
@@ -2149,6 +2262,27 @@ class FastVoiceLoop:
         except (OSError, ConnectionError):
             pass                      # the rx loop notices and reconnects
 
+    # -- fillers while the rig thinks
+    def _start_fillers(self, text: str) -> None:
+        if self.fillers is None or not str(text).strip():
+            return
+        self.turn_gen += 1
+        gen = self.turn_gen
+        threading.Thread(target=self._filler_worker, args=(gen, text), daemon=True).start()
+
+    def _filler_worker(self, gen: int, text: str) -> None:
+        d1, d2, rep = self.filler_schedule
+        at, n, t0 = d1, 0, time.monotonic()
+        while self.running and n < 4:
+            self.stop_ev.wait(max(0.0, at - (time.monotonic() - t0)))
+            if not self.running or self.stop_ev.is_set() or self.turn_gen != gen or self.answered_gen == gen:
+                return                      # the rig answered, a newer turn started, or the call ended
+            info = play_filler(self.rtp, self.fillers, text, second=n > 0, log=self.log)
+            if info:
+                n += 1
+                self.filler_events.append(info)
+            at = d2 if n == 1 else at + rep
+
     # -- rx
     def _rx_loop(self) -> None:
         cur: dict = {}
@@ -2168,7 +2302,11 @@ class FastVoiceLoop:
                 self.rx_bytes += len(payload)
                 pcm = array.array('h')
                 pcm.frombytes(payload[:len(payload) // 2 * 2])
-                self.rtp.play(_le(pcm))
+                pcm = _le(pcm)
+                if self.leveler is not None:
+                    pcm = self.leveler.process(pcm)
+                self.answered_gen = self.turn_gen
+                self.rtp.play(pcm)
                 continue
             try:
                 ev = json.loads(payload.decode())
@@ -2181,11 +2319,15 @@ class FastVoiceLoop:
             elif t == 'asr_final':
                 cur = {'transcript': ev.get('text', '')}
                 self.log(f"fast-voice: heard {ev.get('text', '')!r}")
+                self._start_fillers(ev.get('text', ''))
             elif t == 'metrics':
                 cur.update({'turn': ev.get('turn'), 'reply': ' '.join(ev.get('spoken') or []),
                             'first_audio_ms': ev.get('endpoint_to_first_audio_ms'),
                             'asr_ms': ev.get('asr_final_ms'), 'llm_ttft_ms': ev.get('llm_ttft_ms'),
                             'tts_ms': ev.get('tts_first_ms'), 'result': 'ok'})
+                if self.filler_events:
+                    cur['fillers'] = [f"{f.get('lang')}/{f.get('category')}/{f.get('n')}" for f in self.filler_events]
+                    self.filler_events = []
                 self.turns.append(cur)
                 cur = {}
             elif t == 'error':
@@ -2218,7 +2360,11 @@ PRESETS = {
 }
 PRESETS['s22-outer'] = {   # run in the outer recovery userland; tools via chroot
     'asr': ['chroot', '/mnt/omarchy-trial'] + PRESETS['s22']['asr'],
-    'tts': ['chroot', '/mnt/omarchy-trial'] + PRESETS['s22']['tts'],
+    # The call speaks with the SAME voice as every other path: s22-say in render-only mode picks the engine
+    # (Supertonic F1 for English, the el-antonis Piper voice for Greek text) and loudness-normalises the
+    # render to -16 LUFS.  {out} is chroot-relative here (root strips the prefix), s22-say wants the outer path.
+    'tts': ['env', 'S22_SAY_OUT=/mnt/omarchy-trial{out}', '/srv/s22/hardware/bin/s22-say', '--', '{text}'],
+    'tts_legacy': ['chroot', '/mnt/omarchy-trial'] + PRESETS['s22']['tts'],
     'root': '/mnt/omarchy-trial',
 }
 
@@ -2291,6 +2437,8 @@ def _common(p: argparse.ArgumentParser) -> None:
     v.add_argument('--fast-voice-token-env', default='UNUM_VOICE_TOKEN',
                    help='env var holding the shared secret the service expects')
     v.add_argument('--fast-voice-lang', default='auto')
+    v.add_argument('--no-fillers', action='store_true', help='do not play the pre-rendered filler clips while the agent thinks')
+    v.add_argument('--no-leveler', action='store_true', help='fast voice: play the rig audio at its own level')
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -2316,6 +2464,8 @@ def _make_voice_loop(args, call: Call, log):
         return FastVoiceLoop(call.rtp, args.fast_voice, token=os.environ.get(args.fast_voice_token_env) or None,
                              greeting=args.greeting or None, pin=args.pin, barge_in=True,
                              lang=args.fast_voice_lang,
+                             fillers=None if args.no_fillers else load_filler_bank(),
+                             leveler=None if args.no_leveler else Leveler(),
                              fallback=(lambda: _make_classic_loop(args, call, log)) if can_fall_back else None,
                              log=log)
     return _make_classic_loop(args, call, log)
@@ -2334,7 +2484,8 @@ def _make_classic_loop(args, call: Call, log) -> VoiceLoop:
     vad = EnergyVad(min_db=args.vad_min_db, hangover_ms=args.vad_hangover_ms)
     return VoiceLoop(call.rtp, command_asr(asr_t, root), chat, command_tts(tts_t, root), work,
                      asr_rate=args.asr_rate, vad=vad, barge_in=args.barge_in,
-                     greeting=args.greeting or None, pin=args.pin, log=log)
+                     greeting=args.greeting or None, pin=args.pin, log=log,
+                     fillers=None if args.no_fillers else load_filler_bank())
 
 
 def run(args, log=_log) -> int:

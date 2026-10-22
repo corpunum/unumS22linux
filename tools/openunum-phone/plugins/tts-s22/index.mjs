@@ -41,7 +41,9 @@ export default class TtsS22Plugin extends PluginBase {
           text: { type: 'string', description: 'Text to synthesize' },
           engine: { type: 'string', enum: ENGINES, description: 'TTS engine (default supertonic; Greek: el-antonis / el-female)' },
           play: { type: 'boolean', description: 'Speak it on the phone (default true)' },
-          out: { type: 'string', enum: OUTPUTS, description: 'Output: speaker (default), earpiece, top, bottom' }
+          out: { type: 'string', enum: OUTPUTS, description: 'Output: speaker (default), earpiece, top, bottom' },
+          filler: { type: 'boolean', description: 'Play a pre-rendered "hmm, let me think" clip (same voice and loudness) while the speech renders (default: config.filler, off)' },
+          thinking_for: { type: 'string', description: 'The user question the filler clip is picked for (language and category)' }
         },
         required: ['text']
       },
@@ -53,13 +55,16 @@ export default class TtsS22Plugin extends PluginBase {
         const engine = ENGINES.includes(args?.engine) ? args.engine : (this.config.engine || 'supertonic');
         const play = typeof args?.play === 'boolean' ? args.play : this.config.play !== false;
         const out = OUTPUTS.includes(args?.out) ? args.out : (this.config.out || 'speaker');
-        const argv = ['tts', '--engine', engine, ...(play ? ['--play', '--out', out] : []), text];
+        const filler = play && (typeof args?.filler === 'boolean' ? args.filler : this.config.filler === true);
+        const argv = ['tts', '--engine', engine, ...(play ? ['--play', '--out', out] : []),
+          ...(filler ? ['--filler', ...(args?.thinking_for ? ['--for', String(args.thinking_for)] : [])] : []), text];
         const r = await runCli(this.config.ui_cli || '/usr/local/bin/s22-ui', argv, Number(this.config.timeout_ms) || 500000);
         if (!r.ok) return { ok: false, error: r.error || 'render_failed', detail: r.tail };
         const durationMs = Math.max(500, Math.round((text.split(/\s+/).length / 150) * 60000));
         const res = { ok: true, audio: { path: r.path, format: 'wav', durationMs }, engine: r.engine, renderMs: r.ms, played: !!r.played };
         if (play) {
           res.out = r.out || out; res.playMs = r.play_ms;
+          if (r.filler) res.filler = r.filler;
           if (!r.played) { res.playError = r.play_error || r.play_tail || `play rc ${r.play_rc}`; res.note = 'Rendered but playback failed.'; }
         } else res.note = 'Rendered only (play=false).';
         return res;
