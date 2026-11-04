@@ -199,6 +199,19 @@ def with_threads_batch(argv: list[str], tb: str | None) -> list[str]:
     return argv + ['-tb', tb]
 
 
+# llama-server's own accounting in the last chunk of every answer (2026-11-04): cache_n = prompt tokens reused
+# from the slot's KV cache, prompt_n = tokens it had to prefill. Logged per request, so a slow first token can
+# be told apart: a cache miss (big prompt_n) or a slow prefill of a small new tail.
+TIMING_RE = re.compile(rb'"(cache_n|prompt_n|prompt_ms|predicted_n|predicted_per_second)"\s*:\s*([0-9]+(?:\.[0-9]+)?)')
+
+
+def backend_timings(tail: bytes) -> dict:
+    out = {}
+    for k, v in TIMING_RE.findall(tail or b''):            # the last occurrence (the final chunk) wins
+        out[k.decode()] = round(float(v), 1) if b'.' in v else int(v)
+    return out
+
+
 def argv_value(argv: list[str], flag: str) -> str | None:
     return argv[argv.index(flag) + 1] if flag in argv and argv.index(flag) + 1 < len(argv) else None
 
@@ -993,7 +1006,7 @@ class OnDemand:
                     self.log(event='request', key=key[:12], slot=self.has_slot(key), n_tools=len(spec['tools']),
                              user=self.last_user, 
                              ttft_s=None if first is None else round(first - t_req, 2),
-                             total_s=round(self.clock() - t_req, 2))
+                             total_s=round(self.clock() - t_req, 2), **backend_timings(info.get('tail', b'')))
             finally:
                 with self.count_lock:
                     self.active -= 1
@@ -1174,6 +1187,7 @@ class OnDemand:
                     if not data:
                         break
                     if src is up:
+                        info['tail'] = (info.get('tail', b'') + data)[-8192:]     # for backend_timings()
                         if not first:
                             first.append(self.clock())
                         if len(content_first) < 1 and CONTENT_RE.search(data):

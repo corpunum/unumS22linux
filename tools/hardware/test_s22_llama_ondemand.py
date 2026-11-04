@@ -159,6 +159,15 @@ class OnDemandTest(unittest.TestCase):
         argv = mod.backend_argv(Path('/nonexistent'))      # DEFAULT_ARGV carries -t 4
         self.assertEqual(argv[argv.index('-t') + 1], '2')
 
+    def test_backend_timings_from_the_last_chunk(self):
+        tail = (b'data: {"choices":[{"delta":{"content":"x"}}]}\n\n'
+                b'data: {"choices":[],"timings":{"cache_n":120,"prompt_n":1534,"prompt_ms":61234.5,'
+                b'"predicted_n":96,"predicted_per_second":10.42}}\n\ndata: [DONE]\n\n')
+        self.assertEqual(mod.backend_timings(tail), {'cache_n': 120, 'prompt_n': 1534, 'prompt_ms': 61234.5,
+                                                     'predicted_n': 96, 'predicted_per_second': 10.4})
+        self.assertEqual(mod.backend_timings(b''), {})
+        self.assertEqual(mod.backend_timings(b'"prompt_n":3 "prompt_n":7')['prompt_n'], 7)
+
     # -- prefill threads (-tb), 2026-11-04
     def test_threads_batch_knob_is_read_at_every_load(self):
         def cmdline():
