@@ -319,6 +319,47 @@
       },
       "available": true,
       "confirm": "none",
+      "description": "Whether the flashlight (rear flash LED) is on and its brightness 0-15.",
+      "effect": "read",
+      "id": "torch.get",
+      "reason": null,
+      "timeout_s": 10
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "type": "boolean"
+          },
+          "value": {
+            "maximum": 15,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "on"
+        ],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Turn the flashlight on or off (on) and optionally set its brightness (value 1-15, default max). Leave it on only briefly: the LED heats the phone.",
+      "effect": "set",
+      "id": "torch.set",
+      "reason": null,
+      "timeout_s": 10
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
       "description": "Whether vibration/haptic feedback is enabled.",
       "effect": "read",
       "id": "vibration.get",

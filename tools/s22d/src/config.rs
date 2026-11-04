@@ -14,6 +14,8 @@ pub struct Config {
     pub volume_file: PathBuf,
     pub display_state: PathBuf,
     pub backlight_dir: PathBuf,
+    /// Flash LED class device used as the torch (`brightness` 0..`max_brightness`, 15 on the S22).
+    pub torch_dir: PathBuf,
     pub keepalive_enabled: PathBuf,
     pub wpa_cli: String,
     pub wpa_ctrl_dir: PathBuf,
@@ -88,6 +90,7 @@ impl Config {
             volume_file: p("srv/s22/buttons/volume"),
             display_state: p("run/s22-display-state"),
             backlight_dir: p("sys/class/backlight/panel"),
+            torch_dir: p("sys/class/leds/torch-sec1"),
             keepalive_enabled: p("srv/s22/state/keepalive/enabled"),
             wpa_cli: "wpa_cli".into(),
             wpa_ctrl_dir: p("run/wpa_supplicant-s22"),

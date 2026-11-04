@@ -1604,3 +1604,35 @@ async fn vibration_off_turns_haptic_play_into_a_reported_no_op() {
     assert_eq!(s, StatusCode::OK, "{v}");
     assert_eq!(v["state"]["played"], false);
 }
+
+#[tokio::test]
+async fn torch_set_writes_the_flash_led_and_get_reports_it() {
+    let h = H::new();
+    let dir = h.app.cfg.torch_dir.clone();
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("max_brightness"), "15\n").unwrap();
+    std::fs::write(dir.join("brightness"), "0\n").unwrap();
+    let read = || std::fs::read_to_string(dir.join("brightness")).unwrap();
+    let (s, v) = h.dev("torch.get", json!({})).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(v["state"]["on"], false);
+    let (s, v) = h.dev("torch.set", json!({"on": true})).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!((read(), v["state"]["on"].clone()), ("15\n".to_string(), json!(true)));
+    let (_, v) = h.dev("torch.set", json!({"on": "true", "value": 4})).await;
+    assert_eq!((read(), v["state"]["brightness"].clone()), ("4\n".to_string(), json!(4)));
+    let (s, _) = h.dev("torch.set", json!({"on": true, "value": 16})).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    assert_eq!(read(), "4\n", "a refused level changes nothing");
+    let (_, v) = h.dev("torch.set", json!({"on": false, "value": 9})).await;
+    assert_eq!((read(), v["state"]["on"].clone()), ("0\n".to_string(), json!(false)));
+    let (s, _) = h.dev("torch.set", json!({})).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn torch_is_unavailable_without_the_led() {
+    let h = H::new();
+    let (s, v) = h.dev("torch.set", json!({"on": true})).await;
+    assert_eq!(s, StatusCode::SERVICE_UNAVAILABLE, "{v}");
+}

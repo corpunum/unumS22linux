@@ -93,6 +93,8 @@ pub fn defs() -> Vec<DevCap> {
         c("volume.set", Set, 10, "Set the speech volume (value 0-10, 0 = mute) or mute/unmute (muted; unmute restores the previous level).", json!({"value": {"type": "integer", "minimum": 0, "maximum": 10}, "muted": {"type": "boolean"}}), &[]),
         c("brightness.get", Read, 10, "Screen state and backlight brightness in percent.", json!({}), &[]),
         c("brightness.set", Set, 15, "Set the backlight brightness in percent (value 1-100).", json!({"value": {"type": "integer", "minimum": 1, "maximum": 100}}), &["value"]),
+        c("torch.get", Read, 10, "Whether the flashlight (rear flash LED) is on and its brightness 0-15.", json!({}), &[]),
+        c("torch.set", Set, 10, "Turn the flashlight on or off (on) and optionally set its brightness (value 1-15, default max). Leave it on only briefly: the LED heats the phone.", json!({"on": {"type": "boolean"}, "value": {"type": "integer", "minimum": 1, "maximum": 15}}), &["on"]),
         c("vibration.get", Read, 10, "Whether vibration/haptic feedback is enabled.", json!({}), &[]),
         c("vibration.set", Set, 10, "Enable or disable vibration and haptic feedback.", on(), &["on"]),
         c("haptic.play", Action, 10, "Vibrate once: pattern tick, buzz, stop, or ON,OFF,... milliseconds (e.g. 40,80,40).", json!({"pattern": {"type": "string", "maxLength": 100}}), &["pattern"]),
@@ -120,6 +122,8 @@ fn availability(app: &Shared, id: &str) -> Option<String> {
         "mobile_data" | "call" | "sms" => app.b.phoned.availability(),
         "brightness" => app.b.display.availability(),
         "camera" => app.b.camera.availability(),
+        "torch" => (!cfg.torch_dir.join("brightness").exists())
+            .then(|| format!("flash LED missing: {}", cfg.torch_dir.display())),
         "haptic" => {
             (!cfg.haptic_sock.exists()).then(|| "s22-haptic daemon not running".to_string())
         }
@@ -243,6 +247,20 @@ struct Out {
     state: Value,
     note: Option<String>,
     extra: Option<(&'static str, Value)>,
+}
+
+fn torch_num(cfg: &crate::config::Config, name: &str) -> Option<u32> {
+    std::fs::read_to_string(cfg.torch_dir.join(name)).ok()?.trim().parse().ok()
+}
+
+fn torch_max(cfg: &crate::config::Config) -> u32 {
+    torch_num(cfg, "max_brightness").filter(|m| *m > 0).unwrap_or(15)
+}
+
+fn torch_state(cfg: &crate::config::Config) -> ApiResult {
+    let b = torch_num(cfg, "brightness")
+        .ok_or_else(|| ApiError::unavailable("flash LED brightness unreadable"))?;
+    Ok(json!({"on": b > 0, "brightness": b, "max_brightness": torch_max(cfg)}))
 }
 
 fn out(state: Value) -> ApiResult<Out> {
@@ -508,6 +526,20 @@ async fn run(app: &Shared, cap: &DevCap, a: &Args) -> ApiResult<Out> {
                 o.remove("ok");
             }
             out(s)
+        }
+        "torch.get" => out(torch_state(&cfg)?),
+        "torch.set" => {
+            let on = a.need_bool("on")?;
+            let max = torch_max(&cfg);
+            let value = a.int("value", 1, u64::from(max))?.map(|v| v as u32);
+            let level = if on { value.unwrap_or(max) } else { 0 };
+            let path = cfg.torch_dir.join("brightness");
+            blocking(move || {
+                std::fs::write(&path, format!("{level}\n"))
+                    .map_err(|e| ApiError::unavailable(format!("torch write: {e}")))
+            })
+            .await?;
+            out(torch_state(&cfg)?)
         }
         "vibration.get" => out(st::vibration(&cfg)),
         "vibration.set" => out(st::set_vibration(&cfg, a.need_bool("on")?)?),

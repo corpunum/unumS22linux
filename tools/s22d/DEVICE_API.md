@@ -106,6 +106,8 @@ are accepted for booleans and integers.
 | `brightness.set` | set | `value` 1-100 | as `brightness.get` | backlight sysfs (0 is refused: switch the screen off instead) |
 | `vibration.get` | read | - | `{enabled, daemon}` | `/srv/s22/state/haptics/config.json` (missing = enabled) |
 | `vibration.set` | set | `on` | as `vibration.get` | same file, other keys kept; s22-haptic re-reads it |
+| `torch.get` | read | - | `{on, brightness, max_brightness}` | flash LED `/sys/class/leds/torch-sec1` |
+| `torch.set` | set | `on`; `value` 1-15 (default max) | as `torch.get` | writes the LED brightness (0 = off); keep it short, the LED heats the phone |
 | `haptic.play` | action | `pattern`: `tick`, `buzz`, `stop` or `ON,OFF,...` ms (<= 16 numbers, each 1-3000) | `{played, daemon: "ok"\|"dropped"}` | one datagram to `/run/s22-haptic.sock` (`docs/S22_HAPTICS.md`); with vibration off `played:false` and nothing is sent |
 | `autosleep.get` | read | - | `{enabled, state, cycles}` | `/srv/s22/state/autosleep/disabled`, `/run/s22-autosleep/status.json` |
 | `autosleep.set` | set | `on` | as `autosleep.get` | the flag file `s22-autosleep on\|off` uses (obeyed within 2 s) |
