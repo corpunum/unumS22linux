@@ -89,3 +89,17 @@ __pycache__/
 **/tailscale/private/
 **/wpa_supplicant*.conf
 **/*auth-url*
+
+# Public-history privacy cleanup (2026-10-31, de-duplicated 2026-11-04): personal device
+# captures (SMS lists, screenshots of the owner's phone) and vendor firmware/blob payloads
+# stay out of new commits. Files already tracked are unaffected; history is the owner's call.
+/evidence/device-api-20261022/
+/tools/unum-shell/screenshots/phone.png
+/evidence/fastshell-20261021/live-phone.png
+/evidence/touchui-20261009/05-phone.png
+/docs/media/fastshell-screens.png
+*.bin
+*.mbn
+*.elf
+*.pit
+*.tar.md5
