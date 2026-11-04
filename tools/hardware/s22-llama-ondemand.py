@@ -43,6 +43,12 @@ on the CPU), and runs the real llama-server on 127.0.0.1:8091.
     model, since the lean prompt never uses that prefix. Off: S22_LLAMA_LEAN=0 or the file
     STATE/lean-off (checked per request).
 
+  * Append-only lean history (2026-11-04). The lean window used to slide by one message per turn, so
+    everything after the system prompt changed every turn and llama.cpp re-prefilled the history (measured
+    cache_n/prompt_n 675/428). LeanWindow now keeps the window start, clips each message once by role,
+    and cuts back (MAX 16 -> KEEP 6) in one block; requests carry cache_prompt + n_keep; llama-server runs
+    S22_LLAMA_SLOTS (default 2) slots over the same -c so side requests do not evict the chat's KV cache.
+
   * Hard per-request limits (2026-10-22, issue #75). A stuck local turn once kept the CPU busy for
     ~45 min (900 s first-token cap x retries). Now every relayed generation request has a wall
     clock: a streamed request must produce model output within FIRST_S (150 s), any request ends
@@ -122,10 +128,13 @@ MAX_PREFIX_FRAC = 0.6
 MAX_BODY = 8 * 1024 * 1024
 # -- lean local profile
 LEAN_DEFAULT = os.environ.get('S22_LLAMA_LEAN', '1') != '0'
+LEAN_MAX_MSGS = 16                  # the window grows to this, then is cut back to LEAN_KEEP_MSGS in ONE block
 LEAN_KEEP_MSGS = 6                  # non-system messages kept (a tool result keeps its assistant call)
 LEAN_CLIP_OLD = 600                 # chars kept of a message before the current user turn
+LEAN_CLIP_USER = 1500               # append-only window: a message is clipped once, by role, wherever it sits
 LEAN_CLIP_TOOL = 2500               # chars kept of a tool result in the current turn
 LEAN_MAX_TOKENS = 768
+SLOTS = max(int(os.environ.get('S22_LLAMA_SLOTS', '2') or 2), 1)   # llama-server slots; the -c budget is split between them
 LEAN_MIN_SYSTEM = 4000              # a request without tools is only rewritten if it carries a controller-size prompt
 WARM_PATHS = ('/completion', '/completions')
 DIRECTIVE = '[OPENUNUM INTERNAL TURN DIRECTIVE]'
@@ -165,6 +174,10 @@ def backend_argv(cfg_path: Path = KEEPALIVE_CONFIG) -> list[str]:
         argv += ['--port', str(BACKEND_PORT)]
     if '-t' in argv:
         argv[argv.index('-t') + 1] = COOL_THREADS
+    if '-np' in argv:                      # 2 slots (same total -c): side requests stop evicting the chat's KV cache
+        argv[argv.index('-np') + 1] = str(SLOTS)
+    else:
+        argv += ['-np', str(SLOTS)]
     if '--slot-save-path' not in argv:
         argv += ['--slot-save-path', SLOT_ARG]
     if '--cache-reuse' not in argv:
@@ -236,7 +249,7 @@ def model_tag(argv: list[str]) -> str:
                 size = str((Path(argv[i + 1]) / m.lstrip('/')).stat().st_size)
             except OSError:
                 pass
-    return '|'.join([m, size] + [f'{f}={argv_value(argv, f)}' for f in ('-c', '-ctk', '-ctv', '-fa')])
+    return '|'.join([m, size] + [f'{f}={argv_value(argv, f)}' for f in ('-c', '-np', '-ctk', '-ctv', '-fa')])
 
 
 def extract_prefix(body: dict) -> dict | None:
@@ -313,10 +326,88 @@ def wants_lean(body: dict) -> bool:
     return sum(len(str(m.get('content') or '')) for m in msgs if m.get('role') in ('system', 'developer')) > LEAN_MIN_SYSTEM
 
 
-def lean_request(body: dict, today: str | None = None) -> dict:
+def raw_key(m: dict) -> str:
+    return hashlib.sha256(json.dumps([m.get('role'), m.get('content'), m.get('tool_calls'), m.get('tool_call_id')],
+                                     sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:20]
+
+
+def lean_message(m: dict) -> dict:
+    """One history message, clipped by role only (never by position), so its bytes never change later."""
+    m = dict(m)
+    c = m.get('content')
+    if isinstance(c, str):
+        if m.get('role') == 'user':
+            c = clip(lean_user_text(c), LEAN_CLIP_USER)
+        elif m.get('role') == 'tool':
+            c = clip(c, LEAN_CLIP_TOOL)
+        else:
+            c = clip(c, LEAN_CLIP_OLD)
+        m['content'] = c
+    return m
+
+
+class LeanWindow:
+    """Append-only history for the local model, so llama-server's prompt cache reuses earlier turns.
+    A sliding window re-prefills the whole history every turn (measured 11-04: cache_n 675 / prompt_n 428).
+    Here the window start stays where it was while the conversation grows (matched by message content,
+    even if OpenUnum itself slides), every message keeps the bytes it had when it entered, and the
+    start only moves when the window passes LEAN_MAX_MSGS: then it is cut back to LEAN_KEEP_MSGS in one
+    block, which costs one full re-prefill every ~(MAX-KEEP)/2 = 5 turns instead of every turn."""
+
+    def __init__(self) -> None:
+        self.keys: list[str] = []
+        self.msgs: list[dict | None] = []
+        self.lock = threading.Lock()
+
+    def start_for(self, keys: list[str]) -> int:
+        old = self.keys
+        if not old:
+            return 0
+        for i, k in enumerate(keys):                 # our first message is still in the conversation
+            if k == old[0]:
+                m = min(len(old), len(keys) - i)
+                if keys[i:i + m] == old[:m]:
+                    return i
+        for j in range(1, len(old)):                  # the conversation slid past our first message(s)
+            m = min(len(old) - j, len(keys))
+            if m > 0 and keys[:m] == old[j:j + m]:
+                return 0
+        return 0                                      # another conversation: start afresh
+
+    def select(self, rest: list[dict]) -> list[dict]:
+        with self.lock:
+            keys = [raw_key(m) for m in rest]
+            known = dict(zip(self.keys, self.msgs))
+            start = self.start_for(keys)
+            if len(rest) - start > LEAN_MAX_MSGS:
+                start = len(rest) - LEAN_KEEP_MSGS
+            while start > 0 and rest[start].get('role') == 'tool':
+                start -= 1                            # keep the assistant tool call its results belong to
+            while start < len(rest) and rest[start].get('role') == 'tool':
+                start += 1
+            last_user = max((i for i, m in enumerate(rest) if m.get('role') == 'user'), default=-1)
+            kept: list[dict | None] = []
+            for i in range(start, len(rest)):
+                if keys[i] in known:
+                    lm = known[keys[i]]
+                else:
+                    lm = lean_message(rest[i])
+                    if rest[i].get('role') == 'user' and not (lm.get('content') or '').strip() and i != last_user:
+                        lm = None
+                kept.append(lm)
+            self.keys, self.msgs = keys[start:], kept
+            return [m for m in kept if m is not None]
+
+
+WINDOW = LeanWindow()
+
+
+def lean_request(body: dict, today: str | None = None, window: LeanWindow | None = None) -> dict:
     """What the local model gets instead of the full controller request (see module doc)."""
     msgs = [m for m in (body.get('messages') or []) if isinstance(m, dict)]
     rest = [dict(m) for m in msgs if m.get('role') not in ('system', 'developer')]
+    if window is not None:
+        return _lean_finish(body, window.select(rest), today)
     cut = max(len(rest) - LEAN_KEEP_MSGS, 0)
     while cut > 0 and rest[cut].get('role') == 'tool':
         cut -= 1                                  # keep the assistant tool call its results belong to
@@ -340,8 +431,16 @@ def lean_request(body: dict, today: str | None = None) -> dict:
         if m.get('role') == 'user' and not (c or '').strip() and i != last_user:
             continue
         out.append(m)
+    return _lean_finish(body, out, today)
+
+
+def _lean_finish(body: dict, out: list, today: str | None) -> dict:
     b = dict(body)
-    b['messages'] = [{'role': 'system', 'content': LEAN_SYSTEM.format(date=today or time.strftime('%Y-%m-%d'))}] + out
+    b['cache_prompt'] = True                      # reuse the KV cache of the previous turn's prefix
+    system = LEAN_SYSTEM.format(date=today or time.strftime('%Y-%m-%d'))
+    # protect the system prompt + tool schemas if llama-server ever shifts the context (~3 chars/token)
+    b.setdefault('n_keep', (len(system) + len(json.dumps(body.get('tools') or [])) ) // 3)
+    b['messages'] = [{'role': 'system', 'content': system}] + out
     mt = b.get('max_tokens') or b.get('n_predict')
     b['max_tokens'] = min(int(mt), LEAN_MAX_TOKENS) if isinstance(mt, (int, float)) and mt > 0 else LEAN_MAX_TOKENS
     b.pop('n_predict', None)
@@ -1120,7 +1219,7 @@ class OnDemand:
             self.dump_user(j)
             if lean and wants_lean(j):
                 orig = len(body)
-                j = lean_request(j)
+                j = lean_request(j, window=WINDOW)
                 body = json.dumps(j, ensure_ascii=False).encode()
                 head = set_body(head, body)
                 self.log_shape(j, orig_bytes=orig)

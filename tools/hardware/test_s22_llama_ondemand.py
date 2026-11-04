@@ -134,8 +134,8 @@ class OnDemandTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / 'c.json'
             p.write_text(json.dumps({'service_defs': {'llama_backend': {'argv': ['x', '--port', '8090']}}}))
-            self.assertEqual(mod.backend_argv(p), ['x', '--port', str(mod.BACKEND_PORT), '--slot-save-path',
-                                                   mod.SLOT_ARG, '--cache-reuse', '256'])
+            self.assertEqual(mod.backend_argv(p), ['x', '--port', str(mod.BACKEND_PORT), '-np', str(mod.SLOTS),
+                                                   '--slot-save-path', mod.SLOT_ARG, '--cache-reuse', '256'])
             self.assertIn('--port', mod.backend_argv(Path(d) / 'missing.json'))
 
 
@@ -364,6 +364,88 @@ def controller_body(n_old=10):
     msgs.append({'role': 'user', 'content': TURN})
     return {'model': 'm', 'messages': msgs, 'max_tokens': 4096, 'temperature': 0.2, 'stream': True,
             'tools': [{'type': 'function', 'function': {'name': 'web_search', 'description': 'w' * 2000, 'parameters': {}}}]}
+
+
+def convo(n_turns, slide=None):
+    """OpenUnum-style request after n_turns exchanges; slide=N keeps only the last N raw messages."""
+    msgs = []
+    for i in range(n_turns):
+        msgs += [{'role': 'user', 'content': f'question {i} ' + 'q' * 300}, {'role': 'assistant', 'content': f'answer {i} ' + 'a' * 900}]
+    msgs.append({'role': 'user', 'content': f'question {n_turns} ' + 'q' * 300})
+    if slide:
+        msgs = msgs[-slide:]
+    return {'model': 'm', 'messages': [{'role': 'system', 'content': 'S' * 12000}] + msgs, 'max_tokens': 4096,
+            'tools': [{'type': 'function', 'function': {'name': 'x', 'parameters': {}}}]}
+
+
+def common_prefix(a, b):
+    n = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        n += 1
+    return n
+
+
+class LeanPrefixStabilityTest(unittest.TestCase):
+    def render(self, w, body):
+        r = mod.lean_request(body, today='2026-11-04', window=w)
+        return r, [json.dumps(m, sort_keys=True) for m in r['messages']]
+
+    def test_history_is_append_only_until_a_block_cut(self):
+        for slide in (None, 5):                          # OpenUnum growing, or sliding by itself
+            w, prev, cuts = mod.LeanWindow(), None, 0
+            for n in range(1, 16):
+                r, cur = self.render(w, convo(n, slide))
+                self.assertTrue(r['cache_prompt'])
+                self.assertGreater(r['n_keep'], 0)
+                self.assertLessEqual(len(cur), mod.LEAN_MAX_MSGS + 2)
+                if prev is not None:
+                    shared = common_prefix(prev, cur)
+                    if shared < len(prev):
+                        cuts += 1                         # the prefix changed: only allowed at a block cut or upstream slide
+                    elif slide is None:
+                        self.assertEqual(cur[:len(prev)], prev)          # strictly append-only
+                prev = cur
+            if slide is None:
+                self.assertLessEqual(cuts, 3, 'block cuts must be rare, not every turn')
+
+    def test_sliding_window_would_miss_every_turn_but_block_cut_does_not(self):
+        stateless = [mod.lean_request(convo(n), today='d')['messages'] for n in range(8, 14)]
+        misses = sum(common_prefix([json.dumps(m) for m in a], [json.dumps(m) for m in b]) < len(a)
+                     for a, b in zip(stateless, stateless[1:]))
+        self.assertGreaterEqual(misses, 4)                # the old behaviour
+        w = mod.LeanWindow()
+        rendered = [self.render(w, convo(n))[1] for n in range(8, 14)]
+        misses = sum(common_prefix(a, b) < len(a) for a, b in zip(rendered, rendered[1:]))
+        self.assertLessEqual(misses, 1)
+
+    def test_a_message_keeps_its_bytes_when_it_stops_being_the_last_turn(self):
+        w = mod.LeanWindow()
+        big = convo(0)
+        big['messages'][-1]['content'] = 'long question ' + 'w' * 1200
+        _, a = self.render(w, big)
+        nxt = convo(1)
+        nxt['messages'][1]['content'] = big['messages'][-1]['content']
+        _, b = self.render(w, nxt)
+        self.assertEqual(a[1], b[1])
+
+    def test_new_conversation_resets_and_tool_pairs_survive_the_cut(self):
+        w = mod.LeanWindow()
+        self.render(w, convo(9))
+        body = convo(1)
+        _, cur = self.render(w, body)
+        self.assertEqual(len(cur), 1 + 3)
+        loop = convo(8)
+        loop['messages'] += [{'role': 'assistant', 'content': '', 'tool_calls': [{'id': '1'}]}] + \
+            [{'role': 'tool', 'tool_call_id': '1', 'content': 'r'}] * 3
+        r, _ = self.render(mod.LeanWindow(), loop)
+        self.assertNotEqual(r['messages'][1]['role'], 'tool')
+
+    def test_backend_argv_uses_two_slots_with_the_same_context(self):
+        argv = mod.backend_argv(Path('/nonexistent'))
+        self.assertEqual(argv[argv.index('-np') + 1], '2')
+        self.assertEqual(argv[argv.index('-c') + 1], '16384')
 
 
 class LeanTest(unittest.TestCase):
