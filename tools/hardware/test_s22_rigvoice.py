@@ -9,6 +9,7 @@ import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -86,11 +87,49 @@ class RigVoiceTests(unittest.TestCase):
         self.addCleanup(s.close)
         out = Path(self.tmp.name) / 'a.wav'
         info = RV.tts_to_wav('Καλημέρα. Hello.', out, self.cfg(s))
-        with wave.open(str(out)) as w:
-            self.assertEqual((w.getframerate(), w.getnchannels(), w.getnframes()), (48000, 1, 24000))
+        with wave.open(str(out)) as w:      # 0.5 s of voice + the fixed 60 ms lead / 180 ms tail silence
+            self.assertEqual((w.getframerate(), w.getnchannels(), w.getnframes()),
+                             (48000, 1, 24000 + int(0.06 * 48000) + int(0.18 * 48000)))
         self.assertEqual(json.loads(s.requests[0][1]), {'input': 'Καλημέρα. Hello.', 'voice': 'antonis'})
         self.assertAlmostEqual(info['audio_s'], 0.5, places=2)
         self.assertTrue(info['normalised'])
+        self.assertTrue(info['pad']['padded'])
+        os.environ['S22_SPEECH_PAD'] = 'off'
+        try:
+            RV.tts_to_wav('Hello.', out, self.cfg(s))
+        finally:
+            del os.environ['S22_SPEECH_PAD']
+        with wave.open(str(out)) as w:
+            self.assertEqual(w.getnframes(), 24000)
+
+    def test_rig_silence_is_cut_to_the_same_pad_as_phone_renders(self):
+        import array
+        lead = bytes(2 * 48000 * 4 // 10)                    # 400 ms of leading silence from the engine
+        a = array.array('h', [int(6000 * math.sin(2 * math.pi * 200 * i / 48000)) for i in range(24000)])
+        pcm, info = RV.pad_speech(lead + a.tobytes() + bytes(2 * 48000), 48000)
+        self.assertEqual((info['silence_before_ms'], info['silence_after_ms']), (400, 1000))
+        self.assertEqual(len(pcm) // 2, 24000 + int(0.06 * 48000) + int(0.18 * 48000))
+
+    def test_per_call_deadlines_from_the_environment(self):
+        s = Stub(delay=0.6)
+        self.addCleanup(s.close)
+        env = {'S22_RIGVOICE_TTFA_S': '3', 'S22_RIGVOICE_BUDGET_S': '7.5', 'S22_RIGVOICE_STALL_S': 'junk'}
+        with unittest.mock.patch.dict(os.environ, env):
+            c = RV.load_config(Path(self.tmp.name) / 'none.json')
+        self.assertEqual((c['ttfa_s'], c['budget_s'], c['stall_s']), (3.0, 7.5, RV.DEFAULTS['stall_s']))
+        with self.assertRaises(RV.RigUnavailable):              # the default 0.3 s first-audio deadline fails
+            RV.tts_pcm('Hello.', self.cfg(s, ttfa_s=0.3))
+        RV.clear_down('tts')
+        pcm, rate, info = RV.tts_pcm('Hello.', dict(self.cfg(s), ttfa_s=c['ttfa_s'], budget_s=c['budget_s']))
+        self.assertGreater(info['ttfa_s'], 0.5)                 # the extended deadline let the slow rig answer
+        self.assertGreater(len(pcm), 0)
+
+    def test_voice_down(self):
+        c = dict(RV.DEFAULTS)
+        self.assertFalse(RV.voice_down(c))
+        self.assertTrue(RV.voice_down(dict(c, enabled=False)))
+        RV.mark_down('tts', 'test')
+        self.assertTrue(RV.voice_down(c))
 
     def test_late_first_audio_gives_up_and_marks_down(self):
         s = Stub(delay=1.0)
@@ -192,6 +231,16 @@ class SayAntonisEngine(unittest.TestCase):
             i = self.src.index(anchor)
             block = self.src[i:self.src.index('espeak-ng', i)]
             self.assertIn('S22_SAY_STRICT', block)
+
+    def test_one_voice_per_answer_hooks(self):
+        block = self.src[self.src.index('    antonis)'):self.src.index('    supertonic) S=')]
+        self.assertIn('"${S22_SAY_VOICE:-}" != phone ]', block)        # locked answers never try the rig
+        self.assertIn('VOICE_USED="$ENGINE-locked"', block)
+        render = self.src[self.src.index('if [ -n "${S22_SAY_OUT:-}" ]; then'):]
+        self.assertLess(render.index('voice_note'), render.index('cp "$CHROOT$R"'))
+        self.assertIn('S22_SAY_VOICE_FILE', self.src)
+        self.assertIn('PAD=${S22_SPEECH_PAD:-60,180}', self.src)
+        self.assertIn("grep -q -e '--pad' \"$LOUDNORM_PY\"", self.src)   # an older loudnorm still normalises
 
     def test_every_render_records_its_voice(self):
         self.assertEqual(self.src.count('voice_log "${VOICE_USED:-$ENGINE}"'), 2)

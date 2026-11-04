@@ -15,6 +15,12 @@ paying the timeout again. The callers then fall back on the phone: s22-say -> Pi
 voice distilled; its English is only partly intelligible), s22-assistant -> Parakeet (English only).
 
 S22_RIGVOICE_LENIENT=1 (offline renders such as the filler clips): long deadlines, no down-marker.
+Per-call deadlines (2026-11-04, one voice per answer): S22_RIGVOICE_TTFA_S, S22_RIGVOICE_STALL_S and
+S22_RIGVOICE_BUDGET_S (whole clause) override the config for one call. s22-assistant renders chunk k+1
+while chunk k plays, so it passes the remaining playback time as extra slack instead of letting a
+transient slowdown switch the rest of the answer to the phone's voice.
+Silence padding: rig audio gets the same fixed lead/tail silence as phone renders (s22_loudnorm.trim_pad,
+S22_SPEECH_PAD, default 60,180 ms), so chunk-to-chunk pauses do not depend on the engine.
 Settings: /srv/s22/state/rigvoice.json overrides DEFAULTS (e.g. {"tts_url": "http://203.0.113.10:1"} to
 force the fallback, {"enabled": false} to stay on the phone); S22_RIGVOICE_CONFIG names another file.
 
@@ -70,7 +76,22 @@ def load_config(path: Path = CONFIG) -> dict:
     if os.environ.get('S22_RIGVOICE_LENIENT') == '1':   # offline renders (filler clips): wait, never mark down
         cfg.update(ttfa_s=max(cfg['ttfa_s'], 30.0), stall_s=max(cfg['stall_s'], 30.0), tts_base_s=60.0,
                    tts_per_char_s=1.0, down_s=0.0)
+    for env, key in (('S22_RIGVOICE_TTFA_S', 'ttfa_s'), ('S22_RIGVOICE_STALL_S', 'stall_s'),
+                     ('S22_RIGVOICE_BUDGET_S', 'budget_s')):
+        try:                                             # one call's deadlines (s22-assistant: playback slack)
+            v = float(os.environ.get(env, ''))
+        except ValueError:
+            continue
+        if 0 < v <= 600:
+            cfg[key] = v
     return cfg
+
+
+def voice_down(cfg: dict | None = None) -> bool:
+    """True when the next s22-say render will not come from the rig (disabled or marked down), i.e. the
+    phone's copy of the voice (Piper el-antonis) speaks: callers pick the matching filler clips."""
+    cfg = cfg or load_config()
+    return not cfg.get('enabled', True) or is_down('tts', cfg)
 
 
 # ---------------------------------------------------------------- down markers
@@ -115,7 +136,7 @@ def tts_pcm(text: str, cfg: dict, clock=time.monotonic) -> tuple[bytes, int, dic
     if is_down('tts', cfg):
         raise RigUnavailable('marked down')
     t0 = clock()
-    budget = float(cfg['tts_base_s']) + float(cfg['tts_per_char_s']) * len(text)
+    budget = float(cfg.get('budget_s') or 0) or float(cfg['tts_base_s']) + float(cfg['tts_per_char_s']) * len(text)
     conn, base = _conn(cfg['tts_url'], float(cfg['ttfa_s']))
     try:
         try:
@@ -180,6 +201,26 @@ def normalise(pcm: bytes, rate: int) -> tuple[bytes, dict]:
     return out.tobytes(), {'normalised': True, 'before_lufs': round(lufs, 2), 'gain_db': round(gain_db, 2)}
 
 
+def pad_speech(pcm: bytes, rate: int) -> tuple[bytes, dict]:
+    """The fixed lead/tail silence of every phone voice (s22_loudnorm.trim_pad, S22_SPEECH_PAD)."""
+    try:
+        import array
+        import s22_loudnorm as LN
+        pad = LN.parse_pad(os.environ.get('S22_SPEECH_PAD', getattr(LN, 'DEFAULT_PAD', '60,180')))
+    except (ImportError, AttributeError, ValueError):
+        return pcm, {'padded': False}
+    if pad is None:
+        return pcm, {'padded': False}
+    a = array.array('h')
+    a.frombytes(pcm)
+    if sys.byteorder == 'big':
+        a.byteswap()
+    out, info = LN.trim_pad_auto(a, rate, 1, pad[0], pad[1])
+    if sys.byteorder == 'big':
+        out.byteswap()
+    return out.tobytes(), info
+
+
 def write_wav(path, pcm: bytes, rate: int) -> None:
     tmp = f'{path}.part'
     with wave.open(tmp, 'wb') as w:
@@ -194,9 +235,10 @@ def tts_to_wav(text: str, out, cfg: dict | None = None) -> dict:
     cfg = cfg or load_config()
     pcm, rate, info = tts_pcm(text, cfg)
     t = time.monotonic()
+    pcm, pad = pad_speech(pcm, rate)          # first: the loudness is then measured on what is played
     pcm, norm = normalise(pcm, rate)
     write_wav(out, pcm, rate)
-    info.update(norm, norm_s=round(time.monotonic() - t, 3))
+    info.update(norm, norm_s=round(time.monotonic() - t, 3), pad=pad)
     return info
 
 

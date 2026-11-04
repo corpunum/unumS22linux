@@ -67,6 +67,22 @@ class FillerPlay(unittest.TestCase):
         proc, info = F.play('do the thing', say=str(self.say), root=self.bank / 'missing', state_file=self.state)
         self.assertIsNone(proc)
 
+    def test_bank_follows_the_voice_that_will_answer(self):
+        """2026-11-04: while the rig voice is down the answer is the phone's copy, so are the clips."""
+        offline = self.bank.with_name('voice-fillers-el-antonis')
+        self.assertEqual(F.bank_root(self.bank, offline, down=True), self.bank)    # offline bank not rendered
+        offline.mkdir()
+        (offline / 'manifest.json').write_text('{"version": 1, "clips": {}}')
+        self.assertEqual(F.bank_root(self.bank, offline, down=True), offline)
+        self.assertEqual(F.bank_root(self.bank, offline, down=False), self.bank)
+
+    def test_render_fillers_engine_writes_its_own_bank(self):
+        R = load('s22_render_fillers', 'voice/s22-render-fillers.py')
+        self.assertEqual(R.default_out(None), R.DEFAULT_OUT)
+        self.assertEqual(R.default_out('antonis'), R.DEFAULT_OUT)
+        self.assertEqual(R.default_out('el-antonis').name, 'voice-fillers-el-antonis')
+        self.assertEqual(Path(F.FILLER_DIR_OFFLINE).name, 'voice-fillers-el-antonis')
+
 
 class Wiring(unittest.TestCase):
     """Every voice path has a filler hook (static checks; behaviour is tested in each path's own tests)."""

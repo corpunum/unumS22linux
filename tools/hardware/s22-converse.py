@@ -379,9 +379,10 @@ class Converser(A.Assistant):
         self.prerender = not self.silent
 
     # -- audio out
-    def say(self, text: str = '', wav: str | None = None, wait: bool = True, filler: bool = False):
+    def say(self, text: str = '', wav: str | None = None, wait: bool = True, filler: bool = False,
+            env: dict | None = None):
         argv = [str(A.BIN / 's22-say')] + (['--wav', wav] if wav else [text])
-        env = dict(os.environ)
+        env = {**os.environ, **(env or {})}     # e.g. S22_SAY_VOICE=phone: one voice per answer
         if self.silent:
             if wav and not filler:      # earcons: nothing to verify, skip them
                 return None

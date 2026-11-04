@@ -16,6 +16,12 @@
 # phone: Piper el-antonis (S22_TTS_OFFLINE, its English is only partly intelligible; S22_TTS_OFFLINE_EN picks
 # another engine for English text, e.g. supertonic). S22_SAY_STRICT=1: no fallback at all (exit 1), used when
 # rendering the filler clips so a bank never mixes voices. /run/s22-say.voices records the voice of every render.
+# One voice per answer (2026-11-04): S22_SAY_VOICE=phone skips the rig and speaks with the phone's copy at once
+# (s22-assistant sets it for the rest of an answer that started on the phone, so an answer never alternates
+# between the two); S22_SAY_VOICE_FILE=PATH gets the voice that rendered (antonis-rig, el-antonis-fallback,
+# el-antonis-locked, espeak-fallback, or the engine name) in render-only mode.
+# Rhythm: renders are trimmed to a fixed lead/tail silence (S22_SPEECH_PAD, default 60,180 ms; off) so the
+# pause between chunks does not depend on the engine (rig renders are padded by s22_rigvoice the same way).
 # On-device neural TTS: sherpa-onnx (static aarch64 build) with on-device
 # models under /opt/s22-tts in the chroot, CPU only, pinned to the big cores.
 # Engines: supertonic (int8, RTF ~0.16), kitten (nano int8, ~0.29),
@@ -76,8 +82,21 @@ TTS=/opt/s22-tts
 # same volume (Supertonic rendered ~-26 LUFS, Piper/Greek ~-21, the earcons ~-14). --wav inputs are
 # played as given (clips are normalised when they are made). S22_LOUDNORM=off disables it.
 LOUDNORM_PY=${S22_LOUDNORM_PY:-/srv/s22/hardware/bin/s22_loudnorm.py}
+PAD=${S22_SPEECH_PAD:-60,180}
 loudnorm() {   # $1 = WAV path on the outer filesystem; never fails. Rig renders arrive normalised already.
-  [ "${S22_LOUDNORM:-on}" = off ] || [ "$VOICE_USED" = antonis-rig ] || [ ! -f "$LOUDNORM_PY" ] || python3 -I -B "$LOUDNORM_PY" "$1" >/dev/null 2>&1 || :
+  [ "${S22_LOUDNORM:-on}" = off ] || [ "$VOICE_USED" = antonis-rig ] || [ ! -f "$LOUDNORM_PY" ] || {
+    # an older s22_loudnorm.py has no --pad: normalise without it rather than not at all
+    if [ "$PAD" != off ] && grep -q -e '--pad' "$LOUDNORM_PY" 2>/dev/null; then
+      python3 -I -B "$LOUDNORM_PY" --pad "$PAD" "$1"
+    else
+      python3 -I -B "$LOUDNORM_PY" "$1"
+    fi >/dev/null 2>&1 || :
+  }
+}
+voice_note() {   # the voice that rendered, for a caller that asked (S22_SAY_VOICE_FILE)
+  [ -n "${S22_SAY_VOICE_FILE:-}" ] || return 0
+  printf '%s\n' "${VOICE_USED:-$ENGINE}" > "$S22_SAY_VOICE_FILE.tmp" 2>/dev/null &&
+    mv -f "$S22_SAY_VOICE_FILE.tmp" "$S22_SAY_VOICE_FILE" 2>/dev/null || :
 }
 # Greek letters are U+0370-03FF (UTF-8 lead bytes 0xCE/0xCF). Checked byte-wise with tr: busybox ash matches
 # case patterns per character, so a lone lead byte never matches there.
@@ -98,7 +117,9 @@ neural_tts() {  # $1 = wav path inside the chroot, $2 = text
   M=$TTS
   case "$ENGINE" in
     antonis)   # the owner's voice from the rig; on failure the same voice from the phone (Piper el-antonis)
-      if [ -f "$RIGVOICE_PY" ] && python3 -I -B "$RIGVOICE_PY" tts "$CHROOT$1" "$2" >/dev/null 2>/run/s22-say.rig.err \
+      # S22_SAY_VOICE=phone: this answer already speaks with the phone's copy, stay with it (no rig try)
+      if [ "${S22_SAY_VOICE:-}" != phone ] && [ -f "$RIGVOICE_PY" ] \
+          && python3 -I -B "$RIGVOICE_PY" tts "$CHROOT$1" "$2" >/dev/null 2>/run/s22-say.rig.err \
           && [ -s "$CHROOT$1" ]; then
         VOICE_USED=antonis-rig; return 0
       fi
@@ -106,7 +127,8 @@ neural_tts() {  # $1 = wav path inside the chroot, $2 = text
       if is_greek "$2"; then ENGINE=${S22_TTS_OFFLINE:-el-antonis}; else ENGINE=${S22_TTS_OFFLINE_EN:-${S22_TTS_OFFLINE:-el-antonis}}; fi
       [ "$ENGINE" = antonis ] && ENGINE=el-antonis
       neural_tts "$1" "$2" || return 1
-      VOICE_USED="$ENGINE-fallback"; return 0;;
+      if [ "${S22_SAY_VOICE:-}" = phone ]; then VOICE_USED="$ENGINE-locked"; else VOICE_USED="$ENGINE-fallback"; fi
+      return 0;;
     supertonic) S=$M/sherpa-onnx-supertonic-tts-int8-2026-03-06
       set -- "$1" "$2" --supertonic-duration-predictor=$S/duration_predictor.int8.onnx \
         --supertonic-text-encoder=$S/text_encoder.int8.onnx \
@@ -163,6 +185,7 @@ if [ -n "${S22_SAY_OUT:-}" ]; then   # render only: never touches the sound card
     VOICE_USED=espeak-fallback
   fi
   voice_log "${VOICE_USED:-$ENGINE}"
+  voice_note
   loudnorm "$CHROOT$R"
   cp "$CHROOT$R" "$S22_SAY_OUT.tmp" && mv "$S22_SAY_OUT.tmp" "$S22_SAY_OUT"; rc=$?
   rm -f "$CHROOT$R"; exit $rc

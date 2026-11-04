@@ -134,7 +134,7 @@ class RunTests(unittest.TestCase):
         class Proc:
             def wait(s, timeout=None): calls.append('first-done')
         a = MOD.Assistant(dict(CFG), speak=True, base=self.base)
-        a._render = lambda text, name: (calls.append(('render', name)) or f'/tmp/{name}')
+        a._render = lambda text, name, env=None: (calls.append(('render', name)) or f'/tmp/{name}')
         a.say = lambda text='', wav=None, wait=True, filler=False: (calls.append(('say', wav or text)), Proc() if not wait else None)[1]
         long_text = 'This is the first sentence of the answer. ' + 'And the rest goes on for a good while longer. ' * 4
         a.speak_answer(long_text.strip())
@@ -365,6 +365,105 @@ class CardTests(unittest.TestCase):
         with mock.patch.object(MOD.urllib.request, 'urlopen', lambda url, timeout=0: io.BufferedReader(io.BytesIO(body))):
             MOD.tool_events('voice', MOD.threading.Event(), out=lambda **kw: got.append(kw))
         self.assertEqual(got, [{'state': 'tool', 'name': 'phone_device'}, {'state': 'thinking'}])
+
+
+class OneVoicePerAnswer(unittest.TestCase):
+    """2026-11-04: an answer keeps the voice of its first chunk (owner: "stop switching between voices")."""
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.base = Path(self.td.name)
+
+    def tearDown(self):
+        self.td.cleanup()
+
+    def run_answer(self, labels, seconds=5.0, **cfg):
+        envs = []
+        a = MOD.Assistant(dict(CFG, **cfg), speak=True, base=self.base)
+
+        class Proc:
+            def wait(s, timeout=None): pass
+
+        def render(text, name, env=None):
+            envs.append((name, dict(env or {})))
+            a.render_voice[name] = labels[len(envs) - 1]
+            return f'/tmp/{name}'
+        a._render = render
+        a._render_covered = lambda text, name: render(text, name)
+        a.say = lambda text='', wav=None, wait=True, filler=False, env=None: Proc()
+        text = 'This is the first sentence of the answer. ' + 'And the rest goes on for a good while longer. ' * 6
+        n = len(MOD.speech_chunks(text.strip()))
+        self.assertGreaterEqual(n, len(labels))
+        with mock.patch.object(MOD, 'wav_seconds', lambda p: seconds):
+            a.speak_answer(text.strip())
+        return a, envs
+
+    def test_answer_that_started_on_the_phone_stays_on_the_phone(self):
+        a, envs = self.run_answer(['el-antonis-fallback'] + ['el-antonis-locked'] * 6)
+        self.assertEqual(envs[0], ('answer1.wav', {}))
+        for name, env in envs[1:]:
+            self.assertEqual(env, {'S22_SAY_VOICE': 'phone'}, name)
+        self.assertNotIn('voice_switch_at', a.rec)
+
+    def test_rig_answer_gets_playback_slack_then_switches_once_and_never_back(self):
+        a, envs = self.run_answer(['antonis-rig', 'antonis-rig', 'el-antonis-fallback', 'antonis-rig',
+                                   'antonis-rig', 'antonis-rig', 'antonis-rig'])
+        rig = MOD.RV.load_config()
+        ttfa = float(envs[1][1]['S22_RIGVOICE_TTFA_S'])
+        self.assertGreater(ttfa, float(rig['ttfa_s']) + 4.0)        # ~5 s of the first chunk still to play
+        self.assertGreater(float(envs[1][1]['S22_RIGVOICE_BUDGET_S']), ttfa)
+        self.assertEqual(a.rec['voice_switch_at'], 3)                # chunk 3 fell back: the rest is phone
+        for name, env in envs[3:]:
+            self.assertEqual(env, {'S22_SAY_VOICE': 'phone'}, name)
+        self.assertEqual(a.rec['voices'][:3], ['antonis-rig', 'antonis-rig', 'el-antonis-fallback'])
+
+    def test_voice_lock_off_and_unknown_voice_keep_the_old_behaviour(self):
+        _, envs = self.run_answer([None] * 7)                      # an older s22-say reports no voice
+        self.assertTrue(all(env == {} for _, env in envs))
+        a, envs = self.run_answer(['el-antonis-fallback'] * 7, voice_lock=False)
+        self.assertTrue(all(env == {} for _, env in envs))
+        self.assertNotIn('voice_switch_at', a.rec)
+
+    def test_chunk_env(self):
+        cfg = {'ttfa_s': 2.0, 'tts_base_s': 3.0, 'tts_per_char_s': 0.1}
+        self.assertEqual(MOD.chunk_env('phone', 9, 'x', cfg), {'S22_SAY_VOICE': 'phone'})
+        self.assertEqual(MOD.chunk_env(None, 9, 'x', cfg), {})
+        self.assertEqual(MOD.chunk_env('rig', 0, 'x', cfg), {})          # nothing playing: default deadlines
+        env = MOD.chunk_env('rig', 4.0, 'x' * 50, cfg)
+        self.assertEqual(env, {'S22_RIGVOICE_TTFA_S': '6.00', 'S22_RIGVOICE_BUDGET_S': '12.00'})
+        self.assertEqual([MOD.voice_kind(v) for v in ('antonis-rig', 'el-antonis-fallback', 'espeak-fallback', '', None)],
+                         ['rig', 'phone', 'phone', None, None])
+
+    def test_render_reads_the_voice_s22_say_reports(self):
+        root = Path(self.td.name)
+        fake = root / 'bin'
+        fake.mkdir()
+        (fake / 's22-say').write_text('#!/bin/sh\nhead -c 2000 /dev/zero > "$S22_SAY_OUT"\n'
+                                      'printf "el-antonis-%s\\n" "${S22_SAY_VOICE:-fallback}" > "$S22_SAY_VOICE_FILE"\n')
+        (fake / 's22-say').chmod(0o755)
+        with mock.patch.object(MOD, 'BIN', fake), mock.patch.object(MOD, 'CHROOT', root / 'chroot'):
+            a = MOD.Assistant(dict(CFG), speak=True, base=self.base)
+            self.assertEqual(a._render('Hello.', 'answer2.wav', env={'S22_SAY_VOICE': 'phone'}),
+                             '/tmp/s22-assistant/answer2.wav')
+            self.assertEqual(a.render_voice['answer2.wav'], 'el-antonis-phone')
+            a._render('Hello.', 'answer3.wav')
+            self.assertEqual(a.render_voice['answer3.wav'], 'el-antonis-fallback')
+
+    def test_filler_bank_follows_the_voice_that_will_answer(self):
+        chroot = Path(self.td.name) / 'chroot'
+        for d in ('voice-fillers', 'voice-fillers-el-antonis'):
+            bank = chroot / 'root/.openunum/assets' / d
+            bank.mkdir(parents=True)
+            (bank / 'manifest.json').write_text('{"version": 1, "clips": {}}')
+        a = MOD.Assistant(dict(CFG), speak=True, base=self.base)
+        with mock.patch.object(MOD, 'CHROOT', chroot):
+            with mock.patch.object(MOD, 'rig_voice_down', lambda: False):
+                self.assertEqual(a.filler_bank().root.name, 'voice-fillers')
+            with mock.patch.object(MOD, 'rig_voice_down', lambda: True):
+                self.assertEqual(a.filler_bank().root.name, 'voice-fillers-el-antonis')
+                (chroot / 'root/.openunum/assets/voice-fillers-el-antonis/manifest.json').unlink()
+                self.assertEqual(a.filler_bank().root.name, 'voice-fillers')   # offline bank not rendered yet
+
 
 if __name__ == '__main__':
     unittest.main()

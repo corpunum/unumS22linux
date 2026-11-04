@@ -17,6 +17,11 @@ points at it, so holding volume up starts it (see s22-buttons).
      (the rig's VoxCPM "antonis", Piper el-antonis on the phone when the rig is unreachable), sentence by
      sentence: the next sentence renders while the previous one plays. A Greek question gets a Greek
      answer (a reply-language hint goes with every turn) and Greek fillers.
+     One voice per answer (2026-11-04): the voice that rendered the first chunk speaks the whole answer.
+     Phone voice -> every later chunk is rendered on the phone too (S22_SAY_VOICE=phone); rig voice ->
+     each later chunk gets the playback time still left on the previous one as extra rig deadline, and if
+     the rig still fails the rest of the answer switches to the phone once (never back). Filler clips
+     come from the bank in the voice that will answer (voice-fillers-el-antonis while the rig is down).
 
 One interaction at a time (flock); a trigger while busy is ignored.  Every
 interaction is appended to /srv/s22/buttons/assistant.jsonl.
@@ -48,6 +53,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import wave
 from pathlib import Path
 
 try:                                   # natural-voice helpers installed next to this script
@@ -94,6 +100,10 @@ DEFAULTS = {
     'filler_second_s': 6.0,      # still no answer -> a second "still thinking" clip
     'filler_repeat_s': 25.0,     # ... and another this often (max 3 more)
     'filler_dir': '/root/.openunum/assets/voice-fillers',   # inside the chroot
+    # the same clips in the phone's copy of the voice (s22-render-fillers --engine el-antonis), used while
+    # the rig voice is down so the filler and the answer after it are one voice; missing -> filler_dir
+    'filler_dir_offline': '/root/.openunum/assets/voice-fillers-el-antonis',
+    'voice_lock': True,          # one voice per answer (the first chunk's), at most one rig -> phone switch
     'split_chars': 120,          # answers longer than this: first sentence is spoken while the rest renders
     'chunk_chars': 220,          # later sentences are grouped into chunks of about this size (render || play)
     'gap_filler_s': 1.5,         # first answer chunk still rendering this long after the last clip -> a filler
@@ -324,6 +334,49 @@ def speech_chunks(text: str, split_chars: int = 120, chunk_chars: int = 220, fir
     return out
 
 
+def voice_kind(label) -> str | None:
+    """s22-say's voice label (S22_SAY_VOICE_FILE) -> 'rig' (the owner's voice from the rig), 'phone' (any
+    voice rendered on the phone: el-antonis fallback/locked, espeak, ...) or None (unknown)."""
+    s = str(label or '').strip()
+    if not s:
+        return None
+    return 'rig' if s.startswith('antonis-rig') else 'phone'
+
+
+def wav_seconds(path) -> float:
+    try:
+        with wave.open(str(path), 'rb') as w:
+            return w.getnframes() / float(w.getframerate() or 1)
+    except (OSError, EOFError, wave.Error):
+        return 0.0
+
+
+def chunk_env(voice: str | None, slack_s: float, text: str, rig_cfg: dict | None) -> dict:
+    """Environment for rendering one later answer chunk so that the answer keeps one voice.
+
+    phone: stay with the phone's copy of the voice, no rig attempt (S22_SAY_VOICE=phone).
+    rig:   the chunk renders while the previous one still plays for slack_s seconds; the rig gets that much
+           more time (first audio and whole clause) before s22-say gives up on it and switches voices."""
+    if voice == 'phone':
+        return {'S22_SAY_VOICE': 'phone'}
+    if voice != 'rig' or not rig_cfg or slack_s <= 0:
+        return {}
+    ttfa = float(rig_cfg.get('ttfa_s', 2.0)) + slack_s
+    budget = (float(rig_cfg.get('tts_base_s', 3.0)) + float(rig_cfg.get('tts_per_char_s', 0.12)) * len(text)
+              + slack_s)
+    return {'S22_RIGVOICE_TTFA_S': f'{ttfa:.2f}', 'S22_RIGVOICE_BUDGET_S': f'{budget:.2f}'}
+
+
+def rig_voice_down() -> bool:
+    """The next render will not come from the rig (disabled, or marked down after a failure)."""
+    if RV is None or not hasattr(RV, 'voice_down'):
+        return False
+    try:
+        return bool(RV.voice_down())
+    except Exception:          # a broken config must never stop the assistant
+        return False
+
+
 # ---------------------------------------------------------------- side effects
 
 class Assistant:
@@ -335,16 +388,18 @@ class Assistant:
                     'mode': os.environ.get('S22_PTT') or 'release'}
         self.agent_ready: dict = {}
         self.lang: str | None = None      # language of the last utterance (rig ASR), else from the text
+        self.render_voice: dict = {}      # render name -> s22-say voice label (S22_SAY_VOICE_FILE)
 
     # -- audio
-    def say(self, text: str = '', wav: str | None = None, wait: bool = True, filler: bool = False):
+    def say(self, text: str = '', wav: str | None = None, wait: bool = True, filler: bool = False,
+            env: dict | None = None):
         if not self.speak_enabled:
             if text:
                 print(f'[say] {text}', flush=True)
             return None
         argv = [str(BIN / 's22-say')] + (['--wav', wav] if wav else [text])
         p = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL)
+                             stderr=subprocess.DEVNULL, env={**os.environ, **env} if env else None)
         if wait:
             p.wait(timeout=180)
         return p
@@ -515,12 +570,19 @@ class Assistant:
         return summarize(text, int(self.cfg['max_spoken_chars']), text_lang(text))
 
     def filler_bank(self):
+        """The clips in the voice that will speak the answer: while the rig voice is down the answer comes
+        from the phone's copy (Piper el-antonis), so its own clip bank is preferred when it exists."""
         if V is None or not self.cfg.get('fillers', True):
             return None
-        root = CHROOT / str(self.cfg['filler_dir']).lstrip('/')
-        if not (root / 'manifest.json').is_file():
-            return None
-        return V.FillerBank(root, chroot_prefix=str(CHROOT), state_file=Path('/srv/s22/state/voice-filler-last.json'))
+        dirs = [self.cfg['filler_dir']]
+        if self.cfg.get('filler_dir_offline') and rig_voice_down():
+            dirs.insert(0, self.cfg['filler_dir_offline'])
+        for d in dirs:
+            root = CHROOT / str(d).lstrip('/')
+            if (root / 'manifest.json').is_file():
+                return V.FillerBank(root, chroot_prefix=str(CHROOT),
+                                    state_file=Path('/srv/s22/state/voice-filler-last.json'))
+        return None
 
     def _thinking_listener(self, stop: threading.Event, out: list, speaker) -> None:
         """Follow /api/chat/stream; reasoning_delta tokens become short spoken chunks (out)."""
@@ -615,14 +677,23 @@ class Assistant:
             raise result['error']
         return result.get('reply', '')
 
-    def _render(self, text: str, name: str) -> str | None:
-        """Synthesize `text` with s22-say in render-only mode; the chroot path of the WAV, or None."""
+    def _render(self, text: str, name: str, env: dict | None = None) -> str | None:
+        """Synthesize `text` with s22-say in render-only mode; the chroot path of the WAV, or None.
+        The voice that rendered it is kept in self.render_voice[name] (s22-say's S22_SAY_VOICE_FILE)."""
         out = CHROOT / WORK.lstrip('/') / name
+        vfile = out.with_name(out.name + '.voice')
         out.parent.mkdir(parents=True, exist_ok=True)
+        self.render_voice.pop(name, None)
         try:
             out.unlink(missing_ok=True)
-            subprocess.run([str(BIN / 's22-say'), text], env={**os.environ, 'S22_SAY_OUT': str(out)},
+            vfile.unlink(missing_ok=True)
+            subprocess.run([str(BIN / 's22-say'), text],
+                           env={**os.environ, 'S22_SAY_OUT': str(out), 'S22_SAY_VOICE_FILE': str(vfile), **(env or {})},
                            stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+            try:
+                self.render_voice[name] = vfile.read_text().strip()
+            except OSError:
+                pass
             if out.is_file() and out.stat().st_size > 1000:
                 return f'{WORK}/{name}'
         except (OSError, subprocess.SubprocessError):
@@ -680,14 +751,38 @@ class Assistant:
             return
         self.rec['render_ms'] = int((time.time() - t) * 1000)
         self.rec['answer_launch_t'] = round(time.time(), 3)
+        # One voice per answer: the first chunk's voice speaks the rest (see chunk_env); a rig chunk that
+        # still fails switches the rest of the answer to the phone once, never back.
+        lock = bool(self.cfg.get('voice_lock', True))
+        voices = [self.render_voice.get('answer1.wav')]
+        voice = voice_kind(voices[0]) if lock else None
+        rig_cfg = None
+        if voice == 'rig' and RV is not None:
+            try:
+                rig_cfg = RV.load_config()
+            except Exception:
+                rig_cfg = None
         playing = self.say(wav=wav, wait=False)
+        play_end = time.time() + wav_seconds(CHROOT / wav.lstrip('/'))
         for i, chunk in enumerate(chunks[1:], 2):
-            nxt = self._render(chunk, f'answer{i}.wav')     # renders while the previous chunk plays
+            name = f'answer{i}.wav'
+            env = chunk_env(voice, play_end - time.time(), chunk, rig_cfg) if lock else {}
+            nxt = self._render(chunk, name, env=env)        # renders while the previous chunk plays
+            voices.append(self.render_voice.get(name))
+            if voice == 'rig' and voice_kind(voices[-1]) == 'phone':
+                voice = 'phone'
+                self.rec['voice_switch_at'] = i
             if playing is not None:
                 playing.wait(timeout=180)
-            playing = self.say(wav=nxt, wait=False) if nxt else self.say(chunk, wait=False)
+            if nxt:
+                playing = self.say(wav=nxt, wait=False)
+                play_end = time.time() + wav_seconds(CHROOT / nxt.lstrip('/'))
+            else:
+                playing = self.say(chunk, wait=False, env=chunk_env(voice, 0.0, chunk, None) or None)
+                play_end = time.time()
         if playing is not None:
             playing.wait(timeout=180)
+        self.rec['voices'] = voices
         self.rec['render_total_ms'] = int((time.time() - t) * 1000)
 
     def log(self) -> None:

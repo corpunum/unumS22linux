@@ -27,13 +27,34 @@ import s22_voice as V  # noqa: E402  (installed next to this script)
 
 CHROOT = Path(os.environ.get('S22_CHROOT', '/mnt/omarchy-trial'))
 FILLER_DIR = Path(os.environ.get('S22_FILLER_DIR', str(CHROOT / 'root/.openunum/assets/voice-fillers')))
+# The same clips in the phone's copy of the voice (s22-render-fillers --engine el-antonis), 2026-11-04.
+FILLER_DIR_OFFLINE = Path(os.environ.get('S22_FILLER_DIR_OFFLINE',
+                                         str(CHROOT / 'root/.openunum/assets/voice-fillers-el-antonis')))
 STATE_FILE = Path(os.environ.get('S22_FILLER_STATE', '/srv/s22/state/voice-filler-last.json'))
 SAY = os.environ.get('S22_SAY', '/srv/s22/hardware/bin/s22-say')
 
 
+def rig_voice_down() -> bool:
+    try:
+        import s22_rigvoice as RV
+        return bool(RV.voice_down())
+    except Exception:            # missing module or broken config: assume the owner voice is available
+        return False
+
+
+def bank_root(primary=None, offline=None, down=None) -> Path:
+    """The clips in the voice the answer will use: while the rig voice is down the answer is spoken by the
+    phone's copy (Piper el-antonis), so its own bank is used when it exists; otherwise the main bank."""
+    primary = Path(primary or FILLER_DIR)
+    offline = Path(offline or FILLER_DIR_OFFLINE)
+    if (rig_voice_down() if down is None else down) and (offline / 'manifest.json').is_file():
+        return offline
+    return primary
+
+
 def pick(question: str, second: bool = False, root=None, state_file=None):
     """-> (wav path INSIDE the chroot or None, info)."""
-    bank = V.FillerBank(root or FILLER_DIR, chroot_prefix=str(CHROOT), state_file=state_file or STATE_FILE)
+    bank = V.FillerBank(root or bank_root(), chroot_prefix=str(CHROOT), state_file=state_file or STATE_FILE)
     return bank.pick(question, second=second)
 
 
