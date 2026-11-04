@@ -19,9 +19,12 @@ Workloads
 
 Safety (all enforced, not advisory)
   * refuses to start while cpu4/cpu7 run below cpuinfo_max_freq (the local model's own cap is active, or a
-    previous run did not restore): unload the local model first; restores exactly what it wrote;
+    previous run did not restore); restores exactly what it wrote;
   * holds /run/s22-hold/llama for the run (s22-llama-ondemand answers 503 and OpenUnum falls back to the
-    cloud model, so two llama processes never compete) and removes it only if the content is still its own;
+    cloud model, if one is configured) and removes it only if the content is still its own; then asks the
+    proxy to unload a resident llama-server (POST /_s22/unload: the hold alone does not stop a running one;
+    on 11-04 the local model had been resident for 5 days at 4 GB), waits up to --unload-wait (900 s) and
+    refuses if it is still there: two copies of the model do not fit in the phone's memory;
   * waits for both CPU zones below --cool (50 C) before every job, aborts a job at --abort-temp (66 C) or
     MemAvailable < 450 MB, kills only the exact PID it started.
 
@@ -244,6 +247,43 @@ class Hold:
             pass
 
 
+def backend_pids(proc: Path = Path('/proc')) -> list[int]:
+    """PIDs of running llama-server processes (the resident local model), by exact cmdline inspection."""
+    out = []
+    for d in proc.iterdir():
+        if not d.name.isdigit() or int(d.name) == os.getpid():
+            continue
+        try:
+            argv = (d / 'cmdline').read_bytes().split(b'\0')
+        except OSError:
+            continue
+        if any(Path(a.decode(errors='replace')).name.startswith('llama-server') for a in argv if a):
+            out.append(int(d.name))
+    return sorted(out)
+
+
+def request_unload(url: str = 'http://127.0.0.1:8090/_s22/unload') -> dict:
+    """Ask s22-llama-ondemand to unload now (it refuses while a request is in flight). Best effort."""
+    try:
+        req = urllib.request.Request(url, b'', {'Content-Length': '0'}, method='POST')
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return json.load(r)
+    except Exception as e:                    # an older proxy has no endpoint: wait for the idle unload
+        return {'ok': False, 'error': f'{type(e).__name__}: {e}'}
+
+
+def wait_unloaded(timeout_s: float, proc: Path = Path('/proc'), poll_s: float = 10.0) -> float:
+    t0 = time.time()
+    while True:
+        pids = backend_pids(proc)
+        if not pids:
+            return round(time.time() - t0, 1)
+        if time.time() - t0 >= timeout_s:
+            raise RuntimeError(f'llama-server {pids} still loaded after {timeout_s:.0f} s: wait for its idle unload '
+                               '(the hold blocks new requests) and run again')
+        time.sleep(poll_s)
+
+
 class Cap:
     """Write the config's cluster cap, restore exactly the value read before writing."""
 
@@ -392,6 +432,7 @@ def main(argv=None) -> int:
     ap.add_argument('--suffix-tokens', type=int, default=300)
     ap.add_argument('--max-tokens', type=int, default=96)
     ap.add_argument('--max-temp', type=float, default=66.0, help='report: configs that peaked at or above are out')
+    ap.add_argument('--unload-wait', type=float, default=900.0, help='run: wait this long for the resident model to unload')
     a = ap.parse_args(argv)
     if a.cmd == 'report':
         if not a.results:
@@ -422,6 +463,15 @@ def main(argv=None) -> int:
         return 2
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     with Hold():
+        if backend_pids():
+            print(json.dumps({'unload': request_unload()}), flush=True)
+        try:
+            waited = wait_unloaded(a.unload_wait)
+        except RuntimeError as e:
+            print(f'refusing: {e}', file=sys.stderr)
+            return 2
+        if waited:
+            print(json.dumps({'resident_model_unloaded_after_s': waited}), flush=True)
         for n, w in jobs:
             rec = run_job(n, matrix[n], w, a)
             with open(a.out, 'a') as f:

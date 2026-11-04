@@ -54,7 +54,8 @@ on the CPU), and runs the real llama-server on 127.0.0.1:8091.
     Survives restarts: the budget, the in-flight requests and the backend pid are kept in
     STATE (budget.json, active.json, backend.json). A new proxy kills a backend left by the old
     one (exact pid, checked cmdline) and counts the requests it was serving as failures.
-    POST /_s22/abort stops all in-flight requests (s22-turnguard uses it); GET /_s22/status.
+    POST /_s22/abort stops all in-flight requests (s22-turnguard uses it); POST /_s22/unload unloads the
+    model now if nothing is in flight (s22-llm-bench); GET /_s22/status.
     Env knobs: S22_LLAMA_FIRST_S, S22_LLAMA_MAX_S, S22_LLAMA_RETRY_MAX, S22_LLAMA_RETRY_WINDOW_S
     (0 disables a limit).
 
@@ -920,6 +921,17 @@ class OnDemand:
                     n = self.abort_all('external')
                     self.log(event='abort_all', n=n)
                     conn.sendall(http_response('200 OK', json.dumps({'ok': True, 'aborted': n}).encode()))
+                elif method == 'POST' and path == '/_s22/unload':
+                    # 2026-11-04, for tools/model-bench/s22-llm-bench.py: free the memory now (a busy local
+                    # default model never reaches the idle unload). Only when nothing is in flight; with the
+                    # /run/s22-hold/llama hold in place the next request gets 503 instead of a reload.
+                    with self.count_lock:
+                        busy = self.active
+                    if not busy:
+                        self.unload('external')
+                    self.log(event='unload_request', done=not busy, active=busy)
+                    conn.sendall(http_response('200 OK', json.dumps(
+                        {'ok': not busy, 'active': busy, 'loaded': self.running()}).encode()))
                 elif path == '/_s22/status':
                     conn.sendall(http_response('200 OK', json.dumps(self.status()).encode()))
                 else:

@@ -144,6 +144,19 @@ class DeviceGuards(unittest.TestCase):
         with B.Cap(None, [4, 5, 6]):
             self.assertEqual(p.read_text().strip(), '2515000')
 
+    def test_waits_for_the_resident_model_to_unload(self):
+        proc = Path(self.td.name) / 'proc'
+        for pid, argv in ((101, [b'/usr/bin/python3', b'/srv/s22/hardware/bin/s22-llama-ondemand', b'serve']),
+                          (202, [b'/system/bin/llama-server-b30266', b'-m', b'/models/x.gguf'])):
+            (proc / str(pid)).mkdir(parents=True)
+            (proc / str(pid) / 'cmdline').write_bytes(b'\0'.join(argv) + b'\0')
+        (proc / 'self').mkdir()
+        self.assertEqual(B.backend_pids(proc), [202])                     # the proxy itself does not count
+        with self.assertRaises(RuntimeError):
+            B.wait_unloaded(0, proc)
+        (proc / '202' / 'cmdline').write_bytes(b'')                       # it unloaded (a zombie has no cmdline)
+        self.assertEqual(B.wait_unloaded(5, proc, poll_s=0.01), 0.0)
+
     def test_guarded_kills_its_own_process_on_heat(self):
         prog = [sys.executable, '-c', 'import time,sys; print("{}"); sys.stdout.flush(); time.sleep(30)']
         self.zone.write_text('70000\n')

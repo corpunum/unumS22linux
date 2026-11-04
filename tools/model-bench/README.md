@@ -94,8 +94,11 @@ python3 s22-llm-bench.py run --out /srv/s22/state/llm-bench/results.jsonl
 python3 s22-llm-bench.py report /srv/s22/state/llm-bench/results.jsonl
 ```
 
-It refuses to run while a CPU clock cap is active (unload the local model first), holds
-`/run/s22-hold/llama` so OpenUnum uses the cloud model meanwhile, waits for both CPU zones below 50 C
+It refuses to run while a CPU clock cap is active, holds `/run/s22-hold/llama` (OpenUnum's local
+requests get 503 meanwhile, so run it when nobody needs the phone's agent, or once the agent has a cloud
+fallback), asks the proxy to unload a resident model (`POST /_s22/unload`; two copies of the model do not
+fit in memory, and on 11-04 it had been resident for 5 days), refuses if it is still loaded after 15 min,
+waits for both CPU zones below 50 C
 before each job, aborts at 66 C or MemAvailable < 450 MB, kills only its own PIDs and restores exactly
 the clock limits it wrote. `report` picks the configuration with the shortest turn prompt time that
 stayed under the temperature limit without losing decode speed, and prints the one line to apply it:

@@ -159,6 +159,18 @@ class OnDemandTest(unittest.TestCase):
         argv = mod.backend_argv(Path('/nonexistent'))      # DEFAULT_ARGV carries -t 4
         self.assertEqual(argv[argv.index('-t') + 1], '2')
 
+    def test_unload_endpoint_frees_the_model_and_the_hold_blocks_a_reload(self):
+        self.assertTrue(self.od.ensure_backend())
+        a, b = socket.socketpair()
+        a.sendall(b'POST /_s22/unload HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n')
+        self.od.handle(b)
+        self.assertIn(b'"ok": true', a.recv(4096))
+        a.close()
+        self.assertFalse(self.od.running())
+        self.assertEqual(self.maxfreq.read_text().strip(), '2515000')      # clock cap restored
+        self.hold.write_text('s22-llm-bench 1\n')
+        self.assertFalse(self.od.ensure_backend())                          # held: no reload
+
     def test_backend_timings_from_the_last_chunk(self):
         tail = (b'data: {"choices":[{"delta":{"content":"x"}}]}\n\n'
                 b'data: {"choices":[],"timings":{"cache_n":120,"prompt_n":1534,"prompt_ms":61234.5,'
