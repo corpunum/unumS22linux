@@ -1,5 +1,9 @@
 # S22 native Linux status
 
+**2026-11-04 review:** device matrix, AI stack, voice-consistency root cause and the prioritised plan are in
+[docs/GAP-PLAN-20261104.md](docs/GAP-PLAN-20261104.md). Note: the Exynos S22 runs the vendor 5.10 kernel;
+the phone's agent was found running on the local model (98 s to first token on one turn).
+
 Updated 2026-10-22 (own models on the NPU; suspend-to-RAM + autosleep; camera ISP, 5G badge, GNSS plan); 2026-10-21 (fast touch shell); earlier sections updated 2026-10-06 by the Claude lead session.
 The 2026-10-02 task board and earlier checkpoints below are historical.
 

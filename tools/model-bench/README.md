@@ -64,7 +64,7 @@ profile"; the X2 core and full clocks reach the 70 C guardian line within second
 `tools/gpu-compat/build-llama-vulkan.sh` with `LLAMA_SERVER=ON` on llama.cpp `f2cc7282` (2026-10-11),
 NDK r27c, `-march=armv8.2-a+dotprod+fp16+i8mm+bf16`, Vulkan ON (unused at `-dev none`), KleidiAI OFF.
 The build tree on the rig produced llama-server sha256 `cfe04cee4066…a0e039afe` and llama-bench
-`dc0251f0faeb…c98d57a6`; compare with the phone's copies before trusting a comparison. With these flags
+`dc0251f0faeb…c98d57a6`, and the phone's copies hash-match them (checked 2026-11-04). With these flags
 ggml repacks Q4_0 weights to its NEON+i8mm 4x8 kernels (the kernel exposes HWCAP2_I8MM), so the CPU path
 already uses the int8 matrix instructions; KleidiAI is the remaining kernel option.
 

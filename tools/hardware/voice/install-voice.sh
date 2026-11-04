@@ -8,10 +8,16 @@
 # s22_rigvoice.py + s22-say: the owner's own voice from the rig (engine antonis, Piper el-antonis fallback) and the
 # rig's Greek/English whisper ASR; the rig side is voice/rig/install-rig.sh. After a voice change, re-render
 # the clips with: s22-render-fillers.py --force (strict: needs the rig).
+# 2026-11-04: the same bank in the phone's copy of the voice, used while the rig is down:
+#   ssh PHONE python3 /srv/s22/hardware/voice/s22-render-fillers.py --engine el-antonis
+# Rollback of this deploy: copy each /srv/s22/hardware/bin/<file>.bak-onevoice-20261104 back over <file>.
 set -eu
 PHONE=${1:-root@203.0.113.21}
 H=$(cd "$(dirname "$0")/.." && pwd)
-ssh "$PHONE" 'cd /srv/s22/hardware/bin && for f in s22-assistant s22-converse s22-say; do [ -e $f.bak-voice-20261021 ] || cp -p $f $f.bak-voice-20261021; [ -e $f.bak-ownervoice-20261022 ] || cp -p $f $f.bak-ownervoice-20261022; done; mkdir -p /srv/s22/hardware/voice'
+ssh "$PHONE" 'cd /srv/s22/hardware/bin && for f in s22-assistant s22-converse s22-say; do [ -e $f.bak-voice-20261021 ] || cp -p $f $f.bak-voice-20261021; [ -e $f.bak-ownervoice-20261022 ] || cp -p $f $f.bak-ownervoice-20261022; done
+  # 2026-11-04 (one voice per answer): rollback copies of everything this script replaces
+  for f in s22-assistant s22-converse s22-say s22_voice.py s22_loudnorm.py s22_filler.py s22_rigvoice.py; do [ ! -e $f ] || [ -e $f.bak-onevoice-20261104 ] || cp -p $f $f.bak-onevoice-20261104; done
+  mkdir -p /srv/s22/hardware/voice'
 scp -q "$H/s22_voice.py" "$H/s22_loudnorm.py" "$H/s22_filler.py" "$H/s22_rigvoice.py" "$PHONE:/srv/s22/hardware/bin/"
 scp -q "$H/s22-say.sh" "$PHONE:/srv/s22/hardware/bin/s22-say"
 scp -q "$H/s22-assistant.py" "$PHONE:/srv/s22/hardware/bin/s22-assistant"
