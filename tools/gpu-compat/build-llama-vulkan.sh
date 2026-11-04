@@ -7,8 +7,8 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=${GPU_COMPAT_ROOT:-"$SCRIPT_DIR/../../rootfs/gpu-compat-20260921"}
-SRC="$ROOT/llama-src"
-BUILD="$ROOT/llama-vulkan-build"
+SRC=${LLAMA_SRC:-"$ROOT/llama-src"}
+BUILD=${LLAMA_BUILD:-"$ROOT/llama-vulkan-build"}
 DEPS="$ROOT/vulkan-build-deps"
 NDK=${ANDROID_NDK:-"$ROOT/toolchain/android-ndk-r27c"}
 HOST_GLSLC=${GLSLC:-/usr/bin/glslc}
@@ -16,6 +16,13 @@ JOBS=${JOBS:-2}
 # T2 (2026-10-08): LLAMA_SERVER=ON adds llama-server; default keeps the accepted recipe.
 LLAMA_SERVER=${LLAMA_SERVER:-OFF}
 TARGETS=${TARGETS:-"llama-bench test-backend-ops"}
+# 2026-11-04, local-model speed work (tools/model-bench/s22-llm-bench.py). The phone's production local
+# server /system/bin/llama-server-b30266 was built with this recipe from llama.cpp f2cc7282 (2026-10-11)
+# with LLAMA_SERVER=ON (LLAMA_SRC/LLAMA_BUILD pointed at a private tree); LLAMA_COMMIT refuses any other
+# source. KLEIDIAI=ON adds Arm's KleidiAI Q4_0 micro-kernels (CMake fetches them); VULKAN=OFF builds the
+# CPU-only variant (production runs -dev none -ngl 0, so only the option under test differs).
+KLEIDIAI=${KLEIDIAI:-OFF}
+VULKAN=${VULKAN:-ON}
 
 check_sha() {
     actual=$(sha256sum "$1" | awk '{print $1}')
@@ -26,6 +33,13 @@ check_sha() {
 }
 
 test -d "$SRC" || { echo "missing private source tree: $SRC" >&2; exit 2; }
+if [ -n "${LLAMA_COMMIT:-}" ]; then
+    actual=$(git -C "$SRC" rev-parse HEAD)
+    case "$actual" in
+        "$LLAMA_COMMIT"*) ;;
+        *) echo "llama.cpp source is $actual, expected $LLAMA_COMMIT" >&2; exit 2 ;;
+    esac
+fi
 test -x "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang" || {
     echo "missing NDK clang: $NDK" >&2; exit 2;
 }
@@ -95,7 +109,8 @@ cmake -S "$SRC" -B "$BUILD" -G Ninja \
     -DGGML_OPENMP=OFF \
     -DGGML_LLAMAFILE=OFF \
     -DGGML_OPENCL=OFF \
-    -DGGML_VULKAN=ON \
+    -DGGML_VULKAN="$VULKAN" \
+    -DGGML_CPU_KLEIDIAI="$KLEIDIAI" \
     -DGGML_VULKAN_CHECK_RESULTS=OFF \
     -DLLAMA_BUILD_TESTS=ON \
     -DLLAMA_BUILD_TOOLS=ON \

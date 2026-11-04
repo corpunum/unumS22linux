@@ -97,6 +97,15 @@ CACHED = ('/health', '/v1/models', '/props', '/slots')
 # So: pin the server to the A710 cores, 2 threads, and cap that cluster only while loaded.
 COOL_CPUS = {4, 5, 6}
 COOL_THREADS = '2'
+# Prefill threads (2026-11-04). llama-server's -tb (--threads-batch) is used for prompt processing only;
+# generation stays on COOL_THREADS. Phone bench 2026-10-11 (Gemma-4 E2B Q4_0, cores 4-6): pp512 32 tok/s at
+# 2 threads / 1.8 GHz, 55 tok/s at 3 threads / 2.5 GHz (that run was sustained: thermal abort at 68 C).
+# A lean-profile turn prefills a few hundred new tokens, a burst of seconds, so a third prefill thread can
+# cut the time to first token without the sustained heat. OFF until tools/model-bench/s22-llm-bench.py has
+# measured turn TTFT and peak temperature on the phone: S22_LLAMA_THREADS_BATCH=3, or "3" in the file
+# STATE/threads-batch (read at every backend load, no restart needed). 1..len(COOL_CPUS): more threads
+# than pinned cores would oversubscribe them.
+THREADS_BATCH_FILE = 'threads-batch'
 MID_MAX_FREQ = Path('/sys/devices/system/cpu/cpu4/cpufreq/scaling_max_freq')
 MID_CAP_KHZ = int(os.environ.get('S22_LLAMA_MID_CAP_KHZ', '1800000'))
 # -- prompt precache
@@ -160,6 +169,34 @@ def backend_argv(cfg_path: Path = KEEPALIVE_CONFIG) -> list[str]:
     if '--cache-reuse' not in argv:
         argv += ['--cache-reuse', '256']
     return argv
+
+
+def threads_batch(state: Path) -> str | None:
+    """The prefill thread count to add (-tb), or None (llama-server then uses -t for prefill too)."""
+    raw = os.environ.get('S22_LLAMA_THREADS_BATCH')
+    if raw is None:
+        try:
+            raw = (state / THREADS_BATCH_FILE).read_text()
+        except OSError:
+            return None
+    try:
+        n = int(str(raw).strip())
+    except ValueError:
+        return None
+    if not 1 <= n <= len(COOL_CPUS) or str(n) == COOL_THREADS:
+        return None
+    return str(n)
+
+
+def with_threads_batch(argv: list[str], tb: str | None) -> list[str]:
+    argv = list(argv)
+    if tb is None:
+        return argv
+    for flag in ('-tb', '--threads-batch'):
+        if flag in argv and argv.index(flag) + 1 < len(argv):
+            argv[argv.index(flag) + 1] = tb
+            return argv
+    return argv + ['-tb', tb]
 
 
 def argv_value(argv: list[str], flag: str) -> str | None:
@@ -591,11 +628,13 @@ class OnDemand:
                 t0 = self.clock()
                 log = open(self.state / 'llama-server.log', 'ab')
                 self.cap_clock()
-                self.proc = subprocess.Popen(self.argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                                             start_new_session=True, preexec_fn=self.preexec)
+                tb = threads_batch(self.state)
+                self.proc = subprocess.Popen(with_threads_batch(self.argv, tb), stdin=subprocess.DEVNULL,
+                                             stdout=log, stderr=log, start_new_session=True,
+                                             preexec_fn=self.preexec)
                 log.close()
                 self.loads += 1
-                self.log(event='load', pid=self.proc.pid)
+                self.log(event='load', pid=self.proc.pid, threads_batch=tb)
                 self.save_json('backend.json', {'pid': self.proc.pid, 't': time.time()})
             deadline = self.clock() + self.start_timeout_s
             while self.clock() < deadline:

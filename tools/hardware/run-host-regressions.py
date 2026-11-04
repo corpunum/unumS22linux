@@ -128,6 +128,7 @@ REVIEWED_HOST_TEST_PATHS = (
     "tools/touchui/test_s22_touchd.py",
     "tools/hardware/camera/test_s22_camera.py",
     "tools/hardware/camera/test_record_safe.py",
+    "tools/model-bench/test_s22_llm_bench.py",
 )
 
 HOST_TESTS = (
@@ -238,6 +239,7 @@ HOST_TESTS = (
     HostTest("tools/touchui/test_s22_touchd.py"),
     HostTest("tools/hardware/camera/test_s22_camera.py"),
     HostTest("tools/hardware/camera/test_record_safe.py"),
+    HostTest("tools/model-bench/test_s22_llm_bench.py"),
 )
 
 
@@ -254,7 +256,8 @@ def _resolve_test_paths(root: Path, tests: Sequence[HostTest]) -> tuple[Path, ..
                     test.path.startswith("tools/pi-web/") or
                     test.path.startswith("tools/persistence/") or
                     test.path.startswith("tools/openunum-phone/") or
-                    test.path.startswith("tools/touchui/")
+                    test.path.startswith("tools/touchui/") or
+                    test.path.startswith("tools/model-bench/")
                 ) or
                 not test.optimization_safe and not test.normal_only_reason):
             raise ValueError(f"invalid or duplicate allowlist entry: {test.path}")

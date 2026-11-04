@@ -115,6 +115,7 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/touchui/test_s22_touchd.py",
     "tools/hardware/camera/test_s22_camera.py",
     "tools/hardware/camera/test_record_safe.py",
+    "tools/model-bench/test_s22_llm_bench.py",
 )
 
 

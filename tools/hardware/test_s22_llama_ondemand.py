@@ -4,6 +4,7 @@ Run: python3 tools/hardware/test_s22_llama_ondemand.py"""
 import importlib.machinery
 import importlib.util
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -11,6 +12,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 import urllib.request
 from pathlib import Path
 
@@ -156,6 +158,34 @@ class OnDemandTest(unittest.TestCase):
     def test_backend_argv_forces_two_threads(self):
         argv = mod.backend_argv(Path('/nonexistent'))      # DEFAULT_ARGV carries -t 4
         self.assertEqual(argv[argv.index('-t') + 1], '2')
+
+    # -- prefill threads (-tb), 2026-11-04
+    def test_threads_batch_knob_is_read_at_every_load(self):
+        def cmdline():
+            return Path(f'/proc/{self.od.proc.pid}/cmdline').read_bytes().split(b'\0')
+        self.od.state.mkdir(parents=True, exist_ok=True)
+        (self.od.state / mod.THREADS_BATCH_FILE).write_text('3\n')
+        self.assertTrue(self.od.ensure_backend())
+        argv = cmdline()
+        self.assertEqual(argv[argv.index(b'-tb') + 1], b'3')
+        self.od.unload('test')
+        (self.od.state / mod.THREADS_BATCH_FILE).write_text('2')       # = COOL_THREADS: nothing to add
+        self.assertTrue(self.od.ensure_backend())
+        self.assertNotIn(b'-tb', cmdline())
+
+    def test_threads_batch_values(self):
+        with tempfile.TemporaryDirectory() as d:
+            st = Path(d)
+            self.assertIsNone(mod.threads_batch(st))                     # no file, no env: off
+            for raw, want in (('3', '3'), (' 1 ', '1'), ('2', None), ('4', None), ('0', None), ('x', None)):
+                (st / mod.THREADS_BATCH_FILE).write_text(raw)
+                self.assertEqual(mod.threads_batch(st), want, raw)
+            with mock.patch.dict(os.environ, {'S22_LLAMA_THREADS_BATCH': '3'}):
+                (st / mod.THREADS_BATCH_FILE).write_text('1')
+                self.assertEqual(mod.threads_batch(st), '3')            # the environment wins
+        self.assertEqual(mod.with_threads_batch(['x', '-t', '2'], '3'), ['x', '-t', '2', '-tb', '3'])
+        self.assertEqual(mod.with_threads_batch(['x', '-tb', '1'], '3'), ['x', '-tb', '3'])
+        self.assertEqual(mod.with_threads_batch(['x'], None), ['x'])
 
 
 # -- prompt precache -------------------------------------------------------------------------
