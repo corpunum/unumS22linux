@@ -83,6 +83,15 @@ class Pure(unittest.TestCase):
         self.assertIn('review first', B.ondemand_setting(B.MATRIX['mid2-tb3']))
         self.assertEqual(B.recommend({'x': {'ok': False, 'peak_c': 70}})[0], None)
 
+    def test_answer_hash_flags_a_kernel_that_changes_the_greedy_answer(self):
+        turn = [{'prompt_ms': 9000, 'predicted_per_second': 10.5}]
+        s = B.summarize([rec('cool2', 'turn', B.MATRIX['cool2'], turns=turn, answer_sha='aa'),
+                         rec('cool2-kleidi', 'turn', B.MATRIX['cool2-kleidi'], turns=turn, answer_sha='bb'),
+                         rec('cool2-tb3', 'turn', B.MATRIX['cool2-tb3'], turns=turn, answer_sha='aa'),
+                         rec('cool3', 'bench', B.MATRIX['cool3'], rows=[])])
+        self.assertEqual({n: v['answer_differs'] for n, v in s.items()},
+                         {'cool2': False, 'cool2-kleidi': True, 'cool2-tb3': False, 'cool3': False})
+
     def test_report_rejects_a_config_that_decodes_slower(self):
         s = {'cool2': {'ok': True, 'peak_c': 55, 'turn_prompt_ms': 9000, 'turn_decode_tps': 10.5},
              'cool3': {'ok': True, 'peak_c': 60, 'turn_prompt_ms': 6000, 'turn_decode_tps': 9.0}}
@@ -144,6 +153,8 @@ class DeviceGuards(unittest.TestCase):
         self.zone.write_text('45000\n')
         g = B.guarded([sys.executable, '-c', 'print("{\\"n_prompt\\": 1}")'], [0], abort_c=66, timeout_s=20)
         self.assertEqual((g['status'], B.bench_rows(g['stdout'])[0]['n_prompt']), ('ok', 1))
+        g = B.guarded([sys.executable, '-c', 'raise SystemExit(3)'], [0], abort_c=66, timeout_s=20)
+        self.assertEqual(g['status'], 'failed-rc-3')          # e.g. a binary that was never staged
 
 
 if __name__ == '__main__':

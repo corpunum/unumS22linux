@@ -44,8 +44,10 @@ Ignore errors (no daemon = no vibration; never block the UI).
 CLI (same commands): `s22-haptic tick|buzz|pattern 40,80,40,80,200|stop|status`,
 `s22-haptic latency`, `--direct` to bypass the daemon.  Without the daemon the
 CLI opens the device itself (about 200 ms because of effect upload).
-Start the daemon: `/srv/s22/hardware/bin/s22-haptic serve` (not yet wired into
-boot persistence; a reboot needs it started again).
+Start the daemon: `/srv/s22/hardware/bin/s22-haptic serve`. Boot persistence: the live phone
+runs it as the keepalive service `haptics` (read 2026-11-04: up since boot); the repo copy
+of the keepalive config now has it too, and `sh tools/hardware/install-haptic.sh` reproduces it
+on a fresh install (idempotent; `--remove` undoes it).
 
 ## Safety
 

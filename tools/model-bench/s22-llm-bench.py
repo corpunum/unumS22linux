@@ -32,6 +32,7 @@ Configs (JSON, --matrix): {"name": {"cpus": [4,5,6], "threads": 2, "threads_batc
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import statistics
@@ -60,6 +61,14 @@ MATRIX = {
     'cool3':      {'cpus': [4, 5, 6], 'threads': 3, 'threads_batch': None, 'cap_khz': 1800000},
     'mid2-tb3':   {'cpus': [4, 5, 6], 'threads': 2, 'threads_batch': 3, 'cap_khz': None},
     'big2-tb4':   {'cpus': [4, 5, 6, 7], 'threads': 2, 'threads_batch': 4, 'cap_khz': 1800000},
+    # the same llama.cpp f2cc7282 with Arm KleidiAI Q4_0 kernels, CPU-only (staged next to the production
+    # binaries under these names; see README "Local model speed")
+    'cool2-kleidi':     {'cpus': [4, 5, 6], 'threads': 2, 'threads_batch': None, 'cap_khz': 1800000,
+                         'server_binary': '/system/bin/llama-server-kleidi',
+                         'bench_binary': '/system/bin/llama-bench-kleidi'},
+    'cool2-tb3-kleidi': {'cpus': [4, 5, 6], 'threads': 2, 'threads_batch': 3, 'cap_khz': 1800000,
+                         'server_binary': '/system/bin/llama-server-kleidi',
+                         'bench_binary': '/system/bin/llama-bench-kleidi'},
 }
 WORKLOADS = ('bench', 'turn')
 
@@ -145,6 +154,10 @@ def summarize(records: list[dict]) -> dict:
         elif r.get('workload') == 'turn' and r.get('turns'):
             s['turn_prompt_ms'] = statistics.median(t['prompt_ms'] for t in r['turns'])
             s['turn_decode_tps'] = statistics.median(t['predicted_per_second'] for t in r['turns'])
+            s['answer_sha'] = r.get('answer_sha')
+    base = out.get('cool2', {}).get('answer_sha')
+    for s in out.values():                         # greedy answer differs from production: check quality first
+        s['answer_differs'] = bool(base and s.get('answer_sha') and s['answer_sha'] != base)
     return out
 
 
@@ -287,6 +300,8 @@ def guarded(argv: list[str], cpus, abort_c: float, timeout_s: float, on_start=No
         r.join(5)
     for f in (p.stdout, p.stderr):
         f.close()
+    if status == 'ok' and p.returncode and not (result or {}).get('done'):
+        status = f'failed-rc-{p.returncode}'          # e.g. a binary that is not staged
     return {'status': status, 'peak_c': peak, 'memavail_min_mb': minmem, 'wall_s': round(time.time() - t0, 1),
             'stdout': ''.join(out), 'stderr': ''.join(err), 'result': result or {}}
 
@@ -332,6 +347,9 @@ def turn_driver(turns: int, suffix_tokens: int, max_tokens: int):
                     tm = r.get('timings', {})
                     res['turns'].append({k: tm.get(k) for k in ('prompt_n', 'prompt_ms', 'prompt_per_second',
                                                                   'predicted_n', 'predicted_per_second')})
+                    if i == 0:                                 # greedy: a kernel change should not alter it
+                        text = (r.get('choices') or [{}])[0].get('message', {}).get('content') or ''
+                        res['answer_sha'] = hashlib.sha256(text.encode()).hexdigest()[:16]
             except Exception as e:                             # recorded, the guard loop stops the server
                 res['error'] = f'{type(e).__name__}: {e}'
             finally:
@@ -351,7 +369,7 @@ def run_job(name: str, c: dict, workload: str, a) -> dict:
         else:
             g = guarded(server_argv(c, a.model), c['cpus'], a.abort_temp, 1800,
                         on_start=turn_driver(a.turns, a.suffix_tokens, a.max_tokens))
-            rec.update({k: g['result'].get(k) for k in ('turns', 'warm_prompt_ms', 'error')})
+            rec.update({k: g['result'].get(k) for k in ('turns', 'warm_prompt_ms', 'error', 'answer_sha')})
             if g['result'].get('error') and g['status'] == 'ok':
                 g['status'] = 'error'
     rec.update(status=g['status'], peak_c=g['peak_c'], memavail_min_mb=g['memavail_min_mb'], wall_s=g['wall_s'],

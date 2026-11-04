@@ -129,6 +129,7 @@ REVIEWED_HOST_TEST_PATHS = (
     "tools/hardware/camera/test_s22_camera.py",
     "tools/hardware/camera/test_record_safe.py",
     "tools/model-bench/test_s22_llm_bench.py",
+    "tools/hardware/power/test_s22_charge_limit.py",
 )
 
 HOST_TESTS = (
@@ -240,6 +241,7 @@ HOST_TESTS = (
     HostTest("tools/hardware/camera/test_s22_camera.py"),
     HostTest("tools/hardware/camera/test_record_safe.py"),
     HostTest("tools/model-bench/test_s22_llm_bench.py"),
+    HostTest("tools/hardware/power/test_s22_charge_limit.py"),
 )
 
 

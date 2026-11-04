@@ -16,7 +16,9 @@
     "autosleep",
     "netpolicy",
     "trace",
-    "turnguard"
+    "haptics",
+    "turnguard",
+    "chargelimit"
   ],
   "pin_model": true,
   "pin": {
@@ -257,6 +259,29 @@
       "requires": "/srv/s22/hardware/bin/s22-turnguard",
       "log": "/srv/s22/state/turnguard/daemon.out",
       "start_wait_s": 5
+    },
+    "chargelimit": {
+      "argv": [
+        "/usr/bin/python3",
+        "/srv/s22/hardware/bin/s22-charge-limit",
+        "run"
+      ],
+      "needle": "/srv/s22/hardware/bin/s22-charge-limit run",
+      "requires": "/srv/s22/hardware/bin/s22-charge-limit",
+      "log": "/srv/s22/state/charge-limit/daemon.out",
+      "start_wait_s": 5,
+      "nice": 10
+    },
+    "haptics": {
+      "argv": [
+        "/usr/bin/python3",
+        "/srv/s22/hardware/bin/s22-haptic",
+        "serve"
+      ],
+      "needle": "/srv/s22/hardware/bin/s22-haptic serve",
+      "requires": "/srv/s22/hardware/bin/s22-haptic",
+      "log": "/srv/s22/state/haptics/daemon.out",
+      "start_wait_s": 3
     }
   },
   "pin_allow": [
