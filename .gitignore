@@ -103,3 +103,15 @@ __pycache__/
 *.elf
 *.pit
 *.tar.md5
+
+# Second privacy cleanup (2026-11-05): phone screenshots, camera photos and raw device/network
+# state stay out of the public repo. Images were purged from history.
+/evidence/**/*.png
+/evidence/**/*.jpg
+/evidence/**/*.jpeg
+/evidence/**/*.gif
+/docs/media/
+**/screenshots/
+**/shots/
+/evidence/network-independence-*/[0-9]*.txt
+**/*phone-state*.txt

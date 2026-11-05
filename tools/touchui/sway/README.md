@@ -33,7 +33,7 @@ The phase 2 numbers are in [../phase2/README.md](../phase2/README.md). This chan
 - `shell.qml` gets `windows()`, `findToplevel()`, `focusToplevel()` and `closeToplevel()`. Under sway they use Quickshell's `ToplevelManager` (wlr-foreign-toplevel: `appId`, `title`, `activate()`, `close()`). Under Hyprland the Hyprland IPC path is unchanged.
 - `SwitcherPage.qml` uses these functions instead of importing `Quickshell.Hyprland`.
 - Tested on the panel:
-  - The list shows `org.omarchy.agent` and `s22.terminal` ([screenshot](shots/v2-switcher.png)).
+  - The list shows `org.omarchy.agent` and `s22.terminal` (screenshot (removed from the public repo for privacy)).
   - Tapping a row focuses that window (checked through the `swaymsg -t get_tree` focus).
   - Hold-Close closes it.
   - The Terminal tile launches or focuses `s22.terminal`.
@@ -41,7 +41,7 @@ The phase 2 numbers are in [../phase2/README.md](../phase2/README.md). This chan
 ## 3. Status under sway
 
 - The Omarchy bar is Hyprland-specific, so it is not started under sway.
-- Under sway the touch shell shows a 28 px status strip on the top layer, with an exclusive zone so apps and the home grid sit below it ([screenshot](shots/v2-strip.png)). It shows:
+- Under sway the touch shell shows a 28 px status strip on the top layer, with an exclusive zone so apps and the home grid sit below it (screenshot (removed from the public repo for privacy)). It shows:
   - the time;
   - the agent model, with a ● or ○ health dot;
   - the network: `wifi`, `usb` or `cell`, plus `· ts` when Tailscale is up (operstate of wlan0, ecm0, rmnet0 and tailscale0);
@@ -54,8 +54,8 @@ The phase 2 numbers are in [../phase2/README.md](../phase2/README.md). This chan
 | Area | Change |
 |---|---|
 | Keyboard bindings | `omarchy/sway-keyboard.conf` has the same 32 curated combos as `omarchy-keyboard.lua`, as sway commands. `s22-kbd-bindings` detects sway and binds or unbinds live (unbinding is safe in sway). The sway config re-applies the bindings at start when the flag is set. Omarchy-shell actions (menu, emojis, clipboard, notifications) remain Hyprland-only. Verified: Super+Return opens foot, Super+W closes it, and after `off`, Super+Return does nothing. |
-| Chat typing | Exclusive focus (from phase 2), re-verified ([screenshot](shots/v2-chat.png)). |
-| Cards and confirm | The overlay works on sway ([screenshot](shots/v2-confirm.png)), and tapping "No" answered the request. |
+| Chat typing | Exclusive focus (from phase 2), re-verified (screenshot (removed from the public repo for privacy)). |
+| Cards and confirm | The overlay works on sway (screenshot (removed from the public repo for privacy)), and tapping "No" answered the request. |
 | Gestures | s22-touchd detected home, back and switcher during the trial. In a trial they are routed to the inactive Hyprland session, which is preferred by design; under the sway profile they route to sway through `/run/s22-desktop/session`. |
 
 ## 10-minute trial, idle after the checks

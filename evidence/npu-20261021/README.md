@@ -66,7 +66,7 @@ Format found by testing: **RGB uint8, planar CHW**. Interleaved HWC input gives 
 int8 (x^0x80) input gives all background. The output is float32 logits (6,64,64):
 ch0 background, ch1 hair, ch2 face skin, and others (eyes/teeth edges).
 3.65 ms mean over 100 runs (274/s).
-![face parsing](npu-face-parsing-demo.png)
+_(screenshot removed from the public repo for privacy: face parsing)_
 (left to right: input, hair map, skin map, argmax overlay). The hair and skin maps are clean. The hard
 argmax under-segments skin (background logit dominates; this is an AWB helper model, not a
 segmentation product). [demo.log](demo.log)

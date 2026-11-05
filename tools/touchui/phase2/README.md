@@ -27,10 +27,10 @@ Panel fps counts scanout framebuffer changes on plane-0 of exynos-drmdpu (DRM de
 
 | Area | Status |
 |---|---|
-| Touch shell | Home, pages, Files and Settings all work over layer-shell ([screenshot](shots/sway-touch-home.png)). |
-| Agent cards | Overlay layer works ([screenshot](shots/sway-agent-card.png)). |
+| Touch shell | Home, pages, Files and Settings all work over layer-shell (screenshot (removed from the public repo for privacy)). |
+| Agent cards | Overlay layer works (screenshot (removed from the public repo for privacy)). |
 | squeekboard | Works through the virtual keyboard and input method. |
-| Typing into the chat page | Works after one change: sway does not give an OnDemand layer keyboard focus on a touch tap, so `shell.qml` takes Exclusive focus on the chat page when `SWAYSOCK` is set ([screenshot](shots/sway-chat-typing.png)). Under Hyprland it stays OnDemand. |
+| Typing into the chat page | Works after one change: sway does not give an OnDemand layer keyboard focus on a touch tap, so `shell.qml` takes Exclusive focus on the chat page when `SWAYSOCK` is set (screenshot (removed from the public repo for privacy)). Under Hyprland it stays OnDemand. |
 | Edge gestures | s22-touchd detects them, because it reads evdev and is compositor-independent. |
 | UI routing to the sway session | s22-touchd now finds a sway session through `/run/s22-desktop/session`, so routing works in the profile. During a trial, Hyprland is still preferred. |
 | App switcher | Fixed in [sway/](../sway/README.md): it lists windows from wlr-foreign-toplevel under sway. |

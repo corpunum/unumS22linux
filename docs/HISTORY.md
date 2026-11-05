@@ -114,7 +114,7 @@ synthetic touchscreen tap reveals the keyboard; physical finger acceptance
 remains unproven. Bluetooth/audio remain unaccepted. Wi-Fi tools and the private
 profile are persisted. See [Wi-Fi recovery-boot acceptance](WIFI_AUTOSTART.md);
 unplugged USB operation and suspend/resume remain untested.
-See the [current screen](../evidence/hardware-20260920/keyboard-after.png) and
+See the current screen (removed from the public repo for privacy) and
 [everyday hardware audit](EVERYDAY_HARDWARE_2026-09-20.md).
 Normal power-on Linux is still unaccepted; do not boot the restored Android
 BOOT or wipe userdata.
@@ -125,7 +125,7 @@ Omarchy Quickshell UI**, terminal, Squeekboard and a local CPU-only
 **Qwen3.5-2B** streaming chat model started automatically after reboot.
 Readiness was observed at15.81s, and the stable sample passed77s uptime.
 
-[Actual screen capture after reboot](../evidence/persistence-20260920/persistent-after-reboot-chat.png)
+Actual screen capture after reboot (removed from the public repo for privacy)
 and [measured results](DRIVER_MODELS_2026-09-20.md).
 
 | Component | Last verified state |

@@ -6,16 +6,16 @@ No people or private items appear in any picture here.
 
 ## Before / after (same raw burst, front camera, 30 ms, 8x analog gain)
 
-![compare](compare-sheet.jpg)
+_(screenshot removed from the public repo for privacy: compare)_
 
 | File | What it is |
 |---|---|
-| [before-raw.jpg](before-raw.jpg) | The raw Bayer mosaic. Only black is subtracted and the levels stretched; no demosaic, WB or gamma. |
-| [old-quick-develop.png](old-quick-develop.png) | The old picture: `s22-camera`'s pure-Python develop, 456x342 (1/4 resolution). |
-| [after-single.jpg](after-single.jpg) | `s22-develop`, one frame, 1824x1368. |
-| [after-stack.jpg](after-stack.jpg) | `s22-develop --stack`, the mean of a 6-frame burst, 1824x1368. |
-| [after-noccm.jpg](after-noccm.jpg), [after-half.jpg](after-half.jpg) | Variants: without the colour matrix, and 2x2-binned (912x684). |
-| [crop-100pct.jpg](crop-100pct.jpg) | 600x450 crops at 100 %: old (upscaled), one frame, stack. |
+| before-raw.jpg (removed from the public repo for privacy) | The raw Bayer mosaic. Only black is subtracted and the levels stretched; no demosaic, WB or gamma. |
+| old-quick-develop.png (removed from the public repo for privacy) | The old picture: `s22-camera`'s pure-Python develop, 456x342 (1/4 resolution). |
+| after-single.jpg (removed from the public repo for privacy) | `s22-develop`, one frame, 1824x1368. |
+| after-stack.jpg (removed from the public repo for privacy) | `s22-develop --stack`, the mean of a 6-frame burst, 1824x1368. |
+| after-noccm.jpg (removed from the public repo for privacy), after-half.jpg (removed from the public repo for privacy) | Variants: without the colour matrix, and 2x2-binned (912x684). |
+| crop-100pct.jpg (removed from the public repo for privacy) | 600x450 crops at 100 %: old (upscaled), one frame, stack. |
 | [after-stack.json](after-stack.json), [after-single.json](after-single.json) | The tool's output: WB gains, CCM, offsets, exposure gain, timing. |
 
 What the processing changes:
@@ -39,9 +39,9 @@ touchd then:
 - took a 4-frame burst;
 - ran `s22-develop develop --stack`.
 
-The whole run took 2.1 s. The shell showed the processed preview ([live-camera.png](live-camera.png), a real
+The whole run took 2.1 s. The shell showed the processed preview (live-camera.png (removed from the public repo for privacy), a real
 scanout capture). touchd's result is [shell-camera.json](shell-camera.json). The full JPEG
-went to the OpenUnum gallery: [shell-photo-front.jpg](shell-photo-front.jpg).
+went to the OpenUnum gallery: shell-photo-front.jpg (removed from the public repo for privacy).
 A rear capture through the same path also worked (30 ms, 16x, 4 frames, 2.2 s), but its scene is dark: the lens is on a surface.
 
 ## 5G badge
@@ -53,7 +53,7 @@ The shell reads s22-phoned `/status` every 20 s:
 
 The test brought mobile data up with `s22-phoned mobile-data up`:
 - NR n78 appeared after 2 s;
-- the badge showed **5G** about 4 s later ([live-5g.png](live-5g.png));
+- the badge showed **5G** about 4 s later (live-5g.png (removed from the public repo for privacy));
 - data went down again, and about 140 s later the badge was back to **4G**.
 
 Routes (ecm0, wlan0) and Tailscale were unchanged. The test used almost no data: the data call was simply up for about 10 s.

@@ -26,7 +26,7 @@ complete answers in **1.1 / 3.7 s**. A keyboard-submitted `hi` completed in
 autonomous-agent benchmarks. The client executes no model-generated commands.
 
 Evidence: [resident-server-chat.txt](../evidence/driver-model-20260920/resident-server-chat.txt),
-[screen capture](../evidence/driver-model-20260920/omarchy-resident-chat.png),
+screen capture (removed from the public repo for privacy),
 and [touch-path test](../evidence/driver-model-20260920/resident-chat-touch.txt).
 The keyboard appears automatically after session startup. This verifies
 synthetic events through the real input device and GUI, not physical finger
@@ -73,9 +73,9 @@ and [`run-arm64-completion.sh`](../tools/model-bench/run-arm64-completion.sh).
 Successful bounded sessions were recorded for Hyprland and the Omarchy
 configuration using the GCC16-patched Aquamarine path. The live checks and
 screenshots are [`hyprland-gcc16-live-check.txt`](../evidence/driver-model-20260920/hyprland-gcc16-live-check.txt),
-[`hyprland-gcc16-display.png`](../evidence/driver-model-20260920/hyprland-gcc16-display.png),
+`hyprland-gcc16-display.png` (removed from the public repo for privacy),
 [`omarchy-gcc16-live-check.txt`](../evidence/driver-model-20260920/omarchy-gcc16-live-check.txt),
-and [`omarchy-gcc16-display.png`](../evidence/driver-model-20260920/omarchy-gcc16-display.png).
+and `omarchy-gcc16-display.png` (removed from the public repo for privacy).
 These prove the bounded sessions and captured frames only; they do not prove
 reboot persistence, a final default desktop, or all input/session behavior.
 

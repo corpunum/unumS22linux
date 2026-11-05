@@ -65,9 +65,9 @@ No audio playback/recording, camera capture or network credentials were used.
 Details: [Wi-Fi](WIFI_NATIVE.md), [Bluetooth/audio](BT_AUDIO_NATIVE.md),
 [input/power](INPUT_POWER_NATIVE.md). Evidence:
 [final live state](../evidence/hardware-20260920/final-live-state.txt),
-[keyboard before](../evidence/hardware-20260920/keyboard-before.png),
-[keyboard after](../evidence/hardware-20260920/keyboard-after.png), and
-[battery panel after reboot](../evidence/hardware-20260920/power-panel-bore758.png).
+keyboard before (removed from the public repo for privacy),
+keyboard after (removed from the public repo for privacy), and
+battery panel after reboot (removed from the public repo for privacy).
 
 Next driver work must fix the source-backed startup sequence before another
 WLAN activation; no automatic retry is configured. The existing vendor rc

@@ -27,7 +27,7 @@ which can text, talk and drive its own screen.
 
 ## See it
 
-<img src="docs/media/fastshell-screens.png" alt="Six real screens of the Rust shell: home with live cards, agent chat with the EN/GR keyboard, an agent question card, the camera page with a processed photo, the app switcher, and the lock screen" width="900">
+_(Screenshots of the phone were removed from the public repo for privacy, 2026-11-05.)_
 
 **unum-fastshell**, our Rust shell (screenshots from the phone, 2026-10-21/22):
 
@@ -39,7 +39,7 @@ which can text, talk and drive its own screen.
 - **Camera** takes a 4-frame burst and shows a processed full-resolution photo in ~2 s.
 - **5G / 4G badge**, app switcher, Power-key lock, and Power held 3 s to fall back to the old shell.
 
-Older desktop walkthrough (10-09): [tour.gif](docs/media/tour.gif) ·
+Older desktop walkthrough (10-09): tour.gif (removed from the public repo for privacy) ·
 [evidence/touchui-20261009](evidence/touchui-20261009/README.md).
 
 ## What changed on 2026-10-21/22

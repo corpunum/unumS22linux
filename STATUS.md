@@ -473,7 +473,7 @@ cold-power-on Linux or guarantee recovery from every possible driver crash.
   hardware. CACHE overlay has34,088KiB free; keep bulk assets on userdata.
 
 Evidence: [final live state](evidence/hardware-20260920/final-live-state.txt),
-[keyboard screen](evidence/hardware-20260920/keyboard-after.png),
+keyboard screen (removed from the public repo for privacy),
 [hardware audit](docs/EVERYDAY_HARDWARE_2026-09-20.md), and
 [Wi-Fi history](docs/WIFI_NATIVE.md), plus
 [live Wi-Fi acceptance](evidence/wifi-connected-20260920/acceptance.json).

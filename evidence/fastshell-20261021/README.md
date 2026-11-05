@@ -9,11 +9,11 @@ Everything ran on the Galaxy S22: kernel 5.10.260, desktop sway-pixman, OpenUnum
 | Criterion (from the task) | Measured | Holds |
 |---|---|---|
 | Tap → page ≤ 25 ms p50 | See the latency table below. | yes |
-| Chat streaming works | A 300-word answer arrived as 441 `content_delta` events and was drawn as it streamed ([sequence](chat-streaming-sequence.png)). | yes |
-| Agent cards work | `s22-touchd ui card` showed a card. `s22-ui confirm` returned `{"answer": "yes"}` after an injected tap on Yes ([confirm](live-confirm.png)). | yes |
-| Lock / unlock works | Injected Power press → s22-buttons → `hooks/power` → touchd → shell: lock cover, connector DPMS Off, CRTC `active=0`.<br>Second press: DPMS On with the lock cover ([lock](live-lock.png)). Swipe up: unlocked ([unlocked](live-unlocked.png)). | yes |
-| Recovery to sway works | Power held 1.3 s → `hooks/power-long`: ui-backend set to quickshell, shell stopped by exact PID, sway on plane-0, Quickshell up 2 s later ([fallback](live-fallback.png)).<br>`s22-desktop-profile fastshell` brought the shell back within 1 s. | yes |
-| Survives `s22-reboot recovery` | Rebooted at 23:14. The shell was on plane-0 about 20 s after boot with no manual step.<br>Tap test again: page p50 18.4 ms. Chat turn OK, cards OK ([chat](after-reboot-chat.png), [home](after-reboot-home.png)). | yes |
+| Chat streaming works | A 300-word answer arrived as 441 `content_delta` events and was drawn as it streamed (sequence (removed from the public repo for privacy)). | yes |
+| Agent cards work | `s22-touchd ui card` showed a card. `s22-ui confirm` returned `{"answer": "yes"}` after an injected tap on Yes (confirm (removed from the public repo for privacy)). | yes |
+| Lock / unlock works | Injected Power press → s22-buttons → `hooks/power` → touchd → shell: lock cover, connector DPMS Off, CRTC `active=0`.<br>Second press: DPMS On with the lock cover (lock (removed from the public repo for privacy)). Swipe up: unlocked (unlocked (removed from the public repo for privacy)). | yes |
+| Recovery to sway works | Power held 1.3 s → `hooks/power-long`: ui-backend set to quickshell, shell stopped by exact PID, sway on plane-0, Quickshell up 2 s later (fallback (removed from the public repo for privacy)).<br>`s22-desktop-profile fastshell` brought the shell back within 1 s. | yes |
+| Survives `s22-reboot recovery` | Rebooted at 23:14. The shell was on plane-0 about 20 s after boot with no manual step.<br>Tap test again: page p50 18.4 ms. Chat turn OK, cards OK (chat (removed from the public repo for privacy), home (removed from the public repo for privacy)). | yes |
 
 ## Latency
 
@@ -53,12 +53,12 @@ More in [`measurements.jsonl`](measurements.jsonl).
 
 ## Screens (real scanout captures, `drm-capture.py`)
 
-- [home](live-home.png): taken before the TZ fix, so the clock shows UTC
-- [settings](live-settings.png), [files](live-files.png), [phone](live-phone.png), [apps](live-switcher.png), [camera](live-camera.png)
-- [chat](live-chat2.png), [confirm](live-confirm.png)
-- [terminal under sway with squeekboard](live-terminal2.png), [back from the terminal](live-back-from-terminal.png)
-- the Quickshell home at the same time: [qs-home](qs-home.png)
-- [offscreen render of every screen](offscreen-sheet.png), including the Greek keyboard
+- home (removed from the public repo for privacy): taken before the TZ fix, so the clock shows UTC
+- settings (removed from the public repo for privacy), files (removed from the public repo for privacy), phone (removed from the public repo for privacy), apps (removed from the public repo for privacy), camera (removed from the public repo for privacy)
+- chat (removed from the public repo for privacy), confirm (removed from the public repo for privacy)
+- terminal under sway with squeekboard (removed from the public repo for privacy), back from the terminal (removed from the public repo for privacy)
+- the Quickshell home at the same time: qs-home (removed from the public repo for privacy)
+- offscreen render of every screen (removed from the public repo for privacy), including the Greek keyboard
 
 ## Measured vs assumed
 
@@ -81,7 +81,7 @@ More in [`measurements.jsonl`](measurements.jsonl).
 
 ## Phone state at the end
 
-- Final screen (23:17): [final-home](final-home.png).
+- Final screen (23:17): final-home (removed from the public repo for privacy).
 - Default touch shell: fastshell (`/srv/s22/state/touchui/ui-backend` = `fastshell`). `/etc/s22-desktop` = `sway-pixman`, unchanged.
 - Installed:
   - `/srv/s22/hardware/bin/unum-fastshell`;

@@ -1,5 +1,8 @@
 # S22 network independence — 2026-10-22
 
+> The raw per-step logs (01-16) were removed from the public history on 2026-11-05 because they held
+> device network state. This summary is what remains.
+
 Question from the owner: does the phone work on its own SIM data, with no Wi-Fi and no USB, and stay
 reachable from the rig over Tailscale?
 

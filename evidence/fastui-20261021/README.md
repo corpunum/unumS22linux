@@ -25,7 +25,7 @@ Files: [`drm-state-before.txt`](drm-state-before.txt) (debugfs `dri/1/state`).
 | Tap on the Settings tile, first panel flip | p50 13.8 ms, max 21.6 ms (6 taps). |
 | Tap on the Settings tile, **page shown** (second flip) | 94–292 ms, **p50 120 ms**. |
 
-So the panel path is already fast. What is left is Quickshell's QML software scene graph. Phase 2 also measured Files scrolling at 17.7 fps with p95 245 ms. Files: [`baseline-tap-settings-tile.jsonl`](baseline-tap-settings-tile.jsonl), [`baseline-home-sway.png`](baseline-home-sway.png).
+So the panel path is already fast. What is left is Quickshell's QML software scene graph. Phase 2 also measured Files scrolling at 17.7 fps with p95 245 ms. Files: [`baseline-tap-settings-tile.jsonl`](baseline-tap-settings-tile.jsonl), `baseline-home-sway.png` (removed from the public repo for privacy).
 
 ## 3. fastui, CPU path
 
@@ -44,7 +44,7 @@ So the panel path is already fast. What is left is Quickshell's QML software sce
 | Idle | 0 panel flips, 0.4 % CPU, **RSS 9.9 MB** |
 | First frame after start | 33–65 ms |
 
-Files: [`trial-swbench2.log`](trial-swbench2.log), [`trial-swbench-full2.log`](trial-swbench-full2.log), [`trial-sw-touch2.log`](trial-sw-touch2.log), [`sw-tap-latency*.jsonl`](sw-tap-latency.jsonl), and the real scanout capture [`fastui-sw-pressed.png`](fastui-sw-pressed.png). The first `trial-swbench(-full).log` runs double-copied the previous frame's damage; the `*2.log` runs fixed that.
+Files: [`trial-swbench2.log`](trial-swbench2.log), [`trial-swbench-full2.log`](trial-swbench-full2.log), [`trial-sw-touch2.log`](trial-sw-touch2.log), [`sw-tap-latency*.jsonl`](sw-tap-latency.jsonl), and the real scanout capture `fastui-sw-pressed.png` (removed from the public repo for privacy). The first `trial-swbench(-full).log` runs double-copied the previous frame's damage; the `*2.log` runs fixed that.
 
 ## 4. fastui, GPU path (Samsung Vulkan in the isolated Bionic runtime)
 
@@ -53,7 +53,7 @@ Files: [`trial-swbench2.log`](trial-swbench2.log), [`trial-swbench-full2.log`](t
 - **Export:** Samsung Vulkan allocates `VK_EXT_external_memory_dma_buf` memory. `vkGetMemoryFdKHR` gives a dma-buf, which goes to the native display process over `SCM_RIGHTS`. That process imports it into card1 with `PRIME_FD_TO_HANDLE` + `ADDFB2` and page-flips it.
 - **Import:** card1 dumb buffers are exported as dma-bufs and imported into Vulkan (importable memory-type bits `0xeaea`). The GPU renders straight into scanout memory.
 
-The scanout captures show the GPU-drawn grid with the touched tile highlighted: [`fastui-gpu-export-pressed.png`](fastui-gpu-export-pressed.png), [`fastui-gpu-import-pressed.png`](fastui-gpu-import-pressed.png). The GPU frame has no text; the shader has no glyphs.
+The scanout captures show the GPU-drawn grid with the touched tile highlighted: `fastui-gpu-export-pressed.png` (removed from the public repo for privacy), `fastui-gpu-import-pressed.png` (removed from the public repo for privacy). The GPU frame has no text; the shader has no glyphs.
 
 | Mode | GPU submit → fence | Frame | Touch → flip (interactive, internal) | Display-process CPU |
 |---|---|---|---|---|
@@ -92,7 +92,7 @@ Files: `trial-gpu-*.log`, `gpu-*-tap-latency.jsonl`.
 ## 6. Phone state after the spike
 
 - sway still owns plane-0, with the same sway, seatd, s22-touchd and squeekboard PIDs as before.
-- The touch shell was restarted once by exact PID (Quickshell 2336 → 19813 → 20414). touchd respawned it. The home screen shows: [`after-restore-sway.png`](after-restore-sway.png).
+- The touch shell was restarted once by exact PID (Quickshell 2336 → 19813 → 20414). touchd respawned it. The home screen shows: `after-restore-sway.png` (removed from the public repo for privacy).
 - The sandbox copy of `fastui-vk` was removed from `llama-vulkan/system/bin`. The binaries stay in `/root/fastui/` on the phone.
 - Audio and the voice scripts were not touched. No packages were installed and nothing was flashed. There was no reboot.
 

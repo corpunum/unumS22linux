@@ -6,7 +6,7 @@ r() { if [ "$2" = ok ]; then echo "$1 ok $3"; else echo "$1 FAIL $3"; fail=1; fi
 
 ip4=$(ip -4 -o addr show dev wlan0 2>/dev/null | awk '{print $4}')
 st=$(cat /sys/class/net/wlan0/operstate 2>/dev/null)
-if [ "$st" = up ] && [ -n "$ip4" ] && ping -c1 -W3 -I wlan0 192.0.2.1 >/dev/null 2>&1; then r wifi ok "$ip4 gw-ping"; else r wifi bad "state=$st ip=$ip4"; fi
+if [ "$st" = up ] && [ -n "$ip4" ] && gw=$(ip -4 route show default dev wlan0 2>/dev/null | awk '{print $3; exit}'); [ -n "$gw" ] && ping -c1 -W3 -I wlan0 "$gw" >/dev/null 2>&1; then r wifi ok "$ip4 gw-ping"; else r wifi bad "state=$st ip=$ip4"; fi
 
 if timeout 15 tailscale ping -c 1 --timeout 10s 203.0.113.10 >/tmp/.tsp 2>&1; then r tailscale ok "$(tail -1 /tmp/.tsp)"; else r tailscale bad "$(tail -1 /tmp/.tsp)"; fi
 
