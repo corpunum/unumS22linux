@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Summarise the phone's s22-trace JSONL (rig side).
 
-    s22-trace-summary.py --pull [--host root@203.0.113.21] [--dir DIR]   fetch, then summarise
-    s22-trace-summary.py FILE_OR_DIR...                                  summarise local copies
+    s22-trace-summary.py --pull [--host USER@PHONE] [--dir DIR]        fetch, then summarise
+    s22-trace-summary.py FILE_OR_DIR...                               summarise local copies
     options: --since ISO|EPOCH  --until ISO|EPOCH  --json
+    --host defaults to $S22_PHONE_HOST (or S22_PHONE_HOST= in ~/.config/s22-linux/local.env).
 
 Drain is computed from the fuel gauge's raw SOC (0.01 % steps) between consecutive samples
 while the battery is discharging, and attributed to the state the phone was in for the whole
@@ -15,8 +16,25 @@ import argparse, glob, gzip, json, os, subprocess, sys, time
 from collections import Counter, defaultdict
 
 CHARGE_FULL_MAH = 3327
-HOST = "root@203.0.113.21"
 REMOTE = "/srv/s22/state/trace"
+
+
+def local_env(key, default=""):
+    """$KEY, else KEY=... in the untracked ~/.config/s22-linux/local.env ($S22_LOCAL_ENV), else default."""
+    v = os.environ.get(key, "").strip()
+    if v:
+        return v
+    path = os.environ.get("S22_LOCAL_ENV") or os.path.join(
+        os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "s22-linux", "local.env")
+    try:
+        with open(path) as fh:
+            for line in fh:
+                k, sep, val = line.strip().partition("=")
+                if sep and k.strip() == key:
+                    return val.strip().strip("\"'")
+    except OSError:
+        pass
+    return default
 
 
 def load(paths):
@@ -192,7 +210,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("paths", nargs="*")
     ap.add_argument("--pull", action="store_true")
-    ap.add_argument("--host", default=HOST)
+    ap.add_argument("--host", default=local_env("S22_PHONE_HOST"))
     ap.add_argument("--dir", default=os.path.expanduser("~/s22-trace"))
     ap.add_argument("--since")
     ap.add_argument("--until")
@@ -200,6 +218,8 @@ def main(argv=None):
     a = ap.parse_args(argv)
     paths = list(a.paths)
     if a.pull:
+        if not a.host:
+            ap.error("no phone: pass --host or set S22_PHONE_HOST (see s22-local.env.example)")
         paths.append(pull(a.host, a.dir))
     if not paths:
         ap.error("give files/dirs or --pull")

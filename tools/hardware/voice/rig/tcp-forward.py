@@ -4,7 +4,7 @@
   tcp-forward.py LISTEN_HOST:PORT TARGET_HOST:PORT
 
 Used for the owner-voice TTS (voxcpm-greek.service binds 127.0.0.1:8890 for OpenUnum; the phone reaches it at
-203.0.113.10:8890 through this relay) without restarting the voice server. Streaming responses pass through
+RIG:8890 through this relay) without restarting the voice server. Streaming responses pass through
 unbuffered (TCP_NODELAY both ways). Standard library only.
 """
 import asyncio

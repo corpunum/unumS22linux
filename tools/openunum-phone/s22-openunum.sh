@@ -1,6 +1,6 @@
 #!/bin/sh
 # OpenUnum on the S22: server + WebUI in the Arch chroot, brain = rig Halogen
-# over Tailscale (see openunum.json). Manual start: s22-openunum [start|stop|status|log]
+# over Tailscale (see openunum.json; replace RIG_TAILNET_IP in the phone's copy, s22-local.env.example). Manual start: s22-openunum [start|stop|status|log]
 # WebUI: http://127.0.0.1:18880 on the phone (or ssh -L 18880:127.0.0.1:18880).
 set -eu
 C=/mnt/omarchy-trial

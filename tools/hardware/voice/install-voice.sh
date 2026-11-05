@@ -1,6 +1,7 @@
 #!/bin/sh
 # Install the natural-voice pieces on the phone (run from this repo on the host).
-#   install-voice.sh [PHONE]   (default root@203.0.113.21)
+#   install-voice.sh [PHONE]   (default $S22_PHONE_HOST, or S22_PHONE_HOST= in ~/.config/s22-linux/local.env)
+# The phone finds the rig through S22_RIG_HOST in its own untracked /srv/s22/state/local.env (s22-local.env.example).
 # Backs up the installed s22-assistant / s22-converse first, copies the scripts, and (re)renders any
 # missing filler clips with the phone's own TTS (about 4 minutes the first time; existing clips are kept).
 # s22_loudnorm.py (-16 LUFS) is what s22-say and the filler renderer normalise with; s22_filler.py is the shared
@@ -12,7 +13,10 @@
 #   ssh PHONE python3 /srv/s22/hardware/voice/s22-render-fillers.py --engine el-antonis
 # Rollback of this deploy: copy each /srv/s22/hardware/bin/<file>.bak-onevoice-20261104 back over <file>.
 set -eu
-PHONE=${1:-root@203.0.113.21}
+CONF=${S22_LOCAL_ENV:-${XDG_CONFIG_HOME:-$HOME/.config}/s22-linux/local.env}
+if [ -z "${1:-}" ] && [ -z "${S22_PHONE_HOST:-}" ] && [ -r "$CONF" ]; then S22_PHONE_HOST=$(sed -n 's/^S22_PHONE_HOST=["'"'"']*\([^"'"'"']*\).*/\1/p' "$CONF" | tail -1); fi
+PHONE=${1:-${S22_PHONE_HOST:-}}
+[ -n "$PHONE" ] || { echo "usage: $0 USER@PHONE (or set S22_PHONE_HOST, see s22-local.env.example)" >&2; exit 2; }
 H=$(cd "$(dirname "$0")/.." && pwd)
 ssh "$PHONE" 'cd /srv/s22/hardware/bin && for f in s22-assistant s22-converse s22-say; do [ -e $f.bak-voice-20261021 ] || cp -p $f $f.bak-voice-20261021; [ -e $f.bak-ownervoice-20261022 ] || cp -p $f $f.bak-ownervoice-20261022; done
   # 2026-11-04 (one voice per answer): rollback copies of everything this script replaces

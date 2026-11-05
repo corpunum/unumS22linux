@@ -7,8 +7,8 @@
   `pnpm install --prod`. It listens on **127.0.0.1:18880**. Use the phone
   browser, or `ssh -L 18880:127.0.0.1:18880`.
 - **Brain:** the rig's Halogen (`openai/qwen3.8-flash-next-uncensored-lean`)
-  at `http://203.0.113.10:8080` over Tailscale. Halogen already listens on `*:8080`, and
-  the phone (203.0.113.21) reached `/v1/models`. **No rig, firewall or
+  at `http://<rig tailnet IP>:8080` over Tailscale. Halogen already listens on `*:8080`, and
+  the phone reached `/v1/models`. **No rig, firewall or
   Halogen change was made.**
 - **Voice:** stays on the device. The agent's `shell_run` calls `s22-say` (neural TTS, local).
 

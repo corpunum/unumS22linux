@@ -62,9 +62,10 @@ to the phone and get the replies in Greek".
 | SIP call, classic loop (rig down) | s22-say | s22-say -> antonis, or Piper el-antonis when the rig is down |
 | offline / rig slow (no first audio in 2 s, clause over 3 s + 0.12 s/char) | n/a | Piper el-antonis on the phone (same voice distilled), rig skipped for 60 s |
 
-Rig side (tools/hardware/voice/rig/install-rig.sh): `s22-voxcpm-tailnet.service` relays 203.0.113.10:8890 -> the
+Rig side (tools/hardware/voice/rig/install-rig.sh): `s22-voxcpm-tailnet.service` relays RIG:8890 -> the
 loopback-only voxcpm-greek :8890 (no restart of the voice server), `s22-whisper.service` serves whisper
-large-v3-turbo on 203.0.113.10:8891 (Vulkan, MemoryMax 4G, `--convert`). Both bind the Tailscale address only.
+large-v3-turbo on RIG:8891 (Vulkan, MemoryMax 4G, `--convert`). Both bind the Tailscale address only
+(RIG = `S22_RIG_HOST`, see `s22-local.env.example`).
 
 English in the owner's voice (VoxCPM antonis, whisper large-v3-turbo round trip, 3 EN + 3 EL sentences): every
 sentence transcribed word for word ("Hello, I am your phone assistant. The battery is at 42% and charging.").

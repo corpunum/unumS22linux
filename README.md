@@ -137,7 +137,8 @@ including an S22+ or Ultra. A researched list of phones with existing native Lin
 Want to do this on your own S22, a similar phone, or another Android phone? Read the
 [porting guide](docs/PORTING.md) first: the warnings, which phones are close enough, the method we
 used (agents reusing the phone's own vendor drivers, with a review loop before anything touches the
-phone), and per-subsystem playbooks. Our Rust touch shell also runs on other Linux phones:
+phone), and per-subsystem playbooks. Addresses (the phone's ssh target, the rig's tailnet IP) are not in
+the code: copy [s22-local.env.example](s22-local.env.example) to an untracked local config. Our Rust touch shell also runs on other Linux phones:
 [tools/unum-fastshell/PORTING.md](tools/unum-fastshell/PORTING.md).
 
 ---

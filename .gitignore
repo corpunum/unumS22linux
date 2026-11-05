@@ -115,3 +115,7 @@ __pycache__/
 **/shots/
 /evidence/network-independence-*/[0-9]*.txt
 **/*phone-state*.txt
+
+# Per-install addresses (tailnet IPs, phone ssh target): see s22-local.env.example
+s22-local.env
+local.env

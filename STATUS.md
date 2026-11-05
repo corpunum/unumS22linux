@@ -301,7 +301,7 @@ mic recording of its own speaker was transcribed by whisper word for word.
 
 **OpenUnum on the phone, using the rig's Halogen over Tailscale.** The
 server and WebUI run in the Arch chroot (127.0.0.1:18880, `s22-openunum
-start`). The model is the rig's Halogen at 203.0.113.10:8080, and speech
+start`). The model is the rig's Halogen at `<rig tailnet IP>:8080`, and speech
 stays local. Device-verified agent turn: the rig model ran shell tools on the
 phone, then `s22-say` spoke "CPU architecture is aarch64 and the modem state
 is ONLINE." [Evidence](evidence/openunum-phone-20261006/README.md).

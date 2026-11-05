@@ -8,7 +8,11 @@ ip4=$(ip -4 -o addr show dev wlan0 2>/dev/null | awk '{print $4}')
 st=$(cat /sys/class/net/wlan0/operstate 2>/dev/null)
 if [ "$st" = up ] && [ -n "$ip4" ] && gw=$(ip -4 route show default dev wlan0 2>/dev/null | awk '{print $3; exit}'); [ -n "$gw" ] && ping -c1 -W3 -I wlan0 "$gw" >/dev/null 2>&1; then r wifi ok "$ip4 gw-ping"; else r wifi bad "state=$st ip=$ip4"; fi
 
-if timeout 15 tailscale ping -c 1 --timeout 10s 203.0.113.10 >/tmp/.tsp 2>&1; then r tailscale ok "$(tail -1 /tmp/.tsp)"; else r tailscale bad "$(tail -1 /tmp/.tsp)"; fi
+# The rig to ping: S22_RIG_HOST from the environment or the untracked /srv/s22/state/local.env (s22-local.env.example).
+[ -n "${S22_RIG_HOST:-}" ] || S22_RIG_HOST=$(sed -n 's/^S22_RIG_HOST=["'"'"']*\([^"'"'"']*\).*/\1/p' "${S22_LOCAL_ENV:-/srv/s22/state/local.env}" 2>/dev/null | tail -1)
+if [ -z "$S22_RIG_HOST" ]; then
+  if tailscale status >/tmp/.tsp 2>&1; then r tailscale ok "up (S22_RIG_HOST unset: no rig ping)"; else r tailscale bad "$(tail -1 /tmp/.tsp)"; fi
+elif timeout 15 tailscale ping -c 1 --timeout 10s "$S22_RIG_HOST" >/tmp/.tsp 2>&1; then r tailscale ok "$(tail -1 /tmp/.tsp)"; else r tailscale bad "$(tail -1 /tmp/.tsp)"; fi
 
 ph=$(curl -s -m 8 http://127.0.0.1:8095/status)
 ms=$(printf '%s' "$ph" | python3 -c 'import sys,json

@@ -19,7 +19,7 @@ Saved implementation files: `tools/hardware/phoned/s22-phoned.py`, `test_ipc_exp
 
 ## Live state verified, 2026-10-14 14:55 UTC
 
-SSH: `root@203.0.113.21`. Phone muted: `sh /srv/s22/state/touchui-mutecheck.sh` returned `level=0`, left/right Digital PCM Volume `0`. CP `/sys/devices/platform/cpif/modem_state`: ONLINE. Uptime 37062 seconds. TCP 8095 belongs to phoned PID **2210**; TCP 8766 belongs to s22d PID **2294**. Always re-check exact PID before a future restart.
+SSH: `root@<phone tailnet IP>` (`S22_PHONE_HOST`). Phone muted: `sh /srv/s22/state/touchui-mutecheck.sh` returned `level=0`, left/right Digital PCM Volume `0`. CP `/sys/devices/platform/cpif/modem_state`: ONLINE. Uptime 37062 seconds. TCP 8095 belongs to phoned PID **2210**; TCP 8766 belongs to s22d PID **2294**. Always re-check exact PID before a future restart.
 
 `/proc/2210/cmdline`: `python3 /srv/s22/hardware/bin/s22-phoned serve`. Deployed binary SHA256 **11ce72e9c4e113e0a1304917f7890171d7c2ca3735cf291291488953c56e8762**, matching the source at **20acf12**, NOT `49da8ea` (source SHA256 `811df3d632bc89dee041870c03c075d6495477d9d499a0ce420f05a0ddef1afd`). No experimental sender is deployed. Initial guessed `/usr/local/lib/s22/s22-phoned.py` path was absent; actual executable path was then resolved via `/proc`.
 

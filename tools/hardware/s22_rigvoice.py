@@ -3,9 +3,9 @@
 
 Owner 2026-10-22: ONE voice everywhere, his own, and he wants to speak Greek to the phone.
 
-  TTS  the rig's VoxCPM2 + LoRA "antonis" (voxcpm-greek.service, reached at 203.0.113.10:8890 through
+  TTS  the rig's VoxCPM2 + LoRA "antonis" (voxcpm-greek.service, reached at RIG:8890 through
        s22-voxcpm-tailnet.service): Greek AND English, streamed (first audio ~0.2 s, RTF ~0.9).
-  ASR  the rig's whisper-server large-v3-turbo (s22-whisper.service, 203.0.113.10:8891), language
+  ASR  the rig's whisper-server large-v3-turbo (s22-whisper.service, RIG:8891), language
        auto-detected and narrowed to Greek or English.
 
 Both bind the rig's Tailscale address only. Every call has hard deadlines (TTS: first audio within
@@ -21,8 +21,11 @@ while chunk k plays, so it passes the remaining playback time as extra slack ins
 transient slowdown switch the rest of the answer to the phone's voice.
 Silence padding: rig audio gets the same fixed lead/tail silence as phone renders (s22_loudnorm.trim_pad,
 S22_SPEECH_PAD, default 60,180 ms), so chunk-to-chunk pauses do not depend on the engine.
-Settings: /srv/s22/state/rigvoice.json overrides DEFAULTS (e.g. {"tts_url": "http://203.0.113.10:1"} to
+Settings: /srv/s22/state/rigvoice.json overrides DEFAULTS (e.g. {"tts_url": "http://127.0.0.1:1"} to
 force the fallback, {"enabled": false} to stay on the phone); S22_RIGVOICE_CONFIG names another file.
+RIG (the rig's Tailscale address) is not in the code: tts_url / asr_url come from rigvoice.json, else from
+S22_RIG_HOST (environment, else the untracked /srv/s22/state/local.env, see s22-local.env.example) as
+http://RIG:8890 and http://RIG:8891. With neither set, the rig counts as unavailable and the phone fallbacks speak.
 
 CLI (installed as /srv/s22/hardware/bin/s22_rigvoice.py):
   s22_rigvoice.py tts OUT.wav TEXT...    exit 0 = OUT.wav written (48 kHz mono s16, already at -16 LUFS),
@@ -47,8 +50,8 @@ from urllib.parse import urlparse
 
 DEFAULTS = {
     'enabled': True,
-    'tts_url': 'http://203.0.113.10:8890',
-    'asr_url': 'http://203.0.113.10:8891',
+    'tts_url': '',             # '' -> http://$S22_RIG_HOST:8890 (see rig_host)
+    'asr_url': '',             # '' -> http://$S22_RIG_HOST:8891
     'voice': 'antonis',
     'ttfa_s': 2.0,             # no first audio by then -> fallback
     'stall_s': 4.0,            # no audio for this long mid-stream -> fallback
@@ -61,6 +64,22 @@ DEFAULTS = {
 }
 CONFIG = Path(os.environ.get('S22_RIGVOICE_CONFIG', '/srv/s22/state/rigvoice.json'))
 DOWN_DIR = Path(os.environ.get('S22_RIGVOICE_RUN', '/run'))
+LOCAL_ENV = Path(os.environ.get('S22_LOCAL_ENV', '/srv/s22/state/local.env'))
+
+
+def rig_host(env_file: Path | None = None) -> str:
+    """The rig's address: $S22_RIG_HOST, else S22_RIG_HOST=... in the untracked local.env, else ''."""
+    v = os.environ.get('S22_RIG_HOST', '').strip()
+    if v:
+        return v
+    try:
+        for line in (env_file or LOCAL_ENV).read_text().splitlines():
+            k, sep, val = line.strip().partition('=')
+            if sep and k.strip() == 'S22_RIG_HOST':
+                return val.strip().strip('"\'')
+    except OSError:
+        pass
+    return ''
 
 
 class RigUnavailable(Exception):
@@ -73,6 +92,10 @@ def load_config(path: Path = CONFIG) -> dict:
         cfg.update(json.loads(path.read_text()))
     except (OSError, ValueError):
         pass
+    host = rig_host() if not (cfg['tts_url'] and cfg['asr_url']) else ''
+    for key, port in (('tts_url', 8890), ('asr_url', 8891)):
+        if not cfg[key] and host:
+            cfg[key] = f'http://{host}:{port}'
     if os.environ.get('S22_RIGVOICE_LENIENT') == '1':   # offline renders (filler clips): wait, never mark down
         cfg.update(ttfa_s=max(cfg['ttfa_s'], 30.0), stall_s=max(cfg['stall_s'], 30.0), tts_base_s=60.0,
                    tts_per_char_s=1.0, down_s=0.0)
@@ -123,6 +146,8 @@ def clear_down(kind: str) -> None:
 
 
 def _conn(url: str, timeout: float) -> tuple[http.client.HTTPConnection, str]:
+    if not url:
+        raise RigUnavailable('no rig address configured (S22_RIG_HOST)')
     u = urlparse(url)
     return http.client.HTTPConnection(u.hostname or '127.0.0.1', u.port or 80, timeout=timeout), u.path.rstrip('/')
 
@@ -311,6 +336,8 @@ def transcribe(wav_path, cfg: dict | None = None, clock=time.monotonic) -> dict:
 # ---------------------------------------------------------------- CLI
 
 def _health(url: str) -> object:
+    if not url:
+        return 'not configured (S22_RIG_HOST)'
     try:
         conn, base = _conn(url, 2.0)
         conn.request('GET', base + ('/health' if url.endswith('8890') else '/'))

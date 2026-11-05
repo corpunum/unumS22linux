@@ -21,7 +21,7 @@ evidence/npu-custom-20261022); AIE.bin is staged automatically once per boot.
 Options:
   --out DIR            output dir (default ./npu-accept-<name>)
   --name NAME          model name (default file stem)
-  --host USER@HOST     phone (default root@203.0.113.21)
+  --host USER@HOST     phone (default $S22_PHONE_HOST, or S22_PHONE_HOST= in ~/.config/s22-linux/local.env)
   --n-random N         random inputs (default 20)      --seed S (default 1234)
   --edge               also run saturated edge inputs (all-min / all-max / mid); stricter than real data,
                        e.g. MicroNet-L shows one |delta| 2 on all-max, so off by default
@@ -172,10 +172,28 @@ def run_canary(phone, canary, tag):
     return r["checksums"][0]["checksum"]
 
 
+def local_env(key, default=""):
+    """$KEY, else KEY=... in the untracked ~/.config/s22-linux/local.env ($S22_LOCAL_ENV), else default."""
+    v = os.environ.get(key, "").strip()
+    if v:
+        return v
+    path = os.environ.get("S22_LOCAL_ENV") or os.path.join(
+        os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "s22-linux", "local.env")
+    try:
+        with open(path) as fh:
+            for line in fh:
+                k, sep, val = line.strip().partition("=")
+                if sep and k.strip() == key:
+                    return val.strip().strip("\"'")
+    except OSError:
+        pass
+    return default
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     ap.add_argument("model")
-    ap.add_argument("--out"); ap.add_argument("--name"); ap.add_argument("--host", default="root@203.0.113.21")
+    ap.add_argument("--out"); ap.add_argument("--name"); ap.add_argument("--host", default=local_env("S22_PHONE_HOST"))
     ap.add_argument("--n-random", type=int, default=20); ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--edge", action="store_true"); ap.add_argument("--real")
     ap.add_argument("--tol", action="append", default=[]); ap.add_argument("--iters", type=int, default=200)
@@ -183,6 +201,8 @@ def main():
     ap.add_argument("--keep-nnc", action="store_true")
     ap.add_argument("--canary", default="/data/models/custom/conv3x3_s8.nnc")
     a = ap.parse_args()
+    if not a.host:
+        ap.error("no phone: pass --host or set S22_PHONE_HOST (see s22-local.env.example)")
 
     model = Path(a.model).resolve()
     name = re.sub(r"[^A-Za-z0-9_.-]", "_", a.name or model.stem)

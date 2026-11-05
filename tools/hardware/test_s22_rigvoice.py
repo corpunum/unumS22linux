@@ -202,16 +202,31 @@ class RigVoiceTests(unittest.TestCase):
 
     def test_config_file_overrides(self):
         p = Path(self.tmp.name) / 'rigvoice.json'
-        p.write_text('{"tts_url": "http://203.0.113.10:1"}')
-        c = RV.load_config(p)
-        self.assertEqual(c['tts_url'], 'http://203.0.113.10:1')
-        self.assertEqual(c['asr_url'], RV.DEFAULTS['asr_url'])
+        p.write_text('{"tts_url": "http://127.0.0.1:1"}')
+        env = Path(self.tmp.name) / 'local.env'
+        with unittest.mock.patch.object(RV, 'LOCAL_ENV', env), unittest.mock.patch.dict(os.environ, {'S22_RIG_HOST': ''}):
+            c = RV.load_config(p)
+            self.assertEqual(c['tts_url'], 'http://127.0.0.1:1')
+            self.assertEqual(c['asr_url'], '')                    # no rig configured anywhere
+            env.write_text('# local\nS22_RIG_HOST="rig.example"\n')
+            c = RV.load_config(p)
+            self.assertEqual(c['tts_url'], 'http://127.0.0.1:1')  # the json wins
+            self.assertEqual(c['asr_url'], 'http://rig.example:8891')
+            os.environ['S22_RIG_HOST'] = '192.0.2.7'              # the environment wins over local.env
+            c = RV.load_config(Path(self.tmp.name) / 'missing.json')
+            self.assertEqual((c['tts_url'], c['asr_url']), ('http://192.0.2.7:8890', 'http://192.0.2.7:8891'))
         os.environ['S22_RIGVOICE_LENIENT'] = '1'
         try:
             c = RV.load_config(p)
         finally:
             del os.environ['S22_RIGVOICE_LENIENT']
         self.assertEqual((c['down_s'], c['ttfa_s']), (0.0, 30.0))
+
+    def test_unconfigured_rig_is_unavailable(self):
+        cfg = dict(RV.DEFAULTS)
+        with self.assertRaises(RV.RigUnavailable):
+            RV.tts_pcm('hello', cfg)
+        self.assertEqual(RV._health(''), 'not configured (S22_RIG_HOST)')
 
 
 class SayAntonisEngine(unittest.TestCase):
