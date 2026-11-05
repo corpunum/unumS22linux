@@ -250,11 +250,17 @@ struct Out {
 }
 
 fn torch_num(cfg: &crate::config::Config, name: &str) -> Option<u32> {
-    std::fs::read_to_string(cfg.torch_dir.join(name)).ok()?.trim().parse().ok()
+    std::fs::read_to_string(cfg.torch_dir.join(name))
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
 }
 
 fn torch_max(cfg: &crate::config::Config) -> u32 {
-    torch_num(cfg, "max_brightness").filter(|m| *m > 0).unwrap_or(15)
+    torch_num(cfg, "max_brightness")
+        .filter(|m| *m > 0)
+        .unwrap_or(15)
 }
 
 fn torch_state(cfg: &crate::config::Config) -> ApiResult {

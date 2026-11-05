@@ -1618,14 +1618,23 @@ async fn torch_set_writes_the_flash_led_and_get_reports_it() {
     assert_eq!(v["state"]["on"], false);
     let (s, v) = h.dev("torch.set", json!({"on": true})).await;
     assert_eq!(s, StatusCode::OK, "{v}");
-    assert_eq!((read(), v["state"]["on"].clone()), ("15\n".to_string(), json!(true)));
+    assert_eq!(
+        (read(), v["state"]["on"].clone()),
+        ("15\n".to_string(), json!(true))
+    );
     let (_, v) = h.dev("torch.set", json!({"on": "true", "value": 4})).await;
-    assert_eq!((read(), v["state"]["brightness"].clone()), ("4\n".to_string(), json!(4)));
+    assert_eq!(
+        (read(), v["state"]["brightness"].clone()),
+        ("4\n".to_string(), json!(4))
+    );
     let (s, _) = h.dev("torch.set", json!({"on": true, "value": 16})).await;
     assert_eq!(s, StatusCode::BAD_REQUEST);
     assert_eq!(read(), "4\n", "a refused level changes nothing");
     let (_, v) = h.dev("torch.set", json!({"on": false, "value": 9})).await;
-    assert_eq!((read(), v["state"]["on"].clone()), ("0\n".to_string(), json!(false)));
+    assert_eq!(
+        (read(), v["state"]["on"].clone()),
+        ("0\n".to_string(), json!(false))
+    );
     let (s, _) = h.dev("torch.set", json!({})).await;
     assert_eq!(s, StatusCode::BAD_REQUEST);
 }
