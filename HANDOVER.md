@@ -33,7 +33,8 @@ Private access details (tailnet name, SSH options, allowlists) live in an untrac
   and keep a rollback branch. Restart by killing the exact PID on :18880; keepalive brings it back in about 5 s.
 - **s22d build:** `cargo build --release --target aarch64-unknown-linux-musl` (rustup cargo; the distro cargo is too old).
   Deploy: copy the binary to the phone, then `sh /srv/s22/hardware/install-s22d.sh --binary <bin>`
-  (`--rollback` restores the old one).
+  (`--rollback` restores the old one). Since 11-11 the script swaps the binary in before it stops the old process;
+  before that, keepalive could restart the OLD binary in the gap. Check with `readlink /proc/<pid>/exe`: it must not say "(deleted)".
 - **Branches:** work lands on `main` only. The pre-rewrite (10-22) local branches were removed on 2026-11-11.
   Every tip was already on main.
 
@@ -42,12 +43,12 @@ Private access details (tailnet name, SSH options, allowlists) live in an untrac
 |---|---|
 | OpenUnum | 2.10.0; the device base is 37 commits behind rig main. One health check fails: `systemd_units_valid`. The chroot has no systemd and keepalive supervises instead, so this is a false alarm. |
 | Voice (text turn, Luna) | Correct reply. The first filler is heard at 1.3 s, the reply audio starts at 7.9 s, and the turn ends at 17.5 s. The phone stays muted (level 0). |
-| Camera via s22d | The capture works, but the develop step is broken: s22d runs the Rust `s22-develop` binary through `python3`, so the agent's `camera_capture` returns a dark, undeveloped quick PNG at 510x383. The shell's camera button (touchd: meter, burst, develop) is fine. |
+| Camera via s22d | Fixed on 11-11. `camera_capture` meters exposure, takes a 4-frame burst and runs `s22-develop --stack` (the binary itself). It returns a 2040x1532 JPEG in about 7.5 s and copies it to the gallery. Same path as the shell's camera button. |
 | UI | sway, unum-fastshell and squeekboard are running. |
 | Local model | llama-server with Gemma-4 E2B and an MTP draft, `-np 2`, cache reuse. |
 | Battery | Charge cap at 85 % is active. |
 | Kernel | Still the 09-24 build. The approved recovery-kernel flash (close_range fix) has not been done. |
-| s22d | 0.3.0 (11-04 build); it includes torch. |
+| s22d | 0.3.0, the 11-11 build (camera ISP fix); it includes torch. |
 
 ## Open work (UnumHub)
 - `U-fd91ceec`: S22 deploy and kernel flash. Prompt-cache verification is still open; the flash is still to do.

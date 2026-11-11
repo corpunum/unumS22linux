@@ -19,6 +19,10 @@ stop_s22d() {
 
 if [ "${1:-}" = --rollback ]; then
   backup=$(ls -d "$STATE"/backup-* 2>/dev/null | sort | tail -1 || true)
+  if [ -n "$backup" ] && [ -f "$backup/s22d" ]; then
+    # put the old binary in place BEFORE stopping (see swap_in below)
+    cp -p "$backup/s22d" "$BIN.new" && mv -f "$BIN.new" "$BIN"
+  fi
   stop_s22d
   if [ -n "$backup" ] && [ -f "$backup/keepalive-config.json" ]; then
     cp -p "$backup/keepalive-config.json" "$CONF"
@@ -35,7 +39,7 @@ if os.path.exists(p):
     os.replace(t, p)
 PY
   fi
-  if [ -n "$backup" ] && [ -f "$backup/s22d" ]; then cp -p "$backup/s22d" "$BIN"; else rm -f "$BIN"; fi
+  [ -n "$backup" ] && [ -f "$backup/s22d" ] || rm -f "$BIN"
   rm -f /run/s22d.sock
   echo "s22d rollback complete (keepalive picks up its config on the next pass)"
   exit 0
@@ -52,8 +56,12 @@ mkdir -p "$STATE" "$(dirname "$BIN")"
 BK="$STATE/backup-$(date +%Y%m%d-%H%M%S)"; mkdir -p "$BK"
 cp -p "$CONF" "$BK/keepalive-config.json"
 [ -f "$BIN" ] && cp -p "$BIN" "$BK/s22d" || true
+# Swap the binary in with an atomic rename BEFORE stopping the old process. Stopping first lets
+# keepalive restart the OLD binary in the gap before the copy (seen 2026-11-11: the old s22d kept
+# serving from a deleted inode while the script reported success).
+install -m 755 "$SRC" "$BIN.new"
+mv -f "$BIN.new" "$BIN"
 stop_s22d
-install -m 755 "$SRC" "$BIN"
 python3 - "$CONF" "$BIN" <<'PY'
 import json, os, sys
 p, b = sys.argv[1:]

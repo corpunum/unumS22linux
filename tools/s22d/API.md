@@ -193,13 +193,21 @@ The owner is never asked about a request that cannot succeed.
 | Capability | Request | Answer |
 |---|---|---|
 | `camera.status` | `GET /v1/camera/status` | `{client_present, develop_available, sensors, dir, last, busy, cooldown_s}` |
-| `camera.capture` | `POST /v1/camera/capture {sensor, exposure_us?, gain?, develop?}` | `{sensor, path, raw, developed, width, height, exposure_us, gain, ms, client}` |
+| `camera.capture` | `POST /v1/camera/capture {sensor, exposure_us?, gain?, develop?}` | `{sensor, path, quick_png, gallery_path, raw, developed, meter, width, height, exposure_us, gain, ms, client}` |
 | `camera.record` (`camera_record`) | `POST /v1/camera/record {sensor, seconds?, fps?, exposure_us?, gain?}` | `{ok, path, gallery_path, frames, fps, seconds}` |
 
 `sensor` is `rear` (S5KGN3) or `front` (IMX374). `exposure_us` is 100-30000 and `gain` is analog 1-16, sent as
-`--cis-exposure-us` / `--cis-again`, the only exposure path that reaches the sensor. `develop` (default true) runs the
-raw to DNG to LibRaw step (draft PR #32) when `/srv/s22/hardware/bin/s22-develop` is installed; otherwise
-`developed` is `{ok:false, reason}` and `path` is the client's own PNG.
+`--cis-exposure-us` / `--cis-again`, the only exposure path that reaches the sensor. `develop` (default true) uses the
+`s22-develop` software ISP (a static binary, `/srv/s22/hardware/bin/s22-develop`) when it is installed, the same path as
+the shell's camera button:
+1. With neither `exposure_us` nor `gain` given, a meter frame (10 ms, 2x) and `s22-develop meter` pick them
+   (`meter` in the answer; the fallback is 20 ms / 8x; max gain 16 rear, 8 front).
+2. A 4-frame `--raw-burst` capture.
+3. `s22-develop develop RAW --stack --out <cap>.jpg`. `path` and the gallery copy are that full-resolution JPEG,
+   and `width`/`height` are its size.
+
+Without the tool, or when develop fails, `developed` is `{ok:false, ...}` and `path` is the client's quick PNG
+(1/4 resolution), which `quick_png` always names.
 
 Video recordings default to 5 seconds (1-30), optionally accept an fps (1-120), and use MJPEG AVI. The client applies the same CIS exposure/gain controls as still capture and is always called with `--allow-fw-stall` and a deadline of seconds+60. Finished AVI files are copied to the OpenUnum gallery as `vid-<timestamp>-<sensor>.avi`; only the latest three working recordings are retained.
 

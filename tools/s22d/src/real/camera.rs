@@ -1,5 +1,8 @@
-//! Camera capture through the reviewed `s22-camera.py` client, with the optional develop step
-//! (raw to DNG to LibRaw, draft PR #32) when that tool is installed.
+//! Camera capture through the reviewed `s22-camera.py` client. When the `s22-develop` software ISP
+//! (a static Rust binary, tools/hardware/camera/s22-develop) is installed, a capture follows the
+//! same path as the shell's camera button (s22-touchd `camera_photo`): a short meter frame,
+//! `s22-develop meter` for exposure/gain, a raw burst at that exposure, then
+//! `s22-develop develop --stack` to a full-resolution JPEG that goes to the OpenUnum gallery.
 //!
 //! The camera path can panic the kernel on a DMA lifecycle fault, so this module is deliberately
 //! conservative: the client always runs with its own `--deadline`, a timed-out client gets
@@ -20,6 +23,19 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub const EXPOSURE_US: std::ops::RangeInclusive<u32> = 100..=30000;
 pub const GAIN: std::ops::RangeInclusive<f32> = 1.0..=16.0;
+/// Meter frame settings and burst length, as in s22-touchd `camera_photo` / `CAMERA_SENSORS`.
+const METER_EXPOSURE_US: u32 = 10000;
+const METER_GAIN: f32 = 2.0;
+const BURST_FRAMES: u32 = 4;
+
+/// Highest analog gain auto exposure may pick (the front sensor is noisier).
+fn max_gain(sensor: &str) -> f32 {
+    if sensor == "front" {
+        8.0
+    } else {
+        16.0
+    }
+}
 
 pub struct CameraClient {
     cfg: Arc<Config>,
@@ -83,19 +99,29 @@ impl CameraClient {
         }
     }
 
-    fn client_args(&self, req: &CaptureReq, png: &Path, raw: &Path) -> Vec<String> {
+    #[allow(clippy::too_many_arguments)]
+    fn client_args(
+        &self,
+        sensor: &str,
+        exposure_us: Option<u32>,
+        gain: Option<f32>,
+        frames: u32,
+        burst: bool,
+        png: &Path,
+        raw: &Path,
+    ) -> Vec<String> {
         let mut a: Vec<String> = self.cfg.python_args.clone();
         a.push(self.cfg.camera_client.display().to_string());
         for s in [
             "capture",
             "--sensor",
-            req.sensor.as_str(),
+            sensor,
             "--out",
             &png.display().to_string(),
             "--raw",
             &raw.display().to_string(),
             "--frames",
-            "1",
+            &frames.to_string(),
             "--skip",
             "6",
             "--deadline",
@@ -103,14 +129,18 @@ impl CameraClient {
         ] {
             a.push(s.to_string());
         }
+        if burst {
+            // every kept frame is written as RAW.0, RAW.1, ... for `s22-develop develop --stack`
+            a.push("--raw-burst".into());
+        }
         if self.cfg.camera_allow_fw_stall {
             a.push("--allow-fw-stall".into());
         }
         // --cis-* is the only exposure path that reaches the sensor (CAMERA.md, review 2026-10-09).
-        if let Some(e) = req.exposure_us {
+        if let Some(e) = exposure_us {
             a.extend(["--cis-exposure-us".into(), e.to_string()]);
         }
-        if let Some(g) = req.gain {
+        if let Some(g) = gain {
             a.extend(["--cis-again".into(), format!("{g}")]);
         }
         a
@@ -176,31 +206,78 @@ impl CameraClient {
         }
     }
 
+    /// Meter frame (10 ms, 2x) -> `s22-develop meter` -> (exposure_us, gain) for the real shot.
+    /// Falls back to 20 ms / 8x (the shell's default) when either step fails; never fails the capture.
+    fn meter(&self, sensor: &str, base: &Path) -> (u32, f32, Value) {
+        let (mut exp, mut gain) = (20000u32, 8.0f32);
+        let mpng = base.with_extension("meter.png");
+        let mraw = base.with_extension("meter.raw");
+        let args = self.client_args(
+            sensor,
+            Some(METER_EXPOSURE_US),
+            Some(METER_GAIN),
+            1,
+            false,
+            &mpng,
+            &mraw,
+        );
+        let info = match self.run_client(&args, Duration::from_secs(self.cfg.camera_deadline_s)) {
+            Err(e) => json!({"ok": false, "error": e.message}),
+            Ok(_) if !mraw.exists() => json!({"ok": false, "error": "meter frame wrote no raw"}),
+            Ok(_) => {
+                let a: Vec<String> = vec![
+                    "meter".into(),
+                    mraw.display().to_string(),
+                    "--exposure-us".into(),
+                    METER_EXPOSURE_US.to_string(),
+                    "--gain".into(),
+                    format!("{METER_GAIN}"),
+                    "--max-gain".into(),
+                    format!("{}", max_gain(sensor)),
+                    "--max-exposure-us".into(),
+                    EXPOSURE_US.end().to_string(),
+                ];
+                let tool = self.cfg.develop_tool.display().to_string();
+                match self.runner.run(&tool, &a, Duration::from_secs(60)) {
+                    Ok(o) => match last_json(&o.stdout) {
+                        Some(m) if m["ok"] == true => {
+                            if let (Some(e), Some(g)) =
+                                (m["exposure_us"].as_u64(), m["gain"].as_f64())
+                            {
+                                exp = (e as u32).clamp(*EXPOSURE_US.start(), *EXPOSURE_US.end());
+                                gain = (g as f32).clamp(*GAIN.start(), max_gain(sensor));
+                            }
+                            m
+                        }
+                        _ => {
+                            json!({"ok": false, "error": tail(&format!("{} {}", o.stderr, o.stdout), 300)})
+                        }
+                    },
+                    Err(e) => json!({"ok": false, "error": e.to_string()}),
+                }
+            }
+        };
+        let _ = std::fs::remove_file(&mpng);
+        let _ = std::fs::remove_file(&mraw);
+        let _ = std::fs::remove_file(base.with_extension("meter.raw.json"));
+        (exp, gain, info)
+    }
+
+    /// `s22-develop develop RAW --stack --out JPG`: the software ISP, run as the binary it is.
     fn develop(&self, raw: &Path, base: &Path) -> Value {
-        if !self.cfg.develop_tool.exists() {
-            return json!({"ok": false, "reason": "develop tool not installed"});
-        }
-        let png = base.with_extension("developed.png");
-        let dng = base.with_extension("dng");
-        let mut args = self.cfg.python_args.clone();
-        args.extend([
-            self.cfg.develop_tool.display().to_string(),
+        let jpg = base.with_extension("jpg");
+        let args: Vec<String> = vec![
             "develop".into(),
             raw.display().to_string(),
-            "--out-png".into(),
-            png.display().to_string(),
-            "--out-dng".into(),
-            dng.display().to_string(),
-            "--json".into(),
-        ]);
-        match self
-            .runner
-            .run(&self.cfg.python, &args, Duration::from_secs(120))
-        {
-            Ok(o) if o.success() => json!({
+            "--stack".into(),
+            "--out".into(),
+            jpg.display().to_string(),
+        ];
+        let tool = self.cfg.develop_tool.display().to_string();
+        match self.runner.run(&tool, &args, Duration::from_secs(120)) {
+            Ok(o) if o.success() && jpg.is_file() => json!({
                 "ok": true,
-                "png": png.display().to_string(),
-                "dng": dng.display().to_string(),
+                "jpeg": jpg.display().to_string(),
                 "tool": last_json(&o.stdout),
             }),
             Ok(o) => {
@@ -214,7 +291,7 @@ impl CameraClient {
     /// drops the working copy. Never fails the capture: errors come back as text.
     fn save_to_gallery(
         &self,
-        png: &Path,
+        img: &Path,
         stamp: u64,
         sensor: &str,
     ) -> Result<Option<PathBuf>, String> {
@@ -226,13 +303,14 @@ impl CameraClient {
             .parent()
             .and_then(Path::parent)
             .is_some_and(Path::is_dir)
-            || !png.is_file()
+            || !img.is_file()
         {
             return Ok(None);
         }
-        let dst = dir.join(format!("cam-{stamp}-{sensor}.png"));
+        let ext = img.extension().and_then(|e| e.to_str()).unwrap_or("png");
+        let dst = dir.join(format!("cam-{stamp}-{sensor}.{ext}"));
         std::fs::create_dir_all(dir)
-            .and_then(|_| std::fs::copy(png, &dst))
+            .and_then(|_| std::fs::copy(img, &dst))
             .map(|_| Some(dst))
             .map_err(|e| format!("gallery copy failed: {e}"))
     }
@@ -417,8 +495,17 @@ impl Camera for CameraClient {
             .join(format!("cap-{stamp}-{}", req.sensor));
         let (png, raw) = (base.with_extension("png"), base.with_extension("raw"));
         let t0 = Instant::now();
+        let isp = req.develop && self.cfg.develop_tool.exists();
+        // Auto exposure only when the caller set neither value; an explicit one is kept as given.
+        let (exposure_us, gain, meter) = if isp && req.exposure_us.is_none() && req.gain.is_none() {
+            let (e, g, m) = self.meter(&req.sensor, &base);
+            (Some(e), Some(g), Some(m))
+        } else {
+            (req.exposure_us, req.gain, None)
+        };
+        let frames = if isp { BURST_FRAMES } else { 1 };
         let stdout = self.run_client(
-            &self.client_args(req, &png, &raw),
+            &self.client_args(&req.sensor, exposure_us, gain, frames, isp, &png, &raw),
             Duration::from_secs(self.cfg.camera_deadline_s),
         )?;
         let client = last_json(&stdout)
@@ -433,24 +520,36 @@ impl Camera for CameraClient {
                     .to_string(),
             ));
         }
-        let developed = if req.develop && raw.exists() {
+        let developed = if isp && raw.exists() {
             Some(self.develop(&raw, &base))
+        } else if req.develop {
+            Some(json!({"ok": false, "reason": "develop tool not installed"}))
         } else {
             None
         };
-        let gallery = self.save_to_gallery(&png, stamp, &req.sensor);
+        // The developed JPEG is the photo; the client's quick PNG (1/4 resolution) is the fallback.
+        let photo = developed
+            .as_ref()
+            .filter(|d| d["ok"] == true)
+            .and_then(|d| d["jpeg"].as_str())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| png.clone());
+        let gallery = self.save_to_gallery(&photo, stamp, &req.sensor);
+        let tool = developed.as_ref().and_then(|d| d.get("tool"));
         let out = json!({
             "ok": true,
             "sensor": req.sensor,
             "gallery_path": gallery.as_ref().ok().and_then(|p| p.as_ref()).map(|p| p.display().to_string()),
             "gallery_error": gallery.as_ref().err(),
-            "path": png.display().to_string(),
+            "path": photo.display().to_string(),
+            "quick_png": png.display().to_string(),
             "raw": raw.exists().then(|| raw.display().to_string()),
             "developed": developed,
-            "width": client["width"],
-            "height": client["height"],
-            "exposure_us": req.exposure_us,
-            "gain": req.gain,
+            "width": tool.and_then(|t| t.get("width")).unwrap_or(&client["width"]),
+            "height": tool.and_then(|t| t.get("height")).unwrap_or(&client["height"]),
+            "exposure_us": exposure_us,
+            "gain": gain,
+            "meter": meter,
             "ms": t0.elapsed().as_millis() as u64,
             "client": client,
         });
@@ -513,7 +612,6 @@ impl Camera for CameraClient {
 
 #[cfg(test)]
 mod tests {
-    use super::super::runner::fake::{out, FakeRunner};
     use super::super::runner::SysRunner;
     use super::*;
     use crate::testutil::Tmp;
@@ -665,25 +763,112 @@ echo "{\"ok\":true,\"frames\":25,\"sessions\":4,\"seconds\":5,\"effective_fps\":
         assert!(args.contains("--sensor rear"));
     }
 
+    /// A stand-in for the static `s22-develop` binary: `meter` answers 15 ms / 4x, `develop`
+    /// writes the --out JPEG. Every call is appended to dev-args.txt.
+    const DEVELOP_SCRIPT: &str = r#"
+echo "$@" >> "$(dirname "$0")/dev-args.txt"
+case "$1" in
+  meter) echo '{"ok": true, "mean": 0.04, "exposure_us": 15000, "gain": 4.0}';;
+  develop) while [ $# -gt 0 ]; do case "$1" in --out) o=$2;; esac; shift; done
+           echo jpeg > "$o"; echo '{"ok": true, "stacked": 4, "width": 4080, "height": 3060, "ms": 900}';;
+esac
+"#;
+
     #[test]
-    fn develop_step_runs_when_the_tool_is_installed() {
-        let (t, mut cam) = setup(OK_SCRIPT);
-        t.write("srv/s22/hardware/bin/s22-develop", "");
-        let runner = Arc::new(FakeRunner::new(vec![(
-            "develop",
-            vec![out("{\"ok\": true, \"stage_ms\": 12}")],
-        )]));
-        cam.runner = runner.clone();
+    fn isp_meters_bursts_develops_and_saves_the_jpeg() {
+        let (t, cam) = setup(&format!(
+            "echo \"$@\" >> \"$(dirname \"$0\")/args.txt\"\n{OK_SCRIPT}"
+        ));
+        t.script("srv/s22/hardware/bin/s22-develop", DEVELOP_SCRIPT);
+        t.write("mnt/omarchy-trial/root/.openunum/openunum.json", "{}");
         let v = cam.capture(&req("rear")).unwrap();
-        assert_eq!(v["developed"]["ok"], true);
-        assert!(v["developed"]["png"]
-            .as_str()
+
+        let bin = t.path().join("srv/s22/hardware/bin");
+        let calls = std::fs::read_to_string(bin.join("args.txt")).unwrap();
+        let calls: Vec<&str> = calls.lines().collect();
+        assert_eq!(calls.len(), 2, "meter frame + burst: {calls:?}");
+        assert!(calls[0].contains("--frames 1") && calls[0].contains("--cis-exposure-us 10000"));
+        assert!(calls[0].contains("--cis-again 2") && !calls[0].contains("--raw-burst"));
+        for want in [
+            "--frames 4",
+            "--raw-burst",
+            "--cis-exposure-us 15000",
+            "--cis-again 4",
+        ] {
+            assert!(calls[1].contains(want), "{want} missing from {}", calls[1]);
+        }
+        let dev = std::fs::read_to_string(bin.join("dev-args.txt")).unwrap();
+        assert!(
+            dev.contains("meter ") && dev.contains("--max-gain 16"),
+            "{dev}"
+        );
+        assert!(dev.contains("develop ") && dev.contains("--stack"), "{dev}");
+
+        assert_eq!(v["developed"]["ok"], true, "{v}");
+        assert_eq!(
+            (v["exposure_us"].as_u64(), v["gain"].as_f64()),
+            (Some(15000), Some(4.0))
+        );
+        assert_eq!(
+            (v["width"].as_u64(), v["height"].as_u64()),
+            (Some(4080), Some(3060))
+        );
+        assert!(v["path"].as_str().unwrap().ends_with(".jpg"));
+        let g = v["gallery_path"].as_str().expect("gallery_path");
+        assert!(g.ends_with("-rear.jpg"), "{g}");
+        assert_eq!(std::fs::read_to_string(g).unwrap(), "jpeg\n");
+        // the meter frame is scratch: nothing of it is left behind
+        let left: Vec<String> = std::fs::read_dir(&cam.cfg.camera_dir)
             .unwrap()
-            .ends_with(".developed.png"));
-        assert!(runner.called("--out-dng"));
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.contains("meter"))
+            .collect();
+        assert!(left.is_empty(), "{left:?}");
+    }
+
+    #[test]
+    fn explicit_exposure_skips_metering_and_develop_false_skips_the_isp() {
+        let (t, cam) = setup(&format!(
+            "echo \"$@\" >> \"$(dirname \"$0\")/args.txt\"\n{OK_SCRIPT}"
+        ));
+        t.script("srv/s22/hardware/bin/s22-develop", DEVELOP_SCRIPT);
+        let mut r = req("front");
+        r.exposure_us = Some(8000);
+        let v = cam.capture(&r).unwrap();
+        assert!(v["meter"].is_null());
+        assert_eq!(v["developed"]["ok"], true);
+        let bin = t.path().join("srv/s22/hardware/bin");
+        let dev = std::fs::read_to_string(bin.join("dev-args.txt")).unwrap();
+        assert!(!dev.contains("meter"), "{dev}");
+
         let mut no = req("rear");
         no.develop = false;
-        assert!(cam.capture(&no).unwrap()["developed"].is_null());
+        let v = cam.capture(&no).unwrap();
+        assert!(v["developed"].is_null());
+        assert!(v["path"].as_str().unwrap().ends_with(".png"));
+        let calls = std::fs::read_to_string(bin.join("args.txt")).unwrap();
+        assert!(calls.lines().last().unwrap().contains("--frames 1"));
+    }
+
+    #[test]
+    fn develop_failure_falls_back_to_the_quick_png() {
+        let (t, cam) = setup(OK_SCRIPT);
+        t.script(
+            "srv/s22/hardware/bin/s22-develop",
+            "echo 'bad raw' >&2; exit 2",
+        );
+        t.write("mnt/omarchy-trial/root/.openunum/openunum.json", "{}");
+        let v = cam.capture(&req("rear")).unwrap();
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["developed"]["ok"], false);
+        assert_eq!(v["meter"]["ok"], false);
+        // the meter fallback is the shell's 20 ms / 8x
+        assert_eq!(
+            (v["exposure_us"].as_u64(), v["gain"].as_f64()),
+            (Some(20000), Some(8.0))
+        );
+        assert!(v["gallery_path"].as_str().unwrap().ends_with("-rear.png"));
     }
 
     #[test]
