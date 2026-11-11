@@ -3,6 +3,7 @@
 Run: python3 tools/hardware/test_s22_llama_ondemand.py"""
 import importlib.machinery
 import importlib.util
+import http.client
 import json
 import os
 import socket
@@ -143,12 +144,19 @@ class OnDemandTest(unittest.TestCase):
         self.assertIn('/v1/models', self.od.cache)
         self.post()
         self.assertEqual(self.od.loads, 1)            # warm: no second load
-        for _ in range(60):
-            self.get('/health')                         # probes while loaded must not keep it loaded
-            if not self.od.running():
-                break
+        # Probes while loaded must not keep it loaded. Wait on the condition with a deadline (not a
+        # fixed number of sleeps): under CPU load the idle unload can land later. A probe that races
+        # the unload itself may see the connection closed; that is tolerated, the deadline is not.
+        deadline = time.monotonic() + 15
+        while self.od.running() and time.monotonic() < deadline:
+            try:
+                self.get('/health')
+            except (http.client.RemoteDisconnected, ConnectionResetError, urllib.error.URLError):
+                pass
             time.sleep(0.2)
         self.assertFalse(self.od.running())
+        st, _ = self.get('/health')                     # a probe after the unload is answered normally
+        self.assertEqual(st, 200)
         st, body = self.get('/v1/models')               # served from cache while unloaded
         self.assertIn(b'fake', body)
         self.assertFalse(self.od.running())
