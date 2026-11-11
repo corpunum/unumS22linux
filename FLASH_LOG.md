@@ -45,6 +45,34 @@ LineageOS's own published SHA256 manifest (see docs/RECOVERY_COMPARISON.md).
 
 ## Flash history
 
+### 2026-11-12 (Athens) — RECOVERY ← close_range kernel fix — SUCCESS
+
+Software path from native Linux, owner present for the download-mode fallback (not needed). Approved by the
+owner via corpunum-82; hub U-fd91ceec.
+
+- **Kernel:** the running kernel's source (`4e5c5ad7d950` + `tools/hardware/bt-hci-socket-restore.patch`,
+  identical to the recorded candidate commit `f52cbbd7`) plus `tools/hardware/close-range-kernel-fix.patch`
+  (fs/file.c `__range_close()` clamps to the fdtable). Built with `tools/hardware/build-recovery-kernel.sh`:
+  the phone's `/proc/config.gz`, the KBUILD identity from its `/proc/version`, and `make ARCH=arm64 LLVM=1`
+  with **LLVM_IAS unset** and `LOCALVERSION=""`. Only that flag set reproduces the running config, because
+  this tree enables the integrated assembler unless LLVM_IAS=0. `LLVM_IAS=1` turns on HAS_LTO_CLANG, and GNU binutils drop RELR.
+- **Reproducibility evidence:** the rebuilt baseline matches the running kernel on config, version string, all
+  58,633 text-symbol offsets and all 14,707 exported CRCs (the 10-03 symvers). It is **not** byte-identical:
+  the build-id hashes DWARF paths, and .rodata has a 3,200-byte shift that was not root-caused (a symbol-table
+  detail). Accepted as sufficient by corpunum-82.
+- **Image:** `recovery.img` SHA-256 `19aa029333ffcaa94cbc80368329423773e8be649391bda99cd8f797af36a845`, packed with
+  `build-bt-hci-recovery.py --base-sha256` against a verified dump of the live partition. Only the kernel
+  changed; AVB footer verified. Kernel build-id `f95682b41f6fa118365d95f0a430cac4aeb2247c`.
+- **Write:** `dd ... conv=fsync` to `/dev/block/by-name/recovery`, full read-back SHA-256 matched,
+  `s22-reboot recovery`, back in 48 s.
+- **Acceptance:** `subprocess.run(['true'], capture_output=True)` in the chroot returns at once (it used to hang
+  as an unkillable task). Wi-Fi, Tailscale, modem/SIM/LTE, 3 ALSA cards, hci0 (second keepalive attempt),
+  camera (developed JPEG), voice turn, OpenUnum and mute all OK.
+- **Rollback image:** the exact pre-flash partition, SHA-256
+  `b10412715756da3cc8ee221368b49f179cc0c64ab7bd2802976480905e6d8d2f` (private backup on the rig, and staged on
+  the phone in `/srv/s22/state/flash-20261112/`). `dd` it back, verify, `s22-reboot recovery`; if the phone does
+  not boot, use download mode + `samloader flash -p RECOVERY <image>`.
+
 ### 2026-09-18 — Phase 7/8 control-boot test — SUCCESS (with one recovered incident)
 
 1. **RECOVERY** ← `lineage/build-20260915/recovery.img` (100,663,296 bytes,

@@ -35,6 +35,8 @@ Private access details (tailnet name, SSH options, allowlists) live in an untrac
   Deploy: copy the binary to the phone, then `sh /srv/s22/hardware/install-s22d.sh --binary <bin>`
   (`--rollback` restores the old one). Since 11-11 the script swaps the binary in before it stops the old process;
   before that, keepalive could restart the OLD binary in the gap. Check with `readlink /proc/<pid>/exe`: it must not say "(deleted)".
+- **Restarting a keepalive-managed service:** kill its exact PID ONCE, then wait for health. Rapid repeated kills race keepalive and hit its restart limit; :8090 was down for 4 min on 11-11.
+- **Long tests over ssh:** put a file in `/run/s22-autosleep/inhibit.d/` whose content is a TTL in seconds. Otherwise the phone can suspend and drop the session.
 - **Branches:** work lands on `main` only. The pre-rewrite (10-22) local branches were removed on 2026-11-11.
   Every tip was already on main.
 
@@ -47,11 +49,11 @@ Private access details (tailnet name, SSH options, allowlists) live in an untrac
 | UI | sway, unum-fastshell and squeekboard are running. **Known gap:** the shell's Local/Luna model toggle (`s22-touchd cmd_model`, `POST /api/model/switch`) gets 403 `model_change_owner_only`, because installation model changes have been owner-only since OpenUnum 51c94ba0. Planned fix (corpunum-82, 11-11): touchd pairs once as a device through OpenUnum owner pairing (security U-a51b0e20, s-openunum, once it supports non-browser devices). It keeps the credential in a root-only file and sends it on model switches. Never put the hub owner token on the phone. Until then, switch models in the web UI. |
 | Local model | llama-server running Gemma-4 E2B with an MTP draft, `-np 2`, cache reuse; lean append-only window. Measured 11-11 with the screen off, after the governor fix: prefill 26 tok/s (it was 9), generation ~11 tok/s (it was 4.6). Six sustained turns peak at 54 °C. Turns 2-5 of one chat reach their first token in 3.4-3.9 s. `threads-batch 3` is rejected: 52 tok/s, but 77 °C sustained and a guardian hold. The proxy reads the backend argv only at start, so an A/B of backend flags needs a proxy restart. Put an autosleep inhibit file in place during long ssh tests. |
 | Battery | Charge cap at 85 % is active. |
-| Kernel | Still the 09-24 build. The approved recovery-kernel flash (close_range fix) has not been done. |
+| Kernel | 11-12: the close_range fix is flashed (build-id f95682b4, RECOVERY 19aa0293…). Subprocess capture no longer hangs. Rollback and the build recipe are in FLASH_LOG.md. To rebuild, use `tools/hardware/build-recovery-kernel.sh` with `KMAKE_FLAGS="ARCH=arm64 LLVM=1"`. |
 | s22d | 0.3.0, the 11-11 build (camera ISP fix); it includes torch. |
 
 ## Open work (UnumHub)
-- `U-fd91ceec`: S22 deploy and kernel flash. Prompt-cache verification is still open; the flash is still to do.
+- `U-fd91ceec`: done 11-12 (cache verified, power fix, kernel flashed).
 - `U-920ae886`: umbrella item for drivers, local inference speed and TTS (`docs/GAP-PLAN-20261104.md`).
 - `U-63d712a5` / `874d6f85`: "phone offline" items. The phone is reachable again, so the update plan in the owner's
   device-update brief can run.

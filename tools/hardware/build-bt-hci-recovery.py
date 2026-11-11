@@ -241,6 +241,11 @@ def main() -> int:
     parser.add_argument("--build-command",
                         help="human-readable exact build invocation and environment")
     parser.add_argument(
+        "--base-sha256", default=BASE_SHA256,
+        help="expected SHA-256 of --base-image (default: the pinned audio-extras image). Pass the hash of a "
+             "verified dump of the live RECOVERY partition to package a kernel against what the phone runs.",
+    )
+    parser.add_argument(
         "--avbtool", type=Path, default=DEFAULT_AVBTOOL,
         help="pinned avbtool.py path (defaults to tools/avb/avbtool.py)",
     )
@@ -255,8 +260,11 @@ def main() -> int:
     if not kernel.is_file() or kernel.stat().st_size == 0:
         raise SystemExit("kernel must be a nonempty regular file")
     base_image = args.base_image
-    if base_image.is_symlink() or not base_image.is_file() or sha(base_image) != BASE_SHA256:
-        raise SystemExit("pinned audio-extras base image is missing or has the wrong hash")
+    base_sha256 = str(args.base_sha256).lower()
+    if len(base_sha256) != 64 or any(c not in "0123456789abcdef" for c in base_sha256):
+        raise SystemExit("--base-sha256 must be 64 hex characters")
+    if base_image.is_symlink() or not base_image.is_file() or sha(base_image) != base_sha256:
+        raise SystemExit("base image is missing or has the wrong hash")
     if not args.avbtool.is_file() or args.avbtool.is_symlink():
         raise SystemExit(f"pinned avbtool.py is missing or is not a regular file: {args.avbtool}")
     for tool_path, expected_hash, label in (
@@ -284,8 +292,8 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="bt-hci-recovery-") as temp:
         work = Path(temp)
         base_dir = work / "base"
-        if not base_image.is_file() or sha(base_image) != BASE_SHA256:
-            raise SystemExit("pinned audio-extras base image changed during candidate packaging")
+        if not base_image.is_file() or sha(base_image) != base_sha256:
+            raise SystemExit("base image changed during candidate packaging")
         base_info = unpack(unpacker, base_image, base_dir)
         candidate = work / "recovery.img"
         run(
@@ -347,7 +355,7 @@ def main() -> int:
         report = {
             "phone_access": False,
             "base_image": base_name,
-            "base_image_sha256": BASE_SHA256,
+            "base_image_sha256": base_sha256,
             "kernel": str(kernel_copy.relative_to(ROOT)),
             "kernel_sha256": sha(kernel),
             "image": str(image_path.relative_to(ROOT)),
