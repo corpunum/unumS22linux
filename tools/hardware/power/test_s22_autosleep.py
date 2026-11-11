@@ -57,3 +57,15 @@ def test_inhibitors_usb_and_flag(tmp_path, monkeypatch):
 def test_handshake_skipped_while_usb_source_active(monkeypatch):
     monkeypatch.setattr(A, "active_wakeup_sources", lambda: ["dwc3-otg"])
     assert A.wakeup_count_handshake(dict(A.CONFIG)) is None
+
+
+def test_screen_off_governor_is_powersave_only_while_idle():
+    cfg = dict(A.CONFIG)
+    assert A.governor_for([], cfg) == "powersave"
+    # keep-awake reasons that are not work keep the cheap governor
+    assert A.governor_for(["ssh:1", "usb-host", "wakeup:wlan"], cfg) == "powersave"
+    # work: the local model's inhibit file, CPU load, audio, a call
+    for why in (["file:llama-ondemand"], ["busy:40%"], ["pcm:pcmC0D0p"], ["call"], ["ssh:1", "busy:30%"]):
+        assert A.governor_for(why, cfg) == "schedutil", why
+    cfg["work_inhibitors"] = []
+    assert A.governor_for(["busy:90%"], cfg) == "powersave"

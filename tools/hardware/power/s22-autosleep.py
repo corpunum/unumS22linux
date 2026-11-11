@@ -10,7 +10,10 @@
 Policy (all knobs in CONFIG, overridable by /srv/s22/state/autosleep/config.json):
 * Screen on (/run/s22-display-state != off): never suspend; cpufreq governors
   back to schedutil.
-* Screen off: governors -> powersave at once (cheap win), then after
+* Screen off: governors -> powersave while idle (cheap win, ~21 mA); back to
+  schedutil while any WORK inhibitor is active (busy CPU, PCM, call, inhibit file),
+  so screen-off work (the local model, voice) is not held at the minimum clock
+  (2026-11-11: powersave kept the A710 cores at 576 MHz mid-prefill). Then after
   lock_grace_s of continuous "off" + idle, suspend cycles start:
   each cycle arms the RTC for max_sleep_s (housekeeping wake) and writes
   "mem" to /sys/power/state (mem_sleep = deep). Any wakeup IRQ (Power key,
@@ -60,6 +63,10 @@ CONFIG = {
     "locked_governor": "powersave",
     "unlocked_governor": "schedutil",
     "governors": True,
+    # inhibitor prefixes that mean "the phone is working": the governor goes back to
+    # unlocked_governor for them even with the screen off. ssh, usb-host and kernel
+    # wakeup sources keep the phone awake but do not need full clocks.
+    "work_inhibitors": ["busy:", "pcm:", "call", "file:"],
     "max_fail_backoff_s": 120,
 }
 
@@ -186,6 +193,14 @@ def inhibit_files():
             pass
         out.append(n)
     return out
+
+
+def governor_for(why, cfg):
+    """Screen-off governor: unlocked while any work inhibitor is active, else locked."""
+    work = tuple(cfg.get("work_inhibitors") or ())
+    if work and any(w.startswith(work) for w in why):
+        return cfg["unlocked_governor"]
+    return cfg["locked_governor"]
 
 
 def inhibitors(cfg, busy):
@@ -359,18 +374,22 @@ def run():
             time.sleep(cfg["poll_s"]); continue
         if off_since is None:
             off_since = now
+        why = inhibitors(cfg, busy)
         if os.path.exists(FLAG):
-            if gov_state == "locked":
+            if gov_state != "unlocked":
                 set_governor(cfg["unlocked_governor"]); gov_state = "unlocked"
-        elif cfg["governors"] and gov_state != "locked":
-            set_governor(cfg["locked_governor"]); gov_state = "locked"
+        elif cfg["governors"]:
+            want = governor_for(why, cfg)
+            st = "locked" if want == cfg["locked_governor"] else "working"
+            if gov_state != st:
+                set_governor(want); gov_state = st
+                log(event="governor", governor=want, why=why)
         if now - off_since < cfg["lock_grace_s"] or now < awake_until:
             # screen off but still in the grace / post-wake window: say so, so a
             # stale "screen-on" status never lingers (2026-10-22)
             write_status({"state": "locked-grace" if now - off_since < cfg["lock_grace_s"] else "post-wake",
                           "t": time.time(), **tot})
             time.sleep(cfg["poll_s"]); continue
-        why = inhibitors(cfg, busy)
         if why != last_why:
             log(event="inhibit", why=why or [])
             last_why = why

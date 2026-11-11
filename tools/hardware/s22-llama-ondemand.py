@@ -92,6 +92,12 @@ from pathlib import Path
 LISTEN = ('127.0.0.1', 8090)
 BACKEND_PORT = 8091
 HOLD = Path('/run/s22-hold/llama')
+# While a request or warm job runs, an inhibit file tells s22-autosleep the phone is working: it keeps the
+# phone awake AND keeps the cpufreq governor on schedutil. With the screen off, autosleep used to switch to
+# powersave, which held the pinned A710 cores at 576 MHz mid-prefill (9 tok/s instead of ~30, 2026-11-11).
+# The content is a TTL in seconds, so a crashed proxy cannot keep the phone awake for long.
+AUTOSLEEP_INHIBIT = Path('/run/s22-autosleep/inhibit.d/llama-ondemand')
+AUTOSLEEP_INHIBIT_TTL_S = 900
 STATE = Path('/srv/s22/state/llama-ondemand')
 LOCK = Path('/run/s22-llama-ondemand.lock')
 KEEPALIVE_CONFIG = Path('/srv/s22/state/keepalive/config.json')
@@ -542,6 +548,7 @@ class OnDemand:
         self.lock = threading.Lock()
         self.count_lock = threading.Lock()
         self.active = 0
+        self.inhibit_path = AUTOSLEEP_INHIBIT
         self.last_use = clock()
         self.cache: dict[str, bytes] = {}
         self.loads = 0
@@ -898,12 +905,25 @@ class OnDemand:
                 pass
             self.log(event='warm_cancelled', key=w[0][:12], by=(except_key or '')[:12])
 
+    def busy(self, delta: int) -> None:
+        """Count in-flight work and keep the autosleep inhibit file present while there is any."""
+        with self.count_lock:
+            self.active += delta
+            working = self.active > 0
+            try:
+                if working:
+                    self.inhibit_path.parent.mkdir(parents=True, exist_ok=True)
+                    self.inhibit_path.write_text(str(AUTOSLEEP_INHIBIT_TTL_S))   # also refreshes the TTL clock
+                else:
+                    self.inhibit_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
     def warm(self, key: str) -> None:
         """Background: make the llama-server slot hold exactly this prefix, then save it. Best effort."""
         if not self.precache or not self.warm_lock.acquire(blocking=False):
             return
-        with self.count_lock:
-            self.active += 1
+        self.busy(+1)
         t0 = time.monotonic()
         try:
             if self.has_slot(key) or self.hold.exists():
@@ -938,8 +958,7 @@ class OnDemand:
             self.warm_failed[key] = time.time()
             self.log(event='warm_failed', key=key[:12], error=str(e)[:200])
         finally:
-            with self.count_lock:
-                self.active -= 1
+            self.busy(-1)
             self.last_use = self.clock()
             self.warm_lock.release()
 
@@ -1081,8 +1100,7 @@ class OnDemand:
                     'the last %d min on the phone CPU model (time limit); not retrying it' % (
                         n_fail, self.retry_window_s // 60)}}).encode()))
                 return
-            with self.count_lock:
-                self.active += 1
+            self.busy(+1)
             self.last_use = self.clock()
             t_req = self.clock()
             info: dict = {}
@@ -1119,8 +1137,7 @@ class OnDemand:
                              ttft_s=None if first is None else round(first - t_req, 2),
                              total_s=round(self.clock() - t_req, 2), **backend_timings(info.get('tail', b'')))
             finally:
-                with self.count_lock:
-                    self.active -= 1
+                self.busy(-1)
                 self.last_use = self.clock()
             if key:
                 self.observe(spec, key)

@@ -60,6 +60,8 @@ class OnDemandTest(unittest.TestCase):
         self.od = mod.OnDemand(idle_s=1.0, argv=[sys.executable, str(d / 'fake.py'), '--port', str(self.bport)],
                                backend_port=self.bport, hold=self.hold, state=d / 'state', start_timeout_s=10,
                                mid_cap=(self.maxfreq, 1800000))
+        self.inhibit = d / 'inhibit.d' / 'llama-ondemand'
+        self.od.inhibit_path = self.inhibit
         threading.Thread(target=self._serve, daemon=True).start()
         for _ in range(50):
             try:
@@ -95,6 +97,34 @@ class OnDemandTest(unittest.TestCase):
                                      headers={'Content-Type': 'application/json'})
         with urllib.request.urlopen(req, timeout=20) as r:
             return r.status, r.read()
+
+    def test_inhibit_file_exists_only_while_work_is_in_flight(self):
+        self.od.busy(+1)
+        self.assertEqual(self.inhibit.read_text(), str(mod.AUTOSLEEP_INHIBIT_TTL_S))
+        self.od.busy(+1)
+        self.od.busy(-1)
+        self.assertTrue(self.inhibit.exists())          # one job still running
+        self.od.busy(-1)
+        self.assertFalse(self.inhibit.exists())
+
+    def test_request_holds_the_autosleep_inhibit_then_drops_it(self):
+        seen = []
+        done = threading.Event()
+
+        def watch():
+            while not done.is_set():
+                seen.append(self.inhibit.exists())
+                time.sleep(0.01)
+        threading.Thread(target=watch, daemon=True).start()
+        st, _ = self.post()
+        done.set()
+        self.assertEqual(st, 200)
+        self.assertIn(True, seen)                         # present while the request ran
+        for _ in range(100):                              # the handler's finally runs just after the reply
+            if not self.inhibit.exists():
+                break
+            time.sleep(0.02)
+        self.assertFalse(self.inhibit.exists())           # gone once it finished
 
     def test_probe_does_not_load(self):
         st, body = self.get('/health')
