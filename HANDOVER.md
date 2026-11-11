@@ -41,7 +41,7 @@ Private access details (tailnet name, SSH options, allowlists) live in an untrac
 ## Health (2026-11-11 evening)
 | Area | State |
 |---|---|
-| OpenUnum | 2.10.0; the device base is 37 commits behind rig main. One health check fails: `systemd_units_valid`. The chroot has no systemd and keepalive supervises instead, so this is a false alarm. |
+| OpenUnum | 2.10.0, updated 11-11: device/s22 = rig main 78af91c plus the Lightpanda launcher commit. Rollback: branch `device/s22-pre-20261111b` and `openunum.json.bak-20261111-update`. One health check fails: `systemd_units_valid`. The chroot has no systemd and keepalive supervises instead, so it is a false alarm (hub U-a6a2ab67). |
 | Voice (text turn, Luna) | Correct reply. The first filler is heard at 1.3 s, the reply audio starts at 7.9 s, and the turn ends at 17.5 s. The phone stays muted (level 0). |
 | Camera via s22d | Fixed on 11-11. `camera_capture` meters exposure, takes a 4-frame burst and runs `s22-develop --stack` (the binary itself). It returns a 2040x1532 JPEG in about 7.5 s and copies it to the gallery. Same path as the shell's camera button. |
 | UI | sway, unum-fastshell and squeekboard are running. |
