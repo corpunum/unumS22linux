@@ -147,7 +147,12 @@ impl Camera for Fake {
             r.sensor, r.exposure_us, r.gain, r.develop
         ))?;
         match self.capture_file.lock().unwrap().clone() {
-            Some(p) => Ok(json!({"path": p, "developed": true})),
+            Some(p) => {
+                // Like the real camera: the work file plus a copy in the gallery.
+                let g = format!("{p}.gallery.jpg");
+                let _ = std::fs::copy(&p, &g);
+                Ok(json!({"path": p, "gallery_path": g, "developed": true}))
+            }
             None => Ok(out),
         }
     }
@@ -1847,6 +1852,11 @@ mod remote_tests {
         assert_eq!(v["kept"], false);
         assert!(v["state"].get("path").is_none());
         assert!(!img.exists(), "deleted after the task");
+        assert!(
+            !std::path::Path::new(&format!("{}.gallery.jpg", img.display())).exists(),
+            "the gallery copy too"
+        );
+        assert!(v["state"].get("gallery_path").is_none());
         let line: Value = serde_json::from_str(
             std::fs::read_to_string(h.tmp.path().join("captures.jsonl"))
                 .unwrap()
@@ -1896,6 +1906,7 @@ mod remote_tests {
         assert_eq!(s, StatusCode::OK, "{v}");
         assert_eq!(v["kept"], true);
         assert!(img.exists());
+        assert!(std::path::Path::new(&format!("{}.gallery.jpg", img.display())).exists());
         assert!(
             h.fake
                 .calls
@@ -1912,7 +1923,9 @@ mod remote_tests {
         let good = remote::sha256_hex(b"x");
         assert!(RemoteConfig::from_json(&json!({"bind": "0.0.0.0:8767", "peers": [{"name": "r", "node_id": "n", "token_sha256": good}]})).is_err());
         assert!(RemoteConfig::from_json(&json!({"bind": "100.64.0.99:8767", "peers": [{"name": "r", "node_id": "n", "token_sha256": "abc"}]})).is_err());
-        assert!(RemoteConfig::from_json(&json!({"bind": "100.64.0.99:8767", "peers": []})).is_err());
+        assert!(
+            RemoteConfig::from_json(&json!({"bind": "100.64.0.99:8767", "peers": []})).is_err()
+        );
         assert!(RemoteConfig::from_json(&json!({"bind": "100.64.0.99:8767", "peers": [{"name": "r", "node_id": "n", "token_sha256": good}]})).is_ok());
     }
 

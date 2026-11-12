@@ -384,7 +384,8 @@ fn finish_capture(cfg: &RemoteConfig, peer: &str, id: &str, save: bool, v: &mut 
             };
             v["artifact"] = json!({"mime": mime, "base64": base64(&bytes), "bytes": bytes.len()});
             if !save {
-                for k in ["path", "quick_png", "raw"] {
+                // Every copy: the work file, the quick preview, raw frames and the gallery copy.
+                for k in ["path", "quick_png", "raw", "gallery_path"] {
                     if let Some(p) = v["state"][k].as_str() {
                         let _ = std::fs::remove_file(p);
                     }
@@ -392,6 +393,7 @@ fn finish_capture(cfg: &RemoteConfig, peer: &str, id: &str, save: bool, v: &mut 
                 if let Some(m) = v["state"].as_object_mut() {
                     m.remove("path");
                     m.remove("quick_png");
+                    m.remove("gallery_path");
                 }
                 v["kept"] = json!(false);
             } else {
