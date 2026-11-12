@@ -2147,7 +2147,8 @@ class FastVoiceLoop:
                  fallback: Callable | None = None, connect_timeout: float = 2.0,
                  reconnect_s: float = 1.0, client_factory=WsClient, snapshot_fn: Callable | None = device_snapshot,
                  snapshot_s: float = 30.0, log=_log, fillers=None, leveler: 'Leveler | None' = None,
-                 filler_delay_s: float = 1.2, filler_second_s: float = 6.0, filler_repeat_s: float = 25.0):
+                 filler_delay_s: float = 1.2, filler_second_s: float = 6.0, filler_repeat_s: float = 25.0,
+                 turns_log: 'Path | None' = None):
         # fillers: pre-rendered clips (s22_voice.FillerBank). When the rig has not started answering
         # filler_delay_s after the transcript arrives, a "hmm, let me think" clip is queued into the call
         # (again at filler_second_s and every filler_repeat_s, max 4); the rig's own audio queues behind it.
@@ -2167,6 +2168,7 @@ class FastVoiceLoop:
         self.running = False
         self.delegate = None
         self.turns: list[dict] = []
+        self.turns_log = Path(turns_log) if turns_log else None   # one JSON line per answered turn
         self.thread: threading.Thread | None = None
         self.tx_bytes = self.rx_bytes = 0
         self.snapshot_fn, self.snapshot_s = snapshot_fn, snapshot_s
@@ -2328,12 +2330,26 @@ class FastVoiceLoop:
                 if self.filler_events:
                     cur['fillers'] = [f"{f.get('lang')}/{f.get('category')}/{f.get('n')}" for f in self.filler_events]
                     self.filler_events = []
+                self._log_turn(cur)              # file first: whoever sees self.turns also finds the line
                 self.turns.append(cur)
                 cur = {}
             elif t == 'error':
                 self.log(f"fast-voice: server error {ev.get('error')!r}")
                 if ev.get('error') == 'unauthorized':
                     self.running = False
+
+
+    def _log_turn(self, rec: dict) -> None:
+        """Same file and shape as the classic loop's turns.jsonl (plus mode/ts), so both paths are visible."""
+        self.log(f"fast-voice: turn {rec.get('turn')} first_audio_ms={rec.get('first_audio_ms')}")
+        if self.turns_log is None:
+            return
+        try:
+            self.turns_log.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.turns_log, 'a') as f:
+                f.write(json.dumps(dict(rec, mode='fast', ts=round(time.time(), 3))) + '\n')
+        except OSError as e:
+            self.log(f'fast-voice: cannot write {self.turns_log}: {e!r}')
 
 
 # ------------------------------------------------------------------ presets / CLI
@@ -2467,6 +2483,7 @@ def _make_voice_loop(args, call: Call, log):
                              fillers=None if args.no_fillers else load_filler_bank(),
                              leveler=None if args.no_leveler else Leveler(),
                              fallback=(lambda: _make_classic_loop(args, call, log)) if can_fall_back else None,
+                             turns_log=Path(args.work_dir) / time.strftime('%Y%m%d-%H%M%S') / 'turns.jsonl',
                              log=log)
     return _make_classic_loop(args, call, log)
 

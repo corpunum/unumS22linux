@@ -776,7 +776,8 @@ class FillerTests(unittest.TestCase):
             bank = self.Bank(self.make_clip(d))
             rtp = self.PlayRtp()
             loop = M.FastVoiceLoop(rtp, f'ws://127.0.0.1:{srv.port}', snapshot_fn=None, log=quiet, fillers=bank,
-                                   leveler=M.Leveler(), filler_delay_s=0.2, filler_second_s=0.5, filler_repeat_s=5)
+                                   leveler=M.Leveler(), filler_delay_s=0.2, filler_second_s=0.5, filler_repeat_s=5,
+                                   turns_log=Path(d) / 'call' / 'turns.jsonl')
             loop.attach()
             try:
                 self.assertTrue(srv.up.wait(2))
@@ -791,6 +792,9 @@ class FillerTests(unittest.TestCase):
                 srv.push(0x1, json.dumps({'type': 'metrics', 'turn': 1, 'spoken': ['Once.']}).encode())
                 self.assertTrue(wait_for(lambda: loop.turns, 3))
                 self.assertEqual(loop.turns[0]['fillers'], ['en/general/1'])
+                rec = json.loads((Path(d) / 'call' / 'turns.jsonl').read_text().splitlines()[0])
+                self.assertEqual((rec['mode'], rec['turn'], rec['transcript'], rec['reply']),
+                                 ('fast', 1, 'tell me a story', 'Once.'))
             finally:
                 loop.stop()
 
