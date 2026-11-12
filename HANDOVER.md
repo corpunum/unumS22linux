@@ -95,28 +95,31 @@ s22d remote device API on the tailnet (:8767, rig only); speak with a per-uttera
 audio.listen (OFF, owner switch); Settings → Rig access switches; uplink.share (proof passed);
 OpenUnum and the Lightpanda proxy as the unprivileged user `unumagent`.
 
-**Open, in order (updated 2026-11-12 17:14 EET):**
-1. Shipping: run `sh tools/ci/ship-gate.sh` in the worktree before queuing (a hanging node test once stalled
-   the gate for hours); unumship's gate is that script now.
-2. Idle battery run (approved for the night of 11-12, avoid 00:20–01:00 and 23:05–23:25 EET): on the phone
-   `setsid sh /srv/s22/state/drain-run.sh 7200 </dev/null >/dev/null 2>&1 &`, plus a rig-side
-   `sleep 8100; ssh ... 'echo 0 > /sys/class/power_supply/battery/batt_slate_mode'` failsafe. Keep the phone
-   quiet for the 2 h. Figure = raw_soc drop / hours from `/srv/s22/state/drain-20261112/sample.csv`
-   (move the old directory aside first; the working figure on 11-12 was 3.2 %/h).
-3. SIM (Vodafone CU prepaid): data bundles until 2026-12-12 (hub U-ea52645f: renew by 12-08), voice 0, SMS 0.
-   Outbound SMS is paused on the phone (`/srv/s22/state/phoned/sms_paused`; remove the file to resume); the
-   two-step SMS confirm therefore cannot send its codes. SMS and calls are also switched off for the rig in
-   `/srv/s22/state/device-switches.json`. Balance: phoned sends exactly "Y" to 1252 (free). When mobile data
-   misbehaves, read the phone's SMS inbox first (EXPERIMENTS 2026-11-12 afternoon).
-4. P4 (U-fe741e10): the daemon proves the phone path (verified HTTPS, other public IP) before and during
-   failover; the phone refuses to share without working data. Installed on the rig, unit DISABLED; selftest
-   passed both ways. Stage 1 redo 2026-11-12 17:47 EET; stage 2 (true cut) not yet; then the decision to enable.
-   Share cap 10 GB/day.
-5. P5 (U-c8028189): `tools/openunum-rig/skills/s22-phone/` (managed skill; corpunum-82 approves after
-   s-openunum's review; photo/listen/say need `context.turn.ownerProven`, which ships 11-13). Phone URL file
-   `~/.config/unum/s22-device.url` (0600) exists.
-6. Smaller: fast-voice turn log unverified until the next call; voxcpm timeout seen once (U-cec2cfe2);
-   optional root cause of the kernel .rodata shift.
+**Open, in order (updated 2026-11-12 19:40 EET, before a context refresh; savings mode: event-only until Thu 2026-11-19 10:00 EET):**
+1. Shipping: run `sh tools/ci/ship-gate.sh` in the worktree before queuing; unumship's gate is that script now.
+2. Idle battery run, tonight 2026-11-12: a background job (started from the old session, so it may die with it; if
+   `/srv/s22/state/drain-20261112/run.log` has no "start" line at 21:05 EET, start it by hand) moves the day's
+   directory to `drain-20261112-day`, runs `setsid sh /srv/s22/state/drain-run.sh 7200` on the phone at 21:00 EET,
+   and at about 23:15 EET sets `batt_slate_mode` back to 0 from the rig. Avoid 23:05–23:25 (OpenUnum release gate;
+   the phone run is light but the rig-side ssh is not heavy). Result = raw_soc drop per hour from
+   `sample.csv`; the working figure so far was 3.2 %/h (not idle). Charging must be back on afterwards
+   (`batt_slate_mode` 0, status Charging); never below 40 %.
+3. Stage 2 of the rig failover (U-fe741e10), Fri 2026-11-13 10:17 EET: corpunum-82 sends "go" at 10:16 and runs
+   `s22-uplink-cut-test.sh cut 180` (config overrides min_failover_s 120, up_after 3); s-unumtrade confirms
+   the trader flat at 10:07. My watcher script `scratchpad/stage2.sh` starts itself at 10:14 (phone state and route
+   log in `stage2-watch.log`, rig checks in `stage2-check.log`; scratchpad is under /tmp/claude-1000/ for the
+   session); if it is gone, run `watch-share.sh 1200` and the six-round check by hand. Stage 1 passed (EXPERIMENTS
+   2026-11-12 evening). After stage 2: the decision to enable the unit is corpunum-82's.
+4. P5 skill (U-c8028189): `tools/openunum-rig/skills/s22-phone/`, Opus-reviewed twice (28 test groups), URL file
+   `~/.config/unum/s22-device.url` exists. corpunum-82 installs and runs `openunum skills approve s22-phone` after
+   the 11-13 release ships `context.turn`. Telegram turns are not owner-proven: photo/listen/say/task/haptic are
+   refused there by design.
+5. SIM (Vodafone CU prepaid): data bundles until 2026-12-12 (hub U-ea52645f: renew by 12-08), voice 0, SMS 0.
+   Outbound SMS is paused on the phone (`/srv/s22/state/phoned/sms_paused`; remove the file to resume); SMS and
+   calls are also off for the rig in `device-switches.json`. Share cap 10 GB/day. Balance: phoned sends exactly
+   "Y" to 1252 (free). When mobile data misbehaves, read the phone's SMS inbox first.
+6. Smaller: two-step SMS confirm cannot run while SMS is paused; fast-voice turn log unverified until the next
+   call; voxcpm timeout seen once (U-cec2cfe2); optional root cause of the kernel .rodata shift.
 
 **Timers that lived only in the session:** none are running now. (The rig-side charging failsafe for the
 11-12 drain run fired and finished; the phone's charging input is on, `batt_slate_mode` 0.)
