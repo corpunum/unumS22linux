@@ -12,7 +12,8 @@ default route via the phone and put failover_dns on dev. Back to normal only aft
   s22-uplink-failover [--config FILE] run | once | status | sweep      (once/status/sweep print JSON)
 
 Config JSON: phone_gw, api, token_file (required; token default location /etc/unum/s22-device.token,
-root:root 600); dev, targets, interval_s, down_after, up_after, min_failover_s, metric, failover_dns.
+root:root 600); dev, targets, interval_s, down_after, up_after, min_failover_s, metric, failover_dns,
+keepalive_s (normal mode: ask the phone's uplink.status this often to keep the path warm; 0 = off).
 """
 from __future__ import annotations
 
@@ -35,11 +36,13 @@ CONF = Path('/etc/unum/uplink-failover.json')
 STATE = Path('/run/unum-uplink-failover.json')
 AUDIT = Path('/var/log/unum-uplink-failover.jsonl')
 DEFAULTS = {'dev': 'eno1', 'targets': ['1.1.1.1', '9.9.9.9'], 'interval_s': 10, 'down_after': 3,
-            'up_after': 6, 'min_failover_s': 300, 'metric': 50, 'failover_dns': ['1.0.0.1', '149.112.112.112']}
+            'up_after': 6, 'min_failover_s': 300, 'metric': 50, 'failover_dns': ['1.0.0.1', '149.112.112.112'],
+            'keepalive_s': 300}
 MARK, TABLE, RULE_PRIO = 0x178, 178, 1178   # probe packets: fwmark -> table -> DHCP gateway on dev
 RETRY_S = 60          # minimum gap between refused/failed failover attempts (doubles on flapping, max GAP_MAX)
 GAP_MAX = 900
 FLAP_WINDOW_S = 3600  # a failover this soon after the previous one doubles the gap; this long in normal resets it
+DNS_FAIL_S = 600      # a failing DNS restore is audited at most this often
 STATUS_S = 30         # poll the phone's uplink.status at most this often while failing over
 STOP = threading.Event()
 
@@ -147,8 +150,9 @@ def load_config(path: Path) -> dict:
     for k in ('interval_s', 'down_after', 'up_after', 'metric'):
         if not isinstance(cfg[k], int) or cfg[k] < 1:
             raise ConfigError(f'{k} must be a positive integer')
-    if not isinstance(cfg['min_failover_s'], int) or cfg['min_failover_s'] < 0:
-        raise ConfigError('min_failover_s must be a non-negative integer')
+    for k in ('min_failover_s', 'keepalive_s'):
+        if not isinstance(cfg[k], int) or cfg[k] < 0:
+            raise ConfigError(f'{k} must be a non-negative integer')
     if not isinstance(cfg['dev'], str) or not cfg['dev'] or cfg['dev'].startswith('-'):
         raise ConfigError('dev must be an interface name')
     for k in ('targets', 'failover_dns'):
@@ -239,34 +243,61 @@ def route_argv(cfg: dict, verb: str) -> list[str]:
     return ['ip', 'route', verb, 'default', 'via', cfg['phone_gw'], 'dev', cfg['dev'], 'metric', str(cfg['metric'])]
 
 
+def read_dns(cfg: dict) -> list[str]:
+    """Resolvers now on dev (`Link 2 (eno1): a b`), verbatim, minus our own failover_dns."""
+    try:
+        r = run(['resolvectl', 'dns', cfg['dev']], check=False)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    lines = (r.stdout or '').splitlines()
+    if r.returncode != 0 or not lines or '):' not in lines[0]:
+        return []
+    return [a for a in lines[0].partition('):')[2].split() if a.split('%')[0] not in cfg['failover_dns']]
+
+
 def set_dns(cfg: dict, st: dict) -> None:
+    if not st.get('dns_prev'):  # a re-entry after a crash must not save the failover resolvers
+        st['dns_prev'] = read_dns(cfg)
     st['dns_set'] = True
+    write_json(STATE, st)  # the previous resolvers are on disk before we replace them
     if not run_ok(['resolvectl', 'dns', cfg['dev'], *cfg['failover_dns']]):
         audit('dns_failed', action='set')
 
 
-def revert_dns(cfg: dict) -> bool:
-    ok = run_ok(['resolvectl', 'revert', cfg['dev']])
-    if not ok:
-        audit('dns_failed', action='revert')
+def restore_dns(cfg: dict, st: dict) -> bool:
+    """Put back the saved resolvers; with none saved, revert and let NetworkManager re-apply its own."""
+    prev = st.get('dns_prev') or []
+    if prev:
+        ok = run_ok(['resolvectl', 'dns', cfg['dev'], *prev])
+    else:
+        ok = run_ok(['resolvectl', 'revert', cfg['dev']])
+        run_ok(['nmcli', 'device', 'reapply', cfg['dev']])
+    st['dns_set'] = not ok
+    if ok:
+        st['dns_prev'] = []
+    elif now() - st.get('dns_fail_at', 0) >= DNS_FAIL_S:
+        st['dns_fail_at'] = now()
+        audit('dns_failed', action='restore')
     return ok
 
 
 def fresh() -> dict:
     return {'mode': 'normal', 'fails': 0, 'oks': 0, 'sharing': False, 'last_try': 0, 'failover_since': 0,
             'last_failover': 0, 'gap': RETRY_S, 'normal_since': 0, 'dns_set': False, 'status_at': 0,
-            'status_fails': 0}
+            'status_fails': 0, 'dns_prev': [], 'dns_fail_at': 0, 'keepalive_at': 0, 'phone_seen': None,
+            'phone_ok': None}
 
 
 def sweep(cfg: dict) -> dict:
     """Tear everything down and tell the phone to stop sharing (idempotent, whatever STATE says)."""
     run_ok(route_argv(cfg, 'del'))
     cleanup_probe_path()
-    revert_dns(cfg)
+    old = read_json(STATE)  # dns_prev lives here: read it before the state is reset
+    restore_dns(cfg, old)
     ok, why = share(cfg, False)
     audit('failover_off', reason='sweep', ok=ok, detail=why)
-    old = read_json(STATE)
-    st = {**fresh(), **{k: old[k] for k in ('gap', 'last_failover', 'normal_since') if k in old}}
+    keep = ('gap', 'last_failover', 'normal_since', 'phone_seen', 'phone_ok')
+    st = {**fresh(), **{k: old[k] for k in keep if k in old}}
     write_json(STATE, st)
     return st
 
@@ -274,9 +305,9 @@ def sweep(cfg: dict) -> dict:
 def leave_failover(cfg: dict, st: dict, reason: str) -> None:
     t = now()
     run_ok(route_argv(cfg, 'del'))
-    dns_reverted = revert_dns(cfg)
+    restore_dns(cfg, st)
     ok, why = share(cfg, False)
-    st.update(mode='normal', sharing=False, dns_set=not dns_reverted, fails=0, oks=0, last_try=t,
+    st.update(mode='normal', sharing=False, fails=0, oks=0, last_try=t,
               normal_since=t, status_fails=0)
     audit('failover_off', reason=reason, ok=ok, detail=why)
 
@@ -305,6 +336,23 @@ def enter_failover(cfg: dict, st: dict, t: float) -> None:
     audit('failover_on', metric=cfg['metric'], gap=st['gap'])
 
 
+def keepalive(cfg: dict, st: dict, t: float) -> None:
+    """Normal mode: ask the phone now and then so the path stays warm. Never touches mode/fails/oks, never POSTs."""
+    if cfg['keepalive_s'] <= 0 or t - st['keepalive_at'] < cfg['keepalive_s']:
+        return
+    st['keepalive_at'] = t
+    ps = phone_status(cfg)
+    was_up, ever = st['phone_ok'] is not None, st['phone_seen'] is not None
+    if ps is None:
+        if was_up:
+            audit('phone_unreachable', source='keepalive')
+        st['phone_ok'] = None
+        return
+    if ever and not was_up:
+        audit('phone_back', source='keepalive')
+    st['phone_seen'], st['phone_ok'] = t, ps.get('rig_configured') is True
+
+
 def once(cfg: dict) -> dict:
     st = {**fresh(), **read_json(STATE)}
     st.pop('note', None)
@@ -324,9 +372,10 @@ def once(cfg: dict) -> dict:
     else:
         run_ok(route_argv(cfg, 'del'))  # the phone route must never exist in normal mode
         if st['dns_set']:
-            st['dns_set'] = not revert_dns(cfg)
+            restore_dns(cfg, st)
         if st['gap'] > RETRY_S and t - st['normal_since'] >= FLAP_WINDOW_S:
             st['gap'] = RETRY_S
+        keepalive(cfg, st, t)
     gw = main_gateway(cfg)
     if gw is None:  # no DHCP gateway on dev is unknown, not down
         st['note'] = 'no_gateway'

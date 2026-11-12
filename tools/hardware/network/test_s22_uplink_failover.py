@@ -79,6 +79,8 @@ class Base(unittest.TestCase):
             self.rules.append({'priority': 1178, 'fwmark': '0x178', 'table': '178'})
         elif argv[:3] == ['ip', 'rule', 'del'] and self.rules:
             self.rules.pop()
+        elif argv[:3] == ['resolvectl', 'dns', 'eno1'] and len(argv) == 3:
+            out = 'Link 2 (eno1): ' + ' '.join(self.dns or [])
         elif argv[:2] == ['resolvectl', 'dns']:
             self.dns = argv[3:]
         elif argv[:2] == ['resolvectl', 'revert']:
@@ -178,12 +180,19 @@ class Probe(Base):  # change 1
 
 class NoGateway(Base):  # change 2
     def test_no_gateway_is_not_down_and_nothing_is_posted(self):
+        self.reconf(keepalive_s=0)
         self.routes = []
         for _ in range(10):
             st = self.step()
             self.assertEqual((st['mode'], st['note'], st['fails']), ('normal', 'no_gateway', 0))
         self.assertEqual((self.posts, self.gets), ([], []))
         self.assertNotIn('down', self.names() if self.m.AUDIT.exists() else [])
+
+    def test_no_gateway_with_default_keepalive_does_one_get_and_no_post(self):
+        self.routes = []
+        for _ in range(10):
+            self.assertEqual(self.step()['note'], 'no_gateway')
+        self.assertEqual((len(self.gets), self.posts), (1, []))
 
     def test_no_gateway_in_failover_keeps_failover_and_counts_failure(self):
         self.step(3)
@@ -393,6 +402,125 @@ class Dns(Base):
         self.write_conf(failover_dns=['not-an-ip'])
         with self.assertRaises(self.m.ConfigError):
             self.m.load_config(self.conf)
+
+
+class DnsRestore(Base):
+    PREV = [MAIN, 'fe80::1%eno1']
+
+    def test_previous_resolvers_are_saved_and_restored_on_leave(self):
+        self.reconf(up_after=1, min_failover_s=0)
+        self.dns = list(self.PREV)
+        self.step(3)
+        self.assertEqual((self.dns, self.state()['dns_prev']), (DNS, self.PREV))
+        self.ping_ok = True
+        self.step()
+        self.assertEqual(self.dns, self.PREV)
+        self.assertNotIn(['resolvectl', 'revert', 'eno1'], self.cmds)
+        st = self.state()
+        self.assertEqual((st['dns_set'], st['dns_prev'], st['mode']), (False, [], 'normal'))
+
+    def test_failover_resolvers_are_never_saved_as_previous_on_reentry(self):
+        self.dns = list(DNS)   # a crash left the failover resolvers on the link and no saved ones
+        self.step(3)
+        self.assertEqual(self.state()['dns_prev'], [])
+
+    def test_existing_previous_is_not_overwritten_on_reentry(self):
+        self.m.write_json(self.m.STATE, {'mode': 'normal', 'dns_prev': [MAIN]})
+        self.dns = list(DNS)
+        self.step(3)
+        self.assertEqual(self.state()['dns_prev'], [MAIN])
+
+    def test_empty_previous_reverts_then_asks_networkmanager_to_reapply(self):
+        self.reconf(up_after=1, min_failover_s=0)
+        self.step(3)
+        self.assertEqual(self.state()['dns_prev'], [])
+        self.ping_ok = True
+        self.step()
+        rev, rea = ['resolvectl', 'revert', 'eno1'], ['nmcli', 'device', 'reapply', 'eno1']
+        self.assertIn(rev, self.cmds)
+        self.assertLess(self.cmds.index(rev), self.cmds.index(rea))
+        self.assertFalse(self.state()['dns_set'])
+
+    def test_sweep_restores_previous_resolvers_from_state(self):
+        self.m.write_json(self.m.STATE, {'mode': 'failover', 'dns_set': True, 'dns_prev': [MAIN]})
+        self.dns = list(DNS)
+        st = self.m.sweep(self.cfg)
+        self.assertEqual(self.dns, [MAIN])
+        self.assertNotIn(['resolvectl', 'revert', 'eno1'], self.cmds)
+        self.assertEqual((st['dns_set'], st['dns_prev']), (False, []))
+
+    def test_failing_restore_is_audited_once_in_ten_minutes(self):
+        self.m.write_json(self.m.STATE, {'mode': 'normal', 'dns_set': True, 'dns_prev': [MAIN]})
+        self.fail = [['resolvectl', 'dns']]
+        self.ping_ok = True   # stay in normal mode: only the restore can fail
+        self.step(10)
+        self.assertEqual(self.names().count('dns_failed'), 1)
+        st = self.state()
+        self.assertEqual((st['dns_set'], st['dns_prev']), (True, [MAIN]))
+        self.clock += 600
+        self.step()
+        self.assertEqual(self.names().count('dns_failed'), 2)
+
+
+class Keepalive(Base):
+    URL = 'http://phone.example:8767/v1/device/uplink.status'
+
+    def setUp(self):
+        super().setUp()
+        self.ping_ok = True
+
+    def test_keepalive_interval_is_respected(self):
+        self.step(30)   # 10 s .. 300 s
+        self.assertEqual(self.gets, [(self.URL, TOKEN, 10)])
+        self.step()     # 310 s: 300 s after the first answer
+        self.assertEqual(len(self.gets), 2)
+
+    def test_keepalive_never_changes_mode_or_counters(self):
+        self.reconf(keepalive_s=10)
+        for status in ({'rig_configured': True}, None, {'on': False}):
+            self.status = status
+            self.step()
+        st = self.state()
+        self.assertEqual((st['mode'], st['fails'], st['oks'], st['sharing']), ('normal', 0, 3, False))
+        self.assertEqual((len(self.gets), self.posts), (3, []))
+        self.ping_ok = False
+        self.status = None
+        self.assertEqual(self.step(2)['fails'], 2)   # failures still counted, still no failover from GETs
+        self.assertEqual(self.posts, [])
+
+    def test_phone_ok_is_false_when_rig_configured_is_false_or_missing(self):
+        self.reconf(keepalive_s=10)
+        for status, ok in (({'rig_configured': False}, False), ({'on': True}, False),
+                           ({'rig_configured': True}, True)):
+            self.status = status
+            st = self.step()
+            self.assertEqual((st['phone_ok'], st['phone_seen']), (ok, self.clock))
+
+    def test_unreachable_and_back_transitions_are_audited_once_each(self):
+        self.reconf(keepalive_s=10)
+        self.status = {'rig_configured': True}
+        self.step(2)
+        self.status = None
+        st = self.step(3)
+        self.assertEqual((st['phone_ok'], st['phone_seen']), (None, 1020.0))
+        self.status = {'rig_configured': True}
+        self.step(3)
+        self.assertEqual([n for n in self.names() if n.startswith('phone_')], ['phone_unreachable', 'phone_back'])
+
+    def test_keepalive_zero_disables_it(self):
+        self.reconf(keepalive_s=0)
+        self.step(50)
+        self.assertEqual((self.gets, self.posts), ([], []))
+        self.assertIsNone(self.state()['phone_ok'])
+
+    def test_keepalive_s_validation(self):
+        self.assertEqual(self.cfg['keepalive_s'], 300)
+        for bad in (-1, 1.5, '300', None):
+            self.write_conf(keepalive_s=bad)
+            with self.assertRaises(self.m.ConfigError):
+                self.m.load_config(self.conf)
+        self.write_conf(keepalive_s=0)
+        self.assertEqual(self.m.load_config(self.conf)['keepalive_s'], 0)
 
 
 class StateFirst(Base):

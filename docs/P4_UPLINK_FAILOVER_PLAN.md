@@ -93,6 +93,25 @@ the sketch above in these points:
 - **Restart during an outage** adopts the running failover if the phone still shares; otherwise it sweeps
   and always sends `off`.
 - **Token:** a root-only copy in `/etc/unum/s22-device.token` (the unit cannot read the home directory).
+- **DNS on the way back:** the resolvers that were on `eno1` before are saved and put back
+  (`resolvectl revert` would wipe the router's address that NetworkManager had set).
+- **Keepalive:** in normal mode the phone's `uplink.status` is read every 5 minutes. It keeps the direct
+  Tailscale path over the LAN warm (the relay is unreachable in an outage) and notices early when the phone
+  is unreachable or no longer has this rig configured.
+
+### Proving it without unplugging anything: `s22-uplink-cut-test.sh`
+
+Run as root on the rig, only while the daemon is active (it refuses otherwise). It loads an nftables
+`netdev` egress rule on `eno1` that matches the main gateway's MAC address, and a transient systemd timer
+removes it (default 240 s, 1 s accuracy). Traffic to the LAN, to the phone, and through the phone passes.
+
+1. `probe`: drops only the daemon's marked probe. The main line keeps working; the daemon still fails over.
+2. `cut`: drops everything sent to the internet through the main gateway. A true outage until failover is up.
+
+Both stages move ALL rig traffic to the phone (another public address, LTE data): open connections break at
+failover and again at failback, and the rig stays on the phone for at least `min_failover_s`. Run it with the
+trading engine flat or paused. NetworkManager's connectivity check may move traffic to Wi-Fi during `cut`;
+that softens the test but does not affect the daemon.
 
 Not yet proven on the rig: the marked probe under the unit's capabilities, and whether the request to the
 phone gets through over Tailscale with the WAN cut (needs a direct LAN path). Both need one live test with
