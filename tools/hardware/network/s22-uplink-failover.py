@@ -236,7 +236,11 @@ def phone_status(cfg: dict) -> dict | None:
         code, body = http_get(cfg['api'].rstrip('/') + '/v1/device/uplink.status', cfg['token'], 10)
     except Exception:
         return None
-    return body if code == 200 and body else None
+    if code != 200 or not body:
+        return None
+    # s22d answers {ok, cap, effect, state: {on, rig_configured, ...}}; hand back the state fields.
+    inner = body.get('state')
+    return {**body, **inner} if isinstance(inner, dict) else body
 
 
 def route_argv(cfg: dict, verb: str) -> list[str]:

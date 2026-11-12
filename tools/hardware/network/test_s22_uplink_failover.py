@@ -488,6 +488,16 @@ class Keepalive(Base):
         self.assertEqual(self.step(2)['fails'], 2)   # failures still counted, still no failover from GETs
         self.assertEqual(self.posts, [])
 
+    def test_status_fields_are_read_from_the_state_object_s22d_really_sends(self):
+        real = {'ok': True, 'cap': 'uplink.status', 'effect': 'read',
+                'state': {'on': False, 'rig_configured': True, 'battery': 85, 'forwarding': False}}
+        self.status = real
+        ps = self.m.phone_status(self.cfg)
+        self.assertIs(ps['on'], False)
+        self.assertIs(ps['rig_configured'], True)
+        self.m.once(self.cfg)
+        self.assertIs(self.m.read_json(self.m.STATE)['phone_ok'], True)
+
     def test_phone_ok_is_false_when_rig_configured_is_false_or_missing(self):
         self.reconf(keepalive_s=10)
         for status, ok in (({'rig_configured': False}, False), ({'on': True}, False),
