@@ -500,7 +500,7 @@ def openunum(method: str, path: str, body: dict | None = None, timeout: float = 
     except urllib.error.HTTPError as e:
         try:
             doc = json.loads(e.read().decode() or '{}')
-        except ValueError:
+        except (ValueError, OSError):      # unreadable body (reset, timeout): the status still counts
             doc = {}
         doc = doc if isinstance(doc, dict) else {}
         doc.setdefault('ok', False)
@@ -979,9 +979,15 @@ class Daemon:
         except FileNotFoundError:
             pass
         srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        srv.bind(str(SOCK))
-        os.chmod(SOCK, 0o600)
+        tmp = SOCK.with_name(SOCK.name + '.new')   # appear only once listening: no "connection refused" window
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
+        srv.bind(str(tmp))
+        os.chmod(tmp, 0o600)
         srv.listen(8)
+        os.replace(tmp, SOCK)
         srv.settimeout(1.0)
         while not self.stopping.is_set():
             try:

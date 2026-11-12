@@ -14,7 +14,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { anySignal } from './daemon-client.mjs';
 import {
-  isOwner, ownerSmsPrompt, untrustedSmsPrompt, ownerCallPrompt, untrustedCallPrompt
+  isOwner, ownerSmsPrompt, allowlistedSmsPrompt, untrustedSmsPrompt, ownerCallPrompt, untrustedCallPrompt
 } from './policy.mjs';
 
 export function backoffDelay(attempt, initialMs, maxMs, rand = Math.random) {
@@ -87,6 +87,8 @@ export class EventBridge {
       minPollIntervalMs: Number(config.minPollIntervalMs ?? 500),
       replayBacklogOnFirstRun: Boolean(config.replayBacklogOnFirstRun),
       answerUnknownCalls: Boolean(config.answerUnknownCalls),
+      ownerSmsInstructions: Boolean(config.ownerSmsInstructions),
+      notifyUnknownSenders: Boolean(config.notifyUnknownSenders),
       maxDispatchAttempts: Number(config.maxDispatchAttempts ?? 10)
     };
     this.log = { info: log.info || (() => {}), error: log.error || (() => {}) };
@@ -279,9 +281,14 @@ export class EventBridge {
     if (ev?.type === 'sms_received') {
       const from = String(pick(ev, 'from', 'number', 'sender') ?? '');
       const msg = { from, text: pick(ev, 'text', 'body') ?? '', ts: pick(ev, 'ts'), id: pick(ev, 'id') };
-      return isOwner(from, owners)
-        ? { sessionId: this.cfg.sessionId, trusted: true, message: ownerSmsPrompt(msg) }
-        : { sessionId: this.cfg.untrustedSessionId, trusted: false, message: untrustedSmsPrompt(msg, owners) };
+      if (isOwner(from, owners)) {
+        return { sessionId: this.cfg.sessionId, trusted: true,
+                 message: this.cfg.ownerSmsInstructions ? ownerSmsPrompt(msg) : allowlistedSmsPrompt(msg) };
+      }
+      // Senders off the allowlist start no turn (the SMS stays in the inbox, readable with sms_inbox) unless the
+      // owner turned notify_unknown_senders on.
+      if (!this.cfg.notifyUnknownSenders) return null;
+      return { sessionId: this.cfg.untrustedSessionId, trusted: false, message: untrustedSmsPrompt(msg, owners) };
     }
     if (ev?.type === 'call_incoming') {
       const number = String(pick(ev, 'number', 'from') ?? '');
@@ -296,7 +303,10 @@ export class EventBridge {
   async dispatch(ev, signal) {
     if (!ev.__seen) { this._remember(ev); Object.defineProperty(ev, '__seen', { value: true }); }
     const turn = this.buildTurn(ev);
-    if (!turn) return { outcome: 'skipped' };
+    if (!turn) {
+      if (ev?.type === 'sms_received') this.log.info('bridge_sms_not_allowlisted', { seq: ev.seq });  // no number, no text
+      return { outcome: 'skipped' };
+    }
     const res = await this.poster.post(turn.sessionId, turn.message, signal);
     if (res.outcome === 'delivered' || res.outcome === 'delivered_unknown') {
       this.stats.turnsPosted += 1;

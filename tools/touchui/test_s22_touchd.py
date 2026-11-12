@@ -521,10 +521,13 @@ class OwnerPairTest(unittest.TestCase):
         class H(http.server.BaseHTTPRequestHandler):
             def do_POST(self):
                 seen.append(self.headers.get('x-openunum-owner-session'))
+                body = b'{"ok": false, "error": "model_change_owner_only"}'
+                self.rfile.read(int(self.headers.get('content-length') or 0))   # drain: no reset on close
                 self.send_response(403)
                 self.send_header('content-type', 'application/json')
+                self.send_header('content-length', str(len(body)))
                 self.end_headers()
-                self.wfile.write(b'{"ok": false, "error": "model_change_owner_only"}')
+                self.wfile.write(body)
 
             def log_message(self, *a):
                 pass

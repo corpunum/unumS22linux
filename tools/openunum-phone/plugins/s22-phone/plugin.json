@@ -22,6 +22,8 @@
     "bridge_start_delay_ms": 3000,
     "replay_backlog_on_first_run": false,
     "answer_unknown_calls": false,
+    "owner_sms_instructions": false,
+    "notify_unknown_senders": false,
     "max_sms_chars": 1000,
     "data_dir": ""
   }
