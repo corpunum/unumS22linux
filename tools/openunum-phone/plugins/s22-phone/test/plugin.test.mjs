@@ -29,7 +29,7 @@ function listen(handler) {
   return new Promise((resolve) => {
     const server = http.createServer(handler);
     server.keepAliveTimeout = 1;
-    server.listen(0, '127.0.0.1', () => resolve(server));
+    server.listen(0, '127.0.0.1', () => { server.unref(); resolve(server); });   // a failing case must not keep node alive
   });
 }
 function close(server) {
@@ -443,7 +443,7 @@ describe('daemon down', () => {
     assert.deepEqual(delays.slice(0, 4), [10, 20, 40, 80]);
     // bring the daemon up on that same port
     const daemon = new FakeDaemon();
-    daemon.server = await new Promise((resolve) => { const s = http.createServer((q, r) => daemon.handle(q, r)); s.listen(Number(new URL(url).port), '127.0.0.1', () => resolve(s)); });
+    daemon.server = await new Promise((resolve) => { const s = http.createServer((q, r) => daemon.handle(q, r)); s.listen(Number(new URL(url).port), '127.0.0.1', () => { s.unref(); resolve(s); }); });
     daemon.url = url;
     await waitFor(() => b.stats.consecutiveFailures === 0 && b.stats.daemonReachable === true, { timeout: 3000 });
     await daemon.inject('sms', { from: OWNER, text: 'back online?' });
