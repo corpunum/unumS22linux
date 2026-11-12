@@ -2076,3 +2076,125 @@ mod p2_tests {
             .starts_with("GET /api/sessions/device:task:123 "));
     }
 }
+
+// ------------------------------------------------------------ audio.listen (P3)
+
+mod listen_tests {
+    use super::*;
+
+    fn h_with_fakes() -> H {
+        H::new()
+    }
+
+    fn arm(h: &H) -> (std::path::PathBuf, std::path::PathBuf) {
+        let marker = h.tmp.path().join("recorded");
+        let rec = h.tmp.script(
+            "bin/s22-rec",
+            &format!("echo $1 > {m}; printf RIFF > \"$2\"", m = marker.display()),
+        );
+        let asr = h.tmp.script(
+            "bin/asr",
+            r#"echo 'log line'; echo '{"text": " hello room ", "tokens": []}'"#,
+        );
+        let _ = (rec, asr);
+        (marker, h.tmp.path().join("bin/asr"))
+    }
+
+    fn cfg_listen(h: &H) -> H {
+        let root = h.tmp.path().to_path_buf();
+        H::with(move |c| {
+            c.rec_tool = root.join("bin/s22-rec");
+            c.asr_cmd = vec![root.join("bin/asr").display().to_string(), "{wav}".into()];
+            c.listen_dir = root.join("listen");
+            c.listen_dir_in_chroot = root.join("listen").display().to_string();
+            c.switches_path = root.join("switches.json");
+            c.capture_audit = root.join("captures.jsonl");
+        })
+    }
+
+    #[tokio::test]
+    async fn off_by_default_for_every_caller() {
+        let base = h_with_fakes();
+        let (marker, _) = arm(&base);
+        let h = cfg_listen(&base);
+        let (s, v) = h
+            .send(
+                "POST",
+                "/v1/device/audio.listen",
+                Some(json!({"seconds": 5})),
+            )
+            .await;
+        assert_eq!(
+            (s, code(&v)),
+            (StatusCode::FORBIDDEN, "capability_off"),
+            "{v}"
+        );
+        assert!(!marker.exists(), "nothing recorded");
+    }
+
+    #[tokio::test]
+    async fn no_banner_no_recording() {
+        let base = h_with_fakes();
+        let (marker, _) = arm(&base);
+        base.tmp.write("switches.json", r#"{"audio.listen": true}"#);
+        let h = cfg_listen(&base);
+        let (s, v) = h
+            .send(
+                "POST",
+                "/v1/device/audio.listen",
+                Some(json!({"seconds": 5})),
+            )
+            .await;
+        assert_eq!(s, StatusCode::SERVICE_UNAVAILABLE, "{v}");
+        assert!(!marker.exists(), "nothing recorded without the banner");
+    }
+
+    #[tokio::test]
+    async fn listens_transcribes_deletes_and_audits() {
+        let base = h_with_fakes();
+        let (marker, _) = arm(&base);
+        base.tmp.write("switches.json", r#"{"audio.listen": true}"#);
+        let h = cfg_listen(&base);
+        let banners = crate::real::touch::fake::serve(
+            &h.app.cfg.touch_sock,
+            |_| json!({"ok": true, "result": "ok"}),
+        );
+        let (s, v) = h
+            .send(
+                "POST",
+                "/v1/device/audio.listen",
+                Some(json!({"seconds": 7})),
+            )
+            .await;
+        assert_eq!(s, StatusCode::OK, "{v}");
+        assert_eq!(v["state"]["transcript"], "hello room");
+        assert_eq!(v["state"]["kept"], false);
+        assert_eq!(std::fs::read_to_string(&marker).unwrap().trim(), "7");
+        let b = banners.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(
+            (b["cmd"].as_str(), b["args"][0].as_str()),
+            (Some("ui"), Some("card"))
+        );
+        let left: Vec<_> = std::fs::read_dir(&h.app.cfg.listen_dir).unwrap().collect();
+        assert!(left.is_empty(), "the audio is deleted");
+        let audit = std::fs::read_to_string(&h.app.cfg.capture_audit).unwrap();
+        let line: Value = serde_json::from_str(audit.lines().last().unwrap()).unwrap();
+        assert_eq!(
+            (
+                line["cap"].as_str(),
+                line["seconds"].as_u64(),
+                line["chars"].as_u64()
+            ),
+            (Some("audio.listen"), Some(7), Some(10))
+        );
+        assert!(!audit.contains("hello room"), "no content in the audit");
+        let (s, v) = h
+            .send(
+                "POST",
+                "/v1/device/audio.listen",
+                Some(json!({"seconds": 500})),
+            )
+            .await;
+        assert_eq!((s, code(&v)), (StatusCode::BAD_REQUEST, "bad_request"));
+    }
+}

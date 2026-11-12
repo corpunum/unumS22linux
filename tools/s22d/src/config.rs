@@ -41,6 +41,15 @@ pub struct Config {
     pub camera_allow_fw_stall: bool,
     pub display_tool: PathBuf,
     pub touch_sock: PathBuf,
+    /// audio.listen: the owner's capability switches, the mic recorder, the ASR command
+    /// (`{wav}` is replaced by the chroot path), the tmpfs work dir (host path + the chroot's view)
+    /// and the capture audit.
+    pub switches_path: PathBuf,
+    pub rec_tool: PathBuf,
+    pub asr_cmd: Vec<String>,
+    pub listen_dir: PathBuf,
+    pub listen_dir_in_chroot: String,
+    pub capture_audit: PathBuf,
     pub confirm_dir: PathBuf,
     pub confirm_timeout_s: u64,
     pub modem_up: PathBuf,
@@ -116,6 +125,20 @@ impl Config {
             camera_allow_fw_stall: true,
             display_tool: p("srv/s22/hardware/bin/s22-display"),
             touch_sock: p("mnt/omarchy-trial/run/s22-touch/ctl.sock"),
+            switches_path: p("srv/s22/state/device-switches.json"),
+            rec_tool: p("srv/s22/hardware/bin/s22-rec"),
+            asr_cmd: [
+                "chroot", "/mnt/omarchy-trial", "taskset", "-c", "4-7",
+                "/opt/s22-asr/bin/sherpa-onnx-offline", "--num-threads=4", "--model-type=nemo_ctc",
+                "--nemo-ctc-model=/opt/s22-asr/sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8/model.int8.onnx",
+                "--tokens=/opt/s22-asr/sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8/tokens.txt", "{wav}",
+            ]
+            .iter()
+            .map(|x| x.to_string())
+            .collect(),
+            listen_dir: p("mnt/omarchy-trial/run/s22d-listen"),
+            listen_dir_in_chroot: "/run/s22d-listen".into(),
+            capture_audit: p("srv/s22/state/audit/device-captures.jsonl"),
             confirm_dir: p("mnt/omarchy-trial/run/s22-touch/confirm"),
             confirm_timeout_s: 60,
             modem_up: p("srv/s22/hardware/bin/s22-modem-up"),

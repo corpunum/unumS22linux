@@ -580,6 +580,27 @@
     {
       "args": {
         "additionalProperties": false,
+        "properties": {
+          "seconds": {
+            "maximum": 120,
+            "minimum": 3,
+            "type": "integer"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Listen to the room for a few seconds (default 20, max 120) and answer with the transcript (on-phone ASR). Shows a banner on the screen while recording; no audio is kept. OFF unless the owner switched it on on the phone.",
+      "effect": "action",
+      "id": "audio.listen",
+      "reason": null,
+      "timeout_s": 260
+    },
+    {
+      "args": {
+        "additionalProperties": false,
         "properties": {},
         "required": [],
         "type": "object"

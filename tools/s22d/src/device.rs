@@ -106,6 +106,7 @@ pub fn defs() -> Vec<DevCap> {
         c("speak", Action, 200, "Say a text out loud on the phone's speaker (the owner's voice), then back to the resting mute.", json!({"text": {"type": "string", "minLength": 1, "maxLength": 1000}}), &["text"]),
         c("task.submit", Action, 40, "Give the phone's own agent (its local model) a task. Answers with the task's session id, and the reply when it is ready within ~30 s; otherwise poll task.get.", json!({"text": {"type": "string", "minLength": 1, "maxLength": 4000}}), &["text"]),
         c("task.get", Read, 15, "The latest reply of a task started with task.submit (session from its answer).", json!({"session": {"type": "string", "maxLength": 80}}), &["session"]),
+        c("audio.listen", Action, 260, "Listen to the room for a few seconds (default 20, max 120) and answer with the transcript (on-phone ASR). Shows a banner on the screen while recording; no audio is kept. OFF unless the owner switched it on on the phone.", json!({"seconds": {"type": "integer", "minimum": 3, "maximum": 120}}), &[]),
         c("screenshot", Action, 15, "Save a screenshot of the shell to the gallery (as Power + Volume down). The screen must be on.", json!({}), &[]),
     ]
 }
@@ -134,6 +135,8 @@ fn availability(app: &Shared, id: &str) -> Option<String> {
             (!cfg.shell_sock.exists()).then(|| "unum-fastshell is not running".to_string())
         }
         "speak" => (!cfg.touch_sock.exists()).then(|| "s22-touchd is not running".to_string()),
+        "audio" => (!cfg.rec_tool.exists())
+            .then(|| format!("recorder missing: {}", cfg.rec_tool.display())),
         _ => None,
     }
 }
@@ -612,6 +615,18 @@ async fn run(app: &Shared, cap: &DevCap, a: &Args) -> ApiResult<Out> {
                 json!({"spoken": true, "played": r["played"], "engine": r["engine"], "ms": r["ms"]}),
             )
         }
+        "audio.listen" => {
+            // The owner's switch binds every caller (the chroot agent via loopback too), not only remote ones.
+            if !crate::remote::switch_on(&cfg.switches_path, "audio.listen") {
+                return Err(ApiError::denied(
+                    "capability_off",
+                    "listening is switched off; only the owner can switch it on, on the phone",
+                ));
+            }
+            let secs = a.int("seconds", 3, 120)?.unwrap_or(20);
+            let caller = crate::app::CALLER.try_with(|c| *c).unwrap_or("internal");
+            out(blocking(move || listen(&cfg, secs, caller)).await?)
+        }
         "task.submit" => {
             let text = a.need_str("text")?;
             if !(1..=4000).contains(&text.chars().count()) {
@@ -700,6 +715,104 @@ async fn run(app: &Shared, cap: &DevCap, a: &Args) -> ApiResult<Out> {
             "no such capability",
         )),
     }
+}
+
+/// audio.listen: banner first (no banner, no recording), record to tmpfs, transcribe on the phone,
+/// delete the audio whatever happens, audit the capture (never the content).
+fn listen(cfg: &crate::config::Config, secs: u64, caller: &str) -> ApiResult<Value> {
+    use crate::real::runner::{Runner, SysRunner};
+    let banner = crate::real::touch::request(
+        &cfg.touch_sock,
+        &json!({"cmd": "ui", "args": ["card", "Listening", format!("The {caller} is listening to the room for {secs} s (audio.listen). Nothing is kept."), (secs + 15).to_string()]}),
+        Duration::from_secs(8),
+    );
+    if !banner.as_ref().is_ok_and(|v| v["ok"] == json!(true)) {
+        return Err(ApiError::unavailable(
+            "cannot show the listening banner, so nothing was recorded",
+        ));
+    }
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&cfg.listen_dir)
+            .map_err(|e| ApiError::internal(format!("listen dir: {e}")))?;
+    }
+    let ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let name = format!("{ms}.wav");
+    let wav = cfg.listen_dir.join(&name);
+    struct Gone(std::path::PathBuf);
+    impl Drop for Gone {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+    let _gone = Gone(wav.clone());
+    let r = SysRunner
+        .run(
+            &cfg.rec_tool.display().to_string(),
+            &[secs.to_string(), wav.display().to_string()],
+            Duration::from_secs(secs + 30),
+        )
+        .map_err(|e| ApiError::upstream(format!("recorder: {e}")))?;
+    if !r.success() || !wav.exists() {
+        return Err(ApiError::upstream(format!(
+            "recording failed: {}",
+            r.stderr
+                .chars()
+                .rev()
+                .take(200)
+                .collect::<String>()
+                .chars()
+                .rev()
+                .collect::<String>()
+        )));
+    }
+    let in_chroot = format!("{}/{name}", cfg.listen_dir_in_chroot);
+    let argv: Vec<String> = cfg
+        .asr_cmd
+        .iter()
+        .map(|x| x.replace("{wav}", &in_chroot))
+        .collect();
+    let (prog, rest) = argv
+        .split_first()
+        .ok_or_else(|| ApiError::internal("no ASR command"))?;
+    let o = SysRunner
+        .run(prog, rest, Duration::from_secs(120))
+        .map_err(|e| ApiError::upstream(format!("asr: {e}")))?;
+    let text = asr_text(&o.stdout)
+        .or_else(|| asr_text(&o.stderr))
+        .unwrap_or_default();
+    if !o.success() && text.is_empty() {
+        return Err(ApiError::upstream("speech recognition failed"));
+    }
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    crate::remote::append_capture(
+        &cfg.capture_audit,
+        &json!({"ts": ts, "caller": caller, "cap": "audio.listen", "seconds": secs, "chars": text.chars().count(), "kept": false}),
+    );
+    Ok(json!({"transcript": text, "seconds": secs, "kept": false}))
+}
+
+/// sherpa-onnx prints a JSON line with "text"; plain output otherwise.
+fn asr_text(out: &str) -> Option<String> {
+    for line in out.lines().rev() {
+        let l = line.trim();
+        if l.starts_with('{') && l.contains("\"text\"") {
+            if let Ok(v) = serde_json::from_str::<Value>(l) {
+                return v["text"].as_str().map(|t| t.trim().to_string());
+            }
+        }
+    }
+    let t = out.trim();
+    (!t.is_empty() && !t.contains('\n')).then(|| t.to_string())
 }
 
 /// The device API's answer when the owner was asked: an explicit no is final (`owner_denied`);

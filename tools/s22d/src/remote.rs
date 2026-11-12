@@ -48,6 +48,7 @@ pub const REMOTE_CAPS: &[&str] = &[
     "speak",
     "task.submit",
     "task.get",
+    "audio.listen",
 ];
 
 /// Captures: results go back in the response, then the file is deleted unless `save: true`.
