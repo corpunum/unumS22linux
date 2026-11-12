@@ -1918,6 +1918,25 @@ mod remote_tests {
         );
     }
 
+    #[tokio::test]
+    async fn get_query_arguments_reach_the_device_api() {
+        let h = H::new();
+        let (s, v) = call(
+            &h,
+            "100.64.0.1:1",
+            Some(TOKEN),
+            "GET",
+            "/v1/device/task.get?session=owner-chat",
+            None,
+        )
+        .await;
+        assert_eq!((s, code(&v)), (StatusCode::BAD_REQUEST, "bad_request"));
+        assert!(
+            v["error"].as_str().unwrap().contains("device:task:"),
+            "the session argument arrived: {v}"
+        );
+    }
+
     #[test]
     fn config_rejects_non_tailnet_binds_and_bad_hashes() {
         let good = remote::sha256_hex(b"x");

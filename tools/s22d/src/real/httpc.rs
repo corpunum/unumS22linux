@@ -80,6 +80,8 @@ pub fn request_with<S: Read + Write>(
         match s.read(&mut buf) {
             Ok(0) => break,
             Ok(n) => raw.extend_from_slice(&buf[..n]),
+            // A signal (the phone suspending and resuming mid-request) is not an error: read again.
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(e) => return Err(HttpError::Io(e.to_string())),
         }
         if raw.len() > 4 << 20 {

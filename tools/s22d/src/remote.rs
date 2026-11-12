@@ -325,6 +325,7 @@ async fn dispatch(
     get: bool,
     req: Request,
 ) -> (StatusCode, Json<Value>) {
+    let query = req.uri().query().map(str::to_string);
     let peer = req
         .extensions()
         .get::<PeerName>()
@@ -359,7 +360,7 @@ async fn dispatch(
         args.to_string().into_bytes()
     };
     let (status, Json(mut v)) =
-        crate::device::call(st.app.clone(), id.clone(), &raw, None, get).await;
+        crate::device::call(st.app.clone(), id.clone(), &raw, query, get).await;
     if status == StatusCode::OK && CAPTURES.contains(&id.as_str()) {
         finish_capture(&st.cfg, &peer, &id, save, &mut v);
     }
