@@ -18,7 +18,7 @@ They did most of it. Agents (Claude, GPT Luna through my framework
 `/init`, the boot handoff, the persistence layer and the drivers glue. **Other agents reviewed
 every step**, adversarially, before anything touched the phone. Every claim below has a log, a
 measurement or a screenshot behind it, and the failures are written down too: the
-[experiment log](EXPERIMENTS.md) is 2,800 lines long.
+[experiment log](EXPERIMENTS.md) is over 3,400 lines long.
 
 Today the phone boots from its RECOVERY partition into Linux and runs **our own Rust touch shell**
 that draws straight to the display. It talks through its own speaker in English and Greek, takes
@@ -31,7 +31,7 @@ _(Screenshots of the phone were removed from the public repo for privacy, 2026-1
 
 **unum-fastshell**, our Rust shell (screenshots from the phone, 2026-10-21/22):
 
-- **Fast:** a tap opens a page in **~9 ms** (the previous QML shell: 63 ms; the first desktop drew
+- **Fast:** a tap opens a page in **~12 ms** (the previous QML shell: 63 ms; the first desktop drew
   at ~3 frames/s). 11 MB of memory, 0.4% CPU when idle.
 - **Agent chat** streams the answer as it arrives, with our own English/Greek keyboard; the **Talk**
   button runs the voice loop.
@@ -50,11 +50,11 @@ Two days of agent work, every item measured on the phone:
 |---|---|---|
 | 🔊 **Audio** | "playback stalls, no DMA progress" | Speaker + mic work through Samsung's DSP graph. The bug: Android plays into virtual *calliope* devices, we wrote straight into the DSP's output end. Found by disassembling the stock audio library |
 | 🗣️ **Voice** | render only, muted | The phone speaks (Whisper transcribes its own speaker exactly in Greek); fillers like "hmm, let me check…" while the agent thinks, and it speaks its thinking |
-| 👆 **UI** | 63–120 ms per page | Rust KMS shell, ~9 ms; Samsung's Vulkan driver can also scan out with zero copy |
+| 👆 **UI** | 63–120 ms per page | Rust KMS shell, ~12 ms; Samsung's Vulkan driver can also scan out with zero copy |
 | 📷 **Camera** | raw Bayer frames | software ISP: demosaic, white balance, stock colour matrix, burst denoise |
 | 📶 **Mobile** | "LTE only" | 5G NSA was already on (n78, 97 Mbit/s down); our modem daemon now sees it |
 | 🔌 **Untethered** | internet through the USB cable | own SIM data with automatic Wi-Fi ⇄ mobile failover (~3 s); USB unplugged and Wi-Fi gone, still reachable over Tailscale (35–56 ms), even asleep |
-| 🧠 **NPU** | one stock model | 16/17 stock models + our own TFLite models compiled on the phone (keyword spotting in 0.5 ms) |
+| 🧠 **NPU** | one stock model | 16/17 stock models + our own TFLite models compiled on the phone (keyword spotting in 0.34 ms) |
 | 🔋 **Battery** | 5.8 %/h locked | deep suspend: 1.1 %/h, still reachable over Tailscale |
 | 🛰️ **GPS** | never powered | GNSS core runs in a sandbox, tracks real satellites (no fix indoors yet) |
 | 📡 **Bluetooth** | manual start | comes up by itself after boot |
