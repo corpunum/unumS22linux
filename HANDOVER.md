@@ -52,6 +52,13 @@ Private access details (tailnet name, SSH options, allowlists) live in an untrac
 | Kernel | 11-12: the close_range fix is flashed (build-id f95682b4, RECOVERY 19aa0293…). Subprocess capture no longer hangs. Rollback and the build recipe are in FLASH_LOG.md. To rebuild, use `tools/hardware/build-recovery-kernel.sh` with `KMAKE_FLAGS="ARCH=arm64 LLVM=1"`. |
 | s22d | 0.3.0, the 11-11 build (camera ISP fix); it includes torch. |
 
+## Phone as an OpenUnum device (2026-11-12, design docs/PHONE_AS_DEVICE_DESIGN.md)
+- s22d's remote listener runs on the phone's tailnet address, port 8767, only while `/srv/s22/state/s22d/remote.json` (0600) exists. That file pins the rig by tailnet `Node.StableID` and holds only the SHA-256 of its bearer token. The token itself lives on the rig at `~/.config/unum/s22-device.token` (0600). To revoke, delete the peer from remote.json and restart s22d.
+- Remote callers get `/v1/device` only, limited to `REMOTE_CAPS` in `tools/s22d/src/remote.rs`, each behind `/srv/s22/state/device-switches.json`. A missing entry means on, except `audio.listen`, which stays off until the owner switches it on.
+- Captures come back in the response. Nothing is kept unless the request has `save: true`. Each capture is logged in `/srv/s22/state/audit/device-captures.jsonl` (who, what, size, sha256; never content).
+- Smoke test from the rig: `curl -H "Authorization: Bearer $(cat ~/.config/unum/s22-device.token)" http://<phone tailnet IP>:8767/v1/device`.
+- Not done yet: touch-shell toggles for the switch file (U-d775e6d0), P4 uplink failover (U-fe741e10), and the rig-side tools (s-openunum, U-c8028189).
+
 ## Open work (UnumHub)
 - `U-fd91ceec`: done 11-12 (cache verified, power fix, kernel flashed).
 - `U-920ae886`: umbrella item for drivers, local inference speed and TTS (`docs/GAP-PLAN-20261104.md`).
