@@ -7,6 +7,7 @@ import json
 import signal
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -38,6 +39,7 @@ class Base(unittest.TestCase):
                               killer=lambda pid, sig: self.kills.append((pid, sig)),
                               renicer=self.renice, clock=lambda: self.now)
         self.root = root
+        self.g.keepalive_probe = lambda: True         # tests opt in to the keepalive watch below
 
     def renice(self, pid, value):
         old = self.nice.get(pid, 0)
@@ -117,6 +119,67 @@ class ThermalTest(Base):
         self.run_pass(40)
         self.assertFalse((self.root / 'hold/llama').exists())
         self.assertTrue((self.root / 'hold/other').exists())
+
+
+class KeepaliveWatchTest(Base):
+    def setUp(self):
+        super().setUp()
+        self.running, self.starts = False, []
+        self.g.keepalive_probe = lambda: self.running
+        self.g.keepalive_start = lambda: (self.starts.append(self.now), 4242)[1]
+        self.enabled = self.root / 'enabled'
+        self.enabled.write_text('')
+        self.patch = mock.patch.object(mod, 'KEEPALIVE_ENABLED', self.enabled)
+        self.patch.start()
+        self.addCleanup(self.patch.stop)
+
+    def events(self):
+        p = self.root / 'state/guardian.jsonl'
+        return [json.loads(l) for l in p.read_text().splitlines()] if p.exists() else []
+
+    def test_dead_keepalive_is_respawned_with_doubling_backoff_and_logged(self):
+        self.assertEqual(self.g.watch_keepalive(1000), 'started')
+        self.assertEqual(self.g.watch_keepalive(1010), 'wait')
+        self.assertEqual(self.g.watch_keepalive(1031), 'started')     # 30 s later, then 60, 120 ...
+        self.assertEqual(self.g.watch_keepalive(1080), 'wait')
+        self.assertEqual(self.g.watch_keepalive(1092), 'started')
+        ev = [e for e in self.events() if e['event'] == 'keepalive_respawn']
+        self.assertEqual([e['next_wait_s'] for e in ev], [30, 60, 120])
+        self.assertEqual(ev[0]['pid'], 4242)
+        self.running = True
+        self.assertEqual(self.g.watch_keepalive(1100), 'running')
+        self.assertEqual(self.g.ka_backoff, 30)                      # reset once it stays up
+
+    def test_backoff_is_capped(self):
+        for i in range(10):
+            self.g.watch_keepalive(self.g.ka_next)
+        self.assertEqual(self.g.ka_backoff, 600)
+
+    def test_off_held_or_unknown_means_hands_off(self):
+        self.enabled.unlink()
+        self.assertEqual(self.g.watch_keepalive(1000), 'off')
+        self.enabled.write_text('')
+        (self.root / 'hold').mkdir(exist_ok=True)
+        (self.root / 'hold/keepalive').write_text('')
+        self.assertEqual(self.g.watch_keepalive(1000), 'off')
+        (self.root / 'hold/keepalive').unlink()
+        self.g.keepalive_probe = lambda: None
+        self.assertEqual(self.g.watch_keepalive(1000), 'unknown')
+        self.assertEqual(self.starts, [])
+
+    def test_probe_reads_the_flock(self):
+        import fcntl
+        lock = self.root / 'ka.lock'
+        self.assertFalse(mod.keepalive_running(lock))               # no file: not running
+        lock.write_text('')
+        self.assertFalse(mod.keepalive_running(lock))
+        with open(lock) as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            self.assertTrue(mod.keepalive_running(lock))
+
+    def test_check_once_runs_the_watch(self):
+        self.run_pass(40)
+        self.assertEqual(len(self.starts), 1)
 
 
 class RestartTest(Base):

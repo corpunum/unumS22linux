@@ -2,7 +2,9 @@
 """s22-guardian: thermal, runaway-process and resource guard for the S22 phone.
 
 Native (Alpine) root, as root. Supervised by s22-keepalive (service
-"guardian"). One pass every INTERVAL_S (default 20 s); a pass only reads /proc
+"guardian"), and it watches keepalive back: when keepalive's flock is free it is
+respawned (backoff 30 s doubling to 600 s, event "keepalive_respawn"), unless the
+enabled marker is gone or /run/s22-hold/keepalive exists. One pass every INTERVAL_S (default 20 s); a pass only reads /proc
 and /sys unless something is wrong, so it costs well under 1 % of a core.
 
 Thermal (max of the BIG/MID/LITTLE/G3D/ISP zones), with hysteresis:
@@ -61,10 +63,16 @@ HOLD_DIR = Path('/run/s22-hold')
 CHROOT = Path('/mnt/omarchy-trial')
 LOCK = Path('/run/s22-guardian.lock')
 LOG_MAX = 1 << 20
+# s22-keepalive supervises every service (guardian included) but nothing restarted keepalive itself:
+# start-persistent-desktop starts it once at boot. The guardian watches it back (corpunum-82, 11-12).
+KEEPALIVE_LOCK = Path('/run/s22-keepalive.lock')
+KEEPALIVE_DAEMON = Path('/srv/s22/hardware/bin/s22-keepalive')
+KEEPALIVE_ENABLED = Path('/srv/s22/state/keepalive/enabled')
 HZ = os.sysconf('SC_CLK_TCK')
 
 DEFAULTS = {
     'interval_s': 20,
+    'keepalive_watch': True, 'keepalive_backoff_s': [30, 600],   # respawn keepalive: first wait, cap
     'zones': ['BIG', 'MID', 'LITTLE', 'G3D', 'ISP'],
     'warn_c': 60, 'hot_c': 70, 'critical_c': 80, 'restore_c': 55, 'confirm_passes': 2,
     # services the guardian may stop: keepalive name -> ps needle
@@ -174,6 +182,9 @@ class Guardian:
         self.level = 0
         self.held: set[str] = set()
         self.reniced: dict[int, int] = {}       # pid -> original nice
+        self.keepalive_probe, self.keepalive_start = keepalive_running, start_keepalive
+        self.ka_next = 0.0
+        self.ka_backoff = float(cfg.get('keepalive_backoff_s', [30, 600])[0])
         self.prev: dict[int, tuple[float, int]] = {}  # pid -> (time, ticks)
         self.busy_since: dict[int, float] = {}
         self.killed: dict[int, float] = {}
@@ -426,6 +437,8 @@ class Guardian:
             self.thermal(temps, table)
             acted = self.runaway(table, now)
             self.floors(mem, disks, table)
+            if self.cfg.get('keepalive_watch'):
+                self.watch_keepalive(now)
         tmax = max(temps.values()) if temps else None
         status = {'t': round(now), 'level': self.level, 'tmax': tmax, 'temps': temps,
                   'mem_available_mb': round(mem) if mem is not None else None,
@@ -434,6 +447,31 @@ class Guardian:
                   'stuck': sorted(self.stuck)}
         self.write_status(status)
         return status
+
+    def watch_keepalive(self, now: float) -> str:
+        """Respawn s22-keepalive when its flock is free (= not running), unless it is switched off (no
+        enabled marker) or held (/run/s22-hold/keepalive). Backoff doubles from the first wait to the cap
+        while it keeps dying, resets once it is seen running again. Every respawn is logged."""
+        first, cap = (float(x) for x in self.cfg.get('keepalive_backoff_s', [30, 600]))
+        reap_started()
+        state = self.keepalive_probe()
+        if state is not False:                       # running (True) or cannot tell (None): leave it
+            if state is True:
+                self.ka_backoff = first
+            return 'running' if state else 'unknown'
+        if not KEEPALIVE_ENABLED.exists() or (self.hold_dir / 'keepalive').exists():
+            return 'off'
+        if now < self.ka_next:
+            return 'wait'
+        try:
+            pid = self.keepalive_start()
+            result = 'started'
+        except Exception as e:  # noqa: BLE001 - logged, retried after the backoff
+            pid, result = None, f'failed: {type(e).__name__}: {e}'
+        self.log(event='keepalive_respawn', result=result, pid=pid, next_wait_s=self.ka_backoff)
+        self.ka_next = now + self.ka_backoff
+        self.ka_backoff = min(cap, self.ka_backoff * 2)
+        return result
 
     def write_status(self, status: dict) -> None:
         try:
@@ -462,6 +500,46 @@ class Guardian:
             except Exception as e:  # noqa: BLE001 - keep guarding
                 self.log(event='pass_error', error=f'{type(e).__name__}: {e}')
             time.sleep(self.cfg['interval_s'])
+
+
+def keepalive_running(lock: Path = KEEPALIVE_LOCK) -> bool | None:
+    """True while some s22-keepalive holds its flock, False when the lock is free, None when unknown."""
+    try:
+        fd = os.open(lock, os.O_RDONLY)
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return None
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return True
+    except OSError:
+        return None
+    else:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return False
+    finally:
+        os.close(fd)
+
+
+def start_keepalive(daemon: Path = KEEPALIVE_DAEMON) -> int:
+    """Start keepalive detached, the way start-persistent-desktop does (root-owned, not group/world-writable)."""
+    st = daemon.stat()
+    if daemon.is_symlink() or st.st_uid != 0 or st.st_mode & 0o022:
+        raise PermissionError('keepalive ownership changed')
+    with open(KEEPALIVE_ENABLED.parent / 'daemon.log', 'ab') as log:
+        proc = subprocess.Popen(['/usr/bin/python3', str(daemon)], stdin=subprocess.DEVNULL, stdout=log,
+                                stderr=log, start_new_session=True, cwd='/')
+    _STARTED.append(proc)
+    return proc.pid
+
+
+_STARTED: list = []    # keepalives this guardian started: polled so a dead one is reaped, not left a zombie
+
+
+def reap_started() -> None:
+    _STARTED[:] = [p for p in _STARTED if p.poll() is None]
 
 
 def main(argv=None) -> int:
