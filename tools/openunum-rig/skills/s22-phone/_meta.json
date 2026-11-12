@@ -1,0 +1,13 @@
+{
+  "name": "s22-phone",
+  "version": "1.0.0",
+  "type": "executable",
+  "risk": "medium",
+  "description": "Use the Samsung S22 as a device: status, photo, listen, speak, ask its agent, haptics. Calls and SMS are paused.",
+  "needs": ["turn"],
+  "requires": {
+    "services": ["S22 device API on the tailnet"],
+    "files": ["~/.config/unum/s22-device.token"]
+  },
+  "mediaKind": "device"
+}
