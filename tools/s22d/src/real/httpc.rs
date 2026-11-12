@@ -31,8 +31,37 @@ pub fn request_on<S: Read + Write>(
     target: &str,
     body: Option<&Value>,
 ) -> Result<(u16, Value), HttpError> {
+    request_with(s, method, target, body, "localhost", &[])
+}
+
+pub fn request_on_host<S: Read + Write>(
+    s: &mut S,
+    method: &str,
+    target: &str,
+    body: Option<&Value>,
+    host: &str,
+) -> Result<(u16, Value), HttpError> {
+    request_with(s, method, target, body, host, &[])
+}
+
+/// As [`request_on`] with an explicit `Host` (tailscaled's LocalAPI insists on `local-tailscaled.sock`)
+/// and extra header lines (names and values must not contain CR/LF; callers pass constants).
+pub fn request_with<S: Read + Write>(
+    s: &mut S,
+    method: &str,
+    target: &str,
+    body: Option<&Value>,
+    host: &str,
+    extra: &[(&str, &str)],
+) -> Result<(u16, Value), HttpError> {
     let payload = body.map(|b| b.to_string()).unwrap_or_default();
-    let mut head = format!("{method} {target} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nAccept: application/json\r\n");
+    let mut head = format!("{method} {target} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\nAccept: application/json\r\n");
+    for (k, v) in extra {
+        if k.contains(['\r', '\n']) || v.contains(['\r', '\n']) {
+            return Err(HttpError::Protocol("header contains CR/LF".into()));
+        }
+        head += &format!("{k}: {v}\r\n");
+    }
     if body.is_some() {
         head += &format!(
             "Content-Type: application/json\r\nContent-Length: {}\r\n",
@@ -105,6 +134,28 @@ pub fn over_unix(
     let _ = s.set_read_timeout(Some(timeout));
     let _ = s.set_write_timeout(Some(timeout));
     request_on(&mut s, method, target, body)
+}
+
+/// TCP request with extra headers (see [`request_with`]).
+pub fn over_tcp_with(
+    addr: &str,
+    method: &str,
+    target: &str,
+    body: Option<&Value>,
+    timeout: Duration,
+    extra: &[(&str, &str)],
+) -> Result<(u16, Value), HttpError> {
+    use std::net::{TcpStream, ToSocketAddrs};
+    let a = addr
+        .to_socket_addrs()
+        .map_err(|e| HttpError::Connect(format!("{addr}: {e}")))?
+        .next()
+        .ok_or_else(|| HttpError::Connect(format!("{addr}: no address")))?;
+    let mut s = TcpStream::connect_timeout(&a, Duration::from_secs(2))
+        .map_err(|e| HttpError::Connect(format!("{addr}: {e}")))?;
+    let _ = s.set_read_timeout(Some(timeout));
+    let _ = s.set_write_timeout(Some(timeout));
+    request_with(&mut s, method, target, body, "127.0.0.1", extra)
 }
 
 pub fn over_tcp(

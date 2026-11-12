@@ -114,6 +114,9 @@ are accepted for booleans and integers.
 | `screen_timeout.get` | read | - | `{unlocked_s, locked_s, never: 0}` | `/srv/s22/state/fastshell/screen-timeout.json` (defaults 60/15) |
 | `screen_timeout.set` | set | `value?` (unlocked s), `locked?` (s), 0-3600, 0 = never | as `screen_timeout.get` | same file; unum-fastshell re-reads it every 10 s while the screen is on |
 | `camera.capture` | action | `sensor?` `rear`\|`front` (default rear) | `{sensor, path, developed, width, height, ...}` | the reviewed camera path of `camera.capture` in `API.md` (lock, cooldown, gallery copy) |
+| `speak` | action | `text` (1-1000) | `{spoken, played, engine, ms}` | s22-touchd `tts` with `play`: renders with s22-say (the owner's voice), plays at a temporary speech level, amps back to the resting mute |
+| `task.submit` | action | `text` (1-4000) | `{session, done, reply}` | the phone's own OpenUnum `POST /api/chat` in a new `device:task:<ms>` session, agent-marked (`x-openunum-agent-session: s22d-device-task`), framed as from the rig's agent, never the owner; `done` false = still running, poll `task.get` |
+| `task.get` | read | `session` (`device:task:<digits>` only) | `{session, reply, messages}` | `GET /api/sessions/<session>`, latest assistant message |
 | `screenshot` | action | - | `{taken, path, file}` | unum-fastshell `shell.sock` `{"fn":"screenshot"}` (same capture as Power + Volume down) into the gallery; needs a shell build with the hook, else `unavailable` |
 
 ## Catalog

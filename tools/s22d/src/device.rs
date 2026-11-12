@@ -103,6 +103,9 @@ pub fn defs() -> Vec<DevCap> {
         c("screen_timeout.get", Read, 10, "Screen-off timeouts in seconds (unlocked, locked; 0 = never).", json!({}), &[]),
         c("screen_timeout.set", Set, 10, "Set the screen-off timeout: value = seconds while unlocked, locked = seconds on the lock screen (0-3600, 0 = never).", json!({"value": {"type": "integer", "minimum": 0, "maximum": 3600}, "locked": {"type": "integer", "minimum": 0, "maximum": 3600}}), &[]),
         c("camera.capture", Action, 330, "Take a photo (sensor rear or front, default rear); it lands in the gallery.", json!({"sensor": {"type": "string", "enum": ["rear", "front"]}}), &[]),
+        c("speak", Action, 200, "Say a text out loud on the phone's speaker (the owner's voice), then back to the resting mute.", json!({"text": {"type": "string", "minLength": 1, "maxLength": 1000}}), &["text"]),
+        c("task.submit", Action, 40, "Give the phone's own agent (its local model) a task. Answers with the task's session id, and the reply when it is ready within ~30 s; otherwise poll task.get.", json!({"text": {"type": "string", "minLength": 1, "maxLength": 4000}}), &["text"]),
+        c("task.get", Read, 15, "The latest reply of a task started with task.submit (session from its answer).", json!({"session": {"type": "string", "maxLength": 80}}), &["session"]),
         c("screenshot", Action, 15, "Save a screenshot of the shell to the gallery (as Power + Volume down). The screen must be on.", json!({}), &[]),
     ]
 }
@@ -130,6 +133,7 @@ fn availability(app: &Shared, id: &str) -> Option<String> {
         "screenshot" => {
             (!cfg.shell_sock.exists()).then(|| "unum-fastshell is not running".to_string())
         }
+        "speak" => (!cfg.touch_sock.exists()).then(|| "s22-touchd is not running".to_string()),
         _ => None,
     }
 }
@@ -586,6 +590,110 @@ async fn run(app: &Shared, cap: &DevCap, a: &Args) -> ApiResult<Out> {
             out(r)
         }
         "screenshot" => out(blocking(move || st::screenshot(&cfg, Duration::from_secs(4))).await?),
+        "speak" => {
+            let text = a.need_str("text")?;
+            if !(1..=1000).contains(&text.chars().count()) {
+                return Err(ApiError::bad_request("text must be 1-1000 characters"));
+            }
+            let sock = cfg.touch_sock.clone();
+            let r = blocking(move || {
+                crate::real::touch::request(
+                    &sock,
+                    &json!({"cmd": "tts", "text": text, "play": true}),
+                    Duration::from_secs(190),
+                )
+                .map_err(ApiError::upstream)
+            })
+            .await?;
+            if r["ok"] != json!(true) {
+                return Err(ApiError::upstream(format!("touchd tts: {}", r["error"])));
+            }
+            out(
+                json!({"spoken": true, "played": r["played"], "engine": r["engine"], "ms": r["ms"]}),
+            )
+        }
+        "task.submit" => {
+            let text = a.need_str("text")?;
+            if !(1..=4000).contains(&text.chars().count()) {
+                return Err(ApiError::bad_request("text must be 1-4000 characters"));
+            }
+            let ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0);
+            let session = format!("device:task:{ms}");
+            // Agent-marked (never owner-claiming), and framed so the phone's agent knows who asks.
+            let message = format!("[s22d task from the rig's agent, not from the owner] {text}");
+            let addr = cfg.openunum_addr.clone();
+            let sid = session.clone();
+            let (code, v) = blocking(move || {
+                crate::real::httpc::over_tcp_with(
+                    &addr,
+                    "POST",
+                    "/api/chat",
+                    Some(&json!({"sessionId": sid, "message": message})),
+                    Duration::from_secs(30),
+                    &[("x-openunum-agent-session", "s22d-device-task")],
+                )
+                .map_err(|e| ApiError::upstream(e.to_string()))
+            })
+            .await?;
+            if !(200..300).contains(&code) {
+                return Err(ApiError::upstream(format!(
+                    "OpenUnum /api/chat: HTTP {code} {}",
+                    v["error"]
+                )));
+            }
+            out(
+                json!({"session": session, "done": code == 200, "reply": v.get("reply").cloned().unwrap_or(Value::Null)}),
+            )
+        }
+        "task.get" => {
+            let session = a.need_str("session")?;
+            let ok = session.len() > "device:task:".len()
+                && session.starts_with("device:task:")
+                && session["device:task:".len()..]
+                    .bytes()
+                    .all(|b| b.is_ascii_digit());
+            if !ok {
+                return Err(ApiError::bad_request(
+                    "session must be a device:task:<id> from task.submit",
+                ));
+            }
+            let addr = cfg.openunum_addr.clone();
+            let target = format!("/api/sessions/{session}");
+            let (code, v) = blocking(move || {
+                crate::real::httpc::over_tcp_with(
+                    &addr,
+                    "GET",
+                    &target,
+                    None,
+                    Duration::from_secs(10),
+                    &[("x-openunum-agent-session", "s22d-device-task")],
+                )
+                .map_err(|e| ApiError::upstream(e.to_string()))
+            })
+            .await?;
+            if code == 404 {
+                return Err(ApiError::new(
+                    StatusCode::NOT_FOUND,
+                    "not_found",
+                    "no such task session",
+                ));
+            }
+            if code != 200 {
+                return Err(ApiError::upstream(format!(
+                    "OpenUnum /api/sessions: HTTP {code}"
+                )));
+            }
+            let last = v["messages"]
+                .as_array()
+                .and_then(|m| m.iter().rev().find(|x| x["role"] == "assistant"))
+                .cloned();
+            out(
+                json!({"session": session, "reply": last.as_ref().map(|m| m["content"].clone()).unwrap_or(Value::Null), "messages": v["messages"].as_array().map(|m| m.len()).unwrap_or(0)}),
+            )
+        }
         _ => Err(ApiError::new(
             StatusCode::NOT_FOUND,
             "not_found",
@@ -651,7 +759,7 @@ async fn device_status(app: &Shared) -> Value {
     })
 }
 
-async fn call(
+pub(crate) async fn call(
     app: Shared,
     id: String,
     body: &[u8],

@@ -30,6 +30,8 @@ struct Fake {
     gate: Mutex<Option<Receiver<()>>>,
     confirm_gate: Mutex<Option<Receiver<()>>>,
     audio: Mutex<Option<u8>>,
+    /// When set, a capture answers with this file as its `path` (the remote listener reads it).
+    capture_file: Mutex<Option<String>>,
 }
 
 impl Fake {
@@ -140,10 +142,14 @@ impl Camera for Fake {
         if let Some(rx) = self.gate.lock().unwrap().take() {
             let _ = rx.recv_timeout(Duration::from_secs(5));
         }
-        self.rec(&format!(
+        let out = self.rec(&format!(
             "capture {} {:?} {:?} {}",
             r.sensor, r.exposure_us, r.gain, r.develop
-        ))
+        ))?;
+        match self.capture_file.lock().unwrap().clone() {
+            Some(p) => Ok(json!({"path": p, "developed": true})),
+            None => Ok(out),
+        }
     }
     fn record(&self, r: &RecordReq) -> ApiResult {
         self.rec(&format!(
@@ -209,8 +215,13 @@ struct H {
 
 impl H {
     fn new() -> Self {
+        Self::with(|_| {})
+    }
+
+    fn with(f: impl FnOnce(&mut Config)) -> Self {
         let tmp = Tmp::new();
         let mut cfg = Config::rooted(tmp.path());
+        f(&mut cfg);
         cfg.camera_min_interval = Duration::ZERO;
         cfg.camera_failure_cooldown = Duration::from_secs(60);
         cfg.wifi_wait = Duration::ZERO;
@@ -1644,4 +1655,411 @@ async fn torch_is_unavailable_without_the_led() {
     let h = H::new();
     let (s, v) = h.dev("torch.set", json!({"on": true})).await;
     assert_eq!(s, StatusCode::SERVICE_UNAVAILABLE, "{v}");
+}
+
+// ------------------------------------------------------------ remote listener (remote.rs)
+
+mod remote_tests {
+    use super::*;
+    use crate::remote::{self, RemoteConfig, RemoteState};
+
+    const RIG: &str = "nRIGSTABLE0001";
+    const TOKEN: &str = "s3cr3t-token-for-tests";
+
+    fn fake_whois(_: &std::path::Path, peer: &SocketAddr) -> Result<String, String> {
+        match peer.ip().to_string().as_str() {
+            "100.64.0.1" => Ok(RIG.into()),
+            "100.64.0.2" => Ok("nSOMEOTHERNODE".into()),
+            _ => Err("no such peer".into()),
+        }
+    }
+
+    fn state(h: &H) -> RemoteState {
+        let cfg = RemoteConfig::from_json(&json!({
+            "bind": "100.64.0.99:8767",
+            "peers": [{"name": "rig", "node_id": RIG, "token_sha256": remote::sha256_hex(TOKEN.as_bytes())}],
+            "switches": h.tmp.path().join("caps.json").to_str().unwrap(),
+            "capture_audit": h.tmp.path().join("captures.jsonl").to_str().unwrap(),
+        }))
+        .unwrap();
+        RemoteState {
+            app: h.app.clone(),
+            cfg: Arc::new(cfg),
+            whois: fake_whois,
+        }
+    }
+
+    async fn call(
+        h: &H,
+        peer: &str,
+        token: Option<&str>,
+        method: &str,
+        uri: &str,
+        body: Option<Value>,
+    ) -> (StatusCode, Value) {
+        let mut b = Request::builder().method(method).uri(uri);
+        if let Some(t) = token {
+            b = b.header("authorization", format!("Bearer {t}"));
+        }
+        let mut req = b
+            .body(
+                body.map(|v| Body::from(v.to_string()))
+                    .unwrap_or_else(Body::empty),
+            )
+            .unwrap();
+        req.extensions_mut()
+            .insert(ConnectInfo(peer.parse::<SocketAddr>().unwrap()));
+        let r = remote::router(state(h)).oneshot(req).await.unwrap();
+        let s = r.status();
+        let bytes = axum::body::to_bytes(r.into_body(), 4 << 20).await.unwrap();
+        (s, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    }
+
+    #[tokio::test]
+    async fn both_factors_are_required() {
+        let h = H::new();
+        let cases = [
+            ("192.168.1.5:4000", Some(TOKEN), "not_tailnet"),
+            ("100.64.0.9:4000", Some(TOKEN), "whois_failed"),
+            ("100.64.0.2:4000", Some(TOKEN), "unknown_node"), // right token, wrong node
+            ("100.64.0.1:4000", Some("wrong"), "bad_token"),  // right node, wrong token
+            ("100.64.0.1:4000", None, "bad_token"),
+        ];
+        for (peer, tok, want) in cases {
+            let (s, v) = call(&h, peer, tok, "GET", "/v1/device/volume.get", None).await;
+            assert_eq!(
+                (s, code(&v)),
+                (StatusCode::FORBIDDEN, want),
+                "{peer} {tok:?}"
+            );
+        }
+        let (s, v) = call(
+            &h,
+            "100.64.0.1:4000",
+            Some(TOKEN),
+            "GET",
+            "/v1/device/volume.get",
+            None,
+        )
+        .await;
+        assert_eq!(s, StatusCode::OK, "{v}");
+        let denied = h
+            .audit_lines()
+            .iter()
+            .filter(|l| l["action"] == "remote.auth")
+            .count();
+        assert_eq!(denied, 5);
+        assert_eq!(h.audit_lines().last().unwrap()["caller"], "remote");
+    }
+
+    #[tokio::test]
+    async fn an_origin_header_is_refused_even_when_authenticated() {
+        let h = H::new();
+        let mut req = Request::builder()
+            .uri("/v1/device/volume.get")
+            .header("authorization", format!("Bearer {TOKEN}"))
+            .header("origin", "http://evil.example")
+            .body(Body::empty())
+            .unwrap();
+        req.extensions_mut().insert(ConnectInfo(
+            "100.64.0.1:4000".parse::<SocketAddr>().unwrap(),
+        ));
+        let r = remote::router(state(&h)).oneshot(req).await.unwrap();
+        assert_eq!(r.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn only_remote_caps_and_only_when_switched_on() {
+        let h = H::new();
+        let ok = |s: StatusCode| s == StatusCode::OK;
+        for id in ["wifi.set", "mobile_data.set", "autosleep.set", "calls.set"] {
+            let (s, v) = call(
+                &h,
+                "100.64.0.1:1",
+                Some(TOKEN),
+                "POST",
+                &format!("/v1/device/{id}"),
+                Some(json!({"on": false})),
+            )
+            .await;
+            assert_eq!((s, code(&v)), (StatusCode::FORBIDDEN, "not_remote"), "{id}");
+        }
+        let (s, _) = call(&h, "100.64.0.1:1", Some(TOKEN), "GET", "/v1/status", None).await;
+        assert_eq!(
+            s,
+            StatusCode::NOT_FOUND,
+            "only /v1/device is served remotely"
+        );
+        h.tmp.write("caps.json", r#"{"volume.get": false}"#);
+        let (s, v) = call(
+            &h,
+            "100.64.0.1:1",
+            Some(TOKEN),
+            "GET",
+            "/v1/device/volume.get",
+            None,
+        )
+        .await;
+        assert_eq!((s, code(&v)), (StatusCode::FORBIDDEN, "capability_off"));
+        h.tmp.write("caps.json", r#"{"volume.get": true}"#);
+        assert!(ok(call(
+            &h,
+            "100.64.0.1:1",
+            Some(TOKEN),
+            "GET",
+            "/v1/device/volume.get",
+            None
+        )
+        .await
+        .0));
+        assert!(!remote::default_on("audio.listen"), "listening ships off");
+        assert!(remote::default_on("camera.capture"));
+        let (_, v) = call(&h, "100.64.0.1:1", Some(TOKEN), "GET", "/v1/device", None).await;
+        let ids: Vec<&str> = v["capabilities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["id"].as_str().unwrap())
+            .collect();
+        assert!(
+            ids.contains(&"camera.capture") && !ids.contains(&"wifi.set"),
+            "{ids:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_capture_comes_back_in_the_response_and_is_not_kept() {
+        let h = H::new();
+        let img = h.tmp.write("gallery/p1.jpg", "JPEGDATA");
+        *h.fake.capture_file.lock().unwrap() = Some(img.to_str().unwrap().into());
+        let (s, v) = call(
+            &h,
+            "100.64.0.1:1",
+            Some(TOKEN),
+            "POST",
+            "/v1/device/camera.capture",
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(s, StatusCode::OK, "{v}");
+        assert_eq!(v["artifact"]["base64"], remote::base64(b"JPEGDATA"));
+        assert_eq!(v["artifact"]["mime"], "image/jpeg");
+        assert_eq!(v["kept"], false);
+        assert!(v["state"].get("path").is_none());
+        assert!(!img.exists(), "deleted after the task");
+        let line: Value = serde_json::from_str(
+            std::fs::read_to_string(h.tmp.path().join("captures.jsonl"))
+                .unwrap()
+                .lines()
+                .next()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            (
+                line["peer"].as_str(),
+                line["cap"].as_str(),
+                line["kept"].as_bool()
+            ),
+            (Some("rig"), Some("camera.capture"), Some(false))
+        );
+        assert_eq!(line["sha256"], remote::sha256_hex(b"JPEGDATA"));
+        assert!(
+            line.get("base64").is_none() && !line.to_string().contains("JPEGDATA"),
+            "no content in the audit"
+        );
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(h.tmp.path().join("captures.jsonl"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+    }
+
+    #[tokio::test]
+    async fn save_true_keeps_the_photo() {
+        let h = H::new();
+        let img = h.tmp.write("gallery/p2.jpg", "X");
+        *h.fake.capture_file.lock().unwrap() = Some(img.to_str().unwrap().into());
+        let (s, v) = call(
+            &h,
+            "100.64.0.1:1",
+            Some(TOKEN),
+            "POST",
+            "/v1/device/camera.capture",
+            Some(json!({"save": true, "sensor": "front"})),
+        )
+        .await;
+        assert_eq!(s, StatusCode::OK, "{v}");
+        assert_eq!(v["kept"], true);
+        assert!(img.exists());
+        assert!(
+            h.fake
+                .calls
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|c| c.starts_with("capture front")),
+            "save is stripped, sensor passes"
+        );
+    }
+
+    #[test]
+    fn config_rejects_non_tailnet_binds_and_bad_hashes() {
+        let good = remote::sha256_hex(b"x");
+        assert!(RemoteConfig::from_json(&json!({"bind": "0.0.0.0:8767", "peers": [{"name": "r", "node_id": "n", "token_sha256": good}]})).is_err());
+        assert!(RemoteConfig::from_json(&json!({"bind": "100.64.0.99:8767", "peers": [{"name": "r", "node_id": "n", "token_sha256": "abc"}]})).is_err());
+        assert!(RemoteConfig::from_json(&json!({"bind": "100.64.0.99:8767", "peers": []})).is_err());
+        assert!(RemoteConfig::from_json(&json!({"bind": "100.64.0.99:8767", "peers": [{"name": "r", "node_id": "n", "token_sha256": good}]})).is_ok());
+    }
+
+    #[test]
+    fn base64_matches_rfc4648_vectors() {
+        for (i, o) in [
+            ("", ""),
+            ("f", "Zg=="),
+            ("fo", "Zm8="),
+            ("foo", "Zm9v"),
+            ("foobar", "Zm9vYmFy"),
+        ] {
+            assert_eq!(remote::base64(i.as_bytes()), o);
+        }
+    }
+}
+
+// ------------------------------------------------------------ speak / task.submit / task.get
+
+mod p2_tests {
+    use super::*;
+    use std::io::{Read, Write};
+
+    /// One-shot HTTP server: records the request head+body, answers `status` with `body`.
+    fn http_once(status: u16, body: Value) -> (String, std::sync::mpsc::Receiver<String>) {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = l.local_addr().unwrap().to_string();
+        let (tx, rx) = channel();
+        std::thread::spawn(move || {
+            if let Ok((mut c, _)) = l.accept() {
+                let _ = c.set_read_timeout(Some(Duration::from_millis(300)));
+                let mut data = Vec::new();
+                let mut b = [0u8; 4096];
+                while let Ok(n) = c.read(&mut b) {
+                    if n == 0 {
+                        break;
+                    }
+                    data.extend_from_slice(&b[..n]);
+                }
+                let payload = body.to_string();
+                let _ = write!(c, "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}", payload.len());
+                let _ = tx.send(String::from_utf8_lossy(&data).to_string());
+            }
+        });
+        (addr, rx)
+    }
+
+    #[tokio::test]
+    async fn speak_goes_through_touchd_tts_with_play() {
+        let h = H::new();
+        let seen = crate::real::touch::fake::serve(
+            &h.app.cfg.touch_sock,
+            |_| json!({"ok": true, "played": true, "engine": "antonis", "ms": 900}),
+        );
+        let (s, v) = h
+            .send(
+                "POST",
+                "/v1/device/speak",
+                Some(json!({"text": "Dinner is ready"})),
+            )
+            .await;
+        assert_eq!(s, StatusCode::OK, "{v}");
+        assert_eq!(v["state"]["spoken"], true);
+        let req = seen.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(
+            (
+                req["cmd"].as_str(),
+                req["text"].as_str(),
+                req["play"].as_bool()
+            ),
+            (Some("tts"), Some("Dinner is ready"), Some(true))
+        );
+        let (s, v) = h
+            .send("POST", "/v1/device/speak", Some(json!({"text": ""})))
+            .await;
+        assert_eq!((s, code(&v)), (StatusCode::BAD_REQUEST, "bad_request"));
+    }
+
+    #[tokio::test]
+    async fn task_submit_posts_an_agent_marked_framed_turn() {
+        let (addr, rx) = http_once(200, json!({"ok": true, "reply": "done: 3 files"}));
+        let h = H::with(|c| c.openunum_addr = addr);
+        let (s, v) = h
+            .send(
+                "POST",
+                "/v1/device/task.submit",
+                Some(json!({"text": "count the files in /tmp"})),
+            )
+            .await;
+        assert_eq!(s, StatusCode::OK, "{v}");
+        assert!(v["state"]["session"]
+            .as_str()
+            .unwrap()
+            .starts_with("device:task:"));
+        assert_eq!(v["state"]["done"], true);
+        assert_eq!(v["state"]["reply"], "done: 3 files");
+        let raw = rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(raw.starts_with("POST /api/chat "), "{raw}");
+        assert!(
+            raw.contains("x-openunum-agent-session: s22d-device-task"),
+            "agent-marked: {raw}"
+        );
+        assert!(raw.contains("not from the owner"), "framed: {raw}");
+        for owner_claim in [
+            "X-OpenUnum-Request",
+            "x-unum-owner-token",
+            "Origin:",
+            "x-openunum-owner-session",
+        ] {
+            assert!(
+                !raw.to_ascii_lowercase()
+                    .contains(&owner_claim.to_ascii_lowercase()),
+                "never owner-claiming: {owner_claim}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn task_get_reads_only_device_task_sessions() {
+        let (addr, rx) = http_once(
+            200,
+            json!({"messages": [{"role": "user", "content": "q"}, {"role": "assistant", "content": "the answer"}]}),
+        );
+        let h = H::with(|c| c.openunum_addr = addr);
+        for bad in [
+            "owner-chat",
+            "device:task:..%2Fx",
+            "device:task:12a",
+            "device:task:",
+        ] {
+            let (s, v) = h
+                .send("GET", &format!("/v1/device/task.get?session={bad}"), None)
+                .await;
+            assert_eq!(
+                (s, code(&v)),
+                (StatusCode::BAD_REQUEST, "bad_request"),
+                "{bad}: {v}"
+            );
+        }
+        let (s, v) = h
+            .send("GET", "/v1/device/task.get?session=device:task:123", None)
+            .await;
+        assert_eq!(s, StatusCode::OK, "{v}");
+        assert_eq!(v["state"]["reply"], "the answer");
+        assert!(rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .starts_with("GET /api/sessions/device:task:123 "));
+    }
 }

@@ -512,6 +512,74 @@
     {
       "args": {
         "additionalProperties": false,
+        "properties": {
+          "text": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Say a text out loud on the phone's speaker (the owner's voice), then back to the resting mute.",
+      "effect": "action",
+      "id": "speak",
+      "reason": null,
+      "timeout_s": 200
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Give the phone's own agent (its local model) a task. Answers with the task's session id, and the reply when it is ready within ~30 s; otherwise poll task.get.",
+      "effect": "action",
+      "id": "task.submit",
+      "reason": null,
+      "timeout_s": 40
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "session": {
+            "maxLength": 80,
+            "type": "string"
+          }
+        },
+        "required": [
+          "session"
+        ],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "The latest reply of a task started with task.submit (session from its answer).",
+      "effect": "read",
+      "id": "task.get",
+      "reason": null,
+      "timeout_s": 15
+    },
+    {
+      "args": {
+        "additionalProperties": false,
         "properties": {},
         "required": [],
         "type": "object"

@@ -7,6 +7,7 @@ mod config;
 mod device;
 mod error;
 mod real;
+mod remote;
 mod routes;
 #[cfg(test)]
 mod tests;
@@ -82,8 +83,41 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&cfg.socket_path, std::fs::Permissions::from_mode(0o600))?;
     }
+    let remote_app = app.clone();
     let unix_task =
         tokio::spawn(async move { axum::serve(unix, router(app, Transport::Unix)).await });
+
+    // The remote listener (remote.rs): only when its config exists. A bad config is reported and the
+    // local listeners keep serving; binding is retried because tailscale0 may come up after s22d.
+    match remote::RemoteConfig::load(&cfg.remote_config) {
+        Ok(None) => {}
+        Err(e) => remote_app.audit.record(
+            "remote.config",
+            "read",
+            "error",
+            serde_json::json!({"error": e}),
+        ),
+        Ok(Some(rc)) => {
+            let st = remote::RemoteState {
+                app: remote_app.clone(),
+                cfg: Arc::new(rc),
+                whois: remote::tailscale_whois,
+            };
+            tokio::spawn(async move {
+                loop {
+                    match tokio::net::TcpListener::bind(st.cfg.bind).await {
+                        Ok(l) => {
+                            st.app.audit.record("remote.listen", "read", "ok", serde_json::json!({"bind": st.cfg.bind.to_string(), "peers": st.cfg.peers.len()}));
+                            let svc = remote::router(st.clone())
+                                .into_make_service_with_connect_info::<SocketAddr>();
+                            let _ = axum::serve(l, svc).await;
+                        }
+                        Err(_) => tokio::time::sleep(std::time::Duration::from_secs(30)).await,
+                    }
+                }
+            });
+        }
+    }
 
     tokio::select! {
         r = tcp_task => r??,

@@ -8,6 +8,10 @@ use std::time::Duration;
 pub struct Config {
     pub root: PathBuf,
     pub audit_path: PathBuf,
+    /// Remote listener config (remote.rs); absent = no remote listener.
+    pub remote_config: PathBuf,
+    /// The phone's own OpenUnum (task.submit / task.get).
+    pub openunum_addr: String,
     pub tcp_addr: String,
     pub socket_path: PathBuf,
     pub audio_flag: PathBuf,
@@ -84,6 +88,8 @@ impl Config {
         Self {
             root: root.to_path_buf(),
             audit_path: p("srv/s22/state/audit/s22d.jsonl"),
+            remote_config: p("srv/s22/state/s22d/remote.json"),
+            openunum_addr: "127.0.0.1:18880".into(),
             tcp_addr: "127.0.0.1:8766".into(),
             socket_path: p("run/s22d.sock"),
             audio_flag: p("etc/s22-audio-unmuted"),
@@ -148,6 +154,10 @@ impl Config {
             }
         };
         path("S22D_AUDIT", &mut c.audit_path);
+        path("S22D_REMOTE_CONFIG", &mut c.remote_config);
+        if let Ok(v) = std::env::var("S22D_OPENUNUM") {
+            c.openunum_addr = v;
+        }
         path("S22D_SOCKET", &mut c.socket_path);
         path("S22D_TOUCH_SOCK", &mut c.touch_sock);
         path("S22D_CONFIRM_DIR", &mut c.confirm_dir);
