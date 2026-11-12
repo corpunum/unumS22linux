@@ -91,6 +91,29 @@ pub fn request_with<S: Read + Write>(
     parse_response(&raw)
 }
 
+/// `Transfer-Encoding: chunked` body to its bytes (OpenUnum answers chunked; phoned does not).
+fn dechunk(mut b: &[u8]) -> Result<Vec<u8>, HttpError> {
+    let mut out = Vec::new();
+    loop {
+        let eol = b
+            .windows(2)
+            .position(|w| w == b"\r\n")
+            .ok_or_else(|| HttpError::Protocol("bad chunk header".into()))?;
+        let size_txt = String::from_utf8_lossy(&b[..eol]);
+        let size = usize::from_str_radix(size_txt.split(';').next().unwrap_or("").trim(), 16)
+            .map_err(|_| HttpError::Protocol("bad chunk size".into()))?;
+        b = &b[eol + 2..];
+        if size == 0 {
+            return Ok(out);
+        }
+        if b.len() < size {
+            return Err(HttpError::Protocol("truncated chunk".into()));
+        }
+        out.extend_from_slice(&b[..size]);
+        b = b.get(size + 2..).unwrap_or(&[]);
+    }
+}
+
 pub fn parse_response(raw: &[u8]) -> Result<(u16, Value), HttpError> {
     let split = raw
         .windows(4)
@@ -112,9 +135,19 @@ pub fn parse_response(raw: &[u8]) -> Result<(u16, Value), HttpError> {
                 .map(|v| v.trim().parse::<usize>().ok())
         })
         .flatten();
-    let body = match len {
-        Some(n) if n <= body.len() => &body[..n],
-        _ => body,
+    let chunked = head.lines().any(|l| {
+        let l = l.to_ascii_lowercase();
+        l.starts_with("transfer-encoding:") && l.contains("chunked")
+    });
+    let decoded;
+    let body = if chunked {
+        decoded = dechunk(body)?;
+        &decoded[..]
+    } else {
+        match len {
+            Some(n) if n <= body.len() => &body[..n],
+            _ => body,
+        }
     };
     if body.iter().all(|b| b.is_ascii_whitespace()) {
         return Ok((status, Value::Null));
@@ -200,6 +233,16 @@ mod tests {
         );
         assert!(parse_response(b"nonsense").is_err());
         assert!(parse_response(b"HTTP/1.1 200 OK\r\n\r\nnot json").is_err());
+    }
+
+    #[test]
+    fn chunked_bodies_are_decoded() {
+        let raw = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n7\r\n{\"a\": 1\r\n1\r\n}\r\n0\r\n\r\n";
+        let (s, v) = parse_response(raw).unwrap();
+        assert_eq!((s, v["a"].as_i64()), (200, Some(1)));
+        assert!(
+            parse_response(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nzz\r\n").is_err()
+        );
     }
 
     #[test]
