@@ -74,6 +74,30 @@ A root systemd unit `unum-uplink-failover.service` (script under `~/UnumOrchestr
 - **Rollback:** `systemctl disable --now unum-uplink-failover`, then
   `ip route del default via <phone-lan-ip> dev eno1 metric 50 2>/dev/null`, then `uplink.share off`.
 
+## Rig failover as built (2026-11-12, 12:49 EET), after an Opus review
+
+`tools/hardware/network/s22-uplink-failover.py` (+ tests, + `unum-uplink-failover.service`). It differs from
+the sketch above in these points:
+
+- **Probe:** ICMP and TCP 443 to two targets, marked (`fwmark 0x178`, rule 1178, table 178 with the DHCP
+  gateway only), so the probe never rides the phone and no other traffic is pinned. Down = both fail.
+- **No gateway on `eno1`** (cable out, no lease) is "not applicable", not an outage: the phone is not asked.
+- **Entering failover:** only after `ip route get <phone> oif eno1` works and the phone answers ok to
+  `uplink.share on` (100 s timeout; any uncertain answer is followed by `off`). Then the metric-50 route and
+  `resolvectl dns eno1 <public resolvers>`, because the router's resolver is dead in an outage.
+- **In failover:** the route is re-asserted every cycle; the phone's `uplink.status` is polled every 30 s
+  and the rig stands down when the phone stopped sharing (6 h, 2 GB, battery) or is unreachable 3 times.
+- **Leaving:** 6 good probes in a row and at least 5 minutes in failover; repeat failovers within an hour
+  back off (60 s doubling to 900 s).
+- **Normal mode** deletes the phone route every cycle, so a stale route cannot outlive a crash.
+- **Restart during an outage** adopts the running failover if the phone still shares; otherwise it sweeps
+  and always sends `off`.
+- **Token:** a root-only copy in `/etc/unum/s22-device.token` (the unit cannot read the home directory).
+
+Not yet proven on the rig: the marked probe under the unit's capabilities, and whether the request to the
+phone gets through over Tailscale with the WAN cut (needs a direct LAN path). Both need one live test with
+the router's WAN unplugged before the unit is enabled for good.
+
 ## Asks
 
 1. Go for the phone-side `uplink.share` build (mine, no rig changes)? Recommended: yes, now.

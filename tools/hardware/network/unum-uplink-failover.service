@@ -1,0 +1,28 @@
+# Install: copy s22-uplink-failover.py to /usr/local/lib/unum/, the config to /etc/unum/uplink-failover.json, and the
+# token to /etc/unum/s22-device.token (root:root, mode 600); then systemctl enable --now unum-uplink-failover.
+[Unit]
+Description=Fail the rig over to the phone LTE share when the main uplink is down
+Documentation=https://github.com/corpunum/unumS22linux/blob/main/docs/P4_UPLINK_FAILOVER_PLAN.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -I /usr/local/lib/unum/s22-uplink-failover.py run
+ExecStopPost=/usr/bin/python3 -I /usr/local/lib/unum/s22-uplink-failover.py sweep
+Restart=on-failure
+RestartSec=30
+User=root
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
