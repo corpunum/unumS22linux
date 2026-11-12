@@ -227,6 +227,12 @@ class SmsStateTest(Base):
         self.m.SMS_PAUSED.write_text('')
         self.assertEqual(self.m.status()['sms'], {'paused': True, 'reason': 'paused'})
 
+    def test_status_lists_capabilities_switched_off_for_the_rig(self):
+        self.m.SWITCHES = Path(self.tmp.name) / 'switches.json'
+        self.assertEqual(self.m.status()['rig_switched_off'], [])
+        self.m.SWITCHES.write_text(json.dumps({'sms.send': False, 'call.dial': False, 'speak': True}))
+        self.assertEqual(self.m.status()['rig_switched_off'], ['call.dial', 'sms.send'])
+
     def test_daily_cap_is_ten_gb(self):
         self.assertEqual(self.m.CAP_BYTES, 10 * 1000 ** 3)
 

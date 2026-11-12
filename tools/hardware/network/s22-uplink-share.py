@@ -34,6 +34,7 @@ USAGE = Path(os.environ.get('S22_SHARE_USAGE', '/srv/s22/state/uplink-share/usag
 AUDIT = Path(os.environ.get('S22_SHARE_AUDIT', '/srv/s22/state/audit/uplink-share.jsonl'))
 NETPOLICY = Path(os.environ.get('S22_NETPOLICY_CONF', '/srv/s22/state/netpolicy/config.json'))
 SMS_PAUSED = Path(os.environ.get('S22_SMS_PAUSED', '/srv/s22/state/phoned/sms_paused'))
+SWITCHES = Path(os.environ.get('S22_DEVICE_SWITCHES', '/srv/s22/state/device-switches.json'))
 NP_STATUS = Path(os.environ.get('S22_NETPOLICY_STATUS', '/run/s22-netpolicy/status.json'))
 BATTERY = Path(os.environ.get('S22_BATTERY', '/sys/class/power_supply/battery/capacity'))
 NET = Path(os.environ.get('S22_SYS_NET', '/sys/class/net'))
@@ -369,6 +370,11 @@ def sms_state() -> dict:
     return {'paused': True, 'reason': why or 'paused'}
 
 
+def rig_switched_off() -> list[str]:
+    """Device-API capabilities the owner has switched off for the rig (Settings -> Rig access)."""
+    return sorted(k for k, v in read_json(SWITCHES).items() if v is False)
+
+
 def status() -> dict:
     st = read_json(STATE)
     try:
@@ -378,7 +384,7 @@ def status() -> dict:
     fwd = FORWARD.read_text().strip() == '1' if FORWARD.exists() else None
     return {'ok': True, 'on': bool(st.get('on')), 'since': st.get('since'), 'forwarding': fwd,
             'rig_configured': rig_ok, 'battery': battery(), 'bytes_today': used_today(st),
-            'data_fails': int(st.get('data_fails', 0)), 'data_checked': st.get('data_checked'), 'sms': sms_state(),
+            'data_fails': int(st.get('data_fails', 0)), 'data_checked': st.get('data_checked'), 'sms': sms_state(), 'rig_switched_off': rig_switched_off(),
             'cap_bytes': CAP_BYTES, 'max_s': MAX_S, 'min_battery': MIN_BATTERY}
 
 
