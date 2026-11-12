@@ -3460,3 +3460,20 @@ Details: `evidence/npu-custom-20261022/README.md`. Tools: `tools/hardware/npu/nn
 - **Why the morning proof passed:** it lasted 5 s (one curl), inside the window in which traffic still passes.
 - **Consequence for the rig daemon:** it now has to see several HTTP exchanges through the phone, spread over
   seconds, before it touches the default route, and it keeps checking the path during failover.
+
+### 2026-11-12 (evening) — Rig failover stage 1 passed (probe cut, 2 minutes on the phone)
+
+- **Setup:** the SIM now has data (unlimited and 50 GB bundles until 12-12; voice and SMS 0). The daemon with the
+  path check was installed disabled; `selftest --seconds 20` passed (every sample from a different public address
+  than the main line's). Test: `s22-uplink-cut-test.sh probe 180` with `min_failover_s` 120 and `up_after` 3,
+  trader flat (checked at 17:37 EET), run by the orchestrator.
+- **Daemon log (UTC):** 15:47:04 start · 15:47:54 down (3 failed probes) · 15:48:57 failover_on (3 verification
+  probes, held 3) · 15:50:33 up (3 good probes) · 15:50:34 failover_off main_up · 15:51:30 stop.
+- **Phone (own 10 s log):** share on 15:48:41, off 15:50:35; 15.0 MB used (8,658,401 → 23,704,949 bytes today).
+- **Rig during the failover:** six checks 20 s apart: public address different from the main line's in the first
+  five, Coinbase public API 200 in 0.21–0.26 s, DNS ok; the sixth was already back on the main line.
+- **After:** eno1 default at metric 100, NetworkManager connectivity full (no penalty), cut rule removed. The
+  per-link DNS list of eno1 is empty before and after (baseline), so nothing to restore.
+- **Not yet done:** stage 2 (a true outage: drop everything via the main gateway) and the decision to enable the unit.
+- **Mistake in the record:** a watcher read the root-only log wrongly and "failover_on" was signalled at 17:47:07,
+  a minute early; the phone-side log above is the reference.
