@@ -612,6 +612,42 @@
       },
       "available": true,
       "confirm": "none",
+      "description": "Whether the phone is lending its mobile data to the rig (internet sharing), today's shared bytes and the guards.",
+      "effect": "read",
+      "id": "uplink.status",
+      "reason": null,
+      "timeout_s": 15
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on"
+        ],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
+      "description": "Lend the phone's mobile data to the rig while its internet is down (on), or stop (off). Only the rig is forwarded; refused at 40 % battery or less or after 2 GB today; stops by itself after 6 h.",
+      "effect": "set",
+      "id": "uplink.share",
+      "reason": null,
+      "timeout_s": 100
+    },
+    {
+      "args": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "available": true,
+      "confirm": "none",
       "description": "Save a screenshot of the shell to the gallery (as Power + Volume down). The screen must be on.",
       "effect": "action",
       "id": "screenshot",

@@ -2243,3 +2243,60 @@ mod listen_tests {
         assert_eq!((s, code(&v)), (StatusCode::BAD_REQUEST, "bad_request"));
     }
 }
+
+// ------------------------------------------------------------ uplink.share (P4)
+
+mod uplink_tests {
+    use super::*;
+
+    fn with_tool(body: &str) -> H {
+        let tmp = Tmp::new();
+        let tool = tmp.write("bin/share.py", body);
+        let p = tool.clone();
+        let h = H::with(move |c| c.uplink_tool = p);
+        std::mem::forget(tmp);
+        h
+    }
+
+    #[tokio::test]
+    async fn share_on_off_and_status_go_through_the_tool() {
+        let h = with_tool("import json,sys\nprint('noise')\nprint(json.dumps({'ok': True, 'on': sys.argv[1] == 'on', 'cmd': sys.argv[1]}))\n");
+        let (s, v) = h
+            .send("POST", "/v1/device/uplink.share", Some(json!({"on": true})))
+            .await;
+        assert_eq!(s, StatusCode::OK, "{v}");
+        assert_eq!(
+            (v["state"]["cmd"].as_str(), v["state"]["on"].as_bool()),
+            (Some("on"), Some(true))
+        );
+        assert!(v["state"].get("ok").is_none());
+        let (_, v) = h
+            .send(
+                "POST",
+                "/v1/device/uplink.share",
+                Some(json!({"on": false})),
+            )
+            .await;
+        assert_eq!(v["state"]["cmd"], "off");
+        let (_, v) = h.send("GET", "/v1/device/uplink.status", None).await;
+        assert_eq!(v["state"]["cmd"], "status");
+        let (s, v) = h
+            .send("POST", "/v1/device/uplink.share", Some(json!({})))
+            .await;
+        assert_eq!((s, code(&v)), (StatusCode::BAD_REQUEST, "bad_request"));
+    }
+
+    #[tokio::test]
+    async fn a_guard_refusal_is_final() {
+        let h = with_tool("import json\nprint(json.dumps({'ok': False, 'error': 'battery 38 % (sharing needs more than 40 %)'}))\n");
+        let (s, v) = h
+            .send("POST", "/v1/device/uplink.share", Some(json!({"on": true})))
+            .await;
+        assert_eq!(
+            (s, code(&v)),
+            (StatusCode::CONFLICT, "share_refused"),
+            "{v}"
+        );
+        assert!(v["error"].as_str().unwrap().contains("battery"));
+    }
+}

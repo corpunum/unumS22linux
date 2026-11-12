@@ -68,6 +68,13 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
     );
     real::settings::wifi_off_cleanup_at_start(&cfg);
     let app = App::new(cfg.clone(), real::backends(&cfg), audit);
+    // Internet sharing left on by a reboot or a dead watchdog is undone at start (s22-uplink-share sweep).
+    if cfg.uplink_tool.exists() {
+        let c = cfg.clone();
+        std::thread::spawn(move || {
+            let _ = device::uplink(&c, "sweep");
+        });
+    }
 
     let tcp = tokio::net::TcpListener::bind(&cfg.tcp_addr).await?;
     let tcp_app = router(app.clone(), Transport::Tcp);

@@ -49,6 +49,8 @@ pub const REMOTE_CAPS: &[&str] = &[
     "task.submit",
     "task.get",
     "audio.listen",
+    "uplink.status",
+    "uplink.share",
 ];
 
 /// Captures: results go back in the response, then the file is deleted unless `save: true`.

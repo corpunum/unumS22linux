@@ -104,6 +104,7 @@ EXPECTED_HOST_TEST_PATHS = (
     "tools/hardware/phoned/test_lte_attach.py",
     "tools/hardware/phoned/test_radio_nr.py",
     "tools/hardware/network/test_s22_netpolicy.py",
+    "tools/hardware/network/test_s22_uplink_share.py",
     "tools/hardware/voip/test_s22_sip.py",
     "tools/hardware/test_s22_converse.py",
     "tools/hardware/test_s22_loudnorm.py",

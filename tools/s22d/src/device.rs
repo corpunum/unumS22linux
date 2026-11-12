@@ -107,6 +107,8 @@ pub fn defs() -> Vec<DevCap> {
         c("task.submit", Action, 40, "Give the phone's own agent (its local model) a task. Answers with the task's session id, and the reply when it is ready within ~30 s; otherwise poll task.get.", json!({"text": {"type": "string", "minLength": 1, "maxLength": 4000}}), &["text"]),
         c("task.get", Read, 15, "The latest reply of a task started with task.submit (session from its answer).", json!({"session": {"type": "string", "maxLength": 80}}), &["session"]),
         c("audio.listen", Action, 260, "Listen to the room for a few seconds (default 20, max 120) and answer with the transcript (on-phone ASR). Shows a banner on the screen while recording; no audio is kept. OFF unless the owner switched it on on the phone.", json!({"seconds": {"type": "integer", "minimum": 3, "maximum": 120}}), &[]),
+        c("uplink.status", Read, 15, "Whether the phone is lending its mobile data to the rig (internet sharing), today's shared bytes and the guards.", json!({}), &[]),
+        c("uplink.share", Set, 100, "Lend the phone's mobile data to the rig while its internet is down (on), or stop (off). Only the rig is forwarded; refused at 40 % battery or less or after 2 GB today; stops by itself after 6 h.", on(), &["on"]),
         c("screenshot", Action, 15, "Save a screenshot of the shell to the gallery (as Power + Volume down). The screen must be on.", json!({}), &[]),
     ]
 }
@@ -135,6 +137,9 @@ fn availability(app: &Shared, id: &str) -> Option<String> {
             (!cfg.shell_sock.exists()).then(|| "unum-fastshell is not running".to_string())
         }
         "speak" => (!cfg.touch_sock.exists()).then(|| "s22-touchd is not running".to_string()),
+        "uplink" => {
+            (!cfg.uplink_tool.exists()).then(|| format!("missing: {}", cfg.uplink_tool.display()))
+        }
         "audio" => (!cfg.rec_tool.exists())
             .then(|| format!("recorder missing: {}", cfg.rec_tool.display())),
         _ => None,
@@ -618,6 +623,13 @@ async fn run(app: &Shared, cap: &DevCap, a: &Args) -> ApiResult<Out> {
                 json!({"spoken": true, "played": r["played"], "level": level, "engine": r["engine"], "ms": r["ms"]}),
             )
         }
+        "uplink.status" => out(blocking(move || uplink(&cfg, "status")).await?),
+        "uplink.share" => {
+            let on = a
+                .bool("on")?
+                .ok_or_else(|| ApiError::bad_request("on is required"))?;
+            out(blocking(move || uplink(&cfg, if on { "on" } else { "off" })).await?)
+        }
         "audio.listen" => {
             // The owner's switch binds every caller (the chroot agent via loopback too), not only remote ones.
             if !crate::remote::switch_on(&cfg.switches_path, "audio.listen") {
@@ -802,6 +814,44 @@ fn listen(cfg: &crate::config::Config, secs: u64, caller: &str) -> ApiResult<Val
         &json!({"ts": ts, "caller": caller, "cap": "audio.listen", "seconds": secs, "chars": text.chars().count(), "kept": false}),
     );
     Ok(json!({"transcript": text, "seconds": secs, "kept": false}))
+}
+
+/// Run s22-uplink-share and return its JSON answer; a refusal (guards, no rig address) is final (409).
+pub(crate) fn uplink(cfg: &crate::config::Config, cmd: &str) -> ApiResult<Value> {
+    use crate::real::runner::{Runner, SysRunner};
+    let o = SysRunner
+        .run(
+            "/usr/bin/python3",
+            &[cfg.uplink_tool.display().to_string(), cmd.to_string()],
+            Duration::from_secs(95),
+        )
+        .map_err(|e| ApiError::upstream(format!("s22-uplink-share: {e}")))?;
+    let v: Value = o
+        .stdout
+        .lines()
+        .rev()
+        .find_map(|l| serde_json::from_str(l.trim()).ok())
+        .ok_or_else(|| {
+            ApiError::upstream(format!(
+                "s22-uplink-share gave no answer (timed out: {})",
+                o.timed_out
+            ))
+        })?;
+    if v["ok"] != json!(true) {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "share_refused",
+            v["error"]
+                .as_str()
+                .unwrap_or("internet sharing refused")
+                .to_string(),
+        ));
+    }
+    let mut v = v;
+    if let Some(m) = v.as_object_mut() {
+        m.remove("ok");
+    }
+    Ok(v)
 }
 
 /// sherpa-onnx prints a JSON line with "text"; plain output otherwise.

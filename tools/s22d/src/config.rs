@@ -46,6 +46,8 @@ pub struct Config {
     /// and the capture audit.
     pub switches_path: PathBuf,
     pub rec_tool: PathBuf,
+    /// uplink.share / uplink.status (tools/hardware/network/s22-uplink-share.py).
+    pub uplink_tool: PathBuf,
     pub asr_cmd: Vec<String>,
     pub listen_dir: PathBuf,
     pub listen_dir_in_chroot: String,
@@ -127,6 +129,7 @@ impl Config {
             touch_sock: p("mnt/omarchy-trial/run/s22-touch/ctl.sock"),
             switches_path: p("srv/s22/state/device-switches.json"),
             rec_tool: p("srv/s22/hardware/bin/s22-rec"),
+            uplink_tool: p("srv/s22/hardware/bin/s22-uplink-share"),
             asr_cmd: [
                 "chroot", "/mnt/omarchy-trial", "taskset", "-c", "4-7",
                 "/opt/s22-asr/bin/sherpa-onnx-offline", "--num-threads=4", "--model-type=nemo_ctc",

@@ -9,7 +9,7 @@ use serde_json::{Map, Value};
 use std::collections::HashMap;
 
 /// (capability id, row label, detail line, default)
-pub const ITEMS: [(&str, &str, &str, bool); 6] = [
+pub const ITEMS: [(&str, &str, &str, bool); 7] = [
     (
         "audio.listen",
         "Room listening",
@@ -44,6 +44,12 @@ pub const ITEMS: [(&str, &str, &str, bool); 6] = [
         "call.dial",
         "Calls",
         "the rig may place calls (allowlist rules apply)",
+        true,
+    ),
+    (
+        "uplink.share",
+        "Internet sharing",
+        "the rig may use mobile data while its internet is down",
         true,
     ),
 ];
