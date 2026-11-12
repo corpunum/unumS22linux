@@ -1512,6 +1512,12 @@ class Phone:
         text = str(text or "")
         if not text:
             return 400, {"ok": False, "status": "refused", "error": "empty text", "id": None, "parts": 0}
+        if (self.dir / "sms_paused").is_file() and (normalize_number(to), text) != CARRIER_BALANCE_SMS:
+            # Owner switch (2026-11-12): the SIM has no SMS bundle, so every text would be charged.
+            rec = {"id": self.new_id("out"), "to": normalize_number(to), "text": text, "ts": now(), "parts": 0,
+                   "status": "refused", "delivered": None, "mrs": [], "error": "refused: sms paused (sms_paused file)"}
+            self.outbox.put(rec)
+            return 403, {"ok": False, "status": "refused", "error": rec["error"], "id": rec["id"], "parts": 0}
         if (normalize_number(to), text) == CARRIER_BALANCE_SMS:
             # The one short number that may be texted: the carrier's free balance query (read-only).
             n, err = CARRIER_BALANCE_SMS[0], (None if self.tx_enabled() else "refused: tx disabled (no tx_enabled file)")

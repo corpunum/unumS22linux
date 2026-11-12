@@ -298,6 +298,19 @@ class GateTest(unittest.TestCase):
         self.assertEqual(code, 403)
         self.assertIn("tx disabled", res["error"])
 
+    def test_sms_paused_refuses_every_text_but_the_free_balance_query(self):
+        Path(self.tmp.name, "tx_enabled").write_text("")
+        self.allow("+306900000001")
+        Path(self.tmp.name, "sms_paused").write_text("")
+        code, res = self.ph.send_sms("+306900000001", "hello")
+        self.assertEqual((code, res["status"]), (403, "refused"))
+        self.assertIn("sms paused", res["error"])
+        code, res = self.ph.send_sms("1252", "Y")
+        self.assertNotIn("paused", res.get("error") or "")
+        Path(self.tmp.name, "sms_paused").unlink()
+        code, res = self.ph.send_sms("+306900000001", "hello")
+        self.assertNotIn("paused", res.get("error") or "")
+
     def test_tx_disabled_then_allowlist(self):
         code, body = self.ph.send_sms("+306912345678", "hi")
         self.assertEqual((code, body["status"]), (403, "refused"))
