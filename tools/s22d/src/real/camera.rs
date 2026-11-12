@@ -900,7 +900,8 @@ esac
     #[test]
     fn hung_client_gets_sigterm_only() {
         let t = Tmp::new();
-        t.script("srv/s22/hardware/bin/s22-camera", "sleep 30");
+        // exec: the signal must reach the process holding the pipe (a forked `sleep` kept it open for 30 s).
+        t.script("srv/s22/hardware/bin/s22-camera", "exec sleep 30");
         let mut c = Config::rooted(t.path());
         c.python = "sh".into();
         c.python_args = vec![];
