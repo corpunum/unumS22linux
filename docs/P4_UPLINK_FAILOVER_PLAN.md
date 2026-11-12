@@ -40,6 +40,11 @@ through corpunum-82.
 Remote access: `uplink.share` and `uplink.status` join `REMOTE_CAPS` behind a switch (default on,
 owner toggle in Rig access).
 
+**Rig interface:** both rig interfaces (`eno1` and `wlp195s0`) are on the phone's LAN. The phone
+forwards only the address in `/srv/s22/state/uplink-share.json`, which is `eno1`'s, so every rig route
+via the phone must use `dev eno1`. Traffic leaving by Wi-Fi would carry the other source address and be
+dropped.
+
 ## Proof (one destination only, minutes, a few KB of LTE data)
 
 Phone: `uplink.share on`. Rig, with sudo (the rest of the rig is untouched):
