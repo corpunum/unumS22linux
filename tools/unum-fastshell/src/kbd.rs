@@ -93,7 +93,13 @@ pub struct Kbd {
 
 impl Default for Kbd {
     fn default() -> Self {
-        Kbd { visible: false, layout: Layout::En, text_layout: Layout::En, shift: false, tonos: false }
+        Kbd {
+            visible: false,
+            layout: Layout::En,
+            text_layout: Layout::En,
+            shift: false,
+            tonos: false,
+        }
     }
 }
 
@@ -107,8 +113,20 @@ pub enum KeyOut {
 impl Kbd {
     pub fn label(&self, k: &str) -> String {
         match k {
-            LANG => if self.text_layout == Layout::El { "ΕΛ".into() } else { "EN".into() },
-            SPACE => if self.text_layout == Layout::El { "κενό".into() } else { "space".into() },
+            LANG => {
+                if self.text_layout == Layout::El {
+                    "ΕΛ".into()
+                } else {
+                    "EN".into()
+                }
+            }
+            SPACE => {
+                if self.text_layout == Layout::El {
+                    "κενό".into()
+                } else {
+                    "space".into()
+                }
+            }
             SHIFT => "Shift".into(),
             BKSP => "Del".into(),
             ENTER => "Send".into(),
@@ -135,7 +153,11 @@ impl Kbd {
                 KeyOut::Redraw
             }
             LANG => {
-                self.text_layout = if self.text_layout == Layout::En { Layout::El } else { Layout::En };
+                self.text_layout = if self.text_layout == Layout::En {
+                    Layout::El
+                } else {
+                    Layout::En
+                };
                 self.layout = self.text_layout;
                 self.tonos = false;
                 KeyOut::Redraw
@@ -145,7 +167,11 @@ impl Kbd {
                 KeyOut::Redraw
             }
             _ => {
-                let mut s = if self.shift { k.to_uppercase() } else { k.to_string() };
+                let mut s = if self.shift {
+                    k.to_uppercase()
+                } else {
+                    k.to_string()
+                };
                 if self.tonos {
                     let mut cs = s.chars();
                     if let (Some(c), None) = (cs.next(), cs.next()) {

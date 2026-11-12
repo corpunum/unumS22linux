@@ -97,7 +97,10 @@ impl Default for Config {
     }
 }
 
-const DEFAULT_PATHS: [&str; 2] = ["/srv/s22/state/fastshell/config.json", "/etc/unum-fastshell.json"];
+const DEFAULT_PATHS: [&str; 2] = [
+    "/srv/s22/state/fastshell/config.json",
+    "/etc/unum-fastshell.json",
+];
 
 impl Config {
     /// Overlay a JSON object on the defaults.
@@ -114,7 +117,13 @@ impl Config {
             }
         };
         let ls = |k: &str, d: &mut Vec<String>| match v.get(k) {
-            Some(Value::Array(a)) => *d = a.iter().filter_map(Value::as_str).map(String::from).collect(),
+            Some(Value::Array(a)) => {
+                *d = a
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(String::from)
+                    .collect()
+            }
             Some(Value::String(x)) => *d = vec![x.clone()],
             _ => {}
         };
@@ -175,11 +184,22 @@ impl Config {
     /// Load the config file (if any) and the environment. Returns the config
     /// and the file it came from, or a parse error message.
     pub fn load() -> (Config, Option<String>, Option<String>) {
-        let path = std::env::var("FASTSHELL_CONFIG").ok().or_else(|| DEFAULT_PATHS.iter().find(|p| Path::new(p).exists()).map(|p| p.to_string()));
+        let path = std::env::var("FASTSHELL_CONFIG").ok().or_else(|| {
+            DEFAULT_PATHS
+                .iter()
+                .find(|p| Path::new(p).exists())
+                .map(|p| p.to_string())
+        });
         let (mut c, err) = match &path {
-            Some(p) => match std::fs::read_to_string(p).map_err(|e| e.to_string()).and_then(|s| serde_json::from_str::<Value>(&s).map_err(|e| e.to_string())) {
+            Some(p) => match std::fs::read_to_string(p)
+                .map_err(|e| e.to_string())
+                .and_then(|s| serde_json::from_str::<Value>(&s).map_err(|e| e.to_string()))
+            {
                 Ok(v) => (Config::from_json(&v), None),
-                Err(e) => (Config::default(), Some(format!("{p}: {e} (using defaults)"))),
+                Err(e) => (
+                    Config::default(),
+                    Some(format!("{p}: {e} (using defaults)")),
+                ),
             },
             None => (Config::default(), None),
         };
@@ -204,7 +224,12 @@ impl Config {
     }
 
     pub fn touch_map(&self) -> TouchMap {
-        TouchMap { swap_xy: self.touch_swap_xy, invert_x: self.touch_invert_x, invert_y: self.touch_invert_y, ..TouchMap::default() }
+        TouchMap {
+            swap_xy: self.touch_swap_xy,
+            invert_x: self.touch_invert_x,
+            invert_y: self.touch_invert_y,
+            ..TouchMap::default()
+        }
     }
 }
 
@@ -223,11 +248,19 @@ pub fn get() -> &'static Config {
 // ---------------------------------------------------------------- detection
 
 fn rd(p: &Path) -> String {
-    std::fs::read_to_string(p).map(|s| s.trim().to_string()).unwrap_or_default()
+    std::fs::read_to_string(p)
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default()
 }
 
 fn entries(dir: &Path) -> Vec<String> {
-    let mut v: Vec<String> = std::fs::read_dir(dir).map(|r| r.flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect()).unwrap_or_default();
+    let mut v: Vec<String> = std::fs::read_dir(dir)
+        .map(|r| {
+            r.flatten()
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .collect()
+        })
+        .unwrap_or_default();
     v.sort();
     v
 }
@@ -242,8 +275,15 @@ fn sorted_entries(dir: &Path) -> Vec<String> {
 /// "event10" after "event9", "card1" before "card10".
 fn natural_key(s: &str) -> (String, u64, String) {
     let i = s.find(|c: char| c.is_ascii_digit()).unwrap_or(s.len());
-    let j = s[i..].find(|c: char| !c.is_ascii_digit()).map(|j| i + j).unwrap_or(s.len());
-    (s[..i].to_string(), s[i..j].parse().unwrap_or(0), s[j..].to_string())
+    let j = s[i..]
+        .find(|c: char| !c.is_ascii_digit())
+        .map(|j| i + j)
+        .unwrap_or(s.len());
+    (
+        s[..i].to_string(),
+        s[i..j].parse().unwrap_or(0),
+        s[j..].to_string(),
+    )
 }
 
 /// DRM card: the configured node if it is not "auto"; else the first
@@ -254,10 +294,18 @@ pub fn detect_drm_card(sys: &Path, dev: &Path, want: &str) -> Option<String> {
         return Some(want.to_string());
     }
     let ents = sorted_entries(sys);
-    let cards: Vec<&String> = ents.iter().filter(|n| n.starts_with("card") && n[4..].chars().all(|c| c.is_ascii_digit()) && n.len() > 4).collect();
+    let cards: Vec<&String> = ents
+        .iter()
+        .filter(|n| {
+            n.starts_with("card") && n[4..].chars().all(|c| c.is_ascii_digit()) && n.len() > 4
+        })
+        .collect();
     for c in &cards {
         let prefix = format!("{c}-");
-        if ents.iter().any(|n| n.starts_with(&prefix) && rd(&sys.join(n).join("status")) == "connected") {
+        if ents
+            .iter()
+            .any(|n| n.starts_with(&prefix) && rd(&sys.join(n).join("status")) == "connected")
+        {
             return Some(dev.join(c.as_str()).to_string_lossy().into_owned());
         }
     }
@@ -278,14 +326,17 @@ fn has_bit(bitmap: &str, bit: usize, word_bits: usize) -> bool {
         return false;
     }
     let w = words[words.len() - 1 - idx];
-    u128::from_str_radix(w, 16).map(|v| v >> (bit % word_bits) & 1 == 1).unwrap_or(false)
+    u128::from_str_radix(w, 16)
+        .map(|v| v >> (bit % word_bits) & 1 == 1)
+        .unwrap_or(false)
 }
 
 /// Does this input device look like a touchscreen? Needs ABS_MT_POSITION_X/Y;
 /// INPUT_PROP_DIRECT (or BTN_TOUCH when properties are absent) rules out touchpads.
 fn is_touchscreen(dev: &Path, word_bits: usize) -> bool {
     let abs = rd(&dev.join("capabilities/abs"));
-    if !(has_bit(&abs, ABS_MT_POSITION_X, word_bits) && has_bit(&abs, ABS_MT_POSITION_Y, word_bits)) {
+    if !(has_bit(&abs, ABS_MT_POSITION_X, word_bits) && has_bit(&abs, ABS_MT_POSITION_Y, word_bits))
+    {
         return false;
     }
     let props = rd(&dev.join("properties"));
@@ -298,21 +349,37 @@ fn is_touchscreen(dev: &Path, word_bits: usize) -> bool {
 /// Touchscreen evdev node: the configured node if not "auto"; else the first
 /// `eventN` whose device name is `name` (the S22 path, as before); else the
 /// first `eventN` with multitouch position axes and INPUT_PROP_DIRECT.
-pub fn detect_touchscreen(sys_input: &Path, dev_input: &Path, want: &str, name: &str) -> Option<String> {
+pub fn detect_touchscreen(
+    sys_input: &Path,
+    dev_input: &Path,
+    want: &str,
+    name: &str,
+) -> Option<String> {
     if want != "auto" && !want.is_empty() {
         return Some(want.to_string());
     }
     let node = |n: &str| dev_input.join(n).to_string_lossy().into_owned();
     if !name.is_empty() {
         // plain string order, as the S22-only code did
-        let evs: Vec<String> = entries(sys_input).into_iter().filter(|n| n.starts_with("event")).collect();
-        if let Some(n) = evs.iter().find(|n| rd(&sys_input.join(n).join("device/name")) == name) {
+        let evs: Vec<String> = entries(sys_input)
+            .into_iter()
+            .filter(|n| n.starts_with("event"))
+            .collect();
+        if let Some(n) = evs
+            .iter()
+            .find(|n| rd(&sys_input.join(n).join("device/name")) == name)
+        {
             return Some(node(n));
         }
     }
-    let evs: Vec<String> = sorted_entries(sys_input).into_iter().filter(|n| n.starts_with("event")).collect();
+    let evs: Vec<String> = sorted_entries(sys_input)
+        .into_iter()
+        .filter(|n| n.starts_with("event"))
+        .collect();
     let wb = usize::BITS as usize;
-    evs.iter().find(|n| is_touchscreen(&sys_input.join(n).join("device"), wb)).map(|n| node(n))
+    evs.iter()
+        .find(|n| is_touchscreen(&sys_input.join(n).join("device"), wb))
+        .map(|n| node(n))
 }
 
 /// Battery power_supply directory: configured, else `battery` (S22), else the
@@ -325,7 +392,10 @@ pub fn detect_battery(sys_ps: &Path, want: &str) -> Option<PathBuf> {
     if b.join("capacity").exists() {
         return Some(b);
     }
-    sorted_entries(sys_ps).into_iter().map(|n| sys_ps.join(n)).find(|p| rd(&p.join("type")) == "Battery" && p.join("capacity").exists())
+    sorted_entries(sys_ps)
+        .into_iter()
+        .map(|n| sys_ps.join(n))
+        .find(|p| rd(&p.join("type")) == "Battery" && p.join("capacity").exists())
 }
 
 /// Backlight directory: configured, else `panel` (S22), else the first one.
@@ -337,7 +407,10 @@ pub fn detect_backlight(sys_bl: &Path, want: &str) -> Option<PathBuf> {
     if p.join("brightness").exists() {
         return Some(p);
     }
-    sorted_entries(sys_bl).into_iter().map(|n| sys_bl.join(n)).find(|p| p.join("max_brightness").exists())
+    sorted_entries(sys_bl)
+        .into_iter()
+        .map(|n| sys_bl.join(n))
+        .find(|p| p.join("max_brightness").exists())
 }
 
 /// Thermal zones to show, as (type, temp file): the zones whose type is in
@@ -348,15 +421,26 @@ pub fn detect_thermal(sys_th: &Path, types: &[String]) -> Vec<(String, PathBuf)>
     let zones: Vec<(String, PathBuf)> = entries(sys_th)
         .into_iter()
         .filter(|n| n.starts_with("thermal_zone"))
-        .map(|n| (rd(&sys_th.join(&n).join("type")), sys_th.join(n).join("temp")))
+        .map(|n| {
+            (
+                rd(&sys_th.join(&n).join("type")),
+                sys_th.join(n).join("temp"),
+            )
+        })
         .collect();
-    let picked: Vec<_> = zones.iter().filter(|(t, _)| types.iter().any(|x| x == t)).cloned().collect();
+    let picked: Vec<_> = zones
+        .iter()
+        .filter(|(t, _)| types.iter().any(|x| x == t))
+        .cloned()
+        .collect();
     if !picked.is_empty() {
         return picked;
     }
     let hint = |t: &str| {
         let l = t.to_ascii_lowercase();
-        ["cpu", "gpu", "soc", "big", "little", "cluster"].iter().any(|h| l.contains(h))
+        ["cpu", "gpu", "soc", "big", "little", "cluster"]
+            .iter()
+            .any(|h| l.contains(h))
     };
     zones.into_iter().filter(|(t, _)| hint(t)).take(4).collect()
 }
@@ -406,13 +490,29 @@ pub struct TouchMap {
 impl Default for TouchMap {
     fn default() -> Self {
         let (w, h) = (crate::ui::W, crate::ui::H);
-        TouchMap { swap_xy: false, invert_x: false, invert_y: false, cw: w, ch: h, pw: w, ph: h, ox: 0, oy: 0 }
+        TouchMap {
+            swap_xy: false,
+            invert_x: false,
+            invert_y: false,
+            cw: w,
+            ch: h,
+            pw: w,
+            ph: h,
+            ox: 0,
+            oy: 0,
+        }
     }
 }
 
 impl TouchMap {
     pub fn is_identity(&self) -> bool {
-        !self.swap_xy && !self.invert_x && !self.invert_y && self.pw == self.cw && self.ph == self.ch && self.ox == 0 && self.oy == 0
+        !self.swap_xy
+            && !self.invert_x
+            && !self.invert_y
+            && self.pw == self.cw
+            && self.ph == self.ch
+            && self.ox == 0
+            && self.oy == 0
     }
 
     /// Canvas offset of a W x H canvas centred on a pw x ph panel (negative = cropped).
@@ -477,7 +577,8 @@ mod tests {
     struct Tmp(PathBuf);
     impl Tmp {
         fn new(tag: &str) -> Tmp {
-            let p = std::env::temp_dir().join(format!("fastshell-cfg-{tag}-{}", std::process::id()));
+            let p =
+                std::env::temp_dir().join(format!("fastshell-cfg-{tag}-{}", std::process::id()));
             let _ = fs::remove_dir_all(&p);
             fs::create_dir_all(&p).unwrap();
             Tmp(p)
@@ -508,7 +609,9 @@ mod tests {
 
     #[test]
     fn json_overlay() {
-        let c = Config::from_json(&serde_json::json!({"chroot": "", "drm_card": "/dev/dri/card0", "net_wifi": "wlan1", "thermal_types": ["cpu0-thermal"], "touch_invert_y": true, "bogus": 1}));
+        let c = Config::from_json(
+            &serde_json::json!({"chroot": "", "drm_card": "/dev/dri/card0", "net_wifi": "wlan1", "thermal_types": ["cpu0-thermal"], "touch_invert_y": true, "bogus": 1}),
+        );
         assert_eq!(c.chroot, "");
         assert_eq!(c.seatd_socket(), "/run/seatd.sock");
         assert_eq!(c.drm_card, "/dev/dri/card0");
@@ -527,8 +630,14 @@ mod tests {
         t.put("sys/card1-DSI-1/status", "connected");
         t.put("sys/renderD128/dev", "226:128");
         let dev = t.0.join("dev");
-        assert_eq!(detect_drm_card(&t.0.join("sys"), &dev, "auto").unwrap(), dev.join("card1").to_string_lossy());
-        assert_eq!(detect_drm_card(&t.0.join("sys"), &dev, "/dev/dri/card7").unwrap(), "/dev/dri/card7");
+        assert_eq!(
+            detect_drm_card(&t.0.join("sys"), &dev, "auto").unwrap(),
+            dev.join("card1").to_string_lossy()
+        );
+        assert_eq!(
+            detect_drm_card(&t.0.join("sys"), &dev, "/dev/dri/card7").unwrap(),
+            "/dev/dri/card7"
+        );
     }
 
     #[test]
@@ -539,7 +648,10 @@ mod tests {
         t.put("sys/card2/dev", "");
         t.put("sys/card2-DSI-1/status", "connected");
         let dev = t.0.join("dev");
-        assert_eq!(detect_drm_card(&t.0.join("sys"), &dev, "auto").unwrap(), dev.join("card2").to_string_lossy());
+        assert_eq!(
+            detect_drm_card(&t.0.join("sys"), &dev, "auto").unwrap(),
+            dev.join("card2").to_string_lossy()
+        );
         let e = Tmp::new("drm3");
         assert!(detect_drm_card(&e.0, &dev, "auto").is_none());
     }
@@ -559,11 +671,20 @@ mod tests {
         t.put("input/event10/device/name", "goodix-ts");
         t.put("input/event10/device/capabilities/abs", "660800000000000"); // MT_SLOT, POS_X/Y, TRACKING_ID...
         t.put("input/event10/device/properties", "2"); // DIRECT
-        assert_eq!(detect_touchscreen(&si, &di, "auto", "sec_touchscreen").unwrap(), di.join("event10").to_string_lossy());
+        assert_eq!(
+            detect_touchscreen(&si, &di, "auto", "sec_touchscreen").unwrap(),
+            di.join("event10").to_string_lossy()
+        );
         // the S22 name wins over capability order
         t.put("input/event3/device/name", "sec_touchscreen");
-        assert_eq!(detect_touchscreen(&si, &di, "auto", "sec_touchscreen").unwrap(), di.join("event3").to_string_lossy());
-        assert_eq!(detect_touchscreen(&si, &di, "/dev/input/event9", "x").unwrap(), "/dev/input/event9");
+        assert_eq!(
+            detect_touchscreen(&si, &di, "auto", "sec_touchscreen").unwrap(),
+            di.join("event3").to_string_lossy()
+        );
+        assert_eq!(
+            detect_touchscreen(&si, &di, "/dev/input/event9", "x").unwrap(),
+            "/dev/input/event9"
+        );
     }
 
     #[test]
@@ -584,7 +705,11 @@ mod tests {
         t.put("input/event1/device/name", "old-ts");
         t.put("input/event1/device/capabilities/abs", "660800000000000");
         t.put("input/event1/device/capabilities/key", "400 0 0 0 0 0");
-        assert!(detect_touchscreen(&t.0.join("input"), &t.0.join("d"), "auto", "").unwrap().ends_with("event1"));
+        assert!(
+            detect_touchscreen(&t.0.join("input"), &t.0.join("d"), "auto", "")
+                .unwrap()
+                .ends_with("event1")
+        );
     }
 
     #[test]
@@ -593,14 +718,26 @@ mod tests {
         t.put("ps/usb/type", "USB");
         t.put("ps/max170xx_battery/type", "Battery");
         t.put("ps/max170xx_battery/capacity", "77");
-        assert_eq!(detect_battery(&t.0.join("ps"), "auto").unwrap(), t.0.join("ps/max170xx_battery"));
+        assert_eq!(
+            detect_battery(&t.0.join("ps"), "auto").unwrap(),
+            t.0.join("ps/max170xx_battery")
+        );
         t.put("ps/battery/capacity", "50"); // the S22 name wins
-        assert_eq!(detect_battery(&t.0.join("ps"), "auto").unwrap(), t.0.join("ps/battery"));
+        assert_eq!(
+            detect_battery(&t.0.join("ps"), "auto").unwrap(),
+            t.0.join("ps/battery")
+        );
         t.put("bl/backlight-dsi/max_brightness", "4095");
         t.put("bl/backlight-dsi/brightness", "100");
-        assert_eq!(detect_backlight(&t.0.join("bl"), "auto").unwrap(), t.0.join("bl/backlight-dsi"));
+        assert_eq!(
+            detect_backlight(&t.0.join("bl"), "auto").unwrap(),
+            t.0.join("bl/backlight-dsi")
+        );
         t.put("bl/panel/brightness", "100");
-        assert_eq!(detect_backlight(&t.0.join("bl"), "auto").unwrap(), t.0.join("bl/panel"));
+        assert_eq!(
+            detect_backlight(&t.0.join("bl"), "auto").unwrap(),
+            t.0.join("bl/panel")
+        );
         assert!(detect_battery(&t.0.join("none"), "auto").is_none());
     }
 
@@ -613,13 +750,19 @@ mod tests {
         t.put("th/thermal_zone2/type", "G3D");
         t.put("th/thermal_zone10/type", "MID");
         let s22 = Config::default().thermal_types;
-        let z: Vec<String> = detect_thermal(&t.0.join("th"), &s22).into_iter().map(|z| z.0).collect();
+        let z: Vec<String> = detect_thermal(&t.0.join("th"), &s22)
+            .into_iter()
+            .map(|z| z.0)
+            .collect();
         assert_eq!(z, vec!["BIG", "MID", "G3D"]); // zone10 sorts before zone2, as before
         let u = Tmp::new("th2");
         u.put("th/thermal_zone0/type", "cpu0-thermal");
         u.put("th/thermal_zone1/type", "pm8150-tz");
         u.put("th/thermal_zone2/type", "gpu-thermal");
-        let z: Vec<String> = detect_thermal(&u.0.join("th"), &s22).into_iter().map(|z| z.0).collect();
+        let z: Vec<String> = detect_thermal(&u.0.join("th"), &s22)
+            .into_iter()
+            .map(|z| z.0)
+            .collect();
         assert_eq!(z, vec!["cpu0-thermal", "gpu-thermal"]);
     }
 
@@ -634,7 +777,11 @@ mod tests {
         assert_eq!((l.ox, l.oy), (0, 30));
         assert_eq!(l.point(0, 0), (0, -30));
         assert_eq!(l.point(540, 1170), (540, 1170));
-        let inv = TouchMap { invert_x: true, invert_y: true, ..TouchMap::default() };
+        let inv = TouchMap {
+            invert_x: true,
+            invert_y: true,
+            ..TouchMap::default()
+        };
         assert_eq!(inv.point(0, 0), (1079, 2339));
         assert_eq!(inv.apply(Touch::Cancel(3)), Touch::Cancel(3));
     }

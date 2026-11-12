@@ -255,12 +255,16 @@ impl Card {
         res.fb_id_ptr = fbs.as_mut_ptr() as u64;
         ioctl(fd, GETRESOURCES, &mut res)?;
         for &cid in &conns {
-            let mut gc = GetConnector { connector_id: cid, ..Default::default() };
+            let mut gc = GetConnector {
+                connector_id: cid,
+                ..Default::default()
+            };
             ioctl(fd, GETCONNECTOR, &mut gc)?;
             if gc.connection != 1 || gc.count_modes == 0 {
                 continue;
             }
-            let mut modes: Vec<ModeInfo> = vec![unsafe { std::mem::zeroed() }; gc.count_modes as usize];
+            let mut modes: Vec<ModeInfo> =
+                vec![unsafe { std::mem::zeroed() }; gc.count_modes as usize];
             let mut cencs = vec![0u32; gc.count_encoders as usize];
             let mut props = vec![0u32; gc.count_props as usize];
             let mut pvals = vec![0u64; gc.count_props as usize];
@@ -272,14 +276,20 @@ impl Card {
             // Prefer the CRTC this connector's encoder currently drives.
             let mut crtc_id = 0;
             if gc.encoder_id != 0 {
-                let mut ge = GetEncoder { encoder_id: gc.encoder_id, ..Default::default() };
+                let mut ge = GetEncoder {
+                    encoder_id: gc.encoder_id,
+                    ..Default::default()
+                };
                 if ioctl(fd, GETENCODER, &mut ge).is_ok() {
                     crtc_id = ge.crtc_id;
                 }
             }
             if crtc_id == 0 {
                 for &eid in &cencs {
-                    let mut ge = GetEncoder { encoder_id: eid, ..Default::default() };
+                    let mut ge = GetEncoder {
+                        encoder_id: eid,
+                        ..Default::default()
+                    };
                     if ioctl(fd, GETENCODER, &mut ge).is_ok() {
                         for (i, &c) in crtcs.iter().enumerate() {
                             if ge.possible_crtcs & (1 << i) != 0 {
@@ -296,7 +306,11 @@ impl Card {
             // Current mode on that CRTC if valid, else the connector's first (preferred) mode.
             let mut cur: Crtc = unsafe { std::mem::zeroed() };
             cur.crtc_id = crtc_id;
-            let mode = if ioctl(fd, GETCRTC, &mut cur).is_ok() && cur.mode_valid != 0 { cur.mode } else { modes[0] };
+            let mode = if ioctl(fd, GETCRTC, &mut cur).is_ok() && cur.mode_valid != 0 {
+                cur.mode
+            } else {
+                modes[0]
+            };
             return Ok(Card {
                 fd,
                 crtc_id,
@@ -306,7 +320,10 @@ impl Card {
                 mode,
             });
         }
-        Err(io::Error::new(io::ErrorKind::NotFound, "no connected connector"))
+        Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "no connected connector",
+        ))
     }
 
     pub fn set_master(&self) -> bool {
@@ -319,17 +336,34 @@ impl Card {
 
     /// Find a connector property id by name ("DPMS").
     pub fn connector_prop(&self, name: &str) -> Option<u32> {
-        let mut gc = GetConnector { connector_id: self.connector_id, ..Default::default() };
+        let mut gc = GetConnector {
+            connector_id: self.connector_id,
+            ..Default::default()
+        };
         ioctl(self.fd, GETCONNECTOR, &mut gc).ok()?;
         let mut props = vec![0u32; gc.count_props as usize];
         let mut vals = vec![0u64; gc.count_props as usize];
-        let mut gc2 = GetConnector { connector_id: self.connector_id, ..Default::default() };
+        let mut gc2 = GetConnector {
+            connector_id: self.connector_id,
+            ..Default::default()
+        };
         gc2.props_ptr = props.as_mut_ptr() as u64;
         gc2.prop_values_ptr = vals.as_mut_ptr() as u64;
         gc2.count_props = gc.count_props;
         ioctl(self.fd, GETCONNECTOR, &mut gc2).ok()?;
-        for &pid in props.iter().take(gc2.count_props.min(gc.count_props) as usize) {
-            let mut gp = GetProperty { values_ptr: 0, enum_blob_ptr: 0, prop_id: pid, flags: 0, name: [0; 32], count_values: 0, count_enum_blobs: 0 };
+        for &pid in props
+            .iter()
+            .take(gc2.count_props.min(gc.count_props) as usize)
+        {
+            let mut gp = GetProperty {
+                values_ptr: 0,
+                enum_blob_ptr: 0,
+                prop_id: pid,
+                flags: 0,
+                name: [0; 32],
+                count_values: 0,
+                count_enum_blobs: 0,
+            };
             if ioctl(self.fd, GETPROPERTY, &mut gp).is_ok() {
                 let n = gp.name.iter().position(|&b| b == 0).unwrap_or(32);
                 if &gp.name[..n] == name.as_bytes() {
@@ -343,8 +377,14 @@ impl Card {
     /// Legacy DPMS on the connector: on = 0, off = 3. On an atomic driver this
     /// toggles the CRTC's active state (decon off, panel sleep-in).
     pub fn dpms(&self, on: bool) -> io::Result<()> {
-        let pid = self.connector_prop("DPMS").ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no DPMS property"))?;
-        let mut sp = ConnSetProperty { value: if on { 0 } else { 3 }, prop_id: pid, connector_id: self.connector_id };
+        let pid = self
+            .connector_prop("DPMS")
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no DPMS property"))?;
+        let mut sp = ConnSetProperty {
+            value: if on { 0 } else { 3 },
+            prop_id: pid,
+            connector_id: self.connector_id,
+        };
         ioctl(self.fd, SETPROPERTY, &mut sp)
     }
 
@@ -354,7 +394,12 @@ impl Card {
     }
 
     fn add_fb(&self, handle: u32, pitch: u32, w: u32, h: u32) -> io::Result<u32> {
-        let mut f = FbCmd2 { width: w, height: h, pixel_format: FMT_XRGB8888, ..Default::default() };
+        let mut f = FbCmd2 {
+            width: w,
+            height: h,
+            pixel_format: FMT_XRGB8888,
+            ..Default::default()
+        };
         f.handles[0] = handle;
         f.pitches[0] = pitch;
         ioctl(self.fd, ADDFB2, &mut f)?;
@@ -362,33 +407,69 @@ impl Card {
     }
 
     pub fn create_dumb(&self) -> io::Result<Buffer> {
-        let mut cd = CreateDumb { width: self.width, height: self.height, bpp: 32, ..Default::default() };
+        let mut cd = CreateDumb {
+            width: self.width,
+            height: self.height,
+            bpp: 32,
+            ..Default::default()
+        };
         ioctl(self.fd, CREATE_DUMB, &mut cd)?;
         let fb_id = self.add_fb(cd.handle, cd.pitch, self.width, self.height)?;
-        let mut md = MapDumb { handle: cd.handle, ..Default::default() };
+        let mut md = MapDumb {
+            handle: cd.handle,
+            ..Default::default()
+        };
         ioctl(self.fd, MAP_DUMB, &mut md)?;
         let map = unsafe {
-            libc::mmap(std::ptr::null_mut(), cd.size as usize, libc::PROT_READ | libc::PROT_WRITE, libc::MAP_SHARED, self.fd, md.offset as libc::off_t)
+            libc::mmap(
+                std::ptr::null_mut(),
+                cd.size as usize,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_SHARED,
+                self.fd,
+                md.offset as libc::off_t,
+            )
         };
         if map == libc::MAP_FAILED {
             return Err(io::Error::last_os_error());
         }
-        Ok(Buffer { handle: cd.handle, fb_id, pitch: cd.pitch, size: cd.size as usize, map: map as *mut u8, dumb: true })
+        Ok(Buffer {
+            handle: cd.handle,
+            fb_id,
+            pitch: cd.pitch,
+            size: cd.size as usize,
+            map: map as *mut u8,
+            dumb: true,
+        })
     }
 
     /// Export a GEM handle as a dma-buf fd (read/write).
     pub fn export_fd(&self, handle: u32) -> io::Result<RawFd> {
-        let mut p = PrimeHandle { handle, flags: (libc::O_CLOEXEC | libc::O_RDWR) as u32, fd: -1 };
+        let mut p = PrimeHandle {
+            handle,
+            flags: (libc::O_CLOEXEC | libc::O_RDWR) as u32,
+            fd: -1,
+        };
         ioctl(self.fd, PRIME_HANDLE_TO_FD, &mut p)?;
         Ok(p.fd)
     }
 
     /// Import a foreign dma-buf (e.g. Samsung Vulkan memory) as a scanout framebuffer.
     pub fn import_fd(&self, fd: RawFd, pitch: u32, size: usize) -> io::Result<Buffer> {
-        let mut p = PrimeHandle { fd, ..Default::default() };
+        let mut p = PrimeHandle {
+            fd,
+            ..Default::default()
+        };
         ioctl(self.fd, PRIME_FD_TO_HANDLE, &mut p)?;
         let fb_id = self.add_fb(p.handle, pitch, self.width, self.height)?;
-        Ok(Buffer { handle: p.handle, fb_id, pitch, size, map: std::ptr::null_mut(), dumb: false })
+        Ok(Buffer {
+            handle: p.handle,
+            fb_id,
+            pitch,
+            size,
+            map: std::ptr::null_mut(),
+            dumb: false,
+        })
     }
 
     pub fn set_crtc(&self, fb_id: u32) -> io::Result<()> {
@@ -408,19 +489,32 @@ impl Card {
     }
 
     pub fn page_flip(&self, fb_id: u32, user: u64) -> io::Result<()> {
-        let mut p = PageFlip { crtc_id: self.crtc_id, fb_id, flags: 1 /* EVENT */, reserved: 0, user_data: user };
+        let mut p = PageFlip {
+            crtc_id: self.crtc_id,
+            fb_id,
+            flags: 1, /* EVENT */
+            reserved: 0,
+            user_data: user,
+        };
         ioctl(self.fd, PAGE_FLIP, &mut p)
     }
 
     #[allow(dead_code)]
     pub fn dirty(&self, fb_id: u32) -> io::Result<()> {
-        let mut d = FbDirty { fb_id, ..Default::default() };
+        let mut d = FbDirty {
+            fb_id,
+            ..Default::default()
+        };
         ioctl(self.fd, DIRTYFB, &mut d)
     }
 
     /// Wait for one page-flip-complete event; returns its timestamp in µs (CLOCK_MONOTONIC).
     pub fn wait_flip(&self, timeout_ms: i32) -> io::Result<Option<u64>> {
-        let mut pfd = libc::pollfd { fd: self.fd, events: libc::POLLIN, revents: 0 };
+        let mut pfd = libc::pollfd {
+            fd: self.fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
         let r = unsafe { libc::poll(&mut pfd, 1, timeout_ms) };
         if r <= 0 {
             return Ok(None);
@@ -471,7 +565,10 @@ impl Card {
 }
 
 pub fn now_us() -> u64 {
-    let mut t = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+    let mut t = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
     unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut t) };
     t.tv_sec as u64 * 1_000_000 + t.tv_nsec as u64 / 1000
 }

@@ -37,10 +37,22 @@ pub enum Mode {
 #[derive(Clone, Debug, PartialEq)]
 pub enum CamCmd {
     /// Start s22-campreview for this sensor; events carry `gen`.
-    Spawn { gen: u64, argv: Vec<String> },
-    Signal { pid: i32, sig: i32 },
+    Spawn {
+        gen: u64,
+        argv: Vec<String>,
+    },
+    Signal {
+        pid: i32,
+        sig: i32,
+    },
     /// Develop a burst in the background; the result comes back as a "developed" event.
-    Develop { gen: u64, argv: Vec<String>, preview: String, jpeg: String, raw: String },
+    Develop {
+        gen: u64,
+        argv: Vec<String>,
+        preview: String,
+        jpeg: String,
+        raw: String,
+    },
     /// Autosleep inhibit file on/off.
     Inhibit(bool),
 }
@@ -62,13 +74,26 @@ impl Default for Orients {
     fn default() -> Self {
         // Android-style mounting: the sensors' long side runs along the phone's long side;
         // the selfie preview is mirrored like a mirror (photos are saved unmirrored).
-        Orients { rear: Orient { rotate: 90, mirror: false }, front: Orient { rotate: 270, mirror: true } }
+        Orients {
+            rear: Orient {
+                rotate: 90,
+                mirror: false,
+            },
+            front: Orient {
+                rotate: 270,
+                mirror: true,
+            },
+        }
     }
 }
 
 impl Orients {
     pub fn get(&self, sensor: &str) -> Orient {
-        if sensor == "front" { self.front } else { self.rear }
+        if sensor == "front" {
+            self.front
+        } else {
+            self.rear
+        }
     }
     pub fn parse(s: &str) -> Orients {
         let mut o = Orients::default();
@@ -91,7 +116,11 @@ impl Orients {
     }
     /// Settings flip: rotate the sensor's preview a further 90 degrees.
     pub fn turn(&mut self, sensor: &str) {
-        let o = if sensor == "front" { &mut self.front } else { &mut self.rear };
+        let o = if sensor == "front" {
+            &mut self.front
+        } else {
+            &mut self.rear
+        };
         o.rotate = (o.rotate + 90) % 360;
     }
 }
@@ -147,9 +176,28 @@ impl Cam {
     pub fn argv(&self) -> Vec<String> {
         let o = self.orient.get(self.sensor);
         let mut v: Vec<String> = [
-            CAMPREVIEW, "stream", "--sensor", self.sensor, "--until-signal", "--scale", "2", "--threads", "2", "--cpus", PREVIEW_CPUS,
-            "--ae", "--shm", SHM, "--still-dir", WORK, "--still-frames", "4", "--rec-dir", &self.gallery_host,
-            "--rec-rotate", &o.rotate.to_string(),
+            CAMPREVIEW,
+            "stream",
+            "--sensor",
+            self.sensor,
+            "--until-signal",
+            "--scale",
+            "2",
+            "--threads",
+            "2",
+            "--cpus",
+            PREVIEW_CPUS,
+            "--ae",
+            "--shm",
+            SHM,
+            "--still-dir",
+            WORK,
+            "--still-frames",
+            "4",
+            "--rec-dir",
+            &self.gallery_host,
+            "--rec-rotate",
+            &o.rotate.to_string(),
         ]
         .iter()
         .map(|s| s.to_string())
@@ -165,13 +213,22 @@ impl Cam {
         self.phase = Phase::Starting;
         self.restart = false;
         self.status = format!("starting the {} camera…", self.sensor);
-        vec![CamCmd::Inhibit(true), CamCmd::Spawn { gen: self.gen, argv: self.argv() }]
+        vec![
+            CamCmd::Inhibit(true),
+            CamCmd::Spawn {
+                gen: self.gen,
+                argv: self.argv(),
+            },
+        ]
     }
 
     fn term(&mut self) -> Vec<CamCmd> {
         self.phase = Phase::Stopping;
         match self.pid {
-            Some(pid) => vec![CamCmd::Signal { pid, sig: libc::SIGTERM }],
+            Some(pid) => vec![CamCmd::Signal {
+                pid,
+                sig: libc::SIGTERM,
+            }],
             None => vec![],
         }
     }
@@ -207,7 +264,11 @@ impl Cam {
     }
 
     pub fn switch_sensor(&mut self) -> Vec<CamCmd> {
-        self.sensor = if self.sensor == "rear" { "front" } else { "rear" };
+        self.sensor = if self.sensor == "rear" {
+            "front"
+        } else {
+            "rear"
+        };
         match self.phase {
             Phase::Starting | Phase::Live => {
                 self.restart = true;
@@ -234,15 +295,25 @@ impl Cam {
                 self.shots += 1;
                 self.shutter_t = Some((Instant::now(), t_us));
                 self.status = "capturing…".into();
-                vec![CamCmd::Signal { pid, sig: libc::SIGUSR1 }]
+                vec![CamCmd::Signal {
+                    pid,
+                    sig: libc::SIGUSR1,
+                }]
             }
             (Phase::Live, Mode::Video, Some(pid)) => {
                 if self.rec_requested {
                     return vec![];
                 }
                 self.rec_requested = true;
-                self.status = if self.recording.is_some() { "stopping the recording…".into() } else { "starting the recording…".into() };
-                vec![CamCmd::Signal { pid, sig: libc::SIGUSR2 }]
+                self.status = if self.recording.is_some() {
+                    "stopping the recording…".into()
+                } else {
+                    "starting the recording…".into()
+                };
+                vec![CamCmd::Signal {
+                    pid,
+                    sig: libc::SIGUSR2,
+                }]
             }
             _ => vec![],
         }
@@ -259,12 +330,18 @@ impl Cam {
     /// The child started (main has its pid).
     pub fn spawned(&mut self, gen: u64, pid: i32) -> Vec<CamCmd> {
         if gen != self.gen {
-            return vec![CamCmd::Signal { pid, sig: libc::SIGTERM }];
+            return vec![CamCmd::Signal {
+                pid,
+                sig: libc::SIGTERM,
+            }];
         }
         self.pid = Some(pid);
         if self.phase == Phase::Stopping {
             // closed before the child was up
-            return vec![CamCmd::Signal { pid, sig: libc::SIGTERM }];
+            return vec![CamCmd::Signal {
+                pid,
+                sig: libc::SIGTERM,
+            }];
         }
         vec![]
     }
@@ -293,19 +370,47 @@ impl Cam {
             "still" => {
                 if v["ok"] == true {
                     let raw = v["raw"].as_str().unwrap_or("").to_string();
-                    let stamp = raw.rsplit('-').next().and_then(|s| s.strip_suffix(".raw")).unwrap_or("0").to_string();
-                    let jpeg = format!("{}/cam-{}-{}.jpg", self.gallery_host, &stamp[..stamp.len().min(10)], self.sensor);
+                    let stamp = raw
+                        .rsplit('-')
+                        .next()
+                        .and_then(|s| s.strip_suffix(".raw"))
+                        .unwrap_or("0")
+                        .to_string();
+                    let jpeg = format!(
+                        "{}/cam-{}-{}.jpg",
+                        self.gallery_host,
+                        &stamp[..stamp.len().min(10)],
+                        self.sensor
+                    );
                     let preview = format!("{WORK}/last-{stamp}.png");
                     let rot = self.orient.get(self.sensor).rotate;
                     self.status = "developing…".into();
                     let argv: Vec<String> = [
-                        DEVELOP, "develop", &raw, "--stack", "--out", &jpeg, "--preview", &preview, "--preview-max", "1080x1440",
-                        "--rotate", &rot.to_string(), "--quality", "90",
+                        DEVELOP,
+                        "develop",
+                        &raw,
+                        "--stack",
+                        "--out",
+                        &jpeg,
+                        "--preview",
+                        &preview,
+                        "--preview-max",
+                        "1080x1440",
+                        "--rotate",
+                        &rot.to_string(),
+                        "--quality",
+                        "90",
                     ]
                     .iter()
                     .map(|s| s.to_string())
                     .collect();
-                    vec![CamCmd::Develop { gen, argv, preview, jpeg, raw }]
+                    vec![CamCmd::Develop {
+                        gen,
+                        argv,
+                        preview,
+                        jpeg,
+                        raw,
+                    }]
                 } else {
                     self.shots = self.shots.saturating_sub(1);
                     self.status = "the photo failed (raw write)".into();
@@ -322,8 +427,14 @@ impl Cam {
                 self.rec_requested = false;
                 self.recording = None;
                 self.status = if v["ok"] == true {
-                    let name = v["path"].as_str().and_then(|p| p.rsplit('/').next()).unwrap_or("");
-                    format!("video saved: {name} · {} s · {} fps", v["seconds"], v["fps"])
+                    let name = v["path"]
+                        .as_str()
+                        .and_then(|p| p.rsplit('/').next())
+                        .unwrap_or("");
+                    format!(
+                        "video saved: {name} · {} s · {} fps",
+                        v["seconds"], v["fps"]
+                    )
                 } else {
                     format!("recording failed: {}", v["error"].as_str().unwrap_or("?"))
                 };
@@ -337,9 +448,18 @@ impl Cam {
                 self.rec_requested = false;
                 if ev == "spawn_failed" || (was == Phase::Starting && !self.restart) {
                     self.fails += 1;
-                    self.status = format!("camera failed: {}", v["error"].as_str().or(v["tail"].as_str()).unwrap_or("the stream ended"));
+                    self.status = format!(
+                        "camera failed: {}",
+                        v["error"]
+                            .as_str()
+                            .or(v["tail"].as_str())
+                            .unwrap_or("the stream ended")
+                    );
                 }
-                if self.want && (self.restart || (was == Phase::Live && self.fails < 3)) && self.fails < 3 {
+                if self.want
+                    && (self.restart || (was == Phase::Live && self.fails < 3))
+                    && self.fails < 3
+                {
                     return self.spawn();
                 }
                 self.restart = false;
@@ -365,7 +485,12 @@ impl Cam {
                     self.shot_ms.remove(0);
                 }
             }
-            let name = self.last_jpeg.as_deref().and_then(|p| p.rsplit('/').next()).unwrap_or("").to_string();
+            let name = self
+                .last_jpeg
+                .as_deref()
+                .and_then(|p| p.rsplit('/').next())
+                .unwrap_or("")
+                .to_string();
             self.status = format!("saved {name}");
         } else {
             self.status = format!("develop failed: {}", v["error"].as_str().unwrap_or("?"));
@@ -409,7 +534,16 @@ impl Viewfinder {
         if len < 4096 {
             return None;
         }
-        let p = unsafe { libc::mmap(std::ptr::null_mut(), len, libc::PROT_READ, libc::MAP_SHARED, f.as_raw_fd(), 0) };
+        let p = unsafe {
+            libc::mmap(
+                std::ptr::null_mut(),
+                len,
+                libc::PROT_READ,
+                libc::MAP_SHARED,
+                f.as_raw_fd(),
+                0,
+            )
+        };
         if p == libc::MAP_FAILED {
             return None;
         }
@@ -417,11 +551,29 @@ impl Viewfinder {
         let hdr = unsafe { std::slice::from_raw_parts(ptr, 64) };
         let u = |o: usize| u32::from_le_bytes(hdr[o..o + 4].try_into().unwrap()) as usize;
         let (w, h, stride, slots, slot_bytes) = (u(8), u(12), u(16), u(24), u(28));
-        if &hdr[0..4] != b"S22P" || slots != 3 || w == 0 || h == 0 || stride < w * 4 || 4096 + 3 * slot_bytes > len || slot_bytes < stride * h {
+        if &hdr[0..4] != b"S22P"
+            || slots != 3
+            || w == 0
+            || h == 0
+            || stride < w * 4
+            || 4096 + 3 * slot_bytes > len
+            || slot_bytes < stride * h
+        {
             unsafe { libc::munmap(p, len) };
             return None;
         }
-        Some(Viewfinder { ptr, len, w, h, stride, slot_bytes, seq: 0, key: (Rect::new(0, 0, 0, 0), 0, false), tx: vec![], ty: vec![] })
+        Some(Viewfinder {
+            ptr,
+            len,
+            w,
+            h,
+            stride,
+            slot_bytes,
+            seq: 0,
+            key: (Rect::new(0, 0, 0, 0), 0, false),
+            tx: vec![],
+            ty: vec![],
+        })
     }
 
     fn hdr_u64(&self, o: usize) -> u64 {
@@ -437,7 +589,12 @@ impl Viewfinder {
 
     fn slot(&self) -> &[u32] {
         let slot = unsafe { std::ptr::read_volatile(self.ptr.add(40) as *const u32) } as usize % 3;
-        unsafe { std::slice::from_raw_parts(self.ptr.add(4096 + slot * self.slot_bytes) as *const u32, self.slot_bytes / 4) }
+        unsafe {
+            std::slice::from_raw_parts(
+                self.ptr.add(4096 + slot * self.slot_bytes) as *const u32,
+                self.slot_bytes / 4,
+            )
+        }
     }
 
     /// Output size of the rotated frame fitted to `max` (keeps the aspect).
@@ -448,17 +605,28 @@ impl Viewfinder {
     /// Draw the newest frame into `dst` (clipped to the canvas clip), rotated clockwise and mirrored.
     pub fn blit(&mut self, cv: &mut Canvas, dst: Rect, rotate: u32, mirror: bool) {
         if self.key != (dst, rotate, mirror) {
-            let (tx, ty) = tables(self.w, self.h, self.stride / 4, dst.w as usize, dst.h as usize, rotate, mirror);
+            let (tx, ty) = tables(
+                self.w,
+                self.h,
+                self.stride / 4,
+                dst.w as usize,
+                dst.h as usize,
+                rotate,
+                mirror,
+            );
             self.tx = tx;
             self.ty = ty;
             self.key = (dst, rotate, mirror);
         }
-        let Some(i) = dst.intersect(&cv.clip) else { return };
+        let Some(i) = dst.intersect(&cv.clip) else {
+            return;
+        };
         let src = self.slot();
         let cw = cv.w as usize;
         for y in i.y..i.y + i.h {
             let by = self.ty[(y - dst.y) as usize] as usize;
-            let row = &mut cv.px[y as usize * cw + i.x as usize..y as usize * cw + (i.x + i.w) as usize];
+            let row =
+                &mut cv.px[y as usize * cw + i.x as usize..y as usize * cw + (i.x + i.w) as usize];
             let tx = &self.tx[(i.x - dst.x) as usize..(i.x - dst.x + i.w) as usize];
             for (p, &ox) in row.iter_mut().zip(tx) {
                 *p = unsafe { *src.get_unchecked(by + ox as usize) } & 0x00ff_ffff;
@@ -483,8 +651,20 @@ pub fn fit(w: usize, h: usize, rotate: u32, max: Rect) -> Rect {
 /// Index tables: src index of output (x, y) = tx[x] + ty[y], for a source of
 /// `sw` x `sh` pixels (row pitch `sp` pixels) shown rotated `rotate` degrees
 /// clockwise (then mirrored left-right) in a `dw` x `dh` box (nearest pixel).
-pub fn tables(sw: usize, sh: usize, sp: usize, dw: usize, dh: usize, rotate: u32, mirror: bool) -> (Vec<u32>, Vec<u32>) {
-    let (rw, rh) = if rotate % 180 == 90 { (sh, sw) } else { (sw, sh) };
+pub fn tables(
+    sw: usize,
+    sh: usize,
+    sp: usize,
+    dw: usize,
+    dh: usize,
+    rotate: u32,
+    mirror: bool,
+) -> (Vec<u32>, Vec<u32>) {
+    let (rw, rh) = if rotate % 180 == 90 {
+        (sh, sw)
+    } else {
+        (sw, sh)
+    };
     // output (x, y) -> rotated-image (u, v)
     let u = |x: usize| -> usize {
         let x = if mirror { dw - 1 - x } else { x };
@@ -548,19 +728,36 @@ mod tests {
         let mut c = Cam::new("/g");
         let cmds = c.open();
         assert_eq!(c.phase, Phase::Starting);
-        assert!(matches!(&cmds[..], [CamCmd::Inhibit(true), CamCmd::Spawn { gen: 1, .. }]));
+        assert!(matches!(
+            &cmds[..],
+            [CamCmd::Inhibit(true), CamCmd::Spawn { gen: 1, .. }]
+        ));
         if let CamCmd::Spawn { argv, .. } = &cmds[1] {
-            assert!(argv.contains(&"--until-signal".to_string()) && argv.contains(&"rear".to_string()));
+            assert!(
+                argv.contains(&"--until-signal".to_string()) && argv.contains(&"rear".to_string())
+            );
             assert!(argv.windows(2).any(|w| w == ["--rec-rotate", "90"]));
         }
         assert!(c.open().is_empty(), "already starting");
         c.spawned(1, 42);
         assert!(ev(&mut c, json!({"event": "first_frame", "ms": 180.0})).is_empty());
         assert!(c.live());
-        assert_eq!(c.close(), vec![CamCmd::Signal { pid: 42, sig: libc::SIGTERM }, CamCmd::Inhibit(false)]);
+        assert_eq!(
+            c.close(),
+            vec![
+                CamCmd::Signal {
+                    pid: 42,
+                    sig: libc::SIGTERM
+                },
+                CamCmd::Inhibit(false)
+            ]
+        );
         assert_eq!(c.phase, Phase::Stopping);
         // exit after a close: off, no restart
-        assert_eq!(ev(&mut c, json!({"event": "exit", "code": 0})), vec![CamCmd::Inhibit(false)]);
+        assert_eq!(
+            ev(&mut c, json!({"event": "exit", "code": 0})),
+            vec![CamCmd::Inhibit(false)]
+        );
         assert_eq!(c.phase, Phase::Off);
         // a late event from an old child is ignored
         assert!(c.event(0, &json!({"event": "first_frame"})).is_empty());
@@ -573,7 +770,13 @@ mod tests {
         c.open();
         c.spawned(1, 7);
         ev(&mut c, json!({"event": "first_frame"}));
-        assert_eq!(c.switch_sensor(), vec![CamCmd::Signal { pid: 7, sig: libc::SIGTERM }]);
+        assert_eq!(
+            c.switch_sensor(),
+            vec![CamCmd::Signal {
+                pid: 7,
+                sig: libc::SIGTERM
+            }]
+        );
         assert_eq!(c.sensor, "front");
         let cmds = ev(&mut c, json!({"event": "exit", "code": 0}));
         match &cmds[..] {
@@ -594,11 +797,25 @@ mod tests {
         c.open();
         c.spawned(1, 9);
         ev(&mut c, json!({"event": "first_frame"}));
-        assert_eq!(c.shutter(5), vec![CamCmd::Signal { pid: 9, sig: libc::SIGUSR1 }]);
+        assert_eq!(
+            c.shutter(5),
+            vec![CamCmd::Signal {
+                pid: 9,
+                sig: libc::SIGUSR1
+            }]
+        );
         assert_eq!(c.shots, 1);
-        let cmds = ev(&mut c, json!({"event": "still", "ok": true, "raw": "/tmp/s22-cam/shot-1792672445099.raw", "frames": 4}));
+        let cmds = ev(
+            &mut c,
+            json!({"event": "still", "ok": true, "raw": "/tmp/s22-cam/shot-1792672445099.raw", "frames": 4}),
+        );
         match &cmds[..] {
-            [CamCmd::Develop { argv, jpeg, preview, .. }] => {
+            [CamCmd::Develop {
+                argv,
+                jpeg,
+                preview,
+                ..
+            }] => {
                 assert_eq!(jpeg, "/g/cam-1792672445-rear.jpg");
                 assert_eq!(preview, "/tmp/s22-cam/last-1792672445099.png");
                 assert!(argv.contains(&"--stack".to_string()));
@@ -622,19 +839,40 @@ mod tests {
         c.spawned(1, 3);
         ev(&mut c, json!({"event": "first_frame"}));
         c.set_mode(Mode::Video);
-        assert_eq!(c.shutter(1), vec![CamCmd::Signal { pid: 3, sig: libc::SIGUSR2 }]);
+        assert_eq!(
+            c.shutter(1),
+            vec![CamCmd::Signal {
+                pid: 3,
+                sig: libc::SIGUSR2
+            }]
+        );
         assert!(c.shutter(2).is_empty(), "one request at a time");
-        ev(&mut c, json!({"event": "rec_started", "path": "/g/vid-1-rear.avi"}));
+        ev(
+            &mut c,
+            json!({"event": "rec_started", "path": "/g/vid-1-rear.avi"}),
+        );
         assert!(c.recording.is_some());
         c.set_mode(Mode::Photo);
         assert_eq!(c.mode, Mode::Video, "no mode change while recording");
-        assert_eq!(c.shutter(3), vec![CamCmd::Signal { pid: 3, sig: libc::SIGUSR2 }]);
-        ev(&mut c, json!({"event": "rec_stopped", "ok": true, "path": "/g/vid-1-rear.avi", "seconds": 4.0, "fps": 29.8}));
+        assert_eq!(
+            c.shutter(3),
+            vec![CamCmd::Signal {
+                pid: 3,
+                sig: libc::SIGUSR2
+            }]
+        );
+        ev(
+            &mut c,
+            json!({"event": "rec_stopped", "ok": true, "path": "/g/vid-1-rear.avi", "seconds": 4.0, "fps": 29.8}),
+        );
         assert!(c.recording.is_none());
         assert!(c.status.contains("vid-1-rear.avi"));
         // the child dying while live: restarted (up to 3 failures)
         let cmds = ev(&mut c, json!({"event": "exit", "code": 1}));
-        assert!(matches!(&cmds[..], [CamCmd::Inhibit(true), CamCmd::Spawn { gen: 2, .. }]));
+        assert!(matches!(
+            &cmds[..],
+            [CamCmd::Inhibit(true), CamCmd::Spawn { gen: 2, .. }]
+        ));
         for _ in 0..3 {
             ev(&mut c, json!({"event": "exit", "code": 1}));
         }
@@ -647,21 +885,48 @@ mod tests {
         let mut c = Cam::new("/g");
         c.open();
         assert_eq!(c.close(), vec![CamCmd::Inhibit(false)]);
-        assert_eq!(c.spawned(1, 4), vec![CamCmd::Signal { pid: 4, sig: libc::SIGTERM }], "closed before the child was up");
+        assert_eq!(
+            c.spawned(1, 4),
+            vec![CamCmd::Signal {
+                pid: 4,
+                sig: libc::SIGTERM
+            }],
+            "closed before the child was up"
+        );
         // no pid yet: the first frame then closes it
         let mut c = Cam::new("/g");
         c.open();
         c.want = false;
         c.spawned(1, 5);
         let cmds = ev(&mut c, json!({"event": "first_frame"}));
-        assert_eq!(cmds[0], CamCmd::Signal { pid: 5, sig: libc::SIGTERM });
+        assert_eq!(
+            cmds[0],
+            CamCmd::Signal {
+                pid: 5,
+                sig: libc::SIGTERM
+            }
+        );
     }
 
     #[test]
     fn orientation_config_and_flip() {
-        let mut o = Orients::parse(r#"{"rear":{"rotate":270},"front":{"mirror":false,"rotate":45}}"#);
-        assert_eq!(o.rear, Orient { rotate: 270, mirror: false });
-        assert_eq!(o.front, Orient { rotate: 270, mirror: false }, "45 is ignored");
+        let mut o =
+            Orients::parse(r#"{"rear":{"rotate":270},"front":{"mirror":false,"rotate":45}}"#);
+        assert_eq!(
+            o.rear,
+            Orient {
+                rotate: 270,
+                mirror: false
+            }
+        );
+        assert_eq!(
+            o.front,
+            Orient {
+                rotate: 270,
+                mirror: false
+            },
+            "45 is ignored"
+        );
         o.turn("rear");
         assert_eq!(o.rear.rotate, 0);
         assert_eq!(Orients::parse(&o.to_json()), o);

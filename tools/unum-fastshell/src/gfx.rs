@@ -21,7 +21,11 @@ impl Rect {
         let y0 = self.y.max(o.y);
         let x1 = (self.x + self.w).min(o.x + o.w);
         let y1 = (self.y + self.h).min(o.y + o.h);
-        if x1 > x0 && y1 > y0 { Some(Rect::new(x0, y0, x1 - x0, y1 - y0)) } else { None }
+        if x1 > x0 && y1 > y0 {
+            Some(Rect::new(x0, y0, x1 - x0, y1 - y0))
+        } else {
+            None
+        }
     }
     pub fn hits(&self, o: &Rect) -> bool {
         self.intersect(o).is_some()
@@ -81,7 +85,12 @@ pub fn mix(a: u32, b: u32, t: u32) -> u32 {
 
 impl Canvas {
     pub fn new(w: i32, h: i32) -> Canvas {
-        Canvas { w, h, px: vec![0; (w * h) as usize], clip: Rect::new(0, 0, w, h) }
+        Canvas {
+            w,
+            h,
+            px: vec![0; (w * h) as usize],
+            clip: Rect::new(0, 0, w, h),
+        }
     }
 
     pub fn fill(&mut self, r: &Rect, color: u32) {
@@ -117,13 +126,21 @@ impl Canvas {
         // middle band and the side bands between the corners
         self.fill(&Rect::new(r.x, r.y + rad, r.w, r.h - 2 * rad), color);
         self.fill(&Rect::new(r.x + rad, r.y, r.w - 2 * rad, rad), color);
-        self.fill(&Rect::new(r.x + rad, r.y + r.h - rad, r.w - 2 * rad, rad), color);
+        self.fill(
+            &Rect::new(r.x + rad, r.y + r.h - rad, r.w - 2 * rad, rad),
+            color,
+        );
         let rf = rad as f32;
         for (cx, cy, sx, sy) in [
             (r.x + rad, r.y + rad, r.x, r.y),
             (r.x + r.w - rad, r.y + rad, r.x + r.w - rad, r.y),
             (r.x + rad, r.y + r.h - rad, r.x, r.y + r.h - rad),
-            (r.x + r.w - rad, r.y + r.h - rad, r.x + r.w - rad, r.y + r.h - rad),
+            (
+                r.x + r.w - rad,
+                r.y + r.h - rad,
+                r.x + r.w - rad,
+                r.y + r.h - rad,
+            ),
         ] {
             let corner = Rect::new(sx, sy, rad, rad);
             if let Some(i) = corner.intersect(&self.clip) {
@@ -222,7 +239,9 @@ pub fn copy_rects(c: &Canvas, dst: *mut u8, pitch: usize, rects: &[Rect]) -> usi
     let mut bytes = 0usize;
     let full = Rect::new(0, 0, c.w, c.h);
     for r in rects {
-        let Some(r) = r.intersect(&full) else { continue };
+        let Some(r) = r.intersect(&full) else {
+            continue;
+        };
         for y in r.y..r.y + r.h {
             let src = &c.px[(y * c.w + r.x) as usize..(y * c.w + r.x + r.w) as usize];
             unsafe {
@@ -238,7 +257,16 @@ pub fn copy_rects(c: &Canvas, dst: *mut u8, pitch: usize, rects: &[Rect]) -> usi
 /// `copy_rects` for a panel that is not the canvas size: the canvas is placed
 /// at (ox, oy) on a dw x dh buffer (negative offsets crop it). Only used when
 /// the panel differs from 1080x2340; the S22 path stays `copy_rects`.
-pub fn copy_rects_at(c: &Canvas, dst: *mut u8, pitch: usize, dw: i32, dh: i32, ox: i32, oy: i32, rects: &[Rect]) -> usize {
+pub fn copy_rects_at(
+    c: &Canvas,
+    dst: *mut u8,
+    pitch: usize,
+    dw: i32,
+    dh: i32,
+    ox: i32,
+    oy: i32,
+    rects: &[Rect],
+) -> usize {
     let mut bytes = 0usize;
     // the part of the canvas that lands on the buffer
     let vis = Rect::new(0, 0, c.w, c.h).intersect(&Rect::new(-ox, -oy, dw, dh));

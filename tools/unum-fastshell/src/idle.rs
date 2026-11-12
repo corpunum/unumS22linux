@@ -13,7 +13,10 @@ pub struct Cfg {
 
 impl Default for Cfg {
     fn default() -> Cfg {
-        Cfg { unlocked_s: 60, locked_s: 15 }
+        Cfg {
+            unlocked_s: 60,
+            locked_s: 15,
+        }
     }
 }
 
@@ -34,12 +37,19 @@ pub fn parse(s: &str) -> Cfg {
 }
 
 pub fn to_json(c: &Cfg) -> String {
-    format!("{{\"unlocked_s\":{},\"locked_s\":{}}}\n", c.unlocked_s, c.locked_s)
+    format!(
+        "{{\"unlocked_s\":{},\"locked_s\":{}}}\n",
+        c.unlocked_s, c.locked_s
+    )
 }
 
 /// Next preset after `cur` (wraps; an off-list value goes to the first larger one).
 pub fn next_preset(cur: u64) -> u64 {
-    PRESETS.iter().copied().find(|&p| p > cur).unwrap_or(PRESETS[0])
+    PRESETS
+        .iter()
+        .copied()
+        .find(|&p| p > cur)
+        .unwrap_or(PRESETS[0])
 }
 
 /// Should the panel go off now? An inhibited screen never does.
@@ -76,11 +86,41 @@ mod tests {
 
     #[test]
     fn parse_defaults_and_zero() {
-        assert_eq!(parse(""), Cfg { unlocked_s: 60, locked_s: 15 });
-        assert_eq!(parse("{\"unlocked_s\":120}"), Cfg { unlocked_s: 120, locked_s: 15 });
-        assert_eq!(parse("{\"unlocked_s\":0,\"locked_s\":0}"), Cfg { unlocked_s: 0, locked_s: 0 });
-        assert_eq!(parse("{\"unlocked_s\":-5,\"locked_s\":\"x\"}"), Cfg::default());
-        assert_eq!(parse(&to_json(&Cfg { unlocked_s: 30, locked_s: 0 })), Cfg { unlocked_s: 30, locked_s: 0 });
+        assert_eq!(
+            parse(""),
+            Cfg {
+                unlocked_s: 60,
+                locked_s: 15
+            }
+        );
+        assert_eq!(
+            parse("{\"unlocked_s\":120}"),
+            Cfg {
+                unlocked_s: 120,
+                locked_s: 15
+            }
+        );
+        assert_eq!(
+            parse("{\"unlocked_s\":0,\"locked_s\":0}"),
+            Cfg {
+                unlocked_s: 0,
+                locked_s: 0
+            }
+        );
+        assert_eq!(
+            parse("{\"unlocked_s\":-5,\"locked_s\":\"x\"}"),
+            Cfg::default()
+        );
+        assert_eq!(
+            parse(&to_json(&Cfg {
+                unlocked_s: 30,
+                locked_s: 0
+            })),
+            Cfg {
+                unlocked_s: 30,
+                locked_s: 0
+            }
+        );
     }
 
     #[test]
@@ -91,7 +131,10 @@ mod tests {
         assert!(!due(&c, S(14), true, false));
         assert!(due(&c, S(15), true, false));
         assert!(!due(&c, S(3600), false, true), "inhibited");
-        let never = Cfg { unlocked_s: 0, locked_s: 0 };
+        let never = Cfg {
+            unlocked_s: 0,
+            locked_s: 0,
+        };
         assert!(!due(&never, S(99999), false, false));
         assert!(!due(&never, S(99999), true, false));
     }

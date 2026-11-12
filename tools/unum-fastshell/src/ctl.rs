@@ -87,8 +87,14 @@ impl<R: std::io::Read> TakeLine for BufReader<R> {
 /// Write `<dir>/<id>.json` = {"id","answer","ts"} atomically (touchd / s22-ui format).
 pub fn write_confirm(dir: &str, id: &str, answer: &str) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)?;
-    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
     let tmp = format!("{dir}/{id}.json.tmp");
-    std::fs::write(&tmp, json!({"id": id, "answer": answer, "ts": ts}).to_string())?;
+    std::fs::write(
+        &tmp,
+        json!({"id": id, "answer": answer, "ts": ts}).to_string(),
+    )?;
     std::fs::rename(&tmp, format!("{dir}/{id}.json"))
 }

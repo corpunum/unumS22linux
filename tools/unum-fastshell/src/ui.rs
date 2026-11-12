@@ -6,8 +6,8 @@
 use crate::agent::{self, CardCmd};
 use crate::camera::{self, Cam, CamCmd, Mode as CamMode, Viewfinder};
 use crate::config;
-use crate::device::{self, Dev, Toggle};
 use crate::ctl::{write_confirm, Call};
+use crate::device::{self, Dev, Toggle};
 use crate::font::{Face, Fonts};
 use crate::gfx::{Canvas, Rect};
 use crate::idle;
@@ -109,6 +109,8 @@ pub enum Act {
     /// Settings sliders: 0 brightness (1-100 %), 1 volume (0-10).
     Slide(u8),
     DevToggle(Toggle),
+    /// Settings → Rig access: flip one device switch (access.rs).
+    Access(&'static str),
     Mute,
     Model(&'static str),
     Classic,
@@ -324,6 +326,10 @@ pub struct App {
     dummy: Canvas,
     pub idle_cfg: idle::Cfg,
     pub idle_path: String,
+    /// Rig access switches (access.rs); empty in tests that do not set it.
+    pub access_path: String,
+    pub access: std::collections::HashMap<&'static str, bool>,
+    pub access_error: Option<String>,
     pub last_touch: Instant,
     voice_running: bool,
     // ---- physical buttons (buttons.rs)
@@ -372,7 +378,10 @@ impl App {
             pressed: None,
             touch: None,
             st: Status::default(),
-            chat: vec![(Who::Agent, "Your agent, right here. What should we work on?".into())],
+            chat: vec![(
+                Who::Agent,
+                "Your agent, right here. What should we work on?".into(),
+            )],
             live: String::new(),
             activity: None,
             busy: false,
@@ -421,7 +430,12 @@ impl App {
             relayout: true,
             effects: vec![],
             mark: None,
-            stats: Stats { lat: vec![], render: vec![], copy: vec![], frames: 0 },
+            stats: Stats {
+                lat: vec![],
+                render: vec![],
+                copy: vec![],
+                frames: 0,
+            },
             clock: "--:--".into(),
             date: String::new(),
             run_dir: run_dir.into(),
@@ -432,6 +446,9 @@ impl App {
             dummy: Canvas::new(1, 1),
             idle_cfg: idle::Cfg::default(),
             idle_path: String::new(),
+            access_path: String::new(),
+            access: crate::access::load(""),
+            access_error: None,
             last_touch: Instant::now(),
             voice_running: false,
             level: crate::buttons::DEFAULT_LEVEL,
@@ -473,12 +490,23 @@ impl App {
     // ------------------------------------------------------------ status
 
     pub fn read_sys(&mut self) {
-        let rd = |p: &str| std::fs::read_to_string(p).map(|s| s.trim().to_string()).unwrap_or_default();
+        let rd = |p: &str| {
+            std::fs::read_to_string(p)
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default()
+        };
         let (cfg, sys) = (config::get(), config::sys());
-        let b = sys.battery.as_ref().map(|p| p.display().to_string()).unwrap_or_default();
+        let b = sys
+            .battery
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
         self.st.battery = rd(&format!("{b}/capacity")).parse().ok();
         self.st.bat_state = rd(&format!("{b}/status"));
-        self.st.bat_temp = rd(&format!("{b}/temp")).parse::<f32>().ok().map(|t| t / 10.0);
+        self.st.bat_temp = rd(&format!("{b}/temp"))
+            .parse::<f32>()
+            .ok()
+            .map(|t| t / 10.0);
         let mut mx = 0.0f32;
         let mut parts = vec![];
         for (ty, temp) in &sys.thermal {
@@ -492,18 +520,39 @@ impl App {
         }
         self.st.thermal = (mx > 0.0).then_some(mx);
         self.st.thermal_detail = parts.join(" · ");
-        let up = |n: &str| matches!(rd(&format!("/sys/class/net/{n}/operstate")).as_str(), "up" | "unknown");
+        let up = |n: &str| {
+            matches!(
+                rd(&format!("/sys/class/net/{n}/operstate")).as_str(),
+                "up" | "unknown"
+            )
+        };
         let any_up = |v: &[String]| v.iter().any(|n| up(n));
-        let link = if any_up(&cfg.net_wifi) { "wifi" } else if any_up(&cfg.net_usb) { "usb" } else if any_up(&cfg.net_cell) { "cell" } else { "" };
-        let ts = !cfg.net_vpn.is_empty() && std::path::Path::new(&format!("/sys/class/net/{}", cfg.net_vpn)).exists();
+        let link = if any_up(&cfg.net_wifi) {
+            "wifi"
+        } else if any_up(&cfg.net_usb) {
+            "usb"
+        } else if any_up(&cfg.net_cell) {
+            "cell"
+        } else {
+            ""
+        };
+        let ts = !cfg.net_vpn.is_empty()
+            && std::path::Path::new(&format!("/sys/class/net/{}", cfg.net_vpn)).exists();
         self.st.net = match (link, ts) {
             ("", true) => "ts".into(),
             ("", false) => "offline".into(),
             (l, true) => format!("{l} · ts"),
             (l, false) => l.into(),
         };
-        let bl = sys.backlight.as_ref().map(|p| p.display().to_string()).unwrap_or_default();
-        if let (Ok(b), Ok(m)) = (rd(&format!("{bl}/brightness")).parse::<i32>(), rd(&format!("{bl}/max_brightness")).parse::<i32>()) {
+        let bl = sys
+            .backlight
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
+        if let (Ok(b), Ok(m)) = (
+            rd(&format!("{bl}/brightness")).parse::<i32>(),
+            rd(&format!("{bl}/max_brightness")).parse::<i32>(),
+        ) {
             self.brightness = (b, m.max(1));
         }
         self.update_clock();
@@ -518,9 +567,35 @@ impl App {
         let mut tm: libc::tm = unsafe { std::mem::zeroed() };
         unsafe { libc::localtime_r(&t, &mut tm) };
         let c = format!("{:02}:{:02}", tm.tm_hour, tm.tm_min);
-        const DAYS: [&str; 7] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-        const MON: [&str; 12] = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-        let d = format!("{} {} {}", DAYS[tm.tm_wday.clamp(0, 6) as usize], tm.tm_mday, MON[tm.tm_mon.clamp(0, 11) as usize]);
+        const DAYS: [&str; 7] = [
+            "Sunday",
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+        ];
+        const MON: [&str; 12] = [
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
+        ];
+        let d = format!(
+            "{} {} {}",
+            DAYS[tm.tm_wday.clamp(0, 6) as usize],
+            tm.tm_mday,
+            MON[tm.tm_mon.clamp(0, 11) as usize]
+        );
         if c != self.clock {
             self.clock = c;
             self.date = d;
@@ -535,7 +610,12 @@ impl App {
 
     pub fn on_msg(&mut self, m: Msg) {
         match m {
-            Msg::Agent { model, health, sessions, running } => {
+            Msg::Agent {
+                model,
+                health,
+                sessions,
+                running,
+            } => {
                 if model.is_some() {
                     self.st.model = model;
                 }
@@ -559,7 +639,10 @@ impl App {
             }
             Msg::History(lines) => {
                 if !self.busy && self.chat.len() <= 1 && !lines.is_empty() {
-                    self.chat = lines.into_iter().map(|(you, t)| (if you { Who::You } else { Who::Agent }, t)).collect();
+                    self.chat = lines
+                        .into_iter()
+                        .map(|(you, t)| (if you { Who::You } else { Who::Agent }, t))
+                        .collect();
                     self.stick_bottom = true;
                     self.chat_changed();
                 }
@@ -595,7 +678,10 @@ impl App {
             }
             Msg::Touchd(tag, v) => self.on_touchd(tag, v),
             Msg::Radio(v) => {
-                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs_f64())
+                    .unwrap_or(0.0);
                 let b = net::radio_badge(&v, now);
                 if b != self.st.radio {
                     self.st.radio = b;
@@ -605,10 +691,25 @@ impl App {
             Msg::Assistant(v) => {
                 self.voice_running = false;
                 self.last_touch = Instant::now();
-                let you = v["transcript"].as_str().or(v["text"].as_str()).unwrap_or("").to_string();
-                let ans = v["reply"].as_str().or(v["answer"].as_str()).unwrap_or("").to_string();
+                let you = v["transcript"]
+                    .as_str()
+                    .or(v["text"].as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let ans = v["reply"]
+                    .as_str()
+                    .or(v["answer"].as_str())
+                    .unwrap_or("")
+                    .to_string();
                 if !you.is_empty() || !ans.is_empty() {
-                    self.add_card(&format!("Voice: {}", if you.is_empty() { "(no speech)" } else { &you }), &ans, 20.0);
+                    self.add_card(
+                        &format!(
+                            "Voice: {}",
+                            if you.is_empty() { "(no speech)" } else { &you }
+                        ),
+                        &ans,
+                        20.0,
+                    );
                 } else {
                     self.add_card("Voice", "Finished (see assistant.jsonl)", 6.0);
                 }
@@ -621,9 +722,15 @@ impl App {
         match tag {
             "model" => {
                 self.note = if v["ok"] == true {
-                    format!("Model: {}", net::model_label(v["current"]["model"].as_str().unwrap_or("?")))
+                    format!(
+                        "Model: {}",
+                        net::model_label(v["current"]["model"].as_str().unwrap_or("?"))
+                    )
                 } else {
-                    format!("Model switch failed: {}", v["error"].as_str().unwrap_or("?"))
+                    format!(
+                        "Model switch failed: {}",
+                        v["error"].as_str().unwrap_or("?")
+                    )
                 };
                 if let Some(n) = &self.net {
                     net::refresh_agent(n);
@@ -647,7 +754,11 @@ impl App {
     pub fn sync_camera(&mut self) {
         let want = self.page == Page::Camera && !self.locked && self.display_on && self.active;
         if want != self.cam.want {
-            let c = if want { self.cam.open() } else { self.cam.close() };
+            let c = if want {
+                self.cam.open()
+            } else {
+                self.cam.close()
+            };
             self.cam_cmds.extend(c);
             if !want {
                 self.vf = None;
@@ -670,7 +781,9 @@ impl App {
                     eprintln!("fastshell: camera: cannot map {}", camera::SHM);
                 }
             }
-            Some("exit") | Some("spawn_failed") if gen == self.cam.gen || self.cam.phase == camera::Phase::Off => {
+            Some("exit") | Some("spawn_failed")
+                if gen == self.cam.gen || self.cam.phase == camera::Phase::Off =>
+            {
                 if !self.cam.live() {
                     self.vf = None;
                 }
@@ -684,7 +797,11 @@ impl App {
 
     /// An event line from s22-assistant's card modes (turn = `--card turn`, else `--card listen`).
     pub fn card_event(&mut self, turn: bool, gen: u64, v: Value) {
-        let c = if turn { self.card.turn_event(gen, &v) } else { self.card.listen_event(gen, &v) };
+        let c = if turn {
+            self.card.turn_event(gen, &v)
+        } else {
+            self.card.listen_event(gen, &v)
+        };
         if v["state"] == "listening" {
             self.haptic("tick");
         }
@@ -746,10 +863,18 @@ impl App {
     /// Viewfinder frames on the panel over the last 3 s, their age (publish -> flip) and shutter -> thumbnail.
     pub fn camera_perf(&self) -> Value {
         let now = crate::drm::now_us();
-        let recent: Vec<&(u64, f64)> = self.cam_shown.iter().filter(|(t, _)| now.saturating_sub(*t) < 3_000_000).collect();
+        let recent: Vec<&(u64, f64)> = self
+            .cam_shown
+            .iter()
+            .filter(|(t, _)| now.saturating_sub(*t) < 3_000_000)
+            .collect();
         let fps = if recent.len() > 1 {
             let span = (recent[recent.len() - 1].0 - recent[0].0) as f64 / 1e6;
-            if span > 0.0 { ((recent.len() - 1) as f64 / span * 10.0).round() / 10.0 } else { 0.0 }
+            if span > 0.0 {
+                ((recent.len() - 1) as f64 / span * 10.0).round() / 10.0
+            } else {
+                0.0
+            }
         } else {
             0.0
         };
@@ -768,7 +893,9 @@ impl App {
     pub fn load_haptics(&mut self) {
         // s22-haptic's own switch: {"enabled": false} (or unreadable) = off; a missing file = on
         self.haptics = match std::fs::read_to_string(crate::haptic::CONFIG) {
-            Ok(t) => serde_json::from_str::<Value>(&t).map(|v| v["enabled"] != false).unwrap_or(false),
+            Ok(t) => serde_json::from_str::<Value>(&t)
+                .map(|v| v["enabled"] != false)
+                .unwrap_or(false),
             Err(e) => e.kind() == std::io::ErrorKind::NotFound,
         };
     }
@@ -796,7 +923,11 @@ impl App {
             }
             _ => self.turn_seen = true,
         }
-        let k = match &ev { ChatEvent::Delta { .. } => 0, ChatEvent::Snapshot { .. } => 1, _ => 2 };
+        let k = match &ev {
+            ChatEvent::Delta { .. } => 0,
+            ChatEvent::Snapshot { .. } => 1,
+            _ => 2,
+        };
         self.events_n[k] += 1;
         if k == 0 {
             if self.turn_t.1.is_none() {
@@ -829,7 +960,9 @@ impl App {
                 }
                 self.prompt = Some(p);
             }
-            ChatEvent::Snapshot { done, reply, live, .. } => {
+            ChatEvent::Snapshot {
+                done, reply, live, ..
+            } => {
                 if !self.turn_seen {
                     return;
                 }
@@ -857,7 +990,9 @@ impl App {
         );
         self.turn_t = (None, None, 0);
         self.events_n = [0; 3];
-        let text = reply.filter(|r| !r.trim().is_empty()).unwrap_or_else(|| std::mem::take(&mut self.live));
+        let text = reply
+            .filter(|r| !r.trim().is_empty())
+            .unwrap_or_else(|| std::mem::take(&mut self.live));
         self.live.clear();
         if !text.trim().is_empty() {
             self.chat.push((Who::Agent, text.trim().to_string()));
@@ -948,7 +1083,12 @@ impl App {
             self.last_touch = now;
             return false;
         }
-        idle::due(&self.idle_cfg, now.saturating_duration_since(self.last_touch), self.locked, false)
+        idle::due(
+            &self.idle_cfg,
+            now.saturating_duration_since(self.last_touch),
+            self.locked,
+            false,
+        )
     }
 
     /// The Power-press path: lock, hide the keyboard, panel off.
@@ -969,7 +1109,20 @@ impl App {
             return;
         }
         self.last_touch = Instant::now();
-        if acts.iter().any(|a| matches!(a, Action::Step(_) | Action::Mute | Action::Lock | Action::Camera | Action::Screenshot | Action::KeepAwake | Action::PttStart(_) | Action::Assistant(_) | Action::PowerHint)) {
+        if acts.iter().any(|a| {
+            matches!(
+                a,
+                Action::Step(_)
+                    | Action::Mute
+                    | Action::Lock
+                    | Action::Camera
+                    | Action::Screenshot
+                    | Action::KeepAwake
+                    | Action::PttStart(_)
+                    | Action::Assistant(_)
+                    | Action::PowerHint
+            )
+        }) {
             self.haptic("tick");
         }
         for a in acts {
@@ -978,7 +1131,10 @@ impl App {
                     if self.active {
                         self.effects.push(Effect::Display(true));
                     } else {
-                        self.effects.push(Effect::Native(vec!["/srv/s22/hardware/bin/s22-display".into(), "on".into()]));
+                        self.effects.push(Effect::Native(vec![
+                            "/srv/s22/hardware/bin/s22-display".into(),
+                            "on".into(),
+                        ]));
                     }
                 }
                 Action::Lock => {
@@ -989,7 +1145,10 @@ impl App {
                         self.dirty_all();
                         self.effects.push(Effect::Display(false));
                     } else {
-                        self.effects.push(Effect::Native(vec!["/srv/s22/hardware/bin/s22-display".into(), "off".into()]));
+                        self.effects.push(Effect::Native(vec![
+                            "/srv/s22/hardware/bin/s22-display".into(),
+                            "off".into(),
+                        ]));
                     }
                 }
                 Action::Step(d) => {
@@ -1008,7 +1167,11 @@ impl App {
                 }
                 Action::Mute => {
                     if self.level == 0 {
-                        self.level = self.muted_from.take().unwrap_or(crate::buttons::DEFAULT_LEVEL).max(1);
+                        self.level = self
+                            .muted_from
+                            .take()
+                            .unwrap_or(crate::buttons::DEFAULT_LEVEL)
+                            .max(1);
                     } else {
                         self.muted_from = Some(self.level);
                         self.level = 0;
@@ -1025,16 +1188,33 @@ impl App {
                             ("S22_BUTTON".into(), "volup".into()),
                             ("S22_HELD_MS".into(), held.to_string()),
                             ("S22_PTT".into(), "hold".into()),
-                            ("S22_PTT_STOP".into(), format!("{}/ptt-release", crate::buttons::BUTTONS_BASE)),
+                            (
+                                "S22_PTT_STOP".into(),
+                                format!("{}/ptt-release", crate::buttons::BUTTONS_BASE),
+                            ),
                         ],
                     ));
-                    self.add_card("Listening…", "Speak while you hold Volume up; release to send.", 12.0);
+                    self.add_card(
+                        "Listening…",
+                        "Speak while you hold Volume up; release to send.",
+                        12.0,
+                    );
                 }
                 Action::PttRelease(held) => self.effects.push(Effect::PttRelease(held)),
                 Action::Assistant(held) => {
                     self.voice_running = true;
-                    self.effects.push(Effect::Assistant(PTT_HOOK.into(), vec![("S22_BUTTON".into(), "volup".into()), ("S22_HELD_MS".into(), held.to_string())]));
-                    self.add_card("Listening…", "Speak now; the answer is spoken and shown here.", 12.0);
+                    self.effects.push(Effect::Assistant(
+                        PTT_HOOK.into(),
+                        vec![
+                            ("S22_BUTTON".into(), "volup".into()),
+                            ("S22_HELD_MS".into(), held.to_string()),
+                        ],
+                    ));
+                    self.add_card(
+                        "Listening…",
+                        "Speak now; the answer is spoken and shown here.",
+                        12.0,
+                    );
                 }
                 Action::Camera => {
                     if !self.active {
@@ -1048,11 +1228,19 @@ impl App {
                     self.hide_osd();
                     self.effects.push(Effect::Screenshot);
                 }
-                Action::PowerHint => self.show_osd("Keep holding Power to switch to the classic shell…", None, 2200),
+                Action::PowerHint => self.show_osd(
+                    "Keep holding Power to switch to the classic shell…",
+                    None,
+                    2200,
+                ),
                 Action::PowerHintClear => self.hide_osd(),
                 Action::KeepAwake => {
                     self.keep_awake = !self.keep_awake;
-                    let t = if self.keep_awake { "Screen stays on" } else { "Screen timeout on" };
+                    let t = if self.keep_awake {
+                        "Screen stays on"
+                    } else {
+                        "Screen timeout on"
+                    };
                     self.show_osd(t, None, 1500);
                 }
             }
@@ -1067,12 +1255,20 @@ impl App {
     }
 
     fn show_osd(&mut self, title: &str, level: Option<i32>, ms: u64) {
-        self.osd = Some(Osd { title: title.into(), level, until: Instant::now() + std::time::Duration::from_millis(ms) });
+        self.osd = Some(Osd {
+            title: title.into(),
+            level,
+            until: Instant::now() + std::time::Duration::from_millis(ms),
+        });
         self.dirty(Self::osd_rect());
     }
 
     fn show_level(&mut self) {
-        let t = if self.level == 0 { "Muted".to_string() } else { format!("Volume {}", self.level) };
+        let t = if self.level == 0 {
+            "Muted".to_string()
+        } else {
+            format!("Volume {}", self.level)
+        };
         self.show_osd(&t, Some(self.level), 1500);
     }
 
@@ -1086,14 +1282,25 @@ impl App {
     pub fn screenshot_taken(&mut self, name: &str) {
         self.flash_until = Some(Instant::now() + std::time::Duration::from_millis(140));
         self.dirty(Rect::new(0, 0, W, H));
-        self.add_card("Screenshot saved", &format!("Gallery and Files: {GALLERY}/{name}"), 5.0);
+        self.add_card(
+            "Screenshot saved",
+            &format!("Gallery and Files: {GALLERY}/{name}"),
+            5.0,
+        );
         self.files_dir = GALLERY.into();
         self.files.clear();
     }
 
     /// When an overlay must change next (OSD timeout, end of the flash).
     pub fn overlay_deadline(&self) -> Option<Instant> {
-        [self.osd.as_ref().map(|o| o.until), self.flash_until, self.cam_flash_until].into_iter().flatten().min()
+        [
+            self.osd.as_ref().map(|o| o.until),
+            self.flash_until,
+            self.cam_flash_until,
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
 
     pub fn expire_overlays(&mut self, now: Instant) {
@@ -1231,7 +1438,14 @@ impl App {
     }
 
     pub fn perf_json(&self) -> Value {
-        let by = |k: &str| -> Vec<f64> { self.stats.lat.iter().filter(|(kk, _)| *kk == k).map(|(_, v)| *v).collect() };
+        let by = |k: &str| -> Vec<f64> {
+            self.stats
+                .lat
+                .iter()
+                .filter(|(kk, _)| *kk == k)
+                .map(|(_, v)| *v)
+                .collect()
+        };
         let s = |v: Vec<f64>| json!({"n": v.len(), "p50_ms": (pct(&v, 0.5) * 100.0).round() / 100.0, "p95_ms": (pct(&v, 0.95) * 100.0).round() / 100.0, "max_ms": (pct(&v, 1.0) * 100.0).round() / 100.0});
         json!({
             "frames": self.stats.frames,
@@ -1245,10 +1459,16 @@ impl App {
     /// One call from s22-touchd (shell.sock). Same functions as the Quickshell `touch` IPC.
     pub fn call(&mut self, c: &Call) -> String {
         let a0 = c.arg(0).to_string();
-        if !matches!(c.function.as_str(), "state" | "perf" | "ping" | "confirmResult") {
+        if !matches!(
+            c.function.as_str(),
+            "state" | "perf" | "ping" | "confirmResult"
+        ) {
             self.last_touch = Instant::now();
         }
-        if !self.display_on && self.active && ["home", "open", "switcher", "card", "confirm"].contains(&c.function.as_str()) {
+        if !self.display_on
+            && self.active
+            && ["home", "open", "switcher", "card", "confirm"].contains(&c.function.as_str())
+        {
             // wake for anything the owner must see; the lock cover stays on top
             self.effects.push(Effect::Display(true));
         }
@@ -1344,20 +1564,40 @@ impl App {
                 }
             }
             "card" => {
-                let ttl = c.arg(2).parse::<f64>().ok().filter(|t| *t > 0.0).unwrap_or(8.0);
+                let ttl = c
+                    .arg(2)
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|t| *t > 0.0)
+                    .unwrap_or(8.0);
                 let id = self.add_card(c.arg(0), c.arg(1), ttl);
                 format!("card {id}")
             }
             "confirm" => {
                 let id = a0.clone();
-                if id.is_empty() || id.len() > 64 || !id.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-') {
+                if id.is_empty()
+                    || id.len() > 64
+                    || !id
+                        .chars()
+                        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+                {
                     return "bad id".into();
                 }
                 if self.confirm.is_some() {
                     return "busy".into();
                 }
-                let t = c.arg(2).parse::<f64>().ok().filter(|t| *t > 0.0).unwrap_or(60.0).clamp(5.0, 600.0);
-                self.confirm = Some(Confirm { id, question: c.arg(1).chars().take(500).collect(), until: Instant::now() + std::time::Duration::from_secs_f64(t) });
+                let t = c
+                    .arg(2)
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|t| *t > 0.0)
+                    .unwrap_or(60.0)
+                    .clamp(5.0, 600.0);
+                self.confirm = Some(Confirm {
+                    id,
+                    question: c.arg(1).chars().take(500).collect(),
+                    until: Instant::now() + std::time::Duration::from_secs_f64(t),
+                });
                 if !self.active {
                     self.effects.push(Effect::Activate);
                 }
@@ -1365,7 +1605,11 @@ impl App {
                 "asking".into()
             }
             "confirmResult" => {
-                if self.confirm.as_ref().is_some_and(|x| x.id == a0) { "pending".into() } else { "done".into() }
+                if self.confirm.as_ref().is_some_and(|x| x.id == a0) {
+                    "pending".into()
+                } else {
+                    "done".into()
+                }
             }
             "lock" => {
                 self.locked = true;
@@ -1392,7 +1636,13 @@ impl App {
                     "on" => true,
                     "off" => false,
                     "toggle" => !self.display_on,
-                    _ => return if self.display_on { "on".into() } else { "off".into() },
+                    _ => {
+                        return if self.display_on {
+                            "on".into()
+                        } else {
+                            "off".into()
+                        }
+                    }
                 };
                 if !on {
                     self.locked = true;
@@ -1400,7 +1650,11 @@ impl App {
                     self.dirty_all();
                 }
                 self.effects.push(Effect::Display(on));
-                if on { "on".into() } else { "off".into() }
+                if on {
+                    "on".into()
+                } else {
+                    "off".into()
+                }
             }
             "screenshot" => {
                 // s22d's device API (`screenshot`): the same capture as Power + Volume down.
@@ -1463,17 +1717,29 @@ impl App {
                 let name = e.file_name().to_string_lossy().to_string();
                 let md = e.metadata().ok();
                 let dir = md.as_ref().map(|m| m.is_dir()).unwrap_or(false);
-                v.push(FileEntry { name, dir, size: md.map(|m| m.len()).unwrap_or(0) });
+                v.push(FileEntry {
+                    name,
+                    dir,
+                    size: md.map(|m| m.len()).unwrap_or(0),
+                });
             }
         }
-        v.sort_by(|a, b| b.dir.cmp(&a.dir).then(a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+        v.sort_by(|a, b| {
+            b.dir
+                .cmp(&a.dir)
+                .then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        });
         self.files = v;
         self.scroll[Page::Files.idx()] = 0.0;
     }
 
     fn open_file(&mut self, i: usize) {
         let Some(e) = self.files.get(i) else { return };
-        let path = if self.files_dir == "/" { format!("/{}", e.name) } else { format!("{}/{}", self.files_dir, e.name) };
+        let path = if self.files_dir == "/" {
+            format!("/{}", e.name)
+        } else {
+            format!("{}/{}", self.files_dir, e.name)
+        };
         if e.dir {
             self.files_dir = path;
             self.load_dir();
@@ -1500,7 +1766,10 @@ impl App {
             String::from_utf8_lossy(&buf).replace('\t', "    ")
         };
         let lines = self.fonts.wrap(Face::Regular, 32, &text, W - 2 * M - 16);
-        self.viewer = Some(Viewer::Text(e.name.clone(), lines.into_iter().take(3000).collect()));
+        self.viewer = Some(Viewer::Text(
+            e.name.clone(),
+            lines.into_iter().take(3000).collect(),
+        ));
         self.scroll[Page::Files.idx()] = 0.0;
         self.dirty_content();
     }
@@ -1508,7 +1777,12 @@ impl App {
     // ------------------------------------------------------------ activation
 
     fn activate(&mut self, act: Act, t_in: u64) {
-        let page_before = (self.page, self.locked, self.viewer.is_some(), self.kb.visible);
+        let page_before = (
+            self.page,
+            self.locked,
+            self.viewer.is_some(),
+            self.kb.visible,
+        );
         let mut kind = "action";
         match act {
             Act::Open(p) => self.goto(p),
@@ -1522,14 +1796,35 @@ impl App {
             }
             Act::Voice => {
                 self.voice_running = true;
-                let cmd = std::env::var("FASTSHELL_ASSISTANT").unwrap_or_else(|_| config::get().assistant.clone());
-                self.effects.push(Effect::Assistant(cmd, vec![("S22_BUTTON".into(), "fastshell".into())]));
-                self.add_card("Listening…", "Speak now; the answer is spoken and shown here.", 12.0);
+                let cmd = std::env::var("FASTSHELL_ASSISTANT")
+                    .unwrap_or_else(|_| config::get().assistant.clone());
+                self.effects.push(Effect::Assistant(
+                    cmd,
+                    vec![("S22_BUTTON".into(), "fastshell".into())],
+                ));
+                self.add_card(
+                    "Listening…",
+                    "Speak now; the answer is spoken and shown here.",
+                    12.0,
+                );
             }
             Act::Terminal => {
                 self.effects.push(Effect::HandToSway);
-                self.effects.push(Effect::Spawn(vec!["sh".into(), "-c".into(), FOOT.into()]));
-                self.effects.push(Effect::Spawn(vec!["@delay1500".into(), "gdbus".into(), "call".into(), "--session".into(), "--dest".into(), "sm.puri.OSK0".into(), "--object-path".into(), "/sm/puri/OSK0".into(), "--method".into(), "sm.puri.OSK0.SetVisible".into(), "true".into()]));
+                self.effects
+                    .push(Effect::Spawn(vec!["sh".into(), "-c".into(), FOOT.into()]));
+                self.effects.push(Effect::Spawn(vec![
+                    "@delay1500".into(),
+                    "gdbus".into(),
+                    "call".into(),
+                    "--session".into(),
+                    "--dest".into(),
+                    "sm.puri.OSK0".into(),
+                    "--object-path".into(),
+                    "/sm/puri/OSK0".into(),
+                    "--method".into(),
+                    "sm.puri.OSK0.SetVisible".into(),
+                    "true".into(),
+                ]));
             }
             Act::Sway => self.effects.push(Effect::HandToSway),
             Act::Send => self.send(),
@@ -1569,7 +1864,11 @@ impl App {
             }
             Act::FilesUp => {
                 if let Some(i) = self.files_dir.rfind('/') {
-                    self.files_dir = if i == 0 { "/".into() } else { self.files_dir[..i].to_string() };
+                    self.files_dir = if i == 0 {
+                        "/".into()
+                    } else {
+                        self.files_dir[..i].to_string()
+                    };
                     self.load_dir();
                     self.dirty_content();
                 }
@@ -1582,6 +1881,17 @@ impl App {
                     self.dev_call(id, args);
                     self.haptic("tick");
                 }
+                self.dirty_content();
+            }
+            Act::Access(id) => {
+                let on = !self
+                    .access
+                    .get(id)
+                    .copied()
+                    .unwrap_or_else(|| crate::access::default_on(id));
+                self.access_error = crate::access::set(&self.access_path, id, on).err();
+                self.access = crate::access::load(&self.access_path);
+                self.haptic("tick");
                 self.dirty_content();
             }
             Act::Mute => {
@@ -1598,7 +1908,8 @@ impl App {
             }
             Act::Classic => {
                 let f = &config::get().ui_backend_file;
-                let _ = std::fs::write(format!("{f}.tmp"), "quickshell\n").and_then(|_| std::fs::rename(format!("{f}.tmp"), f));
+                let _ = std::fs::write(format!("{f}.tmp"), "quickshell\n")
+                    .and_then(|_| std::fs::rename(format!("{f}.tmp"), f));
                 self.note = "Switching to the classic desktop…".into();
                 self.dirty_content();
             }
@@ -1616,7 +1927,11 @@ impl App {
                 }
                 if self.net.is_some() && self.dev.available != Some(false) {
                     // through the device API (the same file; s22d reads it back)
-                    let args = if locked { json!({"locked": self.idle_cfg.locked_s}) } else { json!({"value": self.idle_cfg.unlocked_s}) };
+                    let args = if locked {
+                        json!({"locked": self.idle_cfg.locked_s})
+                    } else {
+                        json!({"value": self.idle_cfg.unlocked_s})
+                    };
                     self.dev_call("screen_timeout.set", args);
                 } else {
                     // no s22d (another phone): the shell's own file
@@ -1629,7 +1944,11 @@ impl App {
                 if !self.buttons_cfg.is_empty() {
                     crate::buttons::save_enabled(&self.buttons_cfg, self.buttons_enabled);
                 }
-                self.note = if self.buttons_enabled { "Buttons: handled by the shell".into() } else { "Buttons: handed to s22-buttons".into() };
+                self.note = if self.buttons_enabled {
+                    "Buttons: handled by the shell".into()
+                } else {
+                    "Buttons: handed to s22-buttons".into()
+                };
                 self.dirty_content();
             }
             Act::AgentHold => {}
@@ -1644,11 +1963,15 @@ impl App {
                     self.dirty_content();
                 }
                 let c = self.cam.shutter(t_in);
-                eprintln!("fastshell: camera: shutter ({:?}, {:?}, pid {:?}) -> {:?}", self.cam.phase, self.cam.mode, self.cam.pid, c);
+                eprintln!(
+                    "fastshell: camera: shutter ({:?}, {:?}, pid {:?}) -> {:?}",
+                    self.cam.phase, self.cam.mode, self.cam.pid, c
+                );
                 if !c.is_empty() {
                     self.haptic("tick");
                     if self.cam.mode == CamMode::Photo {
-                        self.cam_flash_until = Some(Instant::now() + std::time::Duration::from_millis(120));
+                        self.cam_flash_until =
+                            Some(Instant::now() + std::time::Duration::from_millis(120));
                     }
                 }
                 self.cam_cmds.extend(c);
@@ -1684,7 +2007,11 @@ impl App {
                     }
                 }
                 let o = self.cam.orient.get(s);
-                self.note = format!("Camera {s}: preview rotated {}°{}", o.rotate, if o.mirror { ", mirrored" } else { "" });
+                self.note = format!(
+                    "Camera {s}: preview rotated {}°{}",
+                    o.rotate,
+                    if o.mirror { ", mirrored" } else { "" }
+                );
                 self.dirty_content();
             }
             Act::Refresh => {
@@ -1698,7 +2025,12 @@ impl App {
             }
             Act::Nothing => {}
         }
-        let after = (self.page, self.locked, self.viewer.is_some(), self.kb.visible);
+        let after = (
+            self.page,
+            self.locked,
+            self.viewer.is_some(),
+            self.kb.visible,
+        );
         if after != page_before {
             kind = "page";
         }
@@ -1707,7 +2039,9 @@ impl App {
 
     fn key(&mut self, r: usize, c: usize) {
         let rows = kbd::rows(self.kb.layout);
-        let Some(k) = rows.get(r).and_then(|row| row.get(c)) else { return };
+        let Some(k) = rows.get(r).and_then(|row| row.get(c)) else {
+            return;
+        };
         match self.kb.press(k) {
             KeyOut::Text(s) => {
                 if self.input.chars().count() < 4000 {
@@ -1784,8 +2118,14 @@ impl App {
                 } else {
                     None
                 };
-                let hit = if self.locked && self.confirm.is_none() { None } else { self.hit_at(x, y) };
-                let in_scroll = self.scroll_rect.is_some_and(|r| r.contains(x, y)) && self.confirm.is_none() && !self.locked;
+                let hit = if self.locked && self.confirm.is_none() {
+                    None
+                } else {
+                    self.hit_at(x, y)
+                };
+                let in_scroll = self.scroll_rect.is_some_and(|r| r.contains(x, y))
+                    && self.confirm.is_none()
+                    && !self.locked;
                 if let Some(h) = &hit {
                     if h.hold_ms > 0 {
                         self.hold = Some((Instant::now(), h.clone()));
@@ -1793,7 +2133,11 @@ impl App {
                     if let Act::Key(r, c) = h.act {
                         let rows = kbd::rows(self.kb.layout);
                         if rows[r][c] == kbd::BKSP {
-                            self.repeat_at = Some((Instant::now() + std::time::Duration::from_millis(450), r, c));
+                            self.repeat_at = Some((
+                                Instant::now() + std::time::Duration::from_millis(450),
+                                r,
+                                c,
+                            ));
                         }
                         self.haptic("tick");
                     }
@@ -1809,10 +2153,23 @@ impl App {
                 if hit.is_some() {
                     self.mark = Some((t, "press"));
                 }
-                self.touch = Some(Touching { x0: x, y0: y, t0: t, x, y, edge, dragging: false, samples: vec![(t, y)], hit, in_scroll });
+                self.touch = Some(Touching {
+                    x0: x,
+                    y0: y,
+                    t0: t,
+                    x,
+                    y,
+                    edge,
+                    dragging: false,
+                    samples: vec![(t, y)],
+                    hit,
+                    in_scroll,
+                });
             }
             Touch::Move(x, y, t) => {
-                let Some(mut tc) = self.touch.take() else { return };
+                let Some(mut tc) = self.touch.take() else {
+                    return;
+                };
                 let (dx, dy) = (x - tc.x0, y - tc.y0);
                 if tc.hit.as_ref().is_some_and(|h| h.act == Act::AgentHold) {
                     // holding to talk: moving the finger does not cancel it
@@ -1821,7 +2178,12 @@ impl App {
                     self.touch = Some(tc);
                     return;
                 }
-                if let Some(Hit { act: Act::Slide(id), r, .. }) = tc.hit.clone() {
+                if let Some(Hit {
+                    act: Act::Slide(id),
+                    r,
+                    ..
+                }) = tc.hit.clone()
+                {
                     self.slide(id, r, x, false);
                     tc.x = x;
                     tc.y = y;
@@ -1916,7 +2278,12 @@ impl App {
                 if tc.dragging && tc.in_scroll {
                     // kinetic: velocity over the last ~80 ms
                     let last = *tc.samples.last().unwrap();
-                    let first = tc.samples.iter().find(|(ts, _)| last.0.saturating_sub(*ts) <= 80_000).copied().unwrap_or(last);
+                    let first = tc
+                        .samples
+                        .iter()
+                        .find(|(ts, _)| last.0.saturating_sub(*ts) <= 80_000)
+                        .copied()
+                        .unwrap_or(last);
                     let span = (last.0.saturating_sub(first.0)) as f32 / 1e6;
                     if span > 0.008 {
                         self.velocity = -((last.1 - first.1) as f32) / span;
@@ -1936,7 +2303,9 @@ impl App {
                         return;
                     }
                     if h.hold_ms > 0 {
-                        let held = hold.map(|(s, _)| s.elapsed().as_millis() as u32).unwrap_or(0);
+                        let held = hold
+                            .map(|(s, _)| s.elapsed().as_millis() as u32)
+                            .unwrap_or(0);
                         if held < h.hold_ms {
                             self.note = format!("Hold for {:.1} s", h.hold_ms as f32 / 1000.0);
                             self.dirty_content();
@@ -1949,7 +2318,12 @@ impl App {
                 }
             }
             Touch::Cancel(_) => {
-                if self.touch.as_ref().and_then(|t| t.hit.as_ref()).is_some_and(|h| h.act == Act::AgentHold) {
+                if self
+                    .touch
+                    .as_ref()
+                    .and_then(|t| t.hit.as_ref())
+                    .is_some_and(|h| h.act == Act::AgentHold)
+                {
                     self.card_release();
                 }
                 self.touch = None;
@@ -1980,7 +2354,8 @@ impl App {
         if let Some((at, r, c)) = self.repeat_at {
             if Instant::now() >= at {
                 self.key(r, c);
-                self.repeat_at = Some((Instant::now() + std::time::Duration::from_millis(70), r, c));
+                self.repeat_at =
+                    Some((Instant::now() + std::time::Duration::from_millis(70), r, c));
             }
         }
     }
@@ -2029,7 +2404,11 @@ impl App {
         self.dev.answer(id, status, &v);
         if let Some((k, val)) = keep {
             // the finger is still on it: the slider follows the finger, not a late answer
-            if k == 0 { self.dev.brightness = val } else { self.dev.volume = val }
+            if k == 0 {
+                self.dev.brightness = val
+            } else {
+                self.dev.volume = val
+            }
         }
         if v["ok"] == true {
             match id {
@@ -2038,16 +2417,30 @@ impl App {
                         self.level = l;
                     }
                 }
-                "vibration.set" => self.haptics = self.dev.on.get(&Toggle::Vibration).copied().unwrap_or(self.haptics),
+                "vibration.set" => {
+                    self.haptics = self
+                        .dev
+                        .on
+                        .get(&Toggle::Vibration)
+                        .copied()
+                        .unwrap_or(self.haptics)
+                }
                 "screen_timeout.set" | "screen_timeout.get" => {
                     if let Some((u, l)) = self.dev.timeout {
-                        self.idle_cfg = idle::Cfg { unlocked_s: u, locked_s: l };
+                        self.idle_cfg = idle::Cfg {
+                            unlocked_s: u,
+                            locked_s: l,
+                        };
                     }
                 }
                 _ => {}
             }
             // after a change: read everything back (other rows can move: uplink, Wi-Fi saver)
-            if id.ends_with(".set") && self.sliding.is_none() && self.page == Page::Settings && !self.dev.pending.iter().any(|p| p == "device.status") {
+            if id.ends_with(".set")
+                && self.sliding.is_none()
+                && self.page == Page::Settings
+                && !self.dev.pending.iter().any(|p| p == "device.status")
+            {
                 self.dev_call("device.status", json!({}));
             }
         }
@@ -2111,11 +2504,24 @@ impl App {
         }
         let mut render = std::mem::take(&mut self.damage);
         let mut copy = vec![];
-        let cur = self.scroll_rect.map(|r| (self.page, self.viewer.is_some(), r, self.scroll[self.page.idx()] as i32));
+        let cur = self.scroll_rect.map(|r| {
+            (
+                self.page,
+                self.viewer.is_some(),
+                r,
+                self.scroll[self.page.idx()] as i32,
+            )
+        });
         if let (Some((p, v, r, s)), Some((rp, rv, rs))) = (cur, self.rendered_scroll) {
             if p == rp && v == rv && s != rs {
-                let overlay = self.confirm.is_some() || self.osd.is_some() || self.flash_until.is_some() || !self.cards.is_empty() && self.cards_rect().hits(&r);
-                let whole_damaged = render.iter().any(|d| d.intersect(&r).is_some_and(|i| i.area() * 10 >= r.area() * 9));
+                let overlay = self.confirm.is_some()
+                    || self.osd.is_some()
+                    || self.flash_until.is_some()
+                    || !self.cards.is_empty() && self.cards_rect().hits(&r);
+                let whole_damaged = render.iter().any(|d| {
+                    d.intersect(&r)
+                        .is_some_and(|i| i.area() * 10 >= r.area() * 9)
+                });
                 if !overlay && !whole_damaged && (s - rs).abs() < r.h {
                     if let Some(strip) = cv.scroll(&r, s - rs) {
                         render.push(strip);
@@ -2158,7 +2564,16 @@ impl App {
         self.fonts.draw(cv, f, px, r.x + (r.w - w) / 2, base, s, c);
     }
 
-    fn button(&mut self, cv: &mut Canvas, r: Rect, label: &str, act: Act, fill: u32, fill_p: u32, px: u16) {
+    fn button(
+        &mut self,
+        cv: &mut Canvas,
+        r: Rect,
+        label: &str,
+        act: Act,
+        fill: u32,
+        fill_p: u32,
+        px: u16,
+    ) {
         let p = self.is_pressed(&act);
         if !self.layout_pass && r.hits(&cv.clip) {
             cv.rrect(&r, 28, if p { fill_p } else { fill });
@@ -2172,7 +2587,11 @@ impl App {
     pub fn scene(&mut self, cv: &mut Canvas) {
         let clip = cv.clip;
         // the live viewfinder covers its rectangle: no background pass under it (30 fps, 6 MB)
-        let vf_only = !self.locked && self.page == Page::Camera && self.cam.live() && self.vf.is_some() && self.cam_review.is_none()
+        let vf_only = !self.locked
+            && self.page == Page::Camera
+            && self.cam.live()
+            && self.vf.is_some()
+            && self.cam_review.is_none()
             && self.vf_rect().intersect(&clip) == Some(clip);
         if !self.layout_pass && !vf_only {
             cv.fill(&Rect::new(0, 0, W, H), BG);
@@ -2269,16 +2688,76 @@ impl App {
         let st = self.st.clone();
         let health = st.health.clone().unwrap_or_else(|| "connecting".into());
         let chips: [(String, u32, Act); 4] = [
-            (st.model.clone().map(|m| net::model_label(&m)).unwrap_or_else(|| "agent —".into()), match health.as_str() { "healthy" => GOOD, "down" => BAD, "connecting" => DIM, _ => WARN }, Act::Open(Page::Chat)),
-            (format!("{} sessions · {} running", st.sessions.map(|s| s.0).unwrap_or(0), st.running.unwrap_or(0)), ACCENT, Act::Open(Page::Switcher)),
-            (st.battery.map(|b| format!("{b}%{}", st.bat_temp.map(|t| format!(" · {t:.0}°C")).unwrap_or_default())).unwrap_or_else(|| "—".into()), match st.battery { Some(b) if b < 15 => BAD, Some(b) if b < 30 => WARN, _ => GOOD }, Act::Refresh),
-            (st.thermal.map(|t| format!("{t:.0}°C")).unwrap_or_else(|| "—".into()), match st.thermal { Some(t) if t >= 60.0 => BAD, Some(t) if t >= 48.0 => WARN, _ => GOOD }, Act::Refresh),
+            (
+                st.model
+                    .clone()
+                    .map(|m| net::model_label(&m))
+                    .unwrap_or_else(|| "agent —".into()),
+                match health.as_str() {
+                    "healthy" => GOOD,
+                    "down" => BAD,
+                    "connecting" => DIM,
+                    _ => WARN,
+                },
+                Act::Open(Page::Chat),
+            ),
+            (
+                format!(
+                    "{} sessions · {} running",
+                    st.sessions.map(|s| s.0).unwrap_or(0),
+                    st.running.unwrap_or(0)
+                ),
+                ACCENT,
+                Act::Open(Page::Switcher),
+            ),
+            (
+                st.battery
+                    .map(|b| {
+                        format!(
+                            "{b}%{}",
+                            st.bat_temp
+                                .map(|t| format!(" · {t:.0}°C"))
+                                .unwrap_or_default()
+                        )
+                    })
+                    .unwrap_or_else(|| "—".into()),
+                match st.battery {
+                    Some(b) if b < 15 => BAD,
+                    Some(b) if b < 30 => WARN,
+                    _ => GOOD,
+                },
+                Act::Refresh,
+            ),
+            (
+                st.thermal
+                    .map(|t| format!("{t:.0}°C"))
+                    .unwrap_or_else(|| "—".into()),
+                match st.thermal {
+                    Some(t) if t >= 60.0 => BAD,
+                    Some(t) if t >= 48.0 => WARN,
+                    _ => GOOD,
+                },
+                Act::Refresh,
+            ),
         ];
         let cw = (W - 3 * M) / 2;
         for (i, (label, color, act)) in chips.iter().enumerate() {
-            let r = Rect::new(M + (i as i32 % 2) * (cw + M), y + (i as i32 / 2) * 96, cw, 80);
+            let r = Rect::new(
+                M + (i as i32 % 2) * (cw + M),
+                y + (i as i32 / 2) * 96,
+                cw,
+                80,
+            );
             if !self.layout_pass && r.hits(&cv.clip) {
-                cv.rrect(&r, 26, if self.is_pressed(act) && i < 2 { PRESS } else { SURF });
+                cv.rrect(
+                    &r,
+                    26,
+                    if self.is_pressed(act) && i < 2 {
+                        PRESS
+                    } else {
+                        SURF
+                    },
+                );
                 cv.circle(r.x + 34, r.y + 40, 9, *color);
                 let l = self.fonts.ellipsize(Face::Regular, 30, label, r.w - 80);
                 self.txt(cv, Face::Regular, 30, r.x + 58, r.y + 51, &l, TEXT);
@@ -2304,26 +2783,63 @@ impl App {
             ("Settings", Act::Open(Page::Settings), 0xf0883e, "S"),
         ];
         for (i, (label, act, color, glyph)) in tiles.iter().enumerate() {
-            let r = Rect::new(M + (i as i32 % 3) * (tw + M), y + (i as i32 / 3) * (th + M), tw, th);
+            let r = Rect::new(
+                M + (i as i32 % 3) * (tw + M),
+                y + (i as i32 / 3) * (th + M),
+                tw,
+                th,
+            );
             if !self.layout_pass && r.hits(&cv.clip) {
                 let p = self.is_pressed(act);
                 cv.rrect(&r, 36, if p { PRESS } else { SURF });
                 let ic = Rect::new(r.x + (r.w - 96) / 2, r.y + 26, 96, 96);
                 cv.rrect(&ic, 28, *color);
                 self.txt_center(cv, Face::Bold, 44, ic, glyph, 0x0b0f14);
-                self.txt_center(cv, Face::Bold, 34, Rect::new(r.x, r.y + 132, r.w, 60), label, TEXT);
+                self.txt_center(
+                    cv,
+                    Face::Bold,
+                    34,
+                    Rect::new(r.x, r.y + 132, r.w, 60),
+                    label,
+                    TEXT,
+                );
             }
             self.hit(r, act.clone());
         }
         y += 2 * th + M + 16;
         // Apps · Lock
         let bw = (W - 3 * M) / 2;
-        self.button(cv, Rect::new(M, y, bw, 120), "Apps", Act::Open(Page::Switcher), SURF2, PRESS, 38);
-        self.button(cv, Rect::new(2 * M + bw, y, bw, 120), "Lock", Act::Lock, SURF2, PRESS, 38);
+        self.button(
+            cv,
+            Rect::new(M, y, bw, 120),
+            "Apps",
+            Act::Open(Page::Switcher),
+            SURF2,
+            PRESS,
+            38,
+        );
+        self.button(
+            cv,
+            Rect::new(2 * M + bw, y, bw, 120),
+            "Lock",
+            Act::Lock,
+            SURF2,
+            PRESS,
+            38,
+        );
         if !self.layout_pass {
-            let hint = "Swipe up from the bottom: home  ·  from a side: back  ·  from the top: apps";
+            let hint =
+                "Swipe up from the bottom: home  ·  from a side: back  ·  from the top: apps";
             let w = self.fonts.measure(Face::Regular, 25, hint);
-            self.txt(cv, Face::Regular, 25, (W - w) / 2, H - EDGE_B - 22, hint, 0x5d6875);
+            self.txt(
+                cv,
+                Face::Regular,
+                25,
+                (W - w) / 2,
+                H - EDGE_B - 22,
+                hint,
+                0x5d6875,
+            );
         }
     }
 
@@ -2331,43 +2847,101 @@ impl App {
     fn draw_agent_card(&mut self, cv: &mut Canvas, r: Rect) {
         let active = self.card.active();
         let held = self.is_pressed(&Act::AgentHold) || self.card.held;
-        let listening = matches!(self.card.listen, Some((_, agent::Listen::Listening)) | Some((_, agent::Listen::Starting)));
+        let listening = matches!(
+            self.card.listen,
+            Some((_, agent::Listen::Listening)) | Some((_, agent::Listen::Starting))
+        );
         if !self.layout_pass && r.hits(&cv.clip) {
-            let border = if listening { 0xf85149 } else if active { ACCENT } else { 0x2a3442 };
+            let border = if listening {
+                0xf85149
+            } else if active {
+                ACCENT
+            } else {
+                0x2a3442
+            };
             cv.rrect(&Rect::new(r.x - 3, r.y - 3, r.w + 6, r.h + 6), 43, border);
             cv.rrect(&r, 40, if held { 0x1d2a3a } else { SURF });
             let status = self.card.status_line();
-            let col = if listening { 0xff9b94 } else if active { 0x9ecbff } else { DIM };
+            let col = if listening {
+                0xff9b94
+            } else if active {
+                0x9ecbff
+            } else {
+                DIM
+            };
             let s = self.fonts.ellipsize(Face::Bold, 36, &status, r.w - 300);
             self.txt(cv, Face::Bold, 36, r.x + 40, r.y + 70, &s, col);
             let mut ty = r.y + 130;
             if !self.card.you.is_empty() {
                 let you = format!("You: {}", self.card.you);
-                for l in self.fonts.wrap(Face::Regular, 32, &you, r.w - 80).iter().take(2) {
-                    self.fonts.draw(cv, Face::Regular, 32, r.x + 40, ty, l, 0xc9d1d9);
+                for l in self
+                    .fonts
+                    .wrap(Face::Regular, 32, &you, r.w - 80)
+                    .iter()
+                    .take(2)
+                {
+                    self.fonts
+                        .draw(cv, Face::Regular, 32, r.x + 40, ty, l, 0xc9d1d9);
                     ty += 44;
                 }
                 ty += 16;
             }
             let reply = if self.card.reply.is_empty() && self.card.you.is_empty() {
-                self.chat.iter().rev().find(|(w, _)| *w == Who::Agent).map(|(_, t)| t.clone()).unwrap_or_default()
+                self.chat
+                    .iter()
+                    .rev()
+                    .find(|(w, _)| *w == Who::Agent)
+                    .map(|(_, t)| t.clone())
+                    .unwrap_or_default()
             } else {
                 self.card.reply.clone()
             };
             let maxl = ((r.bottom() - 250 - ty) / 50).max(1) as usize;
             let lines = self.fonts.wrap(Face::Regular, 38, &reply, r.w - 80);
             for (k, l) in lines.iter().take(maxl).enumerate() {
-                let l = if k + 1 == maxl && lines.len() > maxl { format!("{l}…") } else { l.clone() };
-                self.fonts.draw(cv, Face::Regular, 38, r.x + 40, ty + 10 + k as i32 * 50, &l, TEXT);
+                let l = if k + 1 == maxl && lines.len() > maxl {
+                    format!("{l}…")
+                } else {
+                    l.clone()
+                };
+                self.fonts.draw(
+                    cv,
+                    Face::Regular,
+                    38,
+                    r.x + 40,
+                    ty + 10 + k as i32 * 50,
+                    &l,
+                    TEXT,
+                );
             }
             // the mic: big, at the bottom of the card
             let (cx, cy) = (r.x + r.w / 2, r.bottom() - 150);
-            let ring = if listening { BAD } else if held { ACCENT_P } else { ACCENT };
+            let ring = if listening {
+                BAD
+            } else if held {
+                ACCENT_P
+            } else {
+                ACCENT
+            };
             cv.circle(cx, cy, 86, ring);
             mic(cv, cx, cy, TEXT, ring);
-            let hint = if listening { "release to send" } else if active { "hold to queue the next" } else { "hold to talk · tap for a 6 s window" };
+            let hint = if listening {
+                "release to send"
+            } else if active {
+                "hold to queue the next"
+            } else {
+                "hold to talk · tap for a 6 s window"
+            };
             let w = self.fonts.measure(Face::Regular, 26, hint);
-            self.txt(cv, Face::Regular, 26, r.x + (r.w - w) / 2, r.bottom() - 14, hint, DIM);
+            self.txt(
+                cv,
+                Face::Regular,
+                26,
+                r.x + (r.w - w) / 2,
+                r.bottom() - 14,
+                hint,
+                DIM,
+            );
         }
         self.hit(r, Act::AgentHold);
         if active {
@@ -2381,12 +2955,27 @@ impl App {
     }
 
     fn field_rect(&self) -> Rect {
-        let bottom = if self.kb.visible { H - KB_H } else { H - EDGE_B - 10 };
+        let bottom = if self.kb.visible {
+            H - KB_H
+        } else {
+            H - EDGE_B - 10
+        };
         Rect::new(M, bottom - 150, W - 2 * M - 2 * 140, 128)
     }
 
     fn chat_blocks(&mut self, width: i32) {
-        let key = (self.chat.len(), self.chat.last().map(|l| l.1.len()).unwrap_or(0), self.live.len() + self.activity.as_ref().map(|a| a.len() + 1).unwrap_or(0) + self.prompt.as_ref().map(|p| p.question.len() + 7).unwrap_or(0), width);
+        let key = (
+            self.chat.len(),
+            self.chat.last().map(|l| l.1.len()).unwrap_or(0),
+            self.live.len()
+                + self.activity.as_ref().map(|a| a.len() + 1).unwrap_or(0)
+                + self
+                    .prompt
+                    .as_ref()
+                    .map(|p| p.question.len() + 7)
+                    .unwrap_or(0),
+            width,
+        );
         if key == self.blocks_key {
             return;
         }
@@ -2409,9 +2998,20 @@ impl App {
         for (who, text) in items {
             let px = if who == Who::Note { 30 } else { 40 };
             let lines = self.fonts.wrap(Face::Regular, px, &text, maxw - 64);
-            let w = lines.iter().map(|l| self.fonts.measure(Face::Regular, px, l)).max().unwrap_or(0) + 64;
+            let w = lines
+                .iter()
+                .map(|l| self.fonts.measure(Face::Regular, px, l))
+                .max()
+                .unwrap_or(0)
+                + 64;
             let h = lines.len() as i32 * if who == Who::Note { 42 } else { lh } + 44;
-            blocks.push(Block { who, y, h, w: w.min(maxw), lines });
+            blocks.push(Block {
+                who,
+                y,
+                h,
+                w: w.min(maxw),
+                lines,
+            });
             y += h + 22;
         }
         self.blocks = blocks;
@@ -2439,12 +3039,22 @@ impl App {
             let r = Rect::new(M, list_bottom - qh, W - 2 * M, qh);
             if !self.layout_pass && r.hits(&cv.clip) {
                 cv.rrect(&r, 28, 0x2a2410);
-                let q = self.fonts.ellipsize(Face::Bold, 32, &format!("{} {}", p.header, p.question), r.w - 48);
+                let q = self.fonts.ellipsize(
+                    Face::Bold,
+                    32,
+                    &format!("{} {}", p.header, p.question),
+                    r.w - 48,
+                );
                 self.txt(cv, Face::Bold, 32, r.x + 24, r.y + 48, &q, 0xf2cc60);
             }
             let bw = (r.w - 3 * 20) / 2;
             for (i, o) in p.options.iter().enumerate() {
-                let b = Rect::new(r.x + 20 + (i as i32 % 2) * (bw + 20), r.y + 70 + (i as i32 / 2) * 110, bw, 92);
+                let b = Rect::new(
+                    r.x + 20 + (i as i32 % 2) * (bw + 20),
+                    r.y + 70 + (i as i32 / 2) * 110,
+                    bw,
+                    92,
+                );
                 let lbl = self.fonts.ellipsize(Face::Bold, 32, o, bw - 24);
                 self.button(cv, b, &lbl, Act::PromptOpt(i), SURF2, PRESS, 32);
             }
@@ -2477,8 +3087,20 @@ impl App {
                     };
                     cv.rrect(&Rect::new(x, y, b.w, b.h), 30, fill);
                     for (k, l) in b.lines.iter().enumerate() {
-                        let c2 = if l.starts_with('[') && l.ends_with(']') { DIM } else { col };
-                        self.fonts.draw(cv, Face::Regular, px, x + 32, y + 22 + (k as i32 + 1) * lh - lh / 4, l, c2);
+                        let c2 = if l.starts_with('[') && l.ends_with(']') {
+                            DIM
+                        } else {
+                            col
+                        };
+                        self.fonts.draw(
+                            cv,
+                            Face::Regular,
+                            px,
+                            x + 32,
+                            y + 22 + (k as i32 + 1) * lh - lh / 4,
+                            l,
+                            c2,
+                        );
                     }
                 }
                 self.blocks = blocks;
@@ -2491,9 +3113,19 @@ impl App {
             cv.rrect(&field, 40, if self.kb.visible { 0x1f2a38 } else { SURF });
             let maxw = field.w - 64;
             if self.input.is_empty() {
-                self.txt(cv, Face::Regular, 38, field.x + 32, field.y + 78, "Message the agent…", DIM);
+                self.txt(
+                    cv,
+                    Face::Regular,
+                    38,
+                    field.x + 32,
+                    field.y + 78,
+                    "Message the agent…",
+                    DIM,
+                );
             } else {
-                let t = self.fonts.tail(Face::Regular, 38, &self.input.replace('\n', " "), maxw - 10);
+                let t =
+                    self.fonts
+                        .tail(Face::Regular, 38, &self.input.replace('\n', " "), maxw - 10);
                 let end = self.txt(cv, Face::Regular, 38, field.x + 32, field.y + 78, &t, TEXT);
                 cv.fill(&Rect::new(end + 3, field.y + 34, 4, 58), ACCENT);
             }
@@ -2503,14 +3135,43 @@ impl App {
         let send_r = Rect::new(W - M - 128, field.y, 128, field.h);
         self.button(cv, mic_r, "", Act::Voice, SURF2, PRESS, 30);
         if !self.layout_pass && mic_r.hits(&cv.clip) {
-            mic(cv, mic_r.x + 64, mic_r.y + 64, TEXT, if self.is_pressed(&Act::Voice) { PRESS } else { SURF2 });
+            mic(
+                cv,
+                mic_r.x + 64,
+                mic_r.y + 64,
+                TEXT,
+                if self.is_pressed(&Act::Voice) {
+                    PRESS
+                } else {
+                    SURF2
+                },
+            );
         }
         let can = !self.input.trim().is_empty() && !self.busy;
-        self.button(cv, send_r, "Send", Act::Send, if can { ACCENT } else { SURF2 }, ACCENT_P, 30);
+        self.button(
+            cv,
+            send_r,
+            "Send",
+            Act::Send,
+            if can { ACCENT } else { SURF2 },
+            ACCENT_P,
+            30,
+        );
     }
 
-    fn list_page(&mut self, cv: &mut Canvas, top: i32, rows: &[(String, String, u32)], row_acts: Option<&dyn Fn(usize) -> Act>, row_h: i32) {
-        let bottom = if self.kb.visible { H - KB_H } else { H - EDGE_B };
+    fn list_page(
+        &mut self,
+        cv: &mut Canvas,
+        top: i32,
+        rows: &[(String, String, u32)],
+        row_acts: Option<&dyn Fn(usize) -> Act>,
+        row_h: i32,
+    ) {
+        let bottom = if self.kb.visible {
+            H - KB_H
+        } else {
+            H - EDGE_B
+        };
         let list = Rect::new(0, top, W, bottom - top);
         self.scroll_rect = Some(list);
         let i = self.page.idx();
@@ -2519,7 +3180,11 @@ impl App {
         self.scroll[i] = self.scroll[i].clamp(0.0, maxs);
         let off = self.scroll[i] as i32;
         let saved = cv.clip;
-        let c = if self.layout_pass { Some(Rect::new(0, 0, 0, 0)) } else { saved.intersect(&list) };
+        let c = if self.layout_pass {
+            Some(Rect::new(0, 0, 0, 0))
+        } else {
+            saved.intersect(&list)
+        };
         let Some(c) = c else { return };
         cv.clip = c;
         let first = ((off - 20) / row_h).max(0) as usize;
@@ -2533,7 +3198,11 @@ impl App {
                 let act = f(k);
                 if self.layout_pass {
                     if let Some(vis) = r.intersect(&list) {
-                        self.hits.push(Hit { r: vis, act, hold_ms: 0 });
+                        self.hits.push(Hit {
+                            r: vis,
+                            act,
+                            hold_ms: 0,
+                        });
                     }
                     continue;
                 }
@@ -2542,10 +3211,23 @@ impl App {
                 continue;
             }
             let ta = self.fonts.ellipsize(Face::Bold, 36, a, r.w - 56);
-            self.fonts.draw(cv, Face::Bold, 36, r.x + 28, r.y + if b.is_empty() { (row_h - 12 + 28) / 2 } else { 52 }, &ta, *col);
+            self.fonts.draw(
+                cv,
+                Face::Bold,
+                36,
+                r.x + 28,
+                r.y + if b.is_empty() {
+                    (row_h - 12 + 28) / 2
+                } else {
+                    52
+                },
+                &ta,
+                *col,
+            );
             if !b.is_empty() {
                 let tb = self.fonts.ellipsize(Face::Regular, 30, b, r.w - 56);
-                self.fonts.draw(cv, Face::Regular, 30, r.x + 28, r.y + 96, &tb, DIM);
+                self.fonts
+                    .draw(cv, Face::Regular, 30, r.x + 28, r.y + 96, &tb, DIM);
             }
         }
         cv.clip = saved;
@@ -2557,7 +3239,15 @@ impl App {
                 Viewer::Text(n, _) => (n.clone(), false),
                 Viewer::Image(n, ..) => (n.clone(), true),
             };
-            let top = self.header(cv, &name, if is_img { "image" } else { "text preview (first 64 KB)" });
+            let top = self.header(
+                cv,
+                &name,
+                if is_img {
+                    "image"
+                } else {
+                    "text preview (first 64 KB)"
+                },
+            );
             if let Some(Viewer::Image(_, px, w, h)) = &self.viewer {
                 let (w, h) = (*w, *h);
                 let r = Rect::new((W - w) / 2, top + 20, w, h);
@@ -2590,7 +3280,8 @@ impl App {
                     if y - 44 > list.bottom() {
                         break;
                     }
-                    self.fonts.draw(cv, Face::Regular, 32, M + 8, y, l, 0xc9d1d9);
+                    self.fonts
+                        .draw(cv, Face::Regular, 32, M + 8, y, l, 0xc9d1d9);
                 }
                 cv.clip = saved;
             }
@@ -2614,13 +3305,25 @@ impl App {
             })
             .collect();
         if rows.is_empty() && !self.layout_pass {
-            self.txt(cv, Face::Regular, 34, M, top + 80, "(empty or unreadable)", DIM);
+            self.txt(
+                cv,
+                Face::Regular,
+                34,
+                M,
+                top + 80,
+                "(empty or unreadable)",
+                DIM,
+            );
         }
         self.list_page(cv, top, &rows, Some(&|k| Act::File(k)), 140);
     }
 
     fn draw_phone(&mut self, cv: &mut Canvas) {
-        let top = self.header(cv, "Phone", "read-only · calls and SMS stay with the gated agent tools");
+        let top = self.header(
+            cv,
+            "Phone",
+            "read-only · calls and SMS stay with the gated agent tools",
+        );
         let r = Rect::new(W - M - 200, STATUS_H + 24, 200, 84);
         self.button(cv, r, "Refresh", Act::Refresh, SURF2, PRESS, 32);
         let mut rows: Vec<(String, String, u32)> = vec![];
@@ -2635,9 +3338,21 @@ impl App {
                 if st["ok"] == false {
                     rows.push(("Modem unavailable".into(), s(&st["error"]), BAD));
                 } else {
-                    rows.push((format!("Modem {}", s(&st["modem_state"])), format!("SIM {}", s(&st["sim"])), GOOD));
+                    rows.push((
+                        format!("Modem {}", s(&st["modem_state"])),
+                        format!("SIM {}", s(&st["sim"])),
+                        GOOD,
+                    ));
                     let reg = &st["registration"];
-                    rows.push((format!("Network {}", s(&reg["reg_status"])), format!("{} · VoLTE {}", s(&reg["act"]).to_uppercase(), s(&reg["volte"])), TEXT));
+                    rows.push((
+                        format!("Network {}", s(&reg["reg_status"])),
+                        format!(
+                            "{} · VoLTE {}",
+                            s(&reg["act"]).to_uppercase(),
+                            s(&reg["volte"])
+                        ),
+                        TEXT,
+                    ));
                 }
                 rows.push(("Messages".into(), String::new(), 0x9ecbff));
                 let msgs = sms["messages"].as_array().cloned().unwrap_or_default();
@@ -2646,7 +3361,11 @@ impl App {
                 }
                 for m in msgs.iter().take(20) {
                     rows.push((
-                        format!("{}  ·  {}", m["from"].as_str().unwrap_or("?"), m["ts"].as_str().or(m["time"].as_str()).unwrap_or("")),
+                        format!(
+                            "{}  ·  {}",
+                            m["from"].as_str().unwrap_or("?"),
+                            m["ts"].as_str().or(m["time"].as_str()).unwrap_or("")
+                        ),
                         m["text"].as_str().unwrap_or("").replace('\n', " "),
                         TEXT,
                     ));
@@ -2658,8 +3377,16 @@ impl App {
                 }
                 for c in cs.iter().take(20) {
                     rows.push((
-                        format!("{} {}", c["direction"].as_str().unwrap_or(""), c["number"].as_str().or(c["from"].as_str()).unwrap_or("?")),
-                        format!("{} {}", c["state"].as_str().unwrap_or(""), c["ts"].as_str().or(c["time"].as_str()).unwrap_or("")),
+                        format!(
+                            "{} {}",
+                            c["direction"].as_str().unwrap_or(""),
+                            c["number"].as_str().or(c["from"].as_str()).unwrap_or("?")
+                        ),
+                        format!(
+                            "{} {}",
+                            c["state"].as_str().unwrap_or(""),
+                            c["ts"].as_str().or(c["time"].as_str()).unwrap_or("")
+                        ),
                         TEXT,
                     ));
                 }
@@ -2677,9 +3404,15 @@ impl App {
             if live {
                 // only the bands the frame does not cover
                 cv.fill(&Rect::new(area.x, area.y, area.w, vr.y - area.y), 0x000000);
-                cv.fill(&Rect::new(area.x, vr.bottom(), area.w, area.bottom() - vr.bottom()), 0x000000);
+                cv.fill(
+                    &Rect::new(area.x, vr.bottom(), area.w, area.bottom() - vr.bottom()),
+                    0x000000,
+                );
                 cv.fill(&Rect::new(area.x, vr.y, vr.x - area.x, vr.h), 0x000000);
-                cv.fill(&Rect::new(vr.right(), vr.y, area.right() - vr.right(), vr.h), 0x000000);
+                cv.fill(
+                    &Rect::new(vr.right(), vr.y, area.right() - vr.right(), vr.h),
+                    0x000000,
+                );
             } else {
                 cv.fill(&area, 0x000000);
             }
@@ -2687,7 +3420,15 @@ impl App {
                 let r = Rect::new((W - w) / 2, area.y + (area.h - h) / 2, *w, *h);
                 let (px, w, h) = (px.clone(), *w, *h);
                 cv.image(&r, &px, w, h);
-                self.txt(cv, Face::Bold, 34, M + 8, area.y + 64, "Last photo · tap to go back", TEXT);
+                self.txt(
+                    cv,
+                    Face::Bold,
+                    34,
+                    M + 8,
+                    area.y + 64,
+                    "Last photo · tap to go back",
+                    TEXT,
+                );
             } else if let (true, Some(v)) = (self.cam.live(), self.vf.as_mut()) {
                 let o = self.cam.orient.get(self.cam.sensor);
                 if vr.hits(&cv.clip) {
@@ -2697,7 +3438,11 @@ impl App {
                     self.cam_drawn = Some(pubns);
                 }
             } else {
-                let st = if self.cam.status.is_empty() { "camera off".to_string() } else { self.cam.status.clone() };
+                let st = if self.cam.status.is_empty() {
+                    "camera off".to_string()
+                } else {
+                    self.cam.status.clone()
+                };
                 self.txt_center(cv, Face::Regular, 36, area, &st, DIM);
             }
             if self.cam_flash_until.is_some() {
@@ -2708,13 +3453,29 @@ impl App {
                 let pill = Rect::new(W / 2 - 110, area.y + 24, 220, 70);
                 cv.rrect(&pill, 35, 0x000000);
                 cv.circle(pill.x + 42, pill.y + 35, 14, BAD);
-                self.txt(cv, Face::Bold, 36, pill.x + 72, pill.y + 49, &format!("{:02}:{:02}", s / 60, s % 60), TEXT);
+                self.txt(
+                    cv,
+                    Face::Bold,
+                    36,
+                    pill.x + 72,
+                    pill.y + 49,
+                    &format!("{:02}:{:02}", s / 60, s % 60),
+                    TEXT,
+                );
             }
         }
         // a back chip over the viewfinder's corner
         let back = Rect::new(M, area.y + 20, 100, 84);
         if !self.layout_pass && back.hits(&cv.clip) {
-            cv.rrect(&back, 30, if self.is_pressed(&Act::Back) { PRESS } else { 0x10151b });
+            cv.rrect(
+                &back,
+                30,
+                if self.is_pressed(&Act::Back) {
+                    PRESS
+                } else {
+                    0x10151b
+                },
+            );
             self.txt_center(cv, Face::Regular, 56, back, "‹", TEXT);
         }
         self.hit(back, Act::Back);
@@ -2723,7 +3484,15 @@ impl App {
         let line = Rect::new(0, y0, W, 60);
         if !self.layout_pass && line.hits(&cv.clip) {
             let st = if self.cam.status.is_empty() {
-                format!("{} camera · {}", self.cam.sensor, if self.cam.mode == CamMode::Photo { "tap the shutter for a photo" } else { "tap to start / stop recording" })
+                format!(
+                    "{} camera · {}",
+                    self.cam.sensor,
+                    if self.cam.mode == CamMode::Photo {
+                        "tap the shutter for a photo"
+                    } else {
+                        "tap to start / stop recording"
+                    }
+                )
             } else {
                 self.cam.status.clone()
             };
@@ -2733,12 +3502,32 @@ impl App {
         }
         // photo / video
         let my = y0 + 70;
-        for (i, (m, label)) in [(CamMode::Photo, "PHOTO"), (CamMode::Video, "VIDEO")].into_iter().enumerate() {
+        for (i, (m, label)) in [(CamMode::Photo, "PHOTO"), (CamMode::Video, "VIDEO")]
+            .into_iter()
+            .enumerate()
+        {
             let r = Rect::new(W / 2 - 230 + i as i32 * 240, my, 220, 90);
             let on = self.cam.mode == m;
             if !self.layout_pass && r.hits(&cv.clip) {
-                cv.rrect(&r, 45, if self.is_pressed(&Act::CamMode(m)) { PRESS } else if on { SURF2 } else { BG });
-                self.txt_center(cv, Face::Bold, 32, r, label, if on { 0xf2cc60 } else { DIM });
+                cv.rrect(
+                    &r,
+                    45,
+                    if self.is_pressed(&Act::CamMode(m)) {
+                        PRESS
+                    } else if on {
+                        SURF2
+                    } else {
+                        BG
+                    },
+                );
+                self.txt_center(
+                    cv,
+                    Face::Bold,
+                    32,
+                    r,
+                    label,
+                    if on { 0xf2cc60 } else { DIM },
+                );
             }
             self.hit(r, Act::CamMode(m));
         }
@@ -2750,17 +3539,34 @@ impl App {
             cv.circle(W / 2, cy, 115, if p { 0xc9d1d9 } else { 0xffffff });
             cv.circle(W / 2, cy, 100, BG);
             match (self.cam.mode, self.cam.recording.is_some()) {
-                (CamMode::Photo, _) => cv.circle(W / 2, cy, 88, if p { 0xc9d1d9 } else { 0xffffff }),
+                (CamMode::Photo, _) => {
+                    cv.circle(W / 2, cy, 88, if p { 0xc9d1d9 } else { 0xffffff })
+                }
                 (CamMode::Video, false) => cv.circle(W / 2, cy, 80, if p { 0xa33 } else { BAD }),
-                (CamMode::Video, true) => cv.rrect(&Rect::new(W / 2 - 45, cy - 45, 90, 90), 16, BAD),
+                (CamMode::Video, true) => {
+                    cv.rrect(&Rect::new(W / 2 - 45, cy - 45, 90, 90), 16, BAD)
+                }
             }
         }
         self.hit(shutter, Act::CamShutter);
         let thumb = Rect::new(M + 40, cy - 85, 170, 170);
         if !self.layout_pass && thumb.hits(&cv.clip) {
-            cv.rrect(&thumb, 24, if self.is_pressed(&Act::CamThumb) { PRESS } else { SURF2 });
+            cv.rrect(
+                &thumb,
+                24,
+                if self.is_pressed(&Act::CamThumb) {
+                    PRESS
+                } else {
+                    SURF2
+                },
+            );
             if let Some((px, w, h)) = &self.cam_thumb {
-                let r = Rect::new(thumb.x + (thumb.w - w) / 2, thumb.y + (thumb.h - h) / 2, *w, *h);
+                let r = Rect::new(
+                    thumb.x + (thumb.w - w) / 2,
+                    thumb.y + (thumb.h - h) / 2,
+                    *w,
+                    *h,
+                );
                 let (px, w, h) = (px.clone(), *w, *h);
                 cv.image(&r, &px, w, h);
             } else if self.cam.shots > 0 {
@@ -2770,8 +3576,28 @@ impl App {
         self.hit(thumb, Act::CamThumb);
         let flip = Rect::new(W - M - 40 - 170, cy - 85, 170, 170);
         if !self.layout_pass && flip.hits(&cv.clip) {
-            cv.circle(flip.x + 85, cy, 85, if self.is_pressed(&Act::CamFlip) { PRESS } else { SURF2 });
-            self.txt_center(cv, Face::Bold, 30, flip, if self.cam.sensor == "rear" { "Front" } else { "Rear" }, TEXT);
+            cv.circle(
+                flip.x + 85,
+                cy,
+                85,
+                if self.is_pressed(&Act::CamFlip) {
+                    PRESS
+                } else {
+                    SURF2
+                },
+            );
+            self.txt_center(
+                cv,
+                Face::Bold,
+                30,
+                flip,
+                if self.cam.sensor == "rear" {
+                    "Front"
+                } else {
+                    "Rear"
+                },
+                TEXT,
+            );
         }
         self.hit(flip, Act::CamFlip);
     }
@@ -2789,14 +3615,23 @@ impl App {
         let off = self.scroll[idx] as i32;
         let saved = cv.clip;
         let hits0 = self.hits.len();
-        let clip = if self.layout_pass { Some(saved) } else { saved.intersect(&list) };
+        let clip = if self.layout_pass {
+            Some(saved)
+        } else {
+            saved.intersect(&list)
+        };
         let Some(c) = clip else {
             return;
         };
         cv.clip = c;
         let mut y = top + 20 - off;
         y = self.section_title(cv, y, "Connections");
-        for t in [Toggle::Wifi, Toggle::Bluetooth, Toggle::Mobile, Toggle::Calls] {
+        for t in [
+            Toggle::Wifi,
+            Toggle::Bluetooth,
+            Toggle::Mobile,
+            Toggle::Calls,
+        ] {
             y = self.toggle_row(cv, y, t);
         }
         y = self.section_title(cv, y, "Sound and feedback");
@@ -2806,17 +3641,58 @@ impl App {
         y = self.slider_row(cv, y, 0);
         y = self.toggle_row(cv, y, Toggle::Autosleep);
         let bw = (W - 3 * M) / 2;
-        let fmt = |n: u64| if n == 0 { "never".to_string() } else { format!("{n} s") };
-        let (l1, l2) = (format!("Screen off: {}", fmt(self.idle_cfg.unlocked_s)), format!("Locked off: {}", fmt(self.idle_cfg.locked_s)));
-        self.button(cv, Rect::new(M, y, bw, 130), &l1, Act::IdleCycle(false), SURF2, PRESS, 34);
-        self.button(cv, Rect::new(2 * M + bw, y, bw, 130), &l2, Act::IdleCycle(true), SURF2, PRESS, 34);
+        let fmt = |n: u64| {
+            if n == 0 {
+                "never".to_string()
+            } else {
+                format!("{n} s")
+            }
+        };
+        let (l1, l2) = (
+            format!("Screen off: {}", fmt(self.idle_cfg.unlocked_s)),
+            format!("Locked off: {}", fmt(self.idle_cfg.locked_s)),
+        );
+        self.button(
+            cv,
+            Rect::new(M, y, bw, 130),
+            &l1,
+            Act::IdleCycle(false),
+            SURF2,
+            PRESS,
+            34,
+        );
+        self.button(
+            cv,
+            Rect::new(2 * M + bw, y, bw, 130),
+            &l2,
+            Act::IdleCycle(true),
+            SURF2,
+            PRESS,
+            34,
+        );
         y += 130 + M;
         if let Some(e) = self.dev.error.get("Screen timeout").cloned() {
             self.txt(cv, Face::Regular, 28, M, y - 4, &e, BAD);
             y += 40;
         }
-        self.button(cv, Rect::new(M, y, bw, 130), "Screen off", Act::ScreenOff, SURF2, PRESS, 34);
-        self.button(cv, Rect::new(2 * M + bw, y, bw, 130), "Sway desktop", Act::Sway, SURF2, PRESS, 34);
+        self.button(
+            cv,
+            Rect::new(M, y, bw, 130),
+            "Screen off",
+            Act::ScreenOff,
+            SURF2,
+            PRESS,
+            34,
+        );
+        self.button(
+            cv,
+            Rect::new(2 * M + bw, y, bw, 130),
+            "Sway desktop",
+            Act::Sway,
+            SURF2,
+            PRESS,
+            34,
+        );
         y += 130 + M;
         y = self.section_title(cv, y, "Agent");
         // model
@@ -2824,25 +3700,71 @@ impl App {
         let cur = self.st.model.clone().unwrap_or_else(|| "?".into());
         if !self.layout_pass && r.hits(&cv.clip) {
             cv.rrect(&r, 28, SURF);
-            self.txt(cv, Face::Regular, 30, r.x + 28, r.y + 54, "Agent model (hold to switch)", DIM);
+            self.txt(
+                cv,
+                Face::Regular,
+                30,
+                r.x + 28,
+                r.y + 54,
+                "Agent model (hold to switch)",
+                DIM,
+            );
             let c = self.fonts.ellipsize(Face::Bold, 40, &cur, r.w - 56);
             self.txt(cv, Face::Bold, 40, r.x + 28, r.y + 108, &c, TEXT);
         }
         let bw2 = (r.w - 3 * 28) / 2;
-        self.button(cv, Rect::new(r.x + 28, r.y + 150, bw2, 120), "Luna", Act::Model("luna"), SURF2, PRESS, 36);
+        self.button(
+            cv,
+            Rect::new(r.x + 28, r.y + 150, bw2, 120),
+            "Luna",
+            Act::Model("luna"),
+            SURF2,
+            PRESS,
+            36,
+        );
         self.hold_last(800);
-        self.button(cv, Rect::new(r.x + 56 + bw2, r.y + 150, bw2, 120), "Local (Gemma E2B)", Act::Model("local"), SURF2, PRESS, 36);
+        self.button(
+            cv,
+            Rect::new(r.x + 56 + bw2, r.y + 150, bw2, 120),
+            "Local (Gemma E2B)",
+            Act::Model("local"),
+            SURF2,
+            PRESS,
+            36,
+        );
         self.hold_last(800);
         y += 300 + M;
         y = self.section_title(cv, y, "Shell");
         let o = self.cam.orient.get(self.cam.sensor);
-        let cl = format!("Camera {} preview {}°{} — hold to rotate", self.cam.sensor, o.rotate, if o.mirror { " mirrored" } else { "" });
-        self.button(cv, Rect::new(M, y, W - 2 * M, 130), &cl, Act::CamRotate, SURF2, PRESS, 32);
+        let cl = format!(
+            "Camera {} preview {}°{} — hold to rotate",
+            self.cam.sensor,
+            o.rotate,
+            if o.mirror { " mirrored" } else { "" }
+        );
+        self.button(
+            cv,
+            Rect::new(M, y, W - 2 * M, 130),
+            &cl,
+            Act::CamRotate,
+            SURF2,
+            PRESS,
+            32,
+        );
         self.hold_last(800);
         y += 130 + M;
-        self.button(cv, Rect::new(M, y, W - 2 * M, 130), "Classic shell (Quickshell) — hold", Act::Classic, 0x3a2a14, 0x55401e, 34);
+        self.button(
+            cv,
+            Rect::new(M, y, W - 2 * M, 130),
+            "Classic shell (Quickshell) — hold",
+            Act::Classic,
+            0x3a2a14,
+            0x55401e,
+            34,
+        );
         self.hold_last(1200);
         y += 130 + M;
+        y = self.draw_access_section(cv, y);
         y = self.draw_buttons_section(cv, y);
         if !self.layout_pass && Rect::new(0, y, W, 200).hits(&cv.clip) {
             let note = self.note.clone();
@@ -2852,7 +3774,10 @@ impl App {
             let p = self.perf_json();
             let line = format!(
                 "fastshell · tap→flip p50 {} ms (n {}) · page p50 {} ms · render p50 {} ms",
-                p["touch_to_flip"]["press"]["p50_ms"], p["touch_to_flip"]["press"]["n"], p["touch_to_flip"]["page"]["p50_ms"], p["render_ms"]["p50_ms"]
+                p["touch_to_flip"]["press"]["p50_ms"],
+                p["touch_to_flip"]["press"]["n"],
+                p["touch_to_flip"]["page"]["p50_ms"],
+                p["render_ms"]["p50_ms"]
             );
             let lines = self.fonts.wrap(Face::Regular, 28, &line, W - 2 * M);
             for (k, l) in lines.iter().enumerate() {
@@ -2872,7 +3797,14 @@ impl App {
                     kept.push(h);
                 } else if let Some(v) = h.r.intersect(&list) {
                     // sliders keep their full rect (the value maps over it)
-                    kept.push(Hit { r: if matches!(h.act, Act::Slide(_)) { h.r } else { v }, ..h });
+                    kept.push(Hit {
+                        r: if matches!(h.act, Act::Slide(_)) {
+                            h.r
+                        } else {
+                            v
+                        },
+                        ..h
+                    });
                 }
             }
             self.hits = kept;
@@ -2898,22 +3830,39 @@ impl App {
             let (d, col) = match self.dev.error.get(t.label()) {
                 Some(e) => (e.clone(), BAD),
                 None if busy => ("changing…".to_string(), 0xf2cc60),
-                None => (self.dev.detail.get(&t).cloned().unwrap_or_else(|| match on {
-                    Some(true) => "on".into(),
-                    Some(false) => "off".into(),
-                    None => "…".into(),
-                }), DIM),
+                None => (
+                    self.dev
+                        .detail
+                        .get(&t)
+                        .cloned()
+                        .unwrap_or_else(|| match on {
+                            Some(true) => "on".into(),
+                            Some(false) => "off".into(),
+                            None => "…".into(),
+                        }),
+                    DIM,
+                ),
             };
             let d = self.fonts.ellipsize(Face::Regular, 28, &d, r.w - 230);
             self.txt(cv, Face::Regular, 28, r.x + 28, r.y + 100, &d, col);
             let sw = Rect::new(r.right() - 28 - 124, r.y + 32, 124, 64);
             let fill = match on {
-                Some(true) => if busy { ACCENT_P } else { ACCENT },
+                Some(true) => {
+                    if busy {
+                        ACCENT_P
+                    } else {
+                        ACCENT
+                    }
+                }
                 _ => 0x34404f,
             };
             cv.rrect(&sw, 32, fill);
             if on.is_some() {
-                let kx = if on == Some(true) { sw.right() - 32 } else { sw.x + 32 };
+                let kx = if on == Some(true) {
+                    sw.right() - 32
+                } else {
+                    sw.x + 32
+                };
                 cv.circle(kx, sw.y + 32, 26, if busy { DIM } else { TEXT });
             }
         }
@@ -2926,11 +3875,27 @@ impl App {
         let r = Rect::new(M, y, W - 2 * M, 200);
         let (label, frac, val, err) = if id == 0 {
             let b = self.dev.brightness;
-            ("Brightness", b.map(|b| b as f32 / 100.0), b.map(|b| format!("{b}%")), self.dev.error.get("Brightness").cloned())
+            (
+                "Brightness",
+                b.map(|b| b as f32 / 100.0),
+                b.map(|b| format!("{b}%")),
+                self.dev.error.get("Brightness").cloned(),
+            )
         } else {
             let v = self.dev.volume;
             let lv = crate::buttons::LEVELS as f32;
-            ("Volume", v.map(|v| v as f32 / lv), v.map(|v| if self.dev.muted || v == 0 { "muted".to_string() } else { format!("{v} of {}", lv as i32) }), self.dev.error.get("Volume").cloned())
+            (
+                "Volume",
+                v.map(|v| v as f32 / lv),
+                v.map(|v| {
+                    if self.dev.muted || v == 0 {
+                        "muted".to_string()
+                    } else {
+                        format!("{v} of {}", lv as i32)
+                    }
+                }),
+                self.dev.error.get("Volume").cloned(),
+            )
         };
         let track_hit = Rect::new(r.x, r.y + 90, if id == 1 { r.w - 220 } else { r.w }, 110);
         if !self.layout_pass && r.hits(&cv.clip) {
@@ -2938,21 +3903,82 @@ impl App {
             self.txt(cv, Face::Regular, 30, r.x + 28, r.y + 50, label, DIM);
             let v = err.unwrap_or_else(|| val.unwrap_or_else(|| "…".into()));
             self.txt(cv, Face::Bold, 36, r.x + 200, r.y + 52, &v, TEXT);
-            let tr = Rect::new(track_hit.x + 40, track_hit.y + track_hit.h / 2 - 12, track_hit.w - 80, 24);
+            let tr = Rect::new(
+                track_hit.x + 40,
+                track_hit.y + track_hit.h / 2 - 12,
+                track_hit.w - 80,
+                24,
+            );
             cv.rrect(&tr, 12, SURF2);
             if let Some(f) = frac {
                 let fw = (tr.w as f32 * f.clamp(0.0, 1.0)) as i32;
                 cv.rrect(&Rect::new(tr.x, tr.y, fw.max(24), 24), 12, ACCENT);
-                cv.circle(tr.x + fw, tr.y + 12, if self.is_pressed(&Act::Slide(id)) { 40 } else { 32 }, TEXT);
+                cv.circle(
+                    tr.x + fw,
+                    tr.y + 12,
+                    if self.is_pressed(&Act::Slide(id)) {
+                        40
+                    } else {
+                        32
+                    },
+                    TEXT,
+                );
             }
         }
         self.hit(track_hit, Act::Slide(id));
         if id == 1 {
             let m = Rect::new(r.right() - 200, r.y + 100, 172, 84);
             let muted = self.dev.muted || self.dev.volume == Some(0);
-            self.button(cv, m, if muted { "Unmute" } else { "Mute" }, Act::Mute, if muted { ACCENT_P } else { SURF2 }, PRESS, 32);
+            self.button(
+                cv,
+                m,
+                if muted { "Unmute" } else { "Mute" },
+                Act::Mute,
+                if muted { ACCENT_P } else { SURF2 },
+                PRESS,
+                32,
+            );
         }
         y + 200 + 18
+    }
+
+    /// Settings → Rig access: one row per device switch (access.rs). Re-read from the file on every draw
+    /// of the page, so a change made elsewhere (or a failed write) shows the truth.
+    fn draw_access_section(&mut self, cv: &mut Canvas, y: i32) -> i32 {
+        if !self.access_path.is_empty() {
+            self.access = crate::access::load(&self.access_path);
+        }
+        let mut y = self.section_title(cv, y, "Rig access");
+        for (id, label, detail, _) in crate::access::ITEMS {
+            let r = Rect::new(M, y, W - 2 * M, 128);
+            let act = Act::Access(id);
+            let on = self
+                .access
+                .get(id)
+                .copied()
+                .unwrap_or_else(|| crate::access::default_on(id));
+            if !self.layout_pass && r.hits(&cv.clip) {
+                cv.rrect(&r, 28, if self.is_pressed(&act) { PRESS } else { SURF });
+                self.txt(cv, Face::Bold, 38, r.x + 28, r.y + 56, label, TEXT);
+                let d = self.fonts.ellipsize(Face::Regular, 28, detail, r.w - 230);
+                self.txt(cv, Face::Regular, 28, r.x + 28, r.y + 100, &d, DIM);
+                let sw = Rect::new(r.right() - 28 - 124, r.y + 32, 124, 64);
+                cv.rrect(&sw, 32, if on { ACCENT } else { 0x34404f });
+                cv.circle(
+                    if on { sw.right() - 32 } else { sw.x + 32 },
+                    sw.y + 32,
+                    26,
+                    TEXT,
+                );
+            }
+            self.hit(r, act);
+            y += 128 + 18;
+        }
+        if let Some(e) = self.access_error.clone() {
+            self.txt(cv, Face::Regular, 28, M, y - 4, &e, BAD);
+            y += 40;
+        }
+        y
     }
 
     /// Settings → Buttons: every physical-button binding (buttons::BINDINGS) and
@@ -2967,8 +3993,29 @@ impl App {
             cv.rrect(&r, 28, SURF);
             self.txt(cv, Face::Bold, 34, r.x + 28, r.y + 58, "Buttons", TEXT);
             let on = self.buttons_enabled;
-            cv.rrect(&tog, 20, if self.is_pressed(&Act::ButtonsToggle) { PRESS } else if on { ACCENT_P } else { SURF2 });
-            self.txt_center(cv, Face::Regular, 26, tog, if on { "shell · hold: off" } else { "s22-buttons · hold: on" }, TEXT);
+            cv.rrect(
+                &tog,
+                20,
+                if self.is_pressed(&Act::ButtonsToggle) {
+                    PRESS
+                } else if on {
+                    ACCENT_P
+                } else {
+                    SURF2
+                },
+            );
+            self.txt_center(
+                cv,
+                Face::Regular,
+                26,
+                tog,
+                if on {
+                    "shell · hold: off"
+                } else {
+                    "s22-buttons · hold: on"
+                },
+                TEXT,
+            );
             let mut yy = r.y + 84 + 28;
             for (k, v) in rows.iter() {
                 self.txt(cv, Face::Bold, 27, r.x + 28, yy, k, TEXT);
@@ -2991,14 +4038,30 @@ impl App {
     }
 
     fn draw_switcher(&mut self, cv: &mut Canvas) {
-        let top = self.header(cv, "Apps", "switch page, or show the sway desktop (terminal, other windows)");
+        let top = self.header(
+            cv,
+            "Apps",
+            "switch page, or show the sway desktop (terminal, other windows)",
+        );
         let items: [(&str, &str, Act); 8] = [
             ("Home", "cards and tiles", Act::Open(Page::Home)),
             ("Agent", "chat with OpenUnum", Act::Open(Page::Chat)),
-            ("Phone", "modem, SMS, calls (read-only)", Act::Open(Page::Phone)),
-            ("Camera", "live viewfinder, photo, video", Act::Open(Page::Camera)),
+            (
+                "Phone",
+                "modem, SMS, calls (read-only)",
+                Act::Open(Page::Phone),
+            ),
+            (
+                "Camera",
+                "live viewfinder, photo, video",
+                Act::Open(Page::Camera),
+            ),
             ("Files", "browse /root", Act::Open(Page::Files)),
-            ("Settings", "brightness, network, model", Act::Open(Page::Settings)),
+            (
+                "Settings",
+                "brightness, network, model",
+                Act::Open(Page::Settings),
+            ),
             ("Terminal", "foot under sway", Act::Terminal),
             ("Sway desktop", "whatever runs under sway", Act::Sway),
         ];
@@ -3021,7 +4084,11 @@ impl App {
 
     fn draw_cards(&mut self, cv: &mut Canvas) {
         let mut y = STATUS_H + 16;
-        let cards: Vec<(u32, String, String)> = self.cards.iter().map(|c| (c.id, c.title.clone(), c.body.clone())).collect();
+        let cards: Vec<(u32, String, String)> = self
+            .cards
+            .iter()
+            .map(|c| (c.id, c.title.clone(), c.body.clone()))
+            .collect();
         for (id, title, body) in cards {
             let bl = self.fonts.wrap(Face::Regular, 32, &body, W - 4 * M - 40);
             let n = bl.len().min(3) as i32;
@@ -3029,12 +4096,30 @@ impl App {
             let r = Rect::new(M, y, W - 2 * M, h);
             if !self.layout_pass && r.hits(&cv.clip) {
                 cv.rrect(&Rect::new(r.x - 2, r.y - 2, r.w + 4, r.h + 4), 30, 0x3b4656);
-                cv.rrect(&r, 28, if self.is_pressed(&Act::Card(id)) { PRESS } else { 0x1b2533 });
+                cv.rrect(
+                    &r,
+                    28,
+                    if self.is_pressed(&Act::Card(id)) {
+                        PRESS
+                    } else {
+                        0x1b2533
+                    },
+                );
                 let t = self.fonts.ellipsize(Face::Bold, 36, &title, r.w - 120);
-                self.fonts.draw(cv, Face::Bold, 36, r.x + 32, r.y + 58, &t, TEXT);
-                self.fonts.draw(cv, Face::Regular, 40, r.x + r.w - 60, r.y + 58, "×", DIM);
+                self.fonts
+                    .draw(cv, Face::Bold, 36, r.x + 32, r.y + 58, &t, TEXT);
+                self.fonts
+                    .draw(cv, Face::Regular, 40, r.x + r.w - 60, r.y + 58, "×", DIM);
                 for (k, l) in bl.iter().take(3).enumerate() {
-                    self.fonts.draw(cv, Face::Regular, 32, r.x + 32, r.y + 104 + k as i32 * 44, l, 0xc9d1d9);
+                    self.fonts.draw(
+                        cv,
+                        Face::Regular,
+                        32,
+                        r.x + 32,
+                        r.y + 104 + k as i32 * 44,
+                        l,
+                        0xc9d1d9,
+                    );
                 }
             }
             self.hit(r, Act::Card(id));
@@ -3056,21 +4141,66 @@ impl App {
         let r = Rect::new(M, (H - h) / 2, W - 2 * M, h);
         if !self.layout_pass && r.hits(&cv.clip) {
             cv.rrect(&r, 36, 0x1b2533);
-            self.txt(cv, Face::Bold, 44, r.x + 40, r.y + 80, "The agent asks", 0xf2cc60);
+            self.txt(
+                cv,
+                Face::Bold,
+                44,
+                r.x + 40,
+                r.y + 80,
+                "The agent asks",
+                0xf2cc60,
+            );
             let cd = format!("{left} s");
             let w = self.fonts.measure(Face::Regular, 32, &cd);
-            self.txt(cv, Face::Regular, 32, r.right() - 40 - w, r.y + 78, &cd, DIM);
+            self.txt(
+                cv,
+                Face::Regular,
+                32,
+                r.right() - 40 - w,
+                r.y + 78,
+                &cd,
+                DIM,
+            );
             for (k, l) in lines.iter().take(10).enumerate() {
-                self.txt(cv, Face::Regular, 40, r.x + 40, r.y + 150 + k as i32 * 56, l, TEXT);
+                self.txt(
+                    cv,
+                    Face::Regular,
+                    40,
+                    r.x + 40,
+                    r.y + 150 + k as i32 * 56,
+                    l,
+                    TEXT,
+                );
             }
         }
         let bw = (r.w - 3 * 40) / 2;
         let by = r.bottom() - 170;
-        self.button(cv, Rect::new(r.x + 40, by, bw, 130), "No", Act::ConfirmNo, SURF2, PRESS, 42);
-        self.button(cv, Rect::new(r.x + 80 + bw, by, bw, 130), "Yes", Act::ConfirmYes, 0x238636, 0x1a6b2a, 42);
+        self.button(
+            cv,
+            Rect::new(r.x + 40, by, bw, 130),
+            "No",
+            Act::ConfirmNo,
+            SURF2,
+            PRESS,
+            42,
+        );
+        self.button(
+            cv,
+            Rect::new(r.x + 80 + bw, by, bw, 130),
+            "Yes",
+            Act::ConfirmYes,
+            0x238636,
+            0x1a6b2a,
+            42,
+        );
         if self.layout_pass {
             // modal: only its own buttons are live
-            let keep: Vec<Hit> = self.hits.iter().filter(|h| matches!(h.act, Act::ConfirmYes | Act::ConfirmNo)).cloned().collect();
+            let keep: Vec<Hit> = self
+                .hits
+                .iter()
+                .filter(|h| matches!(h.act, Act::ConfirmYes | Act::ConfirmNo))
+                .cloned()
+                .collect();
             self.hits = keep;
         }
     }
@@ -3088,7 +4218,10 @@ impl App {
         self.txt(cv, Face::Regular, 44, (W - w) / 2, 790, &date, DIM);
         let info = format!(
             "{}  ·  {}  ·  {}",
-            self.st.battery.map(|b| format!("{b}% {}", self.st.bat_state)).unwrap_or_default(),
+            self.st
+                .battery
+                .map(|b| format!("{b}% {}", self.st.bat_state))
+                .unwrap_or_default(),
             self.st.model.clone().unwrap_or_default(),
             self.st.health.clone().unwrap_or_default()
         );
@@ -3097,7 +4230,15 @@ impl App {
         self.txt(cv, Face::Regular, 34, (W - w) / 2, 880, &info, DIM);
         let mut y = 1050;
         if !self.cards.is_empty() || self.prompt.is_some() {
-            let s = format!("{} card(s){}", self.cards.len(), if self.prompt.is_some() { " · the agent has a question" } else { "" });
+            let s = format!(
+                "{} card(s){}",
+                self.cards.len(),
+                if self.prompt.is_some() {
+                    " · the agent has a question"
+                } else {
+                    ""
+                }
+            );
             let w = self.fonts.measure(Face::Bold, 36, &s);
             self.txt(cv, Face::Bold, 36, (W - w) / 2, y, &s, 0xf2cc60);
             y += 70;
@@ -3133,12 +4274,38 @@ impl App {
                 let act = Act::Key(ri, ci);
                 if !self.layout_pass && r.hits(&cv.clip) {
                     let p = self.is_pressed(&act);
-                    let on = (*k == kbd::SHIFT && self.kb.shift) || (*k == kbd::TONOS && self.kb.tonos);
-                    let fill = if p || on { 0x4a5a70 } else if kbd::is_special(k) { KEY_SP } else { KEY };
-                    cv.rrect(&r, 16, if *k == kbd::ENTER { if p { ACCENT_P } else { ACCENT } } else { fill });
+                    let on =
+                        (*k == kbd::SHIFT && self.kb.shift) || (*k == kbd::TONOS && self.kb.tonos);
+                    let fill = if p || on {
+                        0x4a5a70
+                    } else if kbd::is_special(k) {
+                        KEY_SP
+                    } else {
+                        KEY
+                    };
+                    cv.rrect(
+                        &r,
+                        16,
+                        if *k == kbd::ENTER {
+                            if p {
+                                ACCENT_P
+                            } else {
+                                ACCENT
+                            }
+                        } else {
+                            fill
+                        },
+                    );
                     let lbl = self.kb.label(k);
                     let px = if lbl.chars().count() > 1 { 32 } else { 48 };
-                    self.txt_center(cv, if px == 48 { Face::Regular } else { Face::Bold }, px, r, &lbl, TEXT);
+                    self.txt_center(
+                        cv,
+                        if px == 48 { Face::Regular } else { Face::Bold },
+                        px,
+                        r,
+                        &lbl,
+                        TEXT,
+                    );
                 }
                 // generous hit area: the full cell
                 let cell = Rect::new(x as i32, y - 8, w as i32, rh);
@@ -3147,12 +4314,25 @@ impl App {
             }
         }
         // the pressed key pops up above the finger (always on), like a phone keyboard
-        if let Some(Hit { act: Act::Key(ri, ci), r, .. }) = self.pressed.clone() {
-            let k = rows.get(ri).and_then(|row| row.get(ci)).copied().unwrap_or("");
+        if let Some(Hit {
+            act: Act::Key(ri, ci),
+            r,
+            ..
+        }) = self.pressed.clone()
+        {
+            let k = rows
+                .get(ri)
+                .and_then(|row| row.get(ci))
+                .copied()
+                .unwrap_or("");
             if !self.layout_pass && !kbd::is_special(k) && !k.is_empty() {
                 let pr = key_popup_rect(r);
                 if pr.hits(&cv.clip) {
-                    cv.rrect(&Rect::new(pr.x - 2, pr.y - 2, pr.w + 4, pr.h + 4), 22, 0x6b7a90);
+                    cv.rrect(
+                        &Rect::new(pr.x - 2, pr.y - 2, pr.w + 4, pr.h + 4),
+                        22,
+                        0x6b7a90,
+                    );
                     cv.rrect(&pr, 20, 0x3a4658);
                     let lbl = self.kb.label(k);
                     self.txt_center(cv, Face::Regular, 72, pr, &lbl, TEXT);
@@ -3210,8 +4390,13 @@ pub fn load_png(path: &str, max_w: i32, max_h: i32) -> Option<(Vec<u32>, i32, i3
         png::ColorType::GrayscaleAlpha => 2,
         _ => return None,
     };
-    let s = (max_w as f32 / iw as f32).min(max_h as f32 / ih as f32).min(1.0);
-    let (w, h) = (((iw as f32 * s) as i32).max(1), ((ih as f32 * s) as i32).max(1));
+    let s = (max_w as f32 / iw as f32)
+        .min(max_h as f32 / ih as f32)
+        .min(1.0);
+    let (w, h) = (
+        ((iw as f32 * s) as i32).max(1),
+        ((ih as f32 * s) as i32).max(1),
+    );
     let mut out = vec![0u32; (w * h) as usize];
     let stride = info.line_size;
     for y in 0..h {
@@ -3219,7 +4404,11 @@ pub fn load_png(path: &str, max_w: i32, max_h: i32) -> Option<(Vec<u32>, i32, i3
         for x in 0..w {
             let sx = (x as i64 * iw as i64 / w as i64) as usize;
             let o = sy * stride + sx * ch;
-            let (r8, g8, b8) = if ch >= 3 { (buf[o], buf[o + 1], buf[o + 2]) } else { (buf[o], buf[o], buf[o]) };
+            let (r8, g8, b8) = if ch >= 3 {
+                (buf[o], buf[o + 1], buf[o + 2])
+            } else {
+                (buf[o], buf[o], buf[o])
+            };
             out[(y * w + x) as usize] = (r8 as u32) << 16 | (g8 as u32) << 8 | b8 as u32;
         }
     }
@@ -3232,7 +4421,10 @@ mod tests {
     use crate::ctl::Call;
 
     fn call(a: &mut App, f: &str, args: &[&str]) -> String {
-        a.call(&Call { function: f.into(), args: args.iter().map(|s| s.to_string()).collect() })
+        a.call(&Call {
+            function: f.into(),
+            args: args.iter().map(|s| s.to_string()).collect(),
+        })
     }
 
     fn app(dir: &str) -> App {
@@ -3243,12 +4435,52 @@ mod tests {
     }
 
     #[test]
+    fn rig_access_rows_flip_the_switch_file() {
+        let p = std::env::temp_dir().join(format!("fastshell-ui-access-{}", std::process::id()));
+        let _ = std::fs::remove_file(&p);
+        let mut a = app("/nonexistent");
+        a.access_path = p.display().to_string();
+        a.goto(Page::Settings);
+        let mut ids: Vec<&'static str> = vec![];
+        for _ in 0..60 {
+            a.layout();
+            for h in &a.hits {
+                if let Act::Access(id) = h.act {
+                    if !ids.contains(&id) {
+                        ids.push(id);
+                    }
+                }
+            }
+            a.scroll_by(300.0);
+        }
+        assert_eq!(
+            ids,
+            crate::access::ITEMS.iter().map(|i| i.0).collect::<Vec<_>>(),
+            "one row per switch"
+        );
+        assert!(!a.access["audio.listen"], "listening starts off");
+        a.activate(Act::Access("audio.listen"), 0);
+        assert!(
+            crate::access::load(&a.access_path)["audio.listen"],
+            "the owner turned it on"
+        );
+        a.activate(Act::Access("audio.listen"), 0);
+        assert!(!crate::access::load(&a.access_path)["audio.listen"]);
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
     fn haptic_ticks_on_keys_and_buttons_only_when_enabled() {
         use crate::buttons::Action as B;
         let mut a = app("/nonexistent");
         a.goto(Page::Chat);
         a.layout();
-        let k = a.hits.iter().find(|h| matches!(h.act, Act::Key(1, 3))).cloned().expect("key");
+        let k = a
+            .hits
+            .iter()
+            .find(|h| matches!(h.act, Act::Key(1, 3)))
+            .cloned()
+            .expect("key");
         a.touch(crate::touch::Touch::Down(k.r.x + 20, k.r.y + 20, 1));
         assert!(a.effects.is_empty(), "vibration off: no datagram");
         // the popup shows while the key is held, and its area is damaged
@@ -3264,7 +4496,10 @@ mod tests {
         assert!(a.effects.contains(&Effect::Haptic("tick")));
         a.effects.clear();
         a.button_actions(&[B::Wake], 6);
-        assert!(!a.effects.contains(&Effect::Haptic("tick")), "a wake alone does not buzz");
+        assert!(
+            !a.effects.contains(&Effect::Haptic("tick")),
+            "a wake alone does not buzz"
+        );
         let p = key_popup_rect(Rect::new(0, 1800, 100, 148));
         assert!(p.x >= 0 && p.bottom() == 1800);
     }
@@ -3274,7 +4509,10 @@ mod tests {
         let mut a = app("/nonexistent");
         a.goto(Page::Camera);
         a.sync_camera();
-        assert!(matches!(&a.cam_cmds[..], [CamCmd::Inhibit(true), CamCmd::Spawn { .. }]));
+        assert!(matches!(
+            &a.cam_cmds[..],
+            [CamCmd::Inhibit(true), CamCmd::Spawn { .. }]
+        ));
         a.cam_cmds.clear();
         let g = a.cam.gen;
         a.cam.spawned(g, 77);
@@ -3283,22 +4521,46 @@ mod tests {
         assert_eq!(a.idle_inhibitor(), Some("camera"));
         // the shutter is on the page and works
         a.layout();
-        let sh = a.hits.iter().find(|h| h.act == Act::CamShutter).expect("shutter").r;
+        let sh = a
+            .hits
+            .iter()
+            .find(|h| h.act == Act::CamShutter)
+            .expect("shutter")
+            .r;
         assert!(sh.bottom() < H - EDGE_B);
         a.activate(Act::CamShutter, 10);
-        assert_eq!(a.cam_cmds, vec![CamCmd::Signal { pid: 77, sig: libc::SIGUSR1 }]);
+        assert_eq!(
+            a.cam_cmds,
+            vec![CamCmd::Signal {
+                pid: 77,
+                sig: libc::SIGUSR1
+            }]
+        );
         assert!(a.cam_flash_until.is_some());
         a.cam_cmds.clear();
         // locking (Power) stops it; so does leaving the page
         a.locked = true;
         a.sync_camera();
-        assert_eq!(a.cam_cmds[0], CamCmd::Signal { pid: 77, sig: libc::SIGTERM });
+        assert_eq!(
+            a.cam_cmds[0],
+            CamCmd::Signal {
+                pid: 77,
+                sig: libc::SIGTERM
+            }
+        );
         a.cam_cmds.clear();
         a.locked = false;
         a.sync_camera();
         assert!(a.cam_cmds.is_empty(), "restart waits for the exit");
         a.camera_event(g, json!({"event": "exit", "code": 0}));
-        assert!(matches!(&a.cam_cmds[..], [CamCmd::Inhibit(true), CamCmd::Spawn { .. }]), "{:?}", a.cam_cmds);
+        assert!(
+            matches!(
+                &a.cam_cmds[..],
+                [CamCmd::Inhibit(true), CamCmd::Spawn { .. }]
+            ),
+            "{:?}",
+            a.cam_cmds
+        );
         a.cam_cmds.clear();
         a.goto(Page::Home);
         a.sync_camera();
@@ -3340,12 +4602,19 @@ mod tests {
         assert_eq!(call(&mut a, "confirm", &["c2", "again?", "30"]), "busy");
         assert_eq!(call(&mut a, "confirmResult", &["c1"]), "pending");
         a.layout();
-        let yes = a.hits.iter().find(|h| h.act == Act::ConfirmYes).expect("yes button").r;
+        let yes = a
+            .hits
+            .iter()
+            .find(|h| h.act == Act::ConfirmYes)
+            .expect("yes button")
+            .r;
         assert_eq!(a.hits.len(), 2, "the dialog is modal");
         a.touch(crate::touch::Touch::Down(yes.x + 10, yes.y + 10, 1));
         a.touch(crate::touch::Touch::Up(yes.x + 10, yes.y + 10, 2));
         assert_eq!(call(&mut a, "confirmResult", &["c1"]), "done");
-        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("confirm/c1.json")).unwrap()).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("confirm/c1.json")).unwrap())
+                .unwrap();
         assert_eq!(v["answer"], "yes");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -3391,7 +4660,11 @@ mod tests {
         let mut v = base.clone();
         v["nr_last_seen"] = json!(950.0);
         assert_eq!(net::radio_badge(&v, 1000.0), Some("5G"), "NR seen 50 s ago");
-        assert_eq!(net::radio_badge(&v, 1200.0), Some("4G"), "NR seen 250 s ago is stale");
+        assert_eq!(
+            net::radio_badge(&v, 1200.0),
+            Some("4G"),
+            "NR seen 250 s ago is stale"
+        );
         let mut v = base.clone();
         v["registration"]["reg_status"] = json!("searching");
         assert_eq!(net::radio_badge(&v, 1000.0), None);
@@ -3408,8 +4681,15 @@ mod tests {
         a.button_actions(&[B::Step(1)], 1000);
         assert_eq!(a.level, 5);
         assert_eq!(a.effects, vec![Effect::Level(5)]);
-        assert_eq!(a.osd.as_ref().map(|o| (o.title.as_str(), o.level)), Some(("Volume 5", Some(5))));
-        assert_eq!(a.mark, Some((1000, "button")), "the overlay frame is timed from the key event");
+        assert_eq!(
+            a.osd.as_ref().map(|o| (o.title.as_str(), o.level)),
+            Some(("Volume 5", Some(5)))
+        );
+        assert_eq!(
+            a.mark,
+            Some((1000, "button")),
+            "the overlay frame is timed from the key event"
+        );
         // hold: the step is undone, the overlay goes, and mute keeps the old level for unmute
         a.effects.clear();
         a.button_actions(&[B::Revert, B::Mute], 2000);
@@ -3440,7 +4720,13 @@ mod tests {
         a.active = false;
         a.effects.clear();
         a.button_actions(&[B::Lock], 7000);
-        assert_eq!(a.effects, vec![Effect::Native(vec!["/srv/s22/hardware/bin/s22-display".into(), "off".into()])]);
+        assert_eq!(
+            a.effects,
+            vec![Effect::Native(vec![
+                "/srv/s22/hardware/bin/s22-display".into(),
+                "off".into()
+            ])]
+        );
     }
 
     #[test]
@@ -3464,21 +4750,43 @@ mod tests {
         // the device API's screenshot call queues the same effect
         a.effects.clear();
         a.display_on = true;
-        assert_eq!(a.call(&Call { function: "screenshot".into(), args: vec![] }), "ok");
+        assert_eq!(
+            a.call(&Call {
+                function: "screenshot".into(),
+                args: vec![]
+            }),
+            "ok"
+        );
         assert_eq!(a.effects.last(), Some(&Effect::Screenshot));
         a.display_on = false;
         a.effects.clear();
-        assert_eq!(a.call(&Call { function: "screenshot".into(), args: vec![] }), "screen is off");
+        assert_eq!(
+            a.call(&Call {
+                function: "screenshot".into(),
+                args: vec![]
+            }),
+            "screen is off"
+        );
         assert!(a.effects.is_empty() || a.effects.iter().all(|e| *e != Effect::Screenshot));
         // keep awake inhibits the screen timeout
         a.button_actions(&[B::KeepAwake], 3);
-        assert_eq!(a.idle_inhibitor(), Some("keep screen on (Power + Volume up)"));
+        assert_eq!(
+            a.idle_inhibitor(),
+            Some("keep screen on (Power + Volume up)")
+        );
         a.button_actions(&[B::KeepAwake], 4);
         assert_eq!(a.idle_inhibitor(), None);
         // push-to-talk goes to the same hook with the same environment as s22-buttons
         a.effects.clear();
         a.button_actions(&[B::Revert, B::PttStart(1000)], 5);
-        let Some(Effect::Assistant(cmd, env)) = a.effects.iter().find(|e| matches!(e, Effect::Assistant(..))).cloned() else { panic!("no assistant") };
+        let Some(Effect::Assistant(cmd, env)) = a
+            .effects
+            .iter()
+            .find(|e| matches!(e, Effect::Assistant(..)))
+            .cloned()
+        else {
+            panic!("no assistant")
+        };
         assert_eq!(cmd, "/srv/s22/buttons/hooks/assistant");
         assert!(env.contains(&("S22_PTT".into(), "hold".into())));
         assert!(env.contains(&("S22_PTT_STOP".into(), "/srv/s22/buttons/ptt-release".into())));
@@ -3492,10 +4800,18 @@ mod tests {
         let mut a = app("/nonexistent");
         a.goto(Page::Settings);
         a.layout();
-        assert!(a.hits.iter().all(|h| h.act != Act::ButtonsToggle), "below the fold until scrolled");
+        assert!(
+            a.hits.iter().all(|h| h.act != Act::ButtonsToggle),
+            "below the fold until scrolled"
+        );
         a.scroll_by(100_000.0);
         a.layout();
-        let tog = a.hits.iter().find(|h| h.act == Act::ButtonsToggle).expect("toggle").clone();
+        let tog = a
+            .hits
+            .iter()
+            .find(|h| h.act == Act::ButtonsToggle)
+            .expect("toggle")
+            .clone();
         assert_eq!(tog.hold_ms, 800);
         assert!(tog.r.bottom() < H - EDGE_B, "fits above the bottom edge");
         let d = std::env::temp_dir().join(format!("fs-buttons-{}.json", std::process::id()));
@@ -3543,7 +4859,10 @@ mod tests {
         assert_eq!(a.idle_inhibitor(), Some("agent question"));
         // never
         a.confirm = None;
-        a.idle_cfg = idle::Cfg { unlocked_s: 0, locked_s: 0 };
+        a.idle_cfg = idle::Cfg {
+            unlocked_s: 0,
+            locked_s: 0,
+        };
         a.last_touch = t0;
         assert!(!a.idle_check(at(100000), false));
         // power-off path
@@ -3570,54 +4889,133 @@ mod tests {
     fn settings_rows_follow_the_device_api() {
         let mut a = app("/nonexistent");
         a.goto(Page::Settings);
-        assert_eq!(a.dev.pending, vec!["device.status", "volume.get", "screen_timeout.get"], "refreshed on open");
+        assert_eq!(
+            a.dev.pending,
+            vec!["device.status", "volume.get", "screen_timeout.get"],
+            "refreshed on open"
+        );
         a.dev_answer("device.status", 200, json!({"ok": true, "state": {"bluetooth": false, "vibration": true, "autosleep": true, "calls_enabled": true,
             "volume": 4, "brightness_pct": 30, "network": {"uplink": "mobile", "wifi": {"enabled": true, "on": true, "connected": false}, "mobile_data": {"on": true, "state": "up"}}}}));
-        a.dev_answer("volume.get", 200, json!({"ok": true, "state": {"level": 4, "muted": false}}));
-        a.dev_answer("screen_timeout.get", 200, json!({"ok": true, "state": {"unlocked_s": 120, "locked_s": 15}}));
-        assert_eq!(a.idle_cfg.unlocked_s, 120, "the shell's timeout follows s22d's read-back");
+        a.dev_answer(
+            "volume.get",
+            200,
+            json!({"ok": true, "state": {"level": 4, "muted": false}}),
+        );
+        a.dev_answer(
+            "screen_timeout.get",
+            200,
+            json!({"ok": true, "state": {"unlocked_s": 120, "locked_s": 15}}),
+        );
+        assert_eq!(
+            a.idle_cfg.unlocked_s, 120,
+            "the shell's timeout follows s22d's read-back"
+        );
         a.layout();
         let ids: Vec<Act> = a.hits.iter().map(|h| h.act.clone()).collect();
-        for t in [Toggle::Wifi, Toggle::Bluetooth, Toggle::Mobile, Toggle::Calls] {
-            assert!(ids.contains(&Act::DevToggle(t)), "{t:?} visible without scrolling");
+        for t in [
+            Toggle::Wifi,
+            Toggle::Bluetooth,
+            Toggle::Mobile,
+            Toggle::Calls,
+        ] {
+            assert!(
+                ids.contains(&Act::DevToggle(t)),
+                "{t:?} visible without scrolling"
+            );
         }
         // a toggle asks for the opposite of the read-back state, then refreshes after the answer
         a.activate(Act::DevToggle(Toggle::Bluetooth), 0);
         assert!(a.dev.busy(Toggle::Bluetooth));
         a.activate(Act::DevToggle(Toggle::Bluetooth), 0);
-        assert_eq!(a.dev.pending.iter().filter(|p| *p == "bluetooth.set").count(), 1, "no second request while one runs");
+        assert_eq!(
+            a.dev
+                .pending
+                .iter()
+                .filter(|p| *p == "bluetooth.set")
+                .count(),
+            1,
+            "no second request while one runs"
+        );
         a.dev.pending.clear();
-        a.dev_answer("bluetooth.set", 200, json!({"ok": true, "state": {"on": true}}));
+        a.dev_answer(
+            "bluetooth.set",
+            200,
+            json!({"ok": true, "state": {"on": true}}),
+        );
         assert_eq!(a.dev.on[&Toggle::Bluetooth], true);
-        assert_eq!(a.dev.pending, vec!["device.status"], "read everything back after a change");
+        assert_eq!(
+            a.dev.pending,
+            vec!["device.status"],
+            "read everything back after a change"
+        );
         // vibration off stops the shell's own ticks; volume answers move the shell's level
-        a.dev_answer("vibration.set", 200, json!({"ok": true, "state": {"enabled": false}}));
+        a.dev_answer(
+            "vibration.set",
+            200,
+            json!({"ok": true, "state": {"enabled": false}}),
+        );
         assert!(!a.haptics);
-        a.dev_answer("volume.set", 200, json!({"ok": true, "state": {"level": 7, "muted": false}}));
+        a.dev_answer(
+            "volume.set",
+            200,
+            json!({"ok": true, "state": {"level": 7, "muted": false}}),
+        );
         assert_eq!(a.level, 7);
         // the volume slider: drag sets locally, a late answer does not pull it back while held
         a.scroll_by(-100_000.0);
         a.layout();
-        let sl = a.hits.iter().find(|h| h.act == Act::Slide(1)).expect("volume slider").clone();
+        let sl = a
+            .hits
+            .iter()
+            .find(|h| h.act == Act::Slide(1))
+            .expect("volume slider")
+            .clone();
         a.touch(crate::touch::Touch::Down(sl.r.x + 40, sl.r.y + 50, 0));
         assert_eq!(a.dev.volume, Some(0));
-        a.touch(crate::touch::Touch::Move(sl.r.right() - 40, sl.r.y + 50, 300_000));
+        a.touch(crate::touch::Touch::Move(
+            sl.r.right() - 40,
+            sl.r.y + 50,
+            300_000,
+        ));
         assert_eq!(a.dev.volume, Some(10));
-        a.dev_answer("volume.set", 200, json!({"ok": true, "state": {"level": 3}}));
+        a.dev_answer(
+            "volume.set",
+            200,
+            json!({"ok": true, "state": {"level": 3}}),
+        );
         assert_eq!(a.dev.volume, Some(10), "finger wins while dragging");
-        a.touch(crate::touch::Touch::Up(sl.r.right() - 40, sl.r.y + 50, 400_000));
-        assert!(a.dev.pending.contains(&"volume.set".to_string()), "committed on release");
+        a.touch(crate::touch::Touch::Up(
+            sl.r.right() - 40,
+            sl.r.y + 50,
+            400_000,
+        ));
+        assert!(
+            a.dev.pending.contains(&"volume.set".to_string()),
+            "committed on release"
+        );
     }
 
     #[test]
     fn home_agent_card_hold_release_queue_and_stop() {
         let mut a = app("/nonexistent");
         a.layout();
-        let card = a.hits.iter().find(|h| h.act == Act::AgentHold).expect("agent card").r;
-        assert!(card.h >= 600 && card.y > 300 && card.bottom() < H / 2 + 400, "big, in the middle");
+        let card = a
+            .hits
+            .iter()
+            .find(|h| h.act == Act::AgentHold)
+            .expect("agent card")
+            .r;
+        assert!(
+            card.h >= 600 && card.y > 300 && card.bottom() < H / 2 + 400,
+            "big, in the middle"
+        );
         let (x, y) = (card.x + card.w / 2, card.y + card.h / 2);
         a.touch(crate::touch::Touch::Down(x, y, 0));
-        assert_eq!(a.card_cmds, vec![CardCmd::Listen { gen: 1 }], "listening starts on touch-down");
+        assert_eq!(
+            a.card_cmds,
+            vec![CardCmd::Listen { gen: 1 }],
+            "listening starts on touch-down"
+        );
         assert_eq!(a.idle_inhibitor(), Some("voice turn"));
         a.touch(crate::touch::Touch::Move(x + 80, y + 60, 400_000));
         assert!(a.card.held, "moving the finger does not cancel");
@@ -3630,12 +5028,24 @@ mod tests {
         a.card_cmds.clear();
         // STOP shows while busy and cancels everything
         a.layout();
-        let stop = a.hits.iter().find(|h| h.act == Act::AgentStop).expect("stop").r;
+        let stop = a
+            .hits
+            .iter()
+            .find(|h| h.act == Act::AgentStop)
+            .expect("stop")
+            .r;
         assert!(card.contains(stop.x, stop.y));
-        a.touch(crate::touch::Touch::Down(stop.x + 10, stop.y + 10, 3_000_000));
+        a.touch(crate::touch::Touch::Down(
+            stop.x + 10,
+            stop.y + 10,
+            3_000_000,
+        ));
         assert!(a.card_cmds.is_empty(), "STOP is not a hold-to-talk");
         a.touch(crate::touch::Touch::Up(stop.x + 10, stop.y + 10, 3_050_000));
-        assert_eq!(a.card_cmds, vec![CardCmd::Kill { pid: 4242 }, CardCmd::CancelApi]);
+        assert_eq!(
+            a.card_cmds,
+            vec![CardCmd::Kill { pid: 4242 }, CardCmd::CancelApi]
+        );
         assert!(!a.card.active());
     }
 

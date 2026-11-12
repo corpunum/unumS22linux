@@ -26,14 +26,26 @@ pub fn call(sock: &str, id: &str, args: &Value, timeout_s: u64) -> (u16, Value) 
         s.read_to_end(&mut raw)?;
         Ok(parse_response(&raw))
     })();
-    r.unwrap_or_else(|e| (0, json!({"ok": false, "code": "no_s22d", "error": e.to_string()})))
+    r.unwrap_or_else(|e| {
+        (
+            0,
+            json!({"ok": false, "code": "no_s22d", "error": e.to_string()}),
+        )
+    })
 }
 
 pub fn parse_response(raw: &[u8]) -> (u16, Value) {
     let raw = String::from_utf8_lossy(raw);
     let (head, body) = raw.split_once("\r\n\r\n").unwrap_or((&raw, ""));
-    let status = head.split(' ').nth(1).and_then(|c| c.parse().ok()).unwrap_or(0);
-    (status, serde_json::from_str(body.trim()).unwrap_or(Value::Null))
+    let status = head
+        .split(' ')
+        .nth(1)
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(0);
+    (
+        status,
+        serde_json::from_str(body.trim()).unwrap_or(Value::Null),
+    )
 }
 
 /// How long a client waits for each capability (Bluetooth up and Wi-Fi association are slow).
@@ -57,7 +69,14 @@ pub enum Toggle {
 }
 
 impl Toggle {
-    pub const ALL: [Toggle; 6] = [Toggle::Wifi, Toggle::Bluetooth, Toggle::Mobile, Toggle::Calls, Toggle::Vibration, Toggle::Autosleep];
+    pub const ALL: [Toggle; 6] = [
+        Toggle::Wifi,
+        Toggle::Bluetooth,
+        Toggle::Mobile,
+        Toggle::Calls,
+        Toggle::Vibration,
+        Toggle::Autosleep,
+    ];
     pub fn label(self) -> &'static str {
         match self {
             Toggle::Wifi => "Wi-Fi",
@@ -79,7 +98,9 @@ impl Toggle {
         }
     }
     fn from_cap(cap: &str) -> Option<Toggle> {
-        Toggle::ALL.into_iter().find(|t| t.set_cap() == cap || t.set_cap().replace(".set", ".get") == cap)
+        Toggle::ALL
+            .into_iter()
+            .find(|t| t.set_cap() == cap || t.set_cap().replace(".set", ".get") == cap)
     }
 }
 
@@ -118,12 +139,14 @@ impl Dev {
     /// The answer to `id` (HTTP status, body).
     pub fn answer(&mut self, id: &str, status: u16, v: &Value) {
         self.pending.retain(|p| p != id);
-        let row = Toggle::from_cap(id).map(|t| t.label().to_string()).unwrap_or_else(|| match id {
-            "volume.set" | "volume.get" => "Volume".into(),
-            "brightness.set" | "brightness.get" => "Brightness".into(),
-            "screen_timeout.set" | "screen_timeout.get" => "Screen timeout".into(),
-            _ => id.to_string(),
-        });
+        let row = Toggle::from_cap(id)
+            .map(|t| t.label().to_string())
+            .unwrap_or_else(|| match id {
+                "volume.set" | "volume.get" => "Volume".into(),
+                "brightness.set" | "brightness.get" => "Brightness".into(),
+                "screen_timeout.set" | "screen_timeout.get" => "Screen timeout".into(),
+                _ => id.to_string(),
+            });
         if status == 0 || (status == 404 && id == "device.status") {
             self.available = Some(false);
         }
@@ -152,9 +175,24 @@ impl Dev {
                 if let Some(x) = b(&net["mobile_data"]["on"]) {
                     self.on.insert(Toggle::Mobile, x);
                 }
-                self.detail.insert(Toggle::Mobile, mobile_detail(&net["mobile_data"], net["operator"].as_str(), net["radio"].as_str()));
-                for (t, k) in [(Toggle::Bluetooth, "bluetooth"), (Toggle::Vibration, "vibration"), (Toggle::Autosleep, "autosleep"), (Toggle::Calls, "calls_enabled")] {
-                    if let Some(x) = b(&st[k]).or_else(|| b(&st[k]["on"])).or_else(|| b(&st[k]["enabled"])) {
+                self.detail.insert(
+                    Toggle::Mobile,
+                    mobile_detail(
+                        &net["mobile_data"],
+                        net["operator"].as_str(),
+                        net["radio"].as_str(),
+                    ),
+                );
+                for (t, k) in [
+                    (Toggle::Bluetooth, "bluetooth"),
+                    (Toggle::Vibration, "vibration"),
+                    (Toggle::Autosleep, "autosleep"),
+                    (Toggle::Calls, "calls_enabled"),
+                ] {
+                    if let Some(x) = b(&st[k])
+                        .or_else(|| b(&st[k]["on"]))
+                        .or_else(|| b(&st[k]["enabled"]))
+                    {
                         self.on.insert(t, x);
                     }
                 }
@@ -176,16 +214,28 @@ impl Dev {
                 if let Some(x) = st["on"].as_bool() {
                     self.on.insert(Toggle::Mobile, x);
                 }
-                self.detail.insert(Toggle::Mobile, mobile_detail(st, None, None));
+                self.detail
+                    .insert(Toggle::Mobile, mobile_detail(st, None, None));
             }
-            "bluetooth.set" | "bluetooth.get" | "autosleep.set" | "autosleep.get" | "vibration.set" | "vibration.get" => {
+            "bluetooth.set" | "bluetooth.get" | "autosleep.set" | "autosleep.get"
+            | "vibration.set" | "vibration.get" => {
                 let t = Toggle::from_cap(id).unwrap();
                 if let Some(x) = st["on"].as_bool().or(st["enabled"].as_bool()) {
                     self.on.insert(t, x);
                 }
                 let d = match t {
-                    Toggle::Autosleep => st["state"].as_str().map(|s| format!("{s}{}", st["cycles"].as_u64().map(|c| format!(" · {c} sleeps")).unwrap_or_default())),
-                    Toggle::Bluetooth => st["detail"].as_str().map(|s| s.chars().take(60).collect()),
+                    Toggle::Autosleep => st["state"].as_str().map(|s| {
+                        format!(
+                            "{s}{}",
+                            st["cycles"]
+                                .as_u64()
+                                .map(|c| format!(" · {c} sleeps"))
+                                .unwrap_or_default()
+                        )
+                    }),
+                    Toggle::Bluetooth => {
+                        st["detail"].as_str().map(|s| s.chars().take(60).collect())
+                    }
                     _ => None,
                 };
                 if let Some(d) = d {
@@ -197,7 +247,8 @@ impl Dev {
                     self.on.insert(Toggle::Calls, x);
                 }
                 if let Some(a) = st["audio"].as_str() {
-                    self.detail.insert(Toggle::Calls, a.chars().take(60).collect());
+                    self.detail
+                        .insert(Toggle::Calls, a.chars().take(60).collect());
                 }
             }
             "volume.set" | "volume.get" => {
@@ -229,7 +280,13 @@ impl Dev {
 
 fn wifi_detail(w: &Value) -> String {
     match (w["connected"].as_bool(), w["ssid"].as_str()) {
-        (Some(true), Some(s)) => format!("connected · {s}{}", w["rssi_dbm"].as_i64().map(|r| format!(" · {r} dBm")).unwrap_or_default()),
+        (Some(true), Some(s)) => format!(
+            "connected · {s}{}",
+            w["rssi_dbm"]
+                .as_i64()
+                .map(|r| format!(" · {r} dBm"))
+                .unwrap_or_default()
+        ),
         _ if w["enabled"] == true && w["on"] == false => "on · parked by the Wi-Fi saver".into(),
         _ if w["enabled"] == true || w["on"] == true => "on · not connected".into(),
         _ => "off".into(),
@@ -248,7 +305,11 @@ fn mobile_detail(m: &Value, operator: Option<&str>, radio: Option<&str>) -> Stri
         p.push(s.to_string());
     }
     if p.is_empty() {
-        if m["on"] == true { "on".into() } else { "off".into() }
+        if m["on"] == true {
+            "on".into()
+        } else {
+            "off".into()
+        }
     } else {
         p.join(" · ")
     }
@@ -284,42 +345,78 @@ mod tests {
     fn toggle_uses_the_read_back_state_and_errors_stay_on_the_row() {
         let mut d = Dev::default();
         d.answer("device.status", 200, &status());
-        assert_eq!(d.toggle_request(Toggle::Wifi), ("wifi.set", json!({"on": false})));
+        assert_eq!(
+            d.toggle_request(Toggle::Wifi),
+            ("wifi.set", json!({"on": false}))
+        );
         d.begin("wifi.set");
         assert!(d.busy(Toggle::Wifi));
         d.answer("wifi.set", 409, &json!({"ok": false, "cap": "wifi.set", "code": "would_strand", "error": "no other uplink"}));
         assert!(!d.busy(Toggle::Wifi));
-        assert_eq!(d.on[&Toggle::Wifi], true, "a refused change keeps the old state");
+        assert_eq!(
+            d.on[&Toggle::Wifi],
+            true,
+            "a refused change keeps the old state"
+        );
         assert!(d.error["Wi-Fi"].contains("offline"));
         // success: the state is what s22d read back, not the request
-        d.answer("wifi.set", 200, &json!({"ok": true, "state": {"enabled": false, "on": false, "connected": false}}));
+        d.answer(
+            "wifi.set",
+            200,
+            &json!({"ok": true, "state": {"enabled": false, "on": false, "connected": false}}),
+        );
         assert_eq!(d.on[&Toggle::Wifi], false);
         assert!(!d.error.contains_key("Wi-Fi"));
-        d.answer("bluetooth.set", 200, &json!({"ok": true, "state": {"on": false, "hci0": false, "detail": "down"}}));
+        d.answer(
+            "bluetooth.set",
+            200,
+            &json!({"ok": true, "state": {"on": false, "hci0": false, "detail": "down"}}),
+        );
         assert_eq!(d.on[&Toggle::Bluetooth], false);
         d.answer("calls.set", 200, &json!({"ok": true, "state": {"enabled": false, "audio": "two-way audio not working yet"}}));
         assert_eq!(d.on[&Toggle::Calls], false);
-        d.answer("vibration.set", 200, &json!({"ok": true, "state": {"enabled": false, "daemon": true}}));
+        d.answer(
+            "vibration.set",
+            200,
+            &json!({"ok": true, "state": {"enabled": false, "daemon": true}}),
+        );
         assert_eq!(d.on[&Toggle::Vibration], false);
     }
 
     #[test]
     fn volume_brightness_timeout_and_no_daemon() {
         let mut d = Dev::default();
-        d.answer("volume.get", 200, &json!({"ok": true, "state": {"level": 0, "muted": true, "max": 10}}));
+        d.answer(
+            "volume.get",
+            200,
+            &json!({"ok": true, "state": {"level": 0, "muted": true, "max": 10}}),
+        );
         assert_eq!((d.volume, d.muted), (Some(0), true));
-        d.answer("brightness.set", 200, &json!({"ok": true, "state": {"percent": 40, "brightness": 1000}}));
+        d.answer(
+            "brightness.set",
+            200,
+            &json!({"ok": true, "state": {"percent": 40, "brightness": 1000}}),
+        );
         assert_eq!(d.brightness, Some(40));
-        d.answer("screen_timeout.get", 200, &json!({"ok": true, "state": {"unlocked_s": 120, "locked_s": 15, "never": 0}}));
+        d.answer(
+            "screen_timeout.get",
+            200,
+            &json!({"ok": true, "state": {"unlocked_s": 120, "locked_s": 15, "never": 0}}),
+        );
         assert_eq!(d.timeout, Some((120, 15)));
-        d.answer("device.status", 0, &json!({"ok": false, "code": "no_s22d", "error": "connection refused"}));
+        d.answer(
+            "device.status",
+            0,
+            &json!({"ok": false, "code": "no_s22d", "error": "connection refused"}),
+        );
         assert_eq!(d.available, Some(false));
         assert_eq!(d.error["device.status"], "s22d not reachable");
     }
 
     #[test]
     fn http_answer_parsing_and_a_real_socket() {
-        let (st, v) = parse_response(b"HTTP/1.1 409 Conflict\r\nContent-Length: 12\r\n\r\n{\"ok\":false}");
+        let (st, v) =
+            parse_response(b"HTTP/1.1 409 Conflict\r\nContent-Length: 12\r\n\r\n{\"ok\":false}");
         assert_eq!((st, v), (409, json!({"ok": false})));
         let dir = std::env::temp_dir().join(format!("fs-dev-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
@@ -333,7 +430,12 @@ mod tests {
             c.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"ok\":true,\"state\":{\"percent\":30}}").unwrap();
             req
         });
-        let (st, v) = call(p.to_str().unwrap(), "brightness.set", &json!({"value": 30}), 5);
+        let (st, v) = call(
+            p.to_str().unwrap(),
+            "brightness.set",
+            &json!({"value": 30}),
+            5,
+        );
         let req = h.join().unwrap();
         assert!(req.starts_with("POST /v1/device/brightness.set HTTP/1.1\r\n"));
         assert!(req.contains("X-S22-Caller: shell") && req.ends_with("{\"value\":30}"));

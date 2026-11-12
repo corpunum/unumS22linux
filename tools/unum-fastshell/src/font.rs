@@ -48,7 +48,10 @@ impl Fonts {
     }
 
     pub fn ascent(&self, f: Face, px: u16) -> i32 {
-        self.font(f).as_scaled(PxScale::from(px as f32)).ascent().round() as i32
+        self.font(f)
+            .as_scaled(PxScale::from(px as f32))
+            .ascent()
+            .round() as i32
     }
 
     pub fn line_h(&self, f: Face, px: u16) -> i32 {
@@ -71,7 +74,10 @@ impl Fonts {
             return *a;
         }
         let g = self.gid(f, c);
-        let a = self.font(f).as_scaled(PxScale::from(px as f32)).h_advance(g);
+        let a = self
+            .font(f)
+            .as_scaled(PxScale::from(px as f32))
+            .h_advance(g);
         self.adv.insert((f, c, px), a);
         a
     }
@@ -101,13 +107,28 @@ impl Fonts {
                     mask[i] = (c.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
                 }
             });
-            Glyph { left: b.min.x as i32, top: b.min.y as i32, w, h, mask }
+            Glyph {
+                left: b.min.x as i32,
+                top: b.min.y as i32,
+                w,
+                h,
+                mask,
+            }
         });
         self.glyphs.insert(key, out);
     }
 
     /// Draw `s` with its baseline at `y`; returns the x after the last glyph.
-    pub fn draw(&mut self, cv: &mut Canvas, f: Face, px: u16, x: i32, y: i32, s: &str, color: u32) -> i32 {
+    pub fn draw(
+        &mut self,
+        cv: &mut Canvas,
+        f: Face,
+        px: u16,
+        x: i32,
+        y: i32,
+        s: &str,
+        color: u32,
+    ) -> i32 {
         let mut pen = x as f32;
         let clip = cv.clip;
         // quick reject: whole line outside the clip vertically
@@ -140,7 +161,11 @@ impl Fonts {
             let mut lw = 0.0f32;
             for word in para.split_inclusive(' ') {
                 let ww: f32 = word.chars().map(|c| self.advance(f, px, c)).sum();
-                let trimmed_w: f32 = word.trim_end().chars().map(|c| self.advance(f, px, c)).sum();
+                let trimmed_w: f32 = word
+                    .trim_end()
+                    .chars()
+                    .map(|c| self.advance(f, px, c))
+                    .sum();
                 if lw + trimmed_w <= max_w as f32 || line.is_empty() && trimmed_w <= max_w as f32 {
                     line.push_str(word);
                     lw += ww;

@@ -12,14 +12,15 @@
 //!   unum-fastshell bench [N]       offscreen full-frame render timings per page
 //! env: S22_TOUCH_RUN (touchd run dir, native path), FASTSHELL_CHROOT,
 //!      S22_SHELL_API, S22_SHELL_S22D, S22_SHELL_PHONED, S22_SHELL_SESSION.
+mod access;
 mod agent;
 mod buttons;
 mod camera;
 // config: FASTSHELL_CONFIG (JSON; see config.rs and PORTING.md). The
 //      built-in defaults are the S22's, so the S22 needs no config file.
 mod config;
-mod device;
 mod ctl;
+mod device;
 mod drm;
 mod font;
 mod gfx;
@@ -53,7 +54,10 @@ fn env(k: &str, d: &str) -> String {
 }
 
 fn log(msg: &str) {
-    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs_f64();
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs_f64();
     eprintln!("{t:.3} fastshell: {msg}");
 }
 
@@ -78,20 +82,39 @@ struct Sway {
 
 impl Sway {
     fn session(&self) -> (String, String) {
-        let s = std::fs::read_to_string(format!("{}/run/s22-desktop/session", self.chroot)).unwrap_or_default();
+        let s = std::fs::read_to_string(format!("{}/run/s22-desktop/session", self.chroot))
+            .unwrap_or_default();
         let mut l = s.lines();
-        (l.next().unwrap_or("").trim().to_string(), l.next().unwrap_or("").trim().to_string())
+        (
+            l.next().unwrap_or("").trim().to_string(),
+            l.next().unwrap_or("").trim().to_string(),
+        )
     }
 
     fn run(&self, argv: &[&str]) -> bool {
         let (wl, sock) = self.session();
         let mut c = std::process::Command::new("chroot");
-        c.arg(&self.chroot).arg("/usr/bin/env").arg("-i").arg("HOME=/root").arg("PATH=/usr/local/bin:/usr/bin:/bin").arg("XDG_RUNTIME_DIR=/run/user/0").arg("LANG=C.UTF-8");
+        c.arg(&self.chroot)
+            .arg("/usr/bin/env")
+            .arg("-i")
+            .arg("HOME=/root")
+            .arg("PATH=/usr/local/bin:/usr/bin:/bin")
+            .arg("XDG_RUNTIME_DIR=/run/user/0")
+            .arg("LANG=C.UTF-8");
         if self.chroot.is_empty() {
             // no chroot: sway (if any) runs on the host
             c = std::process::Command::new("/usr/bin/env");
-            c.arg("-i").arg(format!("HOME={}", std::env::var("HOME").unwrap_or_else(|_| "/root".into()))).arg("PATH=/usr/local/bin:/usr/bin:/bin");
-            c.arg(format!("XDG_RUNTIME_DIR={}", std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/run/user/0".into()))).arg("LANG=C.UTF-8");
+            c.arg("-i")
+                .arg(format!(
+                    "HOME={}",
+                    std::env::var("HOME").unwrap_or_else(|_| "/root".into())
+                ))
+                .arg("PATH=/usr/local/bin:/usr/bin:/bin");
+            c.arg(format!(
+                "XDG_RUNTIME_DIR={}",
+                std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/run/user/0".into())
+            ))
+            .arg("LANG=C.UTF-8");
         }
         if !wl.is_empty() {
             c.arg(format!("WAYLAND_DISPLAY={wl}"));
@@ -102,7 +125,10 @@ impl Sway {
         if let Some(bus) = sway_bus() {
             c.arg(format!("DBUS_SESSION_BUS_ADDRESS={bus}"));
         }
-        c.args(argv).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+        c.args(argv)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
         c.status().map(|s| s.success()).unwrap_or(false)
     }
 }
@@ -111,7 +137,10 @@ impl Sway {
 fn sway_bus() -> Option<String> {
     for e in std::fs::read_dir("/proc").ok()?.flatten() {
         let p = e.path();
-        if std::fs::read_to_string(p.join("comm")).map(|c| c.trim() == "sway").unwrap_or(false) {
+        if std::fs::read_to_string(p.join("comm"))
+            .map(|c| c.trim() == "sway")
+            .unwrap_or(false)
+        {
             let env = std::fs::read(p.join("environ")).ok()?;
             for kv in env.split(|b| *b == 0) {
                 if let Some(v) = kv.strip_prefix(b"DBUS_SESSION_BUS_ADDRESS=") {
@@ -164,23 +193,44 @@ fn run() -> std::io::Result<()> {
     // musl reads zoneinfo from /usr/share/zoneinfo, which the native root may lack:
     // use the chroot's copy by absolute path, else the POSIX fallback rule (Athens on the S22).
     let tz = cfg.tz.clone();
-    if !tz.starts_with('/') && !tz.contains(',') && !std::path::Path::new(&format!("/usr/share/zoneinfo/{tz}")).exists() {
+    if !tz.starts_with('/')
+        && !tz.contains(',')
+        && !std::path::Path::new(&format!("/usr/share/zoneinfo/{tz}")).exists()
+    {
         let alt = format!("{chroot}/usr/share/zoneinfo/{tz}");
-        std::env::set_var("TZ", if std::path::Path::new(&alt).exists() { alt } else { cfg.tz_fallback.clone() });
+        std::env::set_var(
+            "TZ",
+            if std::path::Path::new(&alt).exists() {
+                alt
+            } else {
+                cfg.tz_fallback.clone()
+            },
+        );
     }
     unsafe { tzset() };
     let run_dir = cfg.run_dir();
     let state_dir = cfg.state_dir.clone();
     let _ = std::fs::create_dir_all(&state_dir);
     let _ = std::fs::write(&cfg.pid_file, format!("{}\n", std::process::id()));
-    let drm_card = config::detect_drm_card(std::path::Path::new("/sys/class/drm"), std::path::Path::new("/dev/dri"), &cfg.drm_card).unwrap_or_else(|| "/dev/dri/card1".into());
+    let drm_card = config::detect_drm_card(
+        std::path::Path::new("/sys/class/drm"),
+        std::path::Path::new("/dev/dri"),
+        &cfg.drm_card,
+    )
+    .unwrap_or_else(|| "/dev/dri/card1".into());
     let sys = config::sys();
     log(&format!(
         "config {}: drm {drm_card}, touch {}, battery {}, backlight {}, thermal {:?}",
         cfg_path.as_deref().unwrap_or("(built-in defaults)"),
         touch::find_touchscreen().unwrap_or_else(|| "none".into()),
-        sys.battery.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "none".into()),
-        sys.backlight.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "none".into()),
+        sys.battery
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "none".into()),
+        sys.backlight
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "none".into()),
         sys.thermal.iter().map(|z| z.0.as_str()).collect::<Vec<_>>()
     ));
     let display_state = cfg.display_state_file.as_str();
@@ -199,18 +249,30 @@ fn run() -> std::io::Result<()> {
     };
     ctl::serve(format!("{run_dir}/shell.sock"), netw.clone())?;
     let mut app = App::new(Some(netw.clone()), &run_dir, &chroot);
-    app.idle_path = env("FASTSHELL_IDLE_CFG", &format!("{state_dir}/screen-timeout.json"));
+    app.idle_path = env(
+        "FASTSHELL_IDLE_CFG",
+        &format!("{state_dir}/screen-timeout.json"),
+    );
+    app.access_path = env(
+        "FASTSHELL_ACCESS_CFG",
+        "/srv/s22/state/device-switches.json",
+    );
     app.load_idle();
     app.cam_orient_path = format!("{state_dir}/camera.json");
     app.load_orient();
     app.load_haptics();
     let mut haptic = haptic::Haptic::new(haptic::SOCK);
     let mut cam_child: Option<i32> = None;
-    log(&format!("screen timeout: unlocked {} s, locked {} s (0 = never)", app.idle_cfg.unlocked_s, app.idle_cfg.locked_s));
+    log(&format!(
+        "screen timeout: unlocked {} s, locked {} s (0 = never)",
+        app.idle_cfg.unlocked_s, app.idle_cfg.locked_s
+    ));
     net::refresh_agent(&netw);
     net::fetch_history(&netw);
 
-    let sway = Arc::new(Sway { chroot: chroot.clone() });
+    let sway = Arc::new(Sway {
+        chroot: chroot.clone(),
+    });
     let mut seat = Seat::connect(&cfg.seatd_socket())?;
     seat.open_seat()?;
     let active_flag = Arc::new(AtomicBool::new(false));
@@ -262,7 +324,8 @@ fn run() -> std::io::Result<()> {
 
     let mut pres: Option<Presenter> = None;
     let mut cv = Canvas::new(W, H);
-    let mut tdev = touch::find_touchscreen().and_then(|p| touch::TouchDev::open(&p, W as u32, H as u32).ok());
+    let mut tdev =
+        touch::find_touchscreen().and_then(|p| touch::TouchDev::open(&p, W as u32, H as u32).ok());
     let mut tmap = cfg.touch_map();
     let mut evs = Vec::new();
     let mut sevs = Vec::new();
@@ -272,33 +335,76 @@ fn run() -> std::io::Result<()> {
     let mut last_anim = Instant::now();
     let mut opened_device = false;
     let mut handing: Option<Instant> = None;
-    let mut lat_log = std::fs::OpenOptions::new().create(true).append(true).open(format!("{state_dir}/latency.jsonl")).ok();
+    let mut lat_log = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(format!("{state_dir}/latency.jsonl"))
+        .ok();
     // physical buttons: read the key nodes directly (see buttons.rs for the hand-over with s22-buttons)
     let key_nodes = buttons::find_key_nodes("/sys/class/input");
-    let mut keys: Vec<buttons::KeyDev> = key_nodes.iter().filter_map(|p| buttons::KeyDev::open(p).map_err(|e| log(&format!("key node {p}: {e}"))).ok()).collect();
+    let mut keys: Vec<buttons::KeyDev> = key_nodes
+        .iter()
+        .filter_map(|p| {
+            buttons::KeyDev::open(p)
+                .map_err(|e| log(&format!("key node {p}: {e}")))
+                .ok()
+        })
+        .collect();
     let mut kevs: Vec<(buttons::Key, bool, u64)> = Vec::new();
     let mut machine = buttons::Machine::new(buttons::Timing::default());
-    app.buttons_cfg = env("FASTSHELL_BUTTONS_CFG", &format!("{state_dir}/buttons.json"));
+    app.buttons_cfg = env(
+        "FASTSHELL_BUTTONS_CFG",
+        &format!("{state_dir}/buttons.json"),
+    );
     app.buttons_enabled = buttons::load_enabled(&app.buttons_cfg);
     app.level = buttons::read_level(buttons::SAY_LEVEL);
     let mut claimed = app.buttons_enabled && !keys.is_empty();
     buttons::claim(claimed);
-    log(&format!("buttons: nodes {:?}, handled by the shell: {claimed}, level {}", key_nodes, app.level));
+    log(&format!(
+        "buttons: nodes {:?}, handled by the shell: {claimed}, level {}",
+        key_nodes, app.level
+    ));
     let mut shot_due = false;
-    log(&format!("started pid {} run_dir {run_dir}", std::process::id()));
+    log(&format!(
+        "started pid {} run_dir {run_dir}",
+        std::process::id()
+    ));
 
     while !STOP.load(Ordering::SeqCst) {
         // ---- poll
         let mut fds = vec![
-            libc::pollfd { fd: pipe[0], events: libc::POLLIN, revents: 0 },
-            libc::pollfd { fd: seat.fd, events: libc::POLLIN, revents: 0 },
-            libc::pollfd { fd: tdev.as_ref().map(|t| t.fd).unwrap_or(-1), events: libc::POLLIN, revents: 0 },
-            libc::pollfd { fd: pres.as_ref().map(|p| p.card.fd).unwrap_or(-1), events: libc::POLLIN, revents: 0 },
+            libc::pollfd {
+                fd: pipe[0],
+                events: libc::POLLIN,
+                revents: 0,
+            },
+            libc::pollfd {
+                fd: seat.fd,
+                events: libc::POLLIN,
+                revents: 0,
+            },
+            libc::pollfd {
+                fd: tdev.as_ref().map(|t| t.fd).unwrap_or(-1),
+                events: libc::POLLIN,
+                revents: 0,
+            },
+            libc::pollfd {
+                fd: pres.as_ref().map(|p| p.card.fd).unwrap_or(-1),
+                events: libc::POLLIN,
+                revents: 0,
+            },
         ];
         for k in &keys {
-            fds.push(libc::pollfd { fd: k.fd, events: libc::POLLIN, revents: 0 });
+            fds.push(libc::pollfd {
+                fd: k.fd,
+                events: libc::POLLIN,
+                revents: 0,
+            });
         }
-        let mut timeout = next_tick.saturating_duration_since(Instant::now()).as_millis().min(1000) as i32;
+        let mut timeout = next_tick
+            .saturating_duration_since(Instant::now())
+            .as_millis()
+            .min(1000) as i32;
         if app.animating || app.repeat_at.is_some() || app.hold.is_some() {
             timeout = timeout.min(16);
         }
@@ -310,7 +416,8 @@ fn run() -> std::io::Result<()> {
             timeout = timeout.min((dl.saturating_sub(now_us()) / 1000) as i32 + 1);
         }
         if let Some(dl) = app.overlay_deadline() {
-            timeout = timeout.min(dl.saturating_duration_since(Instant::now()).as_millis() as i32 + 1);
+            timeout =
+                timeout.min(dl.saturating_duration_since(Instant::now()).as_millis() as i32 + 1);
         }
         let r = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as _, timeout) };
         if r < 0 {
@@ -335,7 +442,9 @@ fn run() -> std::io::Result<()> {
                             let ms = tdone.saturating_sub(t_in) as f64 / 1000.0;
                             if ms < 2000.0 {
                                 if kind == "shutter" {
-                                    log(&format!("camera: shutter -> thumbnail on the panel {ms:.0} ms"));
+                                    log(&format!(
+                                        "camera: shutter -> thumbnail on the panel {ms:.0} ms"
+                                    ));
                                 }
                                 app.stats.lat.push((kind, ms));
                                 if app.stats.lat.len() > 4000 {
@@ -392,17 +501,37 @@ fn run() -> std::io::Result<()> {
                             continue;
                         }
                         let card = Card::from_fd(fd)?;
-                        log(&format!("{drm_card} crtc {} conn {} mode {} {}x{}", card.crtc_id, card.connector_id, card.mode_name(), card.width, card.height));
+                        log(&format!(
+                            "{drm_card} crtc {} conn {} mode {} {}x{}",
+                            card.crtc_id,
+                            card.connector_id,
+                            card.mode_name(),
+                            card.width,
+                            card.height
+                        ));
                         let (pw, ph) = (card.width as i32, card.height as i32);
                         let off = if (pw, ph) == (W, H) {
                             None
                         } else {
                             tmap = cfg.touch_map().with_panel(pw, ph);
-                            log(&format!("panel {pw}x{ph} is not {W}x{H}: canvas centred at {},{}", tmap.ox, tmap.oy));
+                            log(&format!(
+                                "panel {pw}x{ph} is not {W}x{H}: canvas centred at {},{}",
+                                tmap.ox, tmap.oy
+                            ));
                             Some((tmap.ox, tmap.oy))
                         };
                         let bufs = vec![card.create_dumb()?, card.create_dumb()?];
-                        pres = Some(Presenter { card, bufs, back: 0, prev: vec![Rect::new(0, 0, W, H)], pending: false, pending_mark: None, pending_cam: None, need_modeset: true, off });
+                        pres = Some(Presenter {
+                            card,
+                            bufs,
+                            back: 0,
+                            prev: vec![Rect::new(0, 0, W, H)],
+                            pending: false,
+                            pending_mark: None,
+                            pending_cam: None,
+                            need_modeset: true,
+                            off,
+                        });
                         write_state(display_state, "on");
                         app.dirty_all();
                     }
@@ -429,7 +558,13 @@ fn run() -> std::io::Result<()> {
         }
         // ---- physical buttons
         let key_ctx = |app: &App| buttons::Ctx {
-            display_on: if app.active { app.display_on } else { std::fs::read_to_string("/run/s22-display-state").map(|s| s.trim() != "off").unwrap_or(true) },
+            display_on: if app.active {
+                app.display_on
+            } else {
+                std::fs::read_to_string("/run/s22-display-state")
+                    .map(|s| s.trim() != "off")
+                    .unwrap_or(true)
+            },
             ptt_hold: buttons::ptt_hold_mode(buttons::BUTTONS_BASE),
         };
         if fds[4..].iter().any(|f| f.revents & libc::POLLIN != 0) {
@@ -445,9 +580,18 @@ fn run() -> std::io::Result<()> {
                         app.level = buttons::read_level(buttons::SAY_LEVEL);
                     }
                     let ctx = key_ctx(&app);
-                    let acts = if down { machine.press(k, t, ctx) } else { machine.release(k, t, ctx) };
+                    let acts = if down {
+                        machine.press(k, t, ctx)
+                    } else {
+                        machine.release(k, t, ctx)
+                    };
                     if !acts.is_empty() {
-                        log(&format!("key {} {} -> {:?}", k.name(), if down { "down" } else { "up" }, acts));
+                        log(&format!(
+                            "key {} {} -> {:?}",
+                            k.name(),
+                            if down { "down" } else { "up" },
+                            acts
+                        ));
                     }
                     app.button_actions(&acts, t);
                 }
@@ -460,9 +604,16 @@ fn run() -> std::io::Result<()> {
             }
             app.button_actions(&acts, now_us());
         }
-        if fds.iter().skip(4).any(|f| f.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) != 0) {
+        if fds
+            .iter()
+            .skip(4)
+            .any(|f| f.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) != 0)
+        {
             log("a key node went away: reopening");
-            keys = buttons::find_key_nodes("/sys/class/input").iter().filter_map(|p| buttons::KeyDev::open(p).ok()).collect();
+            keys = buttons::find_key_nodes("/sys/class/input")
+                .iter()
+                .filter_map(|p| buttons::KeyDev::open(p).ok())
+                .collect();
         }
         if claimed != (app.buttons_enabled && !keys.is_empty()) {
             claimed = !claimed;
@@ -483,7 +634,10 @@ fn run() -> std::io::Result<()> {
                 }
                 Msg::Camera(gen, v) => {
                     if v["event"] != "first_frame" || gen != app.cam.gen {
-                        log(&format!("camera[{gen}]: {}", v.to_string().chars().take(300).collect::<String>()));
+                        log(&format!(
+                            "camera[{gen}]: {}",
+                            v.to_string().chars().take(300).collect::<String>()
+                        ));
                     } else {
                         log(&format!("camera[{gen}]: first frame {} ms", v["ms"]));
                     }
@@ -494,12 +648,19 @@ fn run() -> std::io::Result<()> {
                 }
                 Msg::CamThumb(px, w, h) => app.camera_thumb(px, w, h),
                 Msg::Card(turn, gen, v) => {
-                    log(&format!("card {}[{gen}]: {}", if turn { "turn" } else { "listen" }, v.to_string().chars().take(200).collect::<String>()));
+                    log(&format!(
+                        "card {}[{gen}]: {}",
+                        if turn { "turn" } else { "listen" },
+                        v.to_string().chars().take(200).collect::<String>()
+                    ));
                     app.card_event(turn, gen, v);
                 }
                 Msg::DeviceCap(id, st, v) => {
                     if v["ok"] != true || id.ends_with(".set") {
-                        log(&format!("device {id}: {st} {}", v.to_string().chars().take(240).collect::<String>()));
+                        log(&format!(
+                            "device {id}: {st} {}",
+                            v.to_string().chars().take(240).collect::<String>()
+                        ));
                     }
                     app.dev_answer(id, st, v);
                 }
@@ -514,7 +675,11 @@ fn run() -> std::io::Result<()> {
             if app.display_on && app.active {
                 let say = idle::flock_held(&cfg.say_lock);
                 if app.idle_check(now, say) {
-                    log(&format!("screen timeout: idle {} s, locked {} -> panel off", now.saturating_duration_since(app.last_touch).as_secs(), app.locked));
+                    log(&format!(
+                        "screen timeout: idle {} s, locked {} -> panel off",
+                        now.saturating_duration_since(app.last_touch).as_secs(),
+                        app.locked
+                    ));
                     app.screen_timeout_off();
                 }
             }
@@ -597,7 +762,8 @@ fn run() -> std::io::Result<()> {
                 }
                 Effect::Assistant(cmd, envs) => {
                     if envs.iter().any(|(k, _)| k == "S22_PTT") {
-                        let _ = std::fs::remove_file(format!("{}/ptt-release", buttons::BUTTONS_BASE));
+                        let _ =
+                            std::fs::remove_file(format!("{}/ptt-release", buttons::BUTTONS_BASE));
                     }
                     netw.spawn(move |n| {
                         let mut parts = cmd.split_whitespace();
@@ -610,8 +776,13 @@ fn run() -> std::io::Result<()> {
                             .stderr(std::process::Stdio::null())
                             .status();
                         log(&format!("assistant exited: {st:?}"));
-                        let last = std::fs::read_to_string(&config::get().assistant_log).ok().and_then(|s| s.lines().last().map(String::from)).unwrap_or_default();
-                        n.send(Msg::Assistant(serde_json::from_str(&last).unwrap_or(serde_json::Value::Null)));
+                        let last = std::fs::read_to_string(&config::get().assistant_log)
+                            .ok()
+                            .and_then(|s| s.lines().last().map(String::from))
+                            .unwrap_or_default();
+                        n.send(Msg::Assistant(
+                            serde_json::from_str(&last).unwrap_or(serde_json::Value::Null),
+                        ));
                     });
                 }
                 Effect::PttRelease(held) => {
@@ -620,14 +791,20 @@ fn run() -> std::io::Result<()> {
                     }
                 }
                 Effect::Level(l) => {
-                    let playing = idle::flock_held(&env("FASTSHELL_SAY_LOCK", "/run/s22-say.lock")) || buttons::playback_running();
+                    let playing = idle::flock_held(&env("FASTSHELL_SAY_LOCK", "/run/s22-say.lock"))
+                        || buttons::playback_running();
                     if let Err(e) = buttons::apply_level(l, playing) {
                         log(&format!("level {l}: {e}"));
                     }
                 }
                 Effect::Native(argv) => {
                     std::thread::spawn(move || {
-                        let st = std::process::Command::new(&argv[0]).args(&argv[1..]).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+                        let st = std::process::Command::new(&argv[0])
+                            .args(&argv[1..])
+                            .stdin(std::process::Stdio::null())
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::null())
+                            .status();
                         log(&format!("{argv:?}: {st:?}"));
                     });
                 }
@@ -636,19 +813,21 @@ fn run() -> std::io::Result<()> {
                     haptic.send(what);
                 }
                 Effect::Spawn(argv) => {
-                    {
-                        let sw = sway.clone();
-                        std::thread::spawn(move || {
-                            let mut a: Vec<&str> = argv.iter().map(String::as_str).collect();
-                            let mut delay = 300;
-                            if let Some(ms) = a.first().and_then(|x| x.strip_prefix("@delay")).and_then(|x| x.parse().ok()) {
-                                delay = ms;
-                                a.remove(0);
-                            }
-                            std::thread::sleep(Duration::from_millis(delay));
-                            sw.run(&a);
-                        });
-                    }
+                    let sw = sway.clone();
+                    std::thread::spawn(move || {
+                        let mut a: Vec<&str> = argv.iter().map(String::as_str).collect();
+                        let mut delay = 300;
+                        if let Some(ms) = a
+                            .first()
+                            .and_then(|x| x.strip_prefix("@delay"))
+                            .and_then(|x| x.parse().ok())
+                        {
+                            delay = ms;
+                            a.remove(0);
+                        }
+                        std::thread::sleep(Duration::from_millis(delay));
+                        sw.run(&a);
+                    });
                 }
             }
         }
@@ -687,18 +866,28 @@ fn run() -> std::io::Result<()> {
         }
         // ---- screenshot: once the frame without the level overlay is on the canvas
         if shot_due {
-            let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
             let name = format!("screenshot-{stamp}.png");
             let rel = format!("{}/{name}", ui::GALLERY);
             if app.active && pres.is_some() && app.display_on {
                 if app.damage.is_empty() && !app.relayout {
                     shot_due = false;
-                    let (px, sw, sh) = if std::mem::take(&mut app.shot_half) { (half(&cv.px, W, H), W / 2, H / 2) } else { (cv.px.clone(), W, H) };
+                    let (px, sw, sh) = if std::mem::take(&mut app.shot_half) {
+                        (half(&cv.px, W, H), W / 2, H / 2)
+                    } else {
+                        (cv.px.clone(), W, H)
+                    };
                     let host = format!("{chroot}{rel}");
                     std::thread::spawn(move || {
                         let t = Instant::now();
                         let r = save_png_px(&px, sw, sh, &host);
-                        log(&format!("screenshot {host}: {r:?} in {} ms", t.elapsed().as_millis()));
+                        log(&format!(
+                            "screenshot {host}: {r:?} in {} ms",
+                            t.elapsed().as_millis()
+                        ));
                     });
                     app.screenshot_taken(&name);
                 }
@@ -708,7 +897,11 @@ fn run() -> std::io::Result<()> {
                 let sw = sway.clone();
                 let rel2 = rel.clone();
                 std::thread::spawn(move || {
-                    let ok = sw.run(&["sh", "-c", &format!("mkdir -p {} && grim {rel2}", ui::GALLERY)]);
+                    let ok = sw.run(&[
+                        "sh",
+                        "-c",
+                        &format!("mkdir -p {} && grim {rel2}", ui::GALLERY),
+                    ]);
                     log(&format!("screenshot (grim) {rel2}: {ok}"));
                 });
                 app.screenshot_taken(&name);
@@ -734,11 +927,16 @@ extern "C" {
 /// the release note, STOP (group SIGTERM + the OpenUnum cancel API).
 fn run_card(c: agent::CardCmd, netw: &Net, app: &mut App) {
     use agent::CardCmd;
-    let assistant = std::env::var("FASTSHELL_ASSISTANT").unwrap_or_else(|_| config::get().assistant.clone());
+    let assistant =
+        std::env::var("FASTSHELL_ASSISTANT").unwrap_or_else(|_| config::get().assistant.clone());
     let spawn = |turn: bool, gen: u64, args: Vec<String>, app: &mut App| {
         use std::os::unix::process::CommandExt;
         let mut cmd = std::process::Command::new(&assistant);
-        cmd.args(&args).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null()).process_group(0);
+        cmd.args(&args)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .process_group(0);
         match cmd.spawn() {
             Ok(mut ch) => {
                 let pid = ch.id() as i32;
@@ -754,12 +952,20 @@ fn run_card(c: agent::CardCmd, netw: &Net, app: &mut App) {
                         }
                     }
                     let code = ch.wait().ok().and_then(|s| s.code()).unwrap_or(-1);
-                    n.send(Msg::Card(turn, gen, serde_json::json!({"event": "exit", "code": code})));
+                    n.send(Msg::Card(
+                        turn,
+                        gen,
+                        serde_json::json!({"event": "exit", "code": code}),
+                    ));
                 });
             }
             Err(e) => {
                 log(&format!("card: spawn {assistant}: {e}"));
-                app.card_event(turn, gen, serde_json::json!({"state": "error", "error": e.to_string()}));
+                app.card_event(
+                    turn,
+                    gen,
+                    serde_json::json!({"state": "error", "error": e.to_string()}),
+                );
                 app.card_event(turn, gen, serde_json::json!({"event": "exit", "code": -1}));
             }
         }
@@ -767,16 +973,34 @@ fn run_card(c: agent::CardCmd, netw: &Net, app: &mut App) {
     match c {
         CardCmd::Listen { gen } => {
             let _ = std::fs::remove_file(agent::RELEASE_FILE);
-            spawn(false, gen, vec!["--card".into(), "listen".into(), "--stop-file".into(), agent::RELEASE_FILE.into()], app);
+            spawn(
+                false,
+                gen,
+                vec![
+                    "--card".into(),
+                    "listen".into(),
+                    "--stop-file".into(),
+                    agent::RELEASE_FILE.into(),
+                ],
+                app,
+            );
         }
         CardCmd::Release => {
-            let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+            let t = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs_f64())
+                .unwrap_or(0.0);
             let tmp = format!("{}.tmp", agent::RELEASE_FILE);
             if std::fs::write(&tmp, format!("{{\"t\": {t:.3}}}\n")).is_ok() {
                 let _ = std::fs::rename(&tmp, agent::RELEASE_FILE);
             }
         }
-        CardCmd::Turn { gen, text } => spawn(true, gen, vec!["--card".into(), "turn".into(), "--text".into(), text], app),
+        CardCmd::Turn { gen, text } => spawn(
+            true,
+            gen,
+            vec!["--card".into(), "turn".into(), "--text".into(), text],
+            app,
+        ),
         CardCmd::Kill { pid } => {
             // the whole group: s22-assistant, its fillers, s22-say and the player
             let r = unsafe { libc::kill(-pid, libc::SIGTERM) };
@@ -785,8 +1009,16 @@ fn run_card(c: agent::CardCmd, netw: &Net, app: &mut App) {
         CardCmd::CancelApi => {
             let api = netw.api.clone();
             netw.spawn(move |_| {
-                let r = net::http("POST", &format!("{api}/api/chat/cancel"), Some(&serde_json::json!({"sessionId": "voice"})), Duration::from_secs(10));
-                log(&format!("card: cancel the voice turn: {:?}", r.map(|x| x.0)));
+                let r = net::http(
+                    "POST",
+                    &format!("{api}/api/chat/cancel"),
+                    Some(&serde_json::json!({"sessionId": "voice"})),
+                    Duration::from_secs(10),
+                );
+                log(&format!(
+                    "card: cancel the voice turn: {:?}",
+                    r.map(|x| x.0)
+                ));
             });
         }
     }
@@ -801,12 +1033,22 @@ fn run_cam(c: camera::CamCmd, netw: &Net, app: &mut App, child: &mut Option<i32>
             // a fresh shm inode per child: the old mapping can never see a truncate (SIGBUS)
             let _ = std::fs::remove_file(camera::SHM);
             let _ = std::fs::create_dir_all(camera::WORK);
-            let err = std::fs::File::create(format!("{}/campreview.err", camera::WORK)).map(std::process::Stdio::from).unwrap_or(std::process::Stdio::null());
-            let r = std::process::Command::new(&argv[0]).args(&argv[1..]).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(err).spawn();
+            let err = std::fs::File::create(format!("{}/campreview.err", camera::WORK))
+                .map(std::process::Stdio::from)
+                .unwrap_or(std::process::Stdio::null());
+            let r = std::process::Command::new(&argv[0])
+                .args(&argv[1..])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(err)
+                .spawn();
             match r {
                 Ok(mut ch) => {
                     let pid = ch.id() as i32;
-                    log(&format!("camera[{gen}]: started pid {pid}: {}", argv.join(" ")));
+                    log(&format!(
+                        "camera[{gen}]: started pid {pid}: {}",
+                        argv.join(" ")
+                    ));
                     *child = Some(pid);
                     let more = app.cam.spawned(gen, pid);
                     app.cam_cmds.extend(more);
@@ -833,7 +1075,10 @@ fn run_cam(c: camera::CamCmd, netw: &Net, app: &mut App, child: &mut Option<i32>
                 }
                 Err(e) => {
                     log(&format!("camera[{gen}]: spawn {}: {e}", argv[0]));
-                    app.camera_event(gen, serde_json::json!({"event": "spawn_failed", "error": e.to_string()}));
+                    app.camera_event(
+                        gen,
+                        serde_json::json!({"event": "spawn_failed", "error": e.to_string()}),
+                    );
                 }
             }
         }
@@ -843,7 +1088,13 @@ fn run_cam(c: camera::CamCmd, netw: &Net, app: &mut App, child: &mut Option<i32>
                 unsafe { libc::kill(pid, sig) };
             }
         }
-        CamCmd::Develop { gen, argv, preview, jpeg, raw } => {
+        CamCmd::Develop {
+            gen,
+            argv,
+            preview,
+            jpeg,
+            raw,
+        } => {
             netw.spawn(move |n| {
                 let t = Instant::now();
                 if let Some(d) = std::path::Path::new(&jpeg).parent() {
@@ -919,7 +1170,16 @@ fn frame(app: &mut App, cv: &mut Canvas, p: &mut Presenter) -> std::io::Result<(
             copy_rects(cv, b.map, b.pitch as usize, &cp);
         }
         Some((ox, oy)) => {
-            gfx::copy_rects_at(cv, b.map, b.pitch as usize, p.card.width as i32, p.card.height as i32, ox, oy, &cp);
+            gfx::copy_rects_at(
+                cv,
+                b.map,
+                b.pitch as usize,
+                p.card.width as i32,
+                p.card.height as i32,
+                ox,
+                oy,
+                &cp,
+            );
         }
     }
     let t2 = now_us();
@@ -1010,7 +1270,12 @@ fn half(px: &[u32], w: i32, h: i32) -> Vec<u32> {
     let mut out = Vec::with_capacity(w / 2 * (h / 2));
     for y in 0..h / 2 {
         for x in 0..w / 2 {
-            let p = [px[2 * y * w + 2 * x], px[2 * y * w + 2 * x + 1], px[(2 * y + 1) * w + 2 * x], px[(2 * y + 1) * w + 2 * x + 1]];
+            let p = [
+                px[2 * y * w + 2 * x],
+                px[2 * y * w + 2 * x + 1],
+                px[(2 * y + 1) * w + 2 * x],
+                px[(2 * y + 1) * w + 2 * x + 1],
+            ];
             let c = |s: u32| p.iter().map(|v| (v >> s) & 255).sum::<u32>() / 4;
             out.push(c(16) << 16 | c(8) << 8 | c(0));
         }
@@ -1043,101 +1308,194 @@ fn render_full(a: &mut App, cv: &mut Canvas) -> f64 {
 fn states() -> Vec<(&'static str, Box<dyn Fn(&mut App)>)> {
     vec![
         ("home", Box::new(|_a: &mut App| {})),
-        ("home-card", Box::new(|a: &mut App| {
-            a.add_card("Agent card", "Mission finished: the paper desk review is ready (3 trades, no action needed).", 30.0);
-        })),
-        ("home-agent-busy", Box::new(|a: &mut App| {
-            let _ = a.card.press();
-            a.card_event(false, 1, serde_json::json!({"transcript": "Is the paper desk review ready?"}));
-            a.card_event(true, 2, serde_json::json!({"state": "tool", "name": "worklog_read"}));
-            a.card_event(true, 2, serde_json::json!({"state": "reply", "text": "Yes. The review finished at 21:30: three trades, no action needed."}));
-            let _ = a.card.press();
-            a.card_event(false, 3, serde_json::json!({"transcript": "and the battery?"}));
-            a.card_cmds.clear();
-        })),
-        ("chat", Box::new(|a: &mut App| {
-            a.goto(Page::Chat);
-            a.kb.visible = false;
-        })),
-        ("chat-kbd-en", Box::new(|a: &mut App| {
-            a.goto(Page::Chat);
-            a.input = "What's on my calendar".into();
-        })),
-        ("chat-kbd-el", Box::new(|a: &mut App| {
-            a.goto(Page::Chat);
-            a.kb.text_layout = kbd::Layout::El;
-            a.kb.layout = kbd::Layout::El;
-            a.input = "Καλησπέρα, τι κάνεις;".into();
-        })),
-        ("chat-streaming", Box::new(|a: &mut App| {
-            a.goto(Page::Chat);
-            a.kb.visible = false;
-            a.input = "Check the Wi-Fi".into();
-            a.send();
-            a.on_msg(Msg::Chat(a_turn(a), net::ChatEvent::ToolStarted("wifi_status".into())));
-            a.on_msg(Msg::Chat(a_turn(a), net::ChatEvent::Delta { token: "Wi-Fi is down; the phone is online over USB (ecm0) and Tailscale.".into(), replace: false }));
-        })),
-        ("chat-question", Box::new(|a: &mut App| {
-            a.goto(Page::Chat);
-            a.kb.visible = false;
-            a.prompt = Some(net::Prompt { id: "p1".into(), header: "Model".into(), question: "Switch to the local model?".into(), options: vec!["Yes, switch".into(), "No, keep Luna".into()] });
-        })),
-        ("confirm", Box::new(|a: &mut App| {
-            a.call(&ctl::Call { function: "confirm".into(), args: vec!["dab12".into(), "Send SMS to +30 69x xxx xxxx: \"On my way\"?".into(), "60".into()] });
-        })),
-        ("lock", Box::new(|a: &mut App| {
-            a.add_card("Reminder", "Call your mother", 60.0);
-            a.locked = true;
-        })),
-        ("settings", Box::new(|a: &mut App| {
-            a.goto(Page::Settings);
-            a.dev.pending.clear();
-            a.dev.answer("device.status", 200, &serde_json::json!({"ok": true, "state": {"bluetooth": false, "vibration": true, "autosleep": true, "calls_enabled": true,
+        (
+            "home-card",
+            Box::new(|a: &mut App| {
+                a.add_card("Agent card", "Mission finished: the paper desk review is ready (3 trades, no action needed).", 30.0);
+            }),
+        ),
+        (
+            "home-agent-busy",
+            Box::new(|a: &mut App| {
+                let _ = a.card.press();
+                a.card_event(
+                    false,
+                    1,
+                    serde_json::json!({"transcript": "Is the paper desk review ready?"}),
+                );
+                a.card_event(
+                    true,
+                    2,
+                    serde_json::json!({"state": "tool", "name": "worklog_read"}),
+                );
+                a.card_event(true, 2, serde_json::json!({"state": "reply", "text": "Yes. The review finished at 21:30: three trades, no action needed."}));
+                let _ = a.card.press();
+                a.card_event(
+                    false,
+                    3,
+                    serde_json::json!({"transcript": "and the battery?"}),
+                );
+                a.card_cmds.clear();
+            }),
+        ),
+        (
+            "chat",
+            Box::new(|a: &mut App| {
+                a.goto(Page::Chat);
+                a.kb.visible = false;
+            }),
+        ),
+        (
+            "chat-kbd-en",
+            Box::new(|a: &mut App| {
+                a.goto(Page::Chat);
+                a.input = "What's on my calendar".into();
+            }),
+        ),
+        (
+            "chat-kbd-el",
+            Box::new(|a: &mut App| {
+                a.goto(Page::Chat);
+                a.kb.text_layout = kbd::Layout::El;
+                a.kb.layout = kbd::Layout::El;
+                a.input = "Καλησπέρα, τι κάνεις;".into();
+            }),
+        ),
+        (
+            "chat-streaming",
+            Box::new(|a: &mut App| {
+                a.goto(Page::Chat);
+                a.kb.visible = false;
+                a.input = "Check the Wi-Fi".into();
+                a.send();
+                a.on_msg(Msg::Chat(
+                    a_turn(a),
+                    net::ChatEvent::ToolStarted("wifi_status".into()),
+                ));
+                a.on_msg(Msg::Chat(
+                    a_turn(a),
+                    net::ChatEvent::Delta {
+                        token: "Wi-Fi is down; the phone is online over USB (ecm0) and Tailscale."
+                            .into(),
+                        replace: false,
+                    },
+                ));
+            }),
+        ),
+        (
+            "chat-question",
+            Box::new(|a: &mut App| {
+                a.goto(Page::Chat);
+                a.kb.visible = false;
+                a.prompt = Some(net::Prompt {
+                    id: "p1".into(),
+                    header: "Model".into(),
+                    question: "Switch to the local model?".into(),
+                    options: vec!["Yes, switch".into(), "No, keep Luna".into()],
+                });
+            }),
+        ),
+        (
+            "confirm",
+            Box::new(|a: &mut App| {
+                a.call(&ctl::Call {
+                    function: "confirm".into(),
+                    args: vec![
+                        "dab12".into(),
+                        "Send SMS to +30 69x xxx xxxx: \"On my way\"?".into(),
+                        "60".into(),
+                    ],
+                });
+            }),
+        ),
+        (
+            "lock",
+            Box::new(|a: &mut App| {
+                a.add_card("Reminder", "Call your mother", 60.0);
+                a.locked = true;
+            }),
+        ),
+        (
+            "settings",
+            Box::new(|a: &mut App| {
+                a.goto(Page::Settings);
+                a.dev.pending.clear();
+                a.dev.answer("device.status", 200, &serde_json::json!({"ok": true, "state": {"bluetooth": false, "vibration": true, "autosleep": true, "calls_enabled": true,
                 "volume": 4, "brightness_pct": 30, "network": {"uplink": "mobile", "operator": "Operator", "radio": "5G",
                 "wifi": {"enabled": true, "on": false, "connected": false}, "mobile_data": {"on": true, "state": "up"}}}}));
-            a.dev.begin("bluetooth.set");
-            a.dev.answer("wifi.set", 409, &serde_json::json!({"ok": false, "code": "would_strand"}));
-        })),
-        ("volume-osd", Box::new(|a: &mut App| {
-            a.level = 5;
-            a.button_actions(&[buttons::Action::Step(1)], 0);
-        })),
-        ("volume-osd-locked", Box::new(|a: &mut App| {
-            a.locked = true;
-            a.level = 1;
-            a.button_actions(&[buttons::Action::Revert, buttons::Action::Mute], 0);
-        })),
+                a.dev.begin("bluetooth.set");
+                a.dev.answer(
+                    "wifi.set",
+                    409,
+                    &serde_json::json!({"ok": false, "code": "would_strand"}),
+                );
+            }),
+        ),
+        (
+            "volume-osd",
+            Box::new(|a: &mut App| {
+                a.level = 5;
+                a.button_actions(&[buttons::Action::Step(1)], 0);
+            }),
+        ),
+        (
+            "volume-osd-locked",
+            Box::new(|a: &mut App| {
+                a.locked = true;
+                a.level = 1;
+                a.button_actions(&[buttons::Action::Revert, buttons::Action::Mute], 0);
+            }),
+        ),
         ("switcher", Box::new(|a: &mut App| a.goto(Page::Switcher))),
-        ("files", Box::new(|a: &mut App| {
-            a.files_dir = "/".into();
-            a.goto(Page::Files);
-            a.load_dir();
-        })),
-        ("phone", Box::new(|a: &mut App| {
-            a.goto(Page::Phone);
-            a.phone = Some((
-                serde_json::json!({"ok": true, "modem_state": "ONLINE", "sim": "PB_INIT_COMPLETE", "registration": {"reg_status": "home_3gpp", "act": "lte", "volte": 1}}),
-                serde_json::json!({"messages": [{"from": "+3069xxxxxxxx", "ts": "2026-10-21 18:02", "text": "Θα αργήσω 10 λεπτά"}]}),
-                serde_json::json!({"calls": []}),
-            ));
-        })),
-        ("camera", Box::new(|a: &mut App| {
-            a.goto(Page::Camera);
-            a.cam.status = "starting the rear camera…".into();
-            a.cam_thumb = Some((vec![0x506070; 170 * 128], 170, 128));
-        })),
-        ("camera-video", Box::new(|a: &mut App| {
-            a.goto(Page::Camera);
-            a.cam.mode = camera::Mode::Video;
-            a.cam.recording = Some(Instant::now() - Duration::from_secs(12));
-        })),
-        ("chat-key-popup", Box::new(|a: &mut App| {
-            a.goto(Page::Chat);
-            a.input = "Hel".into();
-            a.layout();
-            let h = a.hits.iter().find(|h| matches!(h.act, ui::Act::Key(1, 8))).cloned();
-            a.pressed = h;
-        })),
+        (
+            "files",
+            Box::new(|a: &mut App| {
+                a.files_dir = "/".into();
+                a.goto(Page::Files);
+                a.load_dir();
+            }),
+        ),
+        (
+            "phone",
+            Box::new(|a: &mut App| {
+                a.goto(Page::Phone);
+                a.phone = Some((
+                    serde_json::json!({"ok": true, "modem_state": "ONLINE", "sim": "PB_INIT_COMPLETE", "registration": {"reg_status": "home_3gpp", "act": "lte", "volte": 1}}),
+                    serde_json::json!({"messages": [{"from": "+3069xxxxxxxx", "ts": "2026-10-21 18:02", "text": "Θα αργήσω 10 λεπτά"}]}),
+                    serde_json::json!({"calls": []}),
+                ));
+            }),
+        ),
+        (
+            "camera",
+            Box::new(|a: &mut App| {
+                a.goto(Page::Camera);
+                a.cam.status = "starting the rear camera…".into();
+                a.cam_thumb = Some((vec![0x506070; 170 * 128], 170, 128));
+            }),
+        ),
+        (
+            "camera-video",
+            Box::new(|a: &mut App| {
+                a.goto(Page::Camera);
+                a.cam.mode = camera::Mode::Video;
+                a.cam.recording = Some(Instant::now() - Duration::from_secs(12));
+            }),
+        ),
+        (
+            "chat-key-popup",
+            Box::new(|a: &mut App| {
+                a.goto(Page::Chat);
+                a.input = "Hel".into();
+                a.layout();
+                let h = a
+                    .hits
+                    .iter()
+                    .find(|h| matches!(h.act, ui::Act::Key(1, 8)))
+                    .cloned();
+                a.pressed = h;
+            }),
+        ),
     ]
 }
 
@@ -1168,7 +1526,10 @@ fn bench(n: usize) {
         render_full(&mut a, &mut cv); // warm the glyph cache
         let mut v: Vec<f64> = (0..n).map(|_| render_full(&mut a, &mut cv)).collect();
         v.sort_by(|x, y| x.partial_cmp(y).unwrap());
-        out.insert(name.into(), serde_json::json!({"n": n, "p50_ms": v[n / 2], "max_ms": v[n - 1]}));
+        out.insert(
+            name.into(),
+            serde_json::json!({"n": n, "p50_ms": v[n / 2], "max_ms": v[n - 1]}),
+        );
     }
     // a scroll step: blit + strip, chat page
     let mut a = demo_app();
@@ -1191,6 +1552,9 @@ fn bench(n: usize) {
         v.push((now_us() - t) as f64 / 1000.0);
     }
     v.sort_by(|x, y| x.partial_cmp(y).unwrap());
-    out.insert("chat-scroll-step-24px".into(), serde_json::json!({"n": n, "p50_ms": v[n / 2], "max_ms": v[n - 1]}));
+    out.insert(
+        "chat-scroll-step-24px".into(),
+        serde_json::json!({"n": n, "p50_ms": v[n / 2], "max_ms": v[n - 1]}),
+    );
     println!("{}", serde_json::Value::Object(out));
 }

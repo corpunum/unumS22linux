@@ -105,8 +105,16 @@ impl Card {
         self.gen += 1;
         self.you = text.clone();
         self.reply.clear();
-        self.turn = Some(Turn { gen: self.gen, pid: None, text: text.clone(), status: Status::Thinking });
-        vec![CardCmd::Turn { gen: self.gen, text }]
+        self.turn = Some(Turn {
+            gen: self.gen,
+            pid: None,
+            text: text.clone(),
+            status: Status::Thinking,
+        });
+        vec![CardCmd::Turn {
+            gen: self.gen,
+            text,
+        }]
     }
 
     /// A typed utterance (ctl `agent_say`): same path as a transcript.
@@ -144,7 +152,9 @@ impl Card {
         match (v["state"].as_str(), v["event"].as_str()) {
             (Some("listening"), _) => self.listen = Some((gen, Listen::Listening)),
             (Some("transcribing"), _) => self.listen = Some((gen, Listen::Transcribing)),
-            (Some("error"), _) => self.note = format!("Listening failed: {}", v["error"].as_str().unwrap_or("?")),
+            (Some("error"), _) => {
+                self.note = format!("Listening failed: {}", v["error"].as_str().unwrap_or("?"))
+            }
             (_, Some("exit")) => {
                 self.listen = None;
                 self.listen_pid = None;
@@ -159,14 +169,20 @@ impl Card {
 
     /// An event line from `--card turn` (or the synthetic exit).
     pub fn turn_event(&mut self, gen: u64, v: &Value) -> Vec<CardCmd> {
-        let Some(t) = self.turn.as_mut().filter(|t| t.gen == gen) else { return vec![] };
+        let Some(t) = self.turn.as_mut().filter(|t| t.gen == gen) else {
+            return vec![];
+        };
         match (v["state"].as_str(), v["event"].as_str()) {
             (Some("waiting"), _) => t.status = Status::Waiting,
             (Some("thinking"), _) => t.status = Status::Thinking,
-            (Some("tool"), _) => t.status = Status::Tool(v["name"].as_str().unwrap_or("?").to_string()),
+            (Some("tool"), _) => {
+                t.status = Status::Tool(v["name"].as_str().unwrap_or("?").to_string())
+            }
             (Some("reply"), _) => self.reply = v["text"].as_str().unwrap_or("").to_string(),
             (Some("speaking"), _) => t.status = Status::Speaking,
-            (Some("error"), _) => self.note = format!("The agent failed: {}", v["error"].as_str().unwrap_or("?")),
+            (Some("error"), _) => {
+                self.note = format!("The agent failed: {}", v["error"].as_str().unwrap_or("?"))
+            }
             (_, Some("exit")) => {
                 self.turn = None;
                 if let Some(next) = self.queue.pop_front() {
@@ -195,14 +211,20 @@ impl Card {
         let n = self.queue.len();
         self.queue.clear();
         self.held = false;
-        self.note = if n > 0 { format!("Stopped (and {n} queued dropped)") } else { "Stopped".into() };
+        self.note = if n > 0 {
+            format!("Stopped (and {n} queued dropped)")
+        } else {
+            "Stopped".into()
+        };
         c
     }
 
     /// The card's status line.
     pub fn status_line(&self) -> String {
         let mut s = match (&self.listen, &self.turn) {
-            (Some((_, Listen::Starting)), None) | (Some((_, Listen::Listening)), None) => "Listening… release to send".to_string(),
+            (Some((_, Listen::Starting)), None) | (Some((_, Listen::Listening)), None) => {
+                "Listening… release to send".to_string()
+            }
             (Some((_, Listen::Transcribing)), None) => "Transcribing…".to_string(),
             (_, Some(t)) => match &t.status {
                 Status::Waiting => "Waiting for the voice button's turn…".to_string(),
@@ -210,10 +232,20 @@ impl Card {
                 Status::Tool(n) => format!("Running a tool: {n}"),
                 Status::Speaking => "Speaking…".to_string(),
             },
-            (None, None) => if self.note.is_empty() { "Hold to talk to your agent".to_string() } else { self.note.clone() },
+            (None, None) => {
+                if self.note.is_empty() {
+                    "Hold to talk to your agent".to_string()
+                } else {
+                    self.note.clone()
+                }
+            }
         };
         if let (Some(l), Some(_)) = (&self.listen, &self.turn) {
-            s.push_str(if l.1 == Listen::Transcribing { " · transcribing the next…" } else { " · listening for the next…" });
+            s.push_str(if l.1 == Listen::Transcribing {
+                " · transcribing the next…"
+            } else {
+                " · listening for the next…"
+            });
         }
         if !self.queue.is_empty() {
             s.push_str(&format!(" · queued ({})", self.queue.len()));
@@ -250,7 +282,13 @@ mod tests {
         assert_eq!(c.release(), vec![CardCmd::Release]);
         assert_eq!(c.status_line(), "Transcribing…");
         let cmds = c.listen_event(1, &json!({"transcript": " turn on the wifi "}));
-        assert_eq!(cmds, vec![CardCmd::Turn { gen: 2, text: "turn on the wifi".into() }]);
+        assert_eq!(
+            cmds,
+            vec![CardCmd::Turn {
+                gen: 2,
+                text: "turn on the wifi".into()
+            }]
+        );
         assert_eq!(c.you, "turn on the wifi");
         c.spawned(true, 2, 555);
         c.turn_event(2, &json!({"state": "tool", "name": "phone_device"}));
@@ -259,7 +297,9 @@ mod tests {
         c.turn_event(2, &json!({"state": "speaking"}));
         assert_eq!(c.status_line(), "Speaking…");
         assert_eq!(c.reply, "Wi-Fi is on.");
-        assert!(c.turn_event(2, &json!({"event": "exit", "code": 0})).is_empty());
+        assert!(c
+            .turn_event(2, &json!({"event": "exit", "code": 0}))
+            .is_empty());
         assert!(!c.active());
     }
 
@@ -269,10 +309,19 @@ mod tests {
         said(&mut c, "first");
         let g1 = c.turn.as_ref().unwrap().gen;
         c.spawned(true, g1, 700);
-        assert!(said(&mut c, "second").iter().all(|x| !matches!(x, CardCmd::Turn { .. })), "queued, not started");
+        assert!(
+            said(&mut c, "second")
+                .iter()
+                .all(|x| !matches!(x, CardCmd::Turn { .. })),
+            "queued, not started"
+        );
         said(&mut c, "third");
         assert_eq!(c.queue, ["second", "third"]);
-        assert!(c.status_line().ends_with("queued (2)"), "{}", c.status_line());
+        assert!(
+            c.status_line().ends_with("queued (2)"),
+            "{}",
+            c.status_line()
+        );
         // the running turn ends: the next one starts, in order
         let cmds = c.turn_event(g1, &json!({"event": "exit", "code": 0}));
         assert!(matches!(&cmds[..], [CardCmd::Turn { text, .. }] if text == "second"));
@@ -294,12 +343,23 @@ mod tests {
         let lg = c.listen.as_ref().unwrap().0;
         c.spawned(false, lg, 901);
         let cmds = c.stop();
-        assert_eq!(cmds, vec![CardCmd::Kill { pid: 900 }, CardCmd::CancelApi, CardCmd::Kill { pid: 901 }]);
+        assert_eq!(
+            cmds,
+            vec![
+                CardCmd::Kill { pid: 900 },
+                CardCmd::CancelApi,
+                CardCmd::Kill { pid: 901 }
+            ]
+        );
         assert!(!c.active() && c.queue.is_empty());
         assert!(c.note.starts_with("Stopped"));
         // late lines from the killed children change nothing
-        assert!(c.turn_event(g, &json!({"event": "exit", "code": -1})).is_empty());
-        assert!(c.listen_event(lg, &json!({"transcript": "third"})).is_empty());
+        assert!(c
+            .turn_event(g, &json!({"event": "exit", "code": -1}))
+            .is_empty());
+        assert!(c
+            .listen_event(lg, &json!({"transcript": "third"}))
+            .is_empty());
         assert!(!c.active());
         // STOP with nothing running is harmless
         assert!(Card::default().stop().is_empty());

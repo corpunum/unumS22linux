@@ -21,11 +21,19 @@ impl Haptic {
         if let Some(s) = &sock {
             let _ = s.set_nonblocking(true);
         }
-        Haptic { sock, path: path.into(), sent: 0, failed: 0 }
+        Haptic {
+            sock,
+            path: path.into(),
+            sent: 0,
+            failed: 0,
+        }
     }
 
     pub fn send(&mut self, what: &str) -> bool {
-        let ok = self.sock.as_ref().is_some_and(|s| s.send_to(what.as_bytes(), &self.path).is_ok());
+        let ok = self
+            .sock
+            .as_ref()
+            .is_some_and(|s| s.send_to(what.as_bytes(), &self.path).is_ok());
         if ok {
             self.sent += 1;
         } else {

@@ -51,13 +51,23 @@ impl Seat {
         for (i, b) in path.bytes().enumerate().take(107) {
             sa.sun_path[i] = b as _;
         }
-        let r = unsafe { libc::connect(fd, &sa as *const _ as *const libc::sockaddr, std::mem::size_of::<libc::sockaddr_un>() as u32) };
+        let r = unsafe {
+            libc::connect(
+                fd,
+                &sa as *const _ as *const libc::sockaddr,
+                std::mem::size_of::<libc::sockaddr_un>() as u32,
+            )
+        };
         if r != 0 {
             let e = io::Error::last_os_error();
             unsafe { libc::close(fd) };
             return Err(e);
         }
-        Ok(Seat { fd, buf: Vec::new(), fds: Vec::new() })
+        Ok(Seat {
+            fd,
+            buf: Vec::new(),
+            fds: Vec::new(),
+        })
     }
 
     fn send(&self, opcode: u16, payload: &[u8]) -> io::Result<()> {
@@ -100,13 +110,22 @@ impl Seat {
     pub fn read(&mut self, out: &mut Vec<SeatEvent>) -> io::Result<()> {
         let mut data = [0u8; 4096];
         let mut cbuf = [0u8; 256];
-        let mut iov = libc::iovec { iov_base: data.as_mut_ptr() as *mut _, iov_len: data.len() };
+        let mut iov = libc::iovec {
+            iov_base: data.as_mut_ptr() as *mut _,
+            iov_len: data.len(),
+        };
         let mut mh: libc::msghdr = unsafe { std::mem::zeroed() };
         mh.msg_iov = &mut iov;
         mh.msg_iovlen = 1;
         mh.msg_control = cbuf.as_mut_ptr() as *mut _;
         mh.msg_controllen = cbuf.len() as _;
-        let n = unsafe { libc::recvmsg(self.fd, &mut mh, libc::MSG_DONTWAIT | libc::MSG_CMSG_CLOEXEC) };
+        let n = unsafe {
+            libc::recvmsg(
+                self.fd,
+                &mut mh,
+                libc::MSG_DONTWAIT | libc::MSG_CMSG_CLOEXEC,
+            )
+        };
         if n == 0 {
             out.push(SeatEvent::Closed);
             return Ok(());
@@ -140,16 +159,32 @@ impl Seat {
             }
             let pl: Vec<u8> = self.buf[4..4 + size].to_vec();
             self.buf.drain(..4 + size);
-            let i32at = |o: usize| if pl.len() >= o + 4 { i32::from_ne_bytes([pl[o], pl[o + 1], pl[o + 2], pl[o + 3]]) } else { -1 };
+            let i32at = |o: usize| {
+                if pl.len() >= o + 4 {
+                    i32::from_ne_bytes([pl[o], pl[o + 1], pl[o + 2], pl[o + 3]])
+                } else {
+                    -1
+                }
+            };
             out.push(match op {
                 SERVER_ENABLE_SEAT => SeatEvent::Enable,
                 SERVER_DISABLE_SEAT => SeatEvent::Disable,
                 SERVER_SEAT_OPENED => {
-                    let name = if pl.len() > 2 { String::from_utf8_lossy(&pl[2..]).trim_end_matches('\0').to_string() } else { String::new() };
+                    let name = if pl.len() > 2 {
+                        String::from_utf8_lossy(&pl[2..])
+                            .trim_end_matches('\0')
+                            .to_string()
+                    } else {
+                        String::new()
+                    };
                     SeatEvent::Opened(name)
                 }
                 SERVER_DEVICE_OPENED => {
-                    let fd = if self.fds.is_empty() { -1 } else { self.fds.remove(0) };
+                    let fd = if self.fds.is_empty() {
+                        -1
+                    } else {
+                        self.fds.remove(0)
+                    };
                     SeatEvent::Device(i32at(0), fd)
                 }
                 SERVER_ERROR => SeatEvent::Error(i32at(0)),

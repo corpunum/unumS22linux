@@ -51,13 +51,23 @@ pub struct TouchDev {
 /// sec_touchscreen), else by multitouch capabilities. See config.rs.
 pub fn find_touchscreen() -> Option<String> {
     let c = crate::config::get();
-    crate::config::detect_touchscreen(std::path::Path::new("/sys/class/input"), std::path::Path::new("/dev/input"), &c.touch_device, &c.touch_name)
+    crate::config::detect_touchscreen(
+        std::path::Path::new("/sys/class/input"),
+        std::path::Path::new("/dev/input"),
+        &c.touch_device,
+        &c.touch_name,
+    )
 }
 
 impl TouchDev {
     pub fn open(path: &str, w: u32, h: u32) -> io::Result<TouchDev> {
         let c = std::ffi::CString::new(path).unwrap();
-        let fd = unsafe { libc::open(c.as_ptr(), libc::O_RDONLY | libc::O_NONBLOCK | libc::O_CLOEXEC) };
+        let fd = unsafe {
+            libc::open(
+                c.as_ptr(),
+                libc::O_RDONLY | libc::O_NONBLOCK | libc::O_CLOEXEC,
+            )
+        };
         if fd < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -66,13 +76,33 @@ impl TouchDev {
         unsafe { libc::ioctl(fd, req as _, &clk) };
         let gabs = |code: u16| -> (i32, i32) {
             let mut a = AbsInfo::default();
-            let req = (2u64 << 30) | ((std::mem::size_of::<AbsInfo>() as u64) << 16) | ((b'E' as u64) << 8) | (0x40 + code as u64);
+            let req = (2u64 << 30)
+                | ((std::mem::size_of::<AbsInfo>() as u64) << 16)
+                | ((b'E' as u64) << 8)
+                | (0x40 + code as u64);
             let r = unsafe { libc::ioctl(fd, req as _, &mut a) };
-            if r == 0 && a.maximum > a.minimum { (a.minimum, a.maximum) } else { (0, 4095) }
+            if r == 0 && a.maximum > a.minimum {
+                (a.minimum, a.maximum)
+            } else {
+                (0, 4095)
+            }
         };
         let xr = gabs(ABS_MT_POSITION_X);
         let yr = gabs(ABS_MT_POSITION_Y);
-        Ok(TouchDev { fd, xr, yr, w: w as i32, h: h as i32, slot: 0, ids: [-1; 10], x: 0, y: 0, was_down: false, moved: false, cancelled: false })
+        Ok(TouchDev {
+            fd,
+            xr,
+            yr,
+            w: w as i32,
+            h: h as i32,
+            slot: 0,
+            ids: [-1; 10],
+            x: 0,
+            y: 0,
+            was_down: false,
+            moved: false,
+            cancelled: false,
+        })
     }
 
     /// Drain pending events into `out`.
@@ -98,11 +128,15 @@ impl TouchDev {
                         }
                     }
                     (EV_ABS, ABS_MT_POSITION_X) if self.slot == 0 => {
-                        self.x = ((val - self.xr.0) as i64 * self.w as i64 / (self.xr.1 - self.xr.0 + 1) as i64) as i32;
+                        self.x = ((val - self.xr.0) as i64 * self.w as i64
+                            / (self.xr.1 - self.xr.0 + 1) as i64)
+                            as i32;
                         self.moved = true;
                     }
                     (EV_ABS, ABS_MT_POSITION_Y) if self.slot == 0 => {
-                        self.y = ((val - self.yr.0) as i64 * self.h as i64 / (self.yr.1 - self.yr.0 + 1) as i64) as i32;
+                        self.y = ((val - self.yr.0) as i64 * self.h as i64
+                            / (self.yr.1 - self.yr.0 + 1) as i64)
+                            as i32;
                         self.moved = true;
                     }
                     (EV_SYN, 0) => {

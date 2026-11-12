@@ -113,7 +113,12 @@ pub struct Timing {
 
 impl Default for Timing {
     fn default() -> Timing {
-        Timing { long_us: 1_000_000, power_long_us: 3_000_000, chord_us: 400_000, double_us: 400_000 }
+        Timing {
+            long_us: 1_000_000,
+            power_long_us: 3_000_000,
+            chord_us: 400_000,
+            double_us: 400_000,
+        }
     }
 }
 
@@ -145,7 +150,11 @@ pub struct Machine {
 
 impl Machine {
     pub fn new(timing: Timing) -> Machine {
-        Machine { timing, down: [None; 3], last_tap: None }
+        Machine {
+            timing,
+            down: [None; 3],
+            last_tap: None,
+        }
     }
 
     pub fn any_down(&self) -> bool {
@@ -157,14 +166,19 @@ impl Machine {
         if self.down[k.idx()].is_some() {
             return out; // autorepeat / duplicate
         }
-        let mut p = Press { t, ..Default::default() };
+        let mut p = Press {
+            t,
+            ..Default::default()
+        };
         if !ctx.display_on {
             out.push(Action::Wake);
             p.woke = true;
         }
         // chord: Power together with a volume key, either order, within chord_us
         let other = match k {
-            Key::Power => [Key::VolDown, Key::VolUp].into_iter().find(|o| self.chord_ok(*o, t)),
+            Key::Power => [Key::VolDown, Key::VolUp]
+                .into_iter()
+                .find(|o| self.chord_ok(*o, t)),
             _ => Some(Key::Power).filter(|o| self.chord_ok(*o, t)),
         };
         if let Some(o) = other {
@@ -177,13 +191,20 @@ impl Machine {
             }
             p.consumed = true;
             self.last_tap = None;
-            out.push(if vol == Key::VolDown { Action::Screenshot } else { Action::KeepAwake });
+            out.push(if vol == Key::VolDown {
+                Action::Screenshot
+            } else {
+                Action::KeepAwake
+            });
             self.down[k.idx()] = Some(p);
             return out;
         }
         match k {
             Key::Power => {
-                if self.last_tap.is_some_and(|lt| t.saturating_sub(lt) <= self.timing.double_us) {
+                if self
+                    .last_tap
+                    .is_some_and(|lt| t.saturating_sub(lt) <= self.timing.double_us)
+                {
                     p.consumed = true;
                     self.last_tap = None;
                     out.push(Action::Camera);
@@ -203,12 +224,16 @@ impl Machine {
     }
 
     fn chord_ok(&self, o: Key, t: u64) -> bool {
-        self.down[o.idx()].is_some_and(|p| !p.consumed && !p.long_fired && t.saturating_sub(p.t) <= self.timing.chord_us)
+        self.down[o.idx()].is_some_and(|p| {
+            !p.consumed && !p.long_fired && t.saturating_sub(p.t) <= self.timing.chord_us
+        })
     }
 
     pub fn release(&mut self, k: Key, t: u64, ctx: Ctx) -> Vec<Action> {
         let _ = ctx;
-        let Some(p) = self.down[k.idx()].take() else { return vec![] };
+        let Some(p) = self.down[k.idx()].take() else {
+            return vec![];
+        };
         let held = (t.saturating_sub(p.t) / 1000) as u32;
         let long = t.saturating_sub(p.t) >= self.timing.long_us;
         match k {
@@ -219,10 +244,18 @@ impl Machine {
                     // s22-buttons runs hooks/power-long (the safety path) itself at
                     // power_long_us; a 1 s .. 3 s hold does nothing but drop the hint
                     self.last_tap = None;
-                    if p.long_fired { vec![Action::PowerHintClear] } else { vec![] }
+                    if p.long_fired {
+                        vec![Action::PowerHintClear]
+                    } else {
+                        vec![]
+                    }
                 } else {
                     self.last_tap = Some(t);
-                    if p.woke { vec![] } else { vec![Action::Lock] }
+                    if p.woke {
+                        vec![]
+                    } else {
+                        vec![Action::Lock]
+                    }
                 }
             }
             Key::VolUp => {
@@ -245,7 +278,9 @@ impl Machine {
         let mut out = vec![];
         let long = self.timing.long_us;
         for k in [Key::VolUp, Key::VolDown, Key::Power] {
-            let Some(p) = self.down[k.idx()].as_mut() else { continue };
+            let Some(p) = self.down[k.idx()].as_mut() else {
+                continue;
+            };
             if p.consumed || p.long_fired || now.saturating_sub(p.t) < long {
                 continue;
             }
@@ -286,7 +321,11 @@ impl Machine {
 /// The speaker level 0-10 that applies now: /run/s22-say.level (kept across
 /// s22-keepalive's mute guard), else s22-say's default 4.
 pub fn read_level(path: &str) -> i32 {
-    std::fs::read_to_string(path).ok().and_then(|s| s.trim().parse().ok()).map(|l: i32| l.clamp(0, LEVELS)).unwrap_or(DEFAULT_LEVEL)
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .map(|l: i32| l.clamp(0, LEVELS))
+        .unwrap_or(DEFAULT_LEVEL)
 }
 
 /// CS35L41 'Digital PCM Volume': 0.125 dB/step, 817 = 0 dB, 0 = mute (as s22-buttons / s22-say).
@@ -323,7 +362,9 @@ pub fn apply_level(level: i32, playing: bool) -> io::Result<()> {
 /// A playback stream is running (s22-say, the voice loop, the assistant cue).
 pub fn playback_running() -> bool {
     for p in ["pcm100p", "pcm102p", "pcm6p"] {
-        if std::fs::read_to_string(format!("/proc/asound/card0/{p}/sub0/status")).is_ok_and(|s| s.contains("RUNNING")) {
+        if std::fs::read_to_string(format!("/proc/asound/card0/{p}/sub0/status"))
+            .is_ok_and(|s| s.contains("RUNNING"))
+        {
             return true;
         }
     }
@@ -333,7 +374,8 @@ pub fn playback_running() -> bool {
 // struct snd_ctl_elem_value on LP64: id (64 bytes) + indirect (4 + 4 pad) +
 // value union (1024) + reserved (128) = 1224 bytes.
 const ELEM_VALUE_SIZE: usize = 1224;
-const SNDRV_CTL_IOCTL_ELEM_WRITE: u64 = (3 << 30) | ((ELEM_VALUE_SIZE as u64) << 16) | ((b'U' as u64) << 8) | 0x13;
+const SNDRV_CTL_IOCTL_ELEM_WRITE: u64 =
+    (3 << 30) | ((ELEM_VALUE_SIZE as u64) << 16) | ((b'U' as u64) << 8) | 0x13;
 const SNDRV_CTL_ELEM_IFACE_MIXER: i32 = 2;
 
 fn elem_value(name: &str) -> [u8; ELEM_VALUE_SIZE] {
@@ -370,7 +412,14 @@ pub fn alsa_set(card: u32, name: &str, v: i64) -> io::Result<()> {
 
 /// Event nodes that report any of the three keys (by capabilities, not by name).
 pub fn find_key_nodes(sys: &str) -> Vec<String> {
-    let mut v: Vec<String> = std::fs::read_dir(sys).map(|d| d.flatten().map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.starts_with("event")).collect()).unwrap_or_default();
+    let mut v: Vec<String> = std::fs::read_dir(sys)
+        .map(|d| {
+            d.flatten()
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .filter(|n| n.starts_with("event"))
+                .collect()
+        })
+        .unwrap_or_default();
     v.sort();
     v.into_iter()
         .filter(|n| {
@@ -379,15 +428,27 @@ pub fn find_key_nodes(sys: &str) -> Vec<String> {
                 .unwrap_or(false)
         })
         // the touchscreen reports KEY_POWER-range bits too on some kernels: skip touch devices
-        .filter(|n| !std::fs::read_to_string(format!("{sys}/{n}/device/capabilities/abs")).map(|s| s.trim() != "0").unwrap_or(false))
+        .filter(|n| {
+            !std::fs::read_to_string(format!("{sys}/{n}/device/capabilities/abs"))
+                .map(|s| s.trim() != "0")
+                .unwrap_or(false)
+        })
         .map(|n| format!("/dev/input/{n}"))
         .collect()
 }
 
 /// sysfs capability bitmap: space-separated hex words, most significant first.
 pub fn caps_have(s: &str, codes: &[u16]) -> bool {
-    let words: Vec<u64> = s.split_whitespace().rev().filter_map(|w| u64::from_str_radix(w, 16).ok()).collect();
-    codes.iter().any(|&c| words.get(c as usize / 64).is_some_and(|w| w >> (c % 64) & 1 == 1))
+    let words: Vec<u64> = s
+        .split_whitespace()
+        .rev()
+        .filter_map(|w| u64::from_str_radix(w, 16).ok())
+        .collect();
+    codes.iter().any(|&c| {
+        words
+            .get(c as usize / 64)
+            .is_some_and(|w| w >> (c % 64) & 1 == 1)
+    })
 }
 
 pub struct KeyDev {
@@ -397,7 +458,12 @@ pub struct KeyDev {
 impl KeyDev {
     pub fn open(path: &str) -> io::Result<KeyDev> {
         let c = std::ffi::CString::new(path).unwrap();
-        let fd = unsafe { libc::open(c.as_ptr(), libc::O_RDONLY | libc::O_NONBLOCK | libc::O_CLOEXEC) };
+        let fd = unsafe {
+            libc::open(
+                c.as_ptr(),
+                libc::O_RDONLY | libc::O_NONBLOCK | libc::O_CLOEXEC,
+            )
+        };
         if fd < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -441,13 +507,20 @@ impl Drop for KeyDev {
 pub fn ptt_hold_mode(base: &str) -> bool {
     use std::os::unix::fs::PermissionsExt;
     std::path::Path::new(&format!("{base}/ptt-hold")).is_file()
-        && std::fs::metadata(format!("{base}/hooks/assistant")).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+        && std::fs::metadata(format!("{base}/hooks/assistant"))
+            .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
 }
 
 /// The release note s22-assistant waits for in hold mode (same format as s22-buttons).
 pub fn write_ptt_release(base: &str, held_ms: u32) -> io::Result<()> {
-    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs_f64();
-    write_atomic(&format!("{base}/ptt-release"), &format!("{{\"t\": {t:.3}, \"held_ms\": {held_ms}}}\n"))
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs_f64();
+    write_atomic(
+        &format!("{base}/ptt-release"),
+        &format!("{{\"t\": {t:.3}, \"held_ms\": {held_ms}}}\n"),
+    )
 }
 
 pub fn claim(on: bool) {
@@ -460,7 +533,11 @@ pub fn claim(on: bool) {
 
 /// Settings toggle, `<state>/buttons.json` {"enabled": true}. Default on.
 pub fn load_enabled(path: &str) -> bool {
-    std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()).and_then(|v| v["enabled"].as_bool()).unwrap_or(true)
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| v["enabled"].as_bool())
+        .unwrap_or(true)
 }
 
 pub fn save_enabled(path: &str, on: bool) {
@@ -471,8 +548,14 @@ pub fn save_enabled(path: &str, on: bool) {
 mod tests {
     use super::*;
 
-    const ON: Ctx = Ctx { display_on: true, ptt_hold: true };
-    const OFF: Ctx = Ctx { display_on: false, ptt_hold: true };
+    const ON: Ctx = Ctx {
+        display_on: true,
+        ptt_hold: true,
+    };
+    const OFF: Ctx = Ctx {
+        display_on: false,
+        ptt_hold: true,
+    };
     const MS: u64 = 1000;
 
     fn m() -> Machine {
@@ -494,19 +577,31 @@ mod tests {
         assert_eq!(b.press(Key::VolUp, 0, ON), vec![Action::Step(1)]);
         assert_eq!(b.next_deadline(), Some(1000 * MS));
         assert_eq!(b.tick(999 * MS, ON), vec![]);
-        assert_eq!(b.tick(1000 * MS, ON), vec![Action::Revert, Action::PttStart(1000)]);
+        assert_eq!(
+            b.tick(1000 * MS, ON),
+            vec![Action::Revert, Action::PttStart(1000)]
+        );
         assert_eq!(b.tick(1500 * MS, ON), vec![], "fires once");
         assert_eq!(b.next_deadline(), None);
-        assert_eq!(b.release(Key::VolUp, 4200 * MS, ON), vec![Action::PttRelease(4200)]);
+        assert_eq!(
+            b.release(Key::VolUp, 4200 * MS, ON),
+            vec![Action::PttRelease(4200)]
+        );
     }
 
     #[test]
     fn volume_up_hold_without_hold_mode_runs_the_assistant_on_release() {
         let mut b = m();
-        let c = Ctx { display_on: true, ptt_hold: false };
+        let c = Ctx {
+            display_on: true,
+            ptt_hold: false,
+        };
         b.press(Key::VolUp, 0, c);
         assert_eq!(b.tick(1100 * MS, c), vec![Action::Revert]);
-        assert_eq!(b.release(Key::VolUp, 1300 * MS, c), vec![Action::Assistant(1300)]);
+        assert_eq!(
+            b.release(Key::VolUp, 1300 * MS, c),
+            vec![Action::Assistant(1300)]
+        );
     }
 
     #[test]
@@ -530,7 +625,10 @@ mod tests {
         assert_eq!(b.press(Key::Power, 0, OFF), vec![Action::Wake]);
         assert_eq!(b.release(Key::Power, 120 * MS, ON), vec![]);
         let mut b = m();
-        assert_eq!(b.press(Key::VolDown, 0, OFF), vec![Action::Wake, Action::Step(-1)]);
+        assert_eq!(
+            b.press(Key::VolDown, 0, OFF),
+            vec![Action::Wake, Action::Step(-1)]
+        );
     }
 
     #[test]
@@ -542,7 +640,11 @@ mod tests {
         assert_eq!(b.tick(1000 * MS, ON), vec![Action::PowerHint]);
         assert_eq!(b.tick(2000 * MS, ON), vec![], "hint only once");
         assert_eq!(b.next_deadline(), None);
-        assert_eq!(b.release(Key::Power, 3200 * MS, ON), vec![Action::PowerHintClear], "no lock: s22-buttons runs hooks/power-long at 3 s");
+        assert_eq!(
+            b.release(Key::Power, 3200 * MS, ON),
+            vec![Action::PowerHintClear],
+            "no lock: s22-buttons runs hooks/power-long at 3 s"
+        );
         // and a following quick press is not a double press
         assert_eq!(b.press(Key::Power, 3400 * MS, ON), vec![]);
     }
@@ -552,8 +654,16 @@ mod tests {
         let mut b = m();
         b.press(Key::Power, 0, ON);
         assert_eq!(b.tick(1000 * MS, ON), vec![Action::PowerHint]);
-        assert_eq!(b.release(Key::Power, 1500 * MS, ON), vec![Action::PowerHintClear], "no lock, no classic shell");
-        assert_eq!(b.press(Key::Power, 1700 * MS, ON), vec![], "not a double press");
+        assert_eq!(
+            b.release(Key::Power, 1500 * MS, ON),
+            vec![Action::PowerHintClear],
+            "no lock, no classic shell"
+        );
+        assert_eq!(
+            b.press(Key::Power, 1700 * MS, ON),
+            vec![],
+            "not a double press"
+        );
     }
 
     #[test]
@@ -568,9 +678,16 @@ mod tests {
     fn power_then_volume_down_is_a_screenshot_and_nothing_else() {
         let mut b = m();
         assert_eq!(b.press(Key::Power, 0, ON), vec![]);
-        assert_eq!(b.press(Key::VolDown, 150 * MS, ON), vec![Action::Screenshot]);
+        assert_eq!(
+            b.press(Key::VolDown, 150 * MS, ON),
+            vec![Action::Screenshot]
+        );
         assert_eq!(b.release(Key::VolDown, 300 * MS, ON), vec![]);
-        assert_eq!(b.release(Key::Power, 320 * MS, ON), vec![], "no lock after a chord");
+        assert_eq!(
+            b.release(Key::Power, 320 * MS, ON),
+            vec![],
+            "no lock after a chord"
+        );
         assert_eq!(b.tick(5000 * MS, ON), vec![]);
     }
 
@@ -578,7 +695,10 @@ mod tests {
     fn volume_down_then_power_reverts_the_step() {
         let mut b = m();
         assert_eq!(b.press(Key::VolDown, 0, ON), vec![Action::Step(-1)]);
-        assert_eq!(b.press(Key::Power, 200 * MS, ON), vec![Action::Revert, Action::Screenshot]);
+        assert_eq!(
+            b.press(Key::Power, 200 * MS, ON),
+            vec![Action::Revert, Action::Screenshot]
+        );
         // held past the hold threshold: still no mute, no power-long, no lock
         assert_eq!(b.tick(1500 * MS, ON), vec![]);
         assert_eq!(b.release(Key::Power, 1600 * MS, ON), vec![]);
@@ -599,11 +719,18 @@ mod tests {
     fn chord_window_is_400_ms() {
         let mut b = m();
         b.press(Key::Power, 0, ON);
-        assert_eq!(b.press(Key::VolDown, 401 * MS, ON), vec![Action::Step(-1)], "too late: two single presses");
+        assert_eq!(
+            b.press(Key::VolDown, 401 * MS, ON),
+            vec![Action::Step(-1)],
+            "too late: two single presses"
+        );
         assert_eq!(b.release(Key::Power, 450 * MS, ON), vec![Action::Lock]);
         let mut b = m();
         b.press(Key::VolUp, 0, ON);
-        assert_eq!(b.press(Key::Power, 400 * MS, ON), vec![Action::Revert, Action::KeepAwake]);
+        assert_eq!(
+            b.press(Key::Power, 400 * MS, ON),
+            vec![Action::Revert, Action::KeepAwake]
+        );
     }
 
     #[test]
@@ -613,7 +740,10 @@ mod tests {
         b.tick(1000 * MS, ON);
         assert_eq!(b.press(Key::Power, 1100 * MS, ON), vec![]);
         assert_eq!(b.release(Key::Power, 1200 * MS, ON), vec![Action::Lock]);
-        assert_eq!(b.release(Key::VolUp, 3000 * MS, ON), vec![Action::PttRelease(3000)]);
+        assert_eq!(
+            b.release(Key::VolUp, 3000 * MS, ON),
+            vec![Action::PttRelease(3000)]
+        );
     }
 
     #[test]
@@ -621,7 +751,10 @@ mod tests {
         let mut b = m();
         b.press(Key::Power, 0, ON);
         assert_eq!(b.release(Key::Power, 100 * MS, ON), vec![Action::Lock]);
-        assert_eq!(b.press(Key::Power, 350 * MS, OFF), vec![Action::Wake, Action::Camera]);
+        assert_eq!(
+            b.press(Key::Power, 350 * MS, OFF),
+            vec![Action::Wake, Action::Camera]
+        );
         assert_eq!(b.release(Key::Power, 450 * MS, ON), vec![]);
         // a third press is a new single press
         assert_eq!(b.press(Key::Power, 600 * MS, ON), vec![]);

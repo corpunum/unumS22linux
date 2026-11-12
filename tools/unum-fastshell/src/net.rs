@@ -27,17 +27,35 @@ pub struct Prompt {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ChatEvent {
-    Delta { token: String, replace: bool },
+    Delta {
+        token: String,
+        replace: bool,
+    },
     Thinking,
     ToolStarted(String),
-    ToolFinished { name: String, ok: bool },
+    ToolFinished {
+        name: String,
+        ok: bool,
+    },
     Prompt(Prompt),
-    Snapshot { done: bool, pending: bool, reply: Option<String>, live: Option<String> },
-    TurnEnd { reply: Option<String> },
+    Snapshot {
+        done: bool,
+        pending: bool,
+        reply: Option<String>,
+        live: Option<String>,
+    },
+    TurnEnd {
+        reply: Option<String>,
+    },
 }
 
 pub enum Msg {
-    Agent { model: Option<String>, health: Option<String>, sessions: Option<(usize, usize)>, running: Option<usize> },
+    Agent {
+        model: Option<String>,
+        health: Option<String>,
+        sessions: Option<(usize, usize)>,
+        running: Option<usize>,
+    },
     Device(Value),
     Chat(u64, ChatEvent),
     ChatReply(u64, Result<Option<String>, String>),
@@ -94,8 +112,13 @@ fn split_url(url: &str) -> Option<(String, String)> {
 
 fn connect(host: &str, timeout: Duration) -> Result<TcpStream, String> {
     use std::net::ToSocketAddrs;
-    let addr = host.to_socket_addrs().map_err(|e| e.to_string())?.next().ok_or("no address")?;
-    let s = TcpStream::connect_timeout(&addr, timeout.min(Duration::from_secs(5))).map_err(|e| e.to_string())?;
+    let addr = host
+        .to_socket_addrs()
+        .map_err(|e| e.to_string())?
+        .next()
+        .ok_or("no address")?;
+    let s = TcpStream::connect_timeout(&addr, timeout.min(Duration::from_secs(5)))
+        .map_err(|e| e.to_string())?;
     s.set_read_timeout(Some(timeout)).ok();
     s.set_write_timeout(Some(Duration::from_secs(10))).ok();
     s.set_nodelay(true).ok();
@@ -103,9 +126,13 @@ fn connect(host: &str, timeout: Duration) -> Result<TcpStream, String> {
 }
 
 fn request_head(method: &str, host: &str, path: &str, body: Option<&str>) -> String {
-    let mut h = format!("{method} {path} HTTP/1.0\r\nHost: {host}\r\nConnection: close\r\nAccept: */*\r\n");
+    let mut h =
+        format!("{method} {path} HTTP/1.0\r\nHost: {host}\r\nConnection: close\r\nAccept: */*\r\n");
     if let Some(b) = body {
-        h.push_str(&format!("Content-Type: application/json\r\nContent-Length: {}\r\n", b.len()));
+        h.push_str(&format!(
+            "Content-Type: application/json\r\nContent-Length: {}\r\n",
+            b.len()
+        ));
     }
     h.push_str("\r\n");
     if let Some(b) = body {
@@ -119,7 +146,11 @@ fn find_head_end(b: &[u8]) -> Option<usize> {
 }
 
 fn parse_head(h: &str) -> (u16, bool) {
-    let status = h.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let status = h
+        .split_whitespace()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
     let chunked = h.lines().any(|l| {
         let l = l.to_ascii_lowercase();
         l.starts_with("transfer-encoding:") && l.contains("chunked")
@@ -155,9 +186,12 @@ impl Dechunk {
             while self.buf.first() == Some(&b'\r') || self.buf.first() == Some(&b'\n') {
                 self.buf.remove(0);
             }
-            let Some(i) = self.buf.windows(2).position(|w| w == b"\r\n") else { return };
+            let Some(i) = self.buf.windows(2).position(|w| w == b"\r\n") else {
+                return;
+            };
             let line = String::from_utf8_lossy(&self.buf[..i]).to_string();
-            let size = usize::from_str_radix(line.split(';').next().unwrap_or("").trim(), 16).unwrap_or(0);
+            let size =
+                usize::from_str_radix(line.split(';').next().unwrap_or("").trim(), 16).unwrap_or(0);
             self.buf.drain(..i + 2);
             if size == 0 {
                 self.done = true;
@@ -169,11 +203,17 @@ impl Dechunk {
 }
 
 /// One request, whole body.
-pub fn http(method: &str, url: &str, body: Option<&Value>, timeout: Duration) -> Result<(u16, Value), String> {
+pub fn http(
+    method: &str,
+    url: &str,
+    body: Option<&Value>,
+    timeout: Duration,
+) -> Result<(u16, Value), String> {
     let (host, path) = split_url(url).ok_or("bad url")?;
     let mut s = connect(&host, timeout)?;
     let b = body.map(|v| v.to_string());
-    s.write_all(request_head(method, &host, &path, b.as_deref()).as_bytes()).map_err(|e| e.to_string())?;
+    s.write_all(request_head(method, &host, &path, b.as_deref()).as_bytes())
+        .map_err(|e| e.to_string())?;
     let mut raw = Vec::new();
     s.read_to_end(&mut raw).map_err(|e| e.to_string())?;
     let he = find_head_end(&raw).ok_or("no http header")?;
@@ -191,11 +231,18 @@ pub fn http(method: &str, url: &str, body: Option<&Value>, timeout: Duration) ->
 
 pub fn get(url: &str, timeout_s: u64) -> Result<Value, String> {
     let (st, v) = http("GET", url, None, Duration::from_secs(timeout_s))?;
-    if (200..300).contains(&st) { Ok(v) } else { Err(error_text(st, &v)) }
+    if (200..300).contains(&st) {
+        Ok(v)
+    } else {
+        Err(error_text(st, &v))
+    }
 }
 
 pub fn error_text(status: u16, body: &Value) -> String {
-    let msg = body["error"].as_str().or(body["message"].as_str()).unwrap_or("");
+    let msg = body["error"]
+        .as_str()
+        .or(body["message"].as_str())
+        .unwrap_or("");
     match body["code"].as_str() {
         Some(code) => format!("{code}: {msg}"),
         None if msg.is_empty() => format!("HTTP {status}"),
@@ -218,7 +265,8 @@ pub struct SseParser {
 
 impl SseParser {
     pub fn feed(&mut self, bytes: &[u8]) -> Vec<RawEvent> {
-        self.buf.extend(bytes.iter().copied().filter(|b| *b != b'\r'));
+        self.buf
+            .extend(bytes.iter().copied().filter(|b| *b != b'\r'));
         let mut out = vec![];
         while let Some(end) = self.buf.windows(2).position(|w| w == b"\n\n") {
             let block: Vec<u8> = self.buf.drain(..end + 2).collect();
@@ -238,7 +286,10 @@ impl SseParser {
                 }
             }
             if !data.is_empty() {
-                out.push(RawEvent { event, data: data.join("\n") });
+                out.push(RawEvent {
+                    event,
+                    data: data.join("\n"),
+                });
             }
         }
         out
@@ -253,24 +304,47 @@ fn text(v: &Value) -> Option<String> {
 pub fn decode(raw: &RawEvent) -> Option<ChatEvent> {
     let v: Value = serde_json::from_str(&raw.data).ok()?;
     Some(match raw.event.as_deref() {
-        Some("content_delta") => ChatEvent::Delta { token: text(&v["token"])?, replace: v["final"] == true },
-        Some("reasoning_start") | Some("reasoning_delta") | Some("agent_thinking") => ChatEvent::Thinking,
+        Some("content_delta") => ChatEvent::Delta {
+            token: text(&v["token"])?,
+            replace: v["final"] == true,
+        },
+        Some("reasoning_start") | Some("reasoning_delta") | Some("agent_thinking") => {
+            ChatEvent::Thinking
+        }
         Some("tool_call_started") => ChatEvent::ToolStarted(text(&v["tool"])?),
-        Some("tool_call_completed") => ChatEvent::ToolFinished { name: text(&v["tool"])?, ok: v["resultOk"] != false },
-        Some("tool_call_failed") => ChatEvent::ToolFinished { name: text(&v["tool"])?, ok: false },
+        Some("tool_call_completed") => ChatEvent::ToolFinished {
+            name: text(&v["tool"])?,
+            ok: v["resultOk"] != false,
+        },
+        Some("tool_call_failed") => ChatEvent::ToolFinished {
+            name: text(&v["tool"])?,
+            ok: false,
+        },
         Some("user_prompt_requested") => ChatEvent::Prompt(Prompt {
             id: text(&v["promptId"])?,
             header: text(&v["header"]).unwrap_or_default(),
             question: text(&v["question"])?,
             options: v["options"]
                 .as_array()
-                .map(|a| a.iter().filter_map(|o| text(o).or_else(|| text(&o["label"]))).take(6).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|o| text(o).or_else(|| text(&o["label"])))
+                        .take(6)
+                        .collect()
+                })
                 .unwrap_or_default(),
         }),
-        Some("turn_end") => ChatEvent::TurnEnd { reply: text(&v["reply"]) },
+        Some("turn_end") => ChatEvent::TurnEnd {
+            reply: text(&v["reply"]),
+        },
         Some("turn_cancelled") => ChatEvent::TurnEnd { reply: None },
         Some(_) => return None,
-        None => ChatEvent::Snapshot { done: v["done"] == true, pending: v["pending"] == true, reply: text(&v["completed"]["reply"]), live: text(&v["liveContent"]) },
+        None => ChatEvent::Snapshot {
+            done: v["done"] == true,
+            pending: v["pending"] == true,
+            reply: text(&v["completed"]["reply"]),
+            live: text(&v["liveContent"]),
+        },
     })
 }
 
@@ -287,12 +361,23 @@ pub fn iso_utc(t: SystemTime) -> String {
     let day = doy - (153 * mp + 2) / 5 + 1;
     let month = if mp < 10 { mp + 3 } else { mp - 9 };
     let year = yoe + era * 400 + i64::from(month <= 2);
-    format!("{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{ms:03}Z", rem / 3600, rem % 3600 / 60, rem % 60)
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{ms:03}Z",
+        rem / 3600,
+        rem % 3600 / 60,
+        rem % 60
+    )
 }
 
 fn urlenc(s: &str) -> String {
     s.bytes()
-        .map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") })
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {
+                (b as char).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
         .collect()
 }
 
@@ -324,7 +409,12 @@ pub fn chat_turn(net: &Net, id: u64, prompt: String) {
         }
     });
     net.spawn(move |n| {
-        let r = http("POST", &format!("{}/api/chat", n.api), Some(&json!({"sessionId": n.session, "message": prompt})), Duration::from_secs(900));
+        let r = http(
+            "POST",
+            &format!("{}/api/chat", n.api),
+            Some(&json!({"sessionId": n.session, "message": prompt})),
+            Duration::from_secs(900),
+        );
         let out = match r {
             Err(e) => Err(e),
             Ok((st, body)) => {
@@ -333,7 +423,10 @@ pub fn chat_turn(net: &Net, id: u64, prompt: String) {
                 } else if !(200..300).contains(&st) {
                     Err(error_text(st, &body))
                 } else {
-                    Ok(body["reply"].as_str().or(body["content"].as_str()).map(String::from))
+                    Ok(body["reply"]
+                        .as_str()
+                        .or(body["content"].as_str())
+                        .map(String::from))
                 }
             }
         };
@@ -342,10 +435,16 @@ pub fn chat_turn(net: &Net, id: u64, prompt: String) {
 }
 
 fn stream_once(n: &Net, id: u64, since: &str) -> Result<(), String> {
-    let url = format!("{}/api/chat/stream?sessionId={}&since={}", n.api, urlenc(&n.session), urlenc(since));
+    let url = format!(
+        "{}/api/chat/stream?sessionId={}&since={}",
+        n.api,
+        urlenc(&n.session),
+        urlenc(since)
+    );
     let (host, path) = split_url(&url).ok_or("bad url")?;
     let mut s = connect(&host, Duration::from_secs(1))?;
-    s.write_all(request_head("GET", &host, &path, None).as_bytes()).map_err(|e| e.to_string())?;
+    s.write_all(request_head("GET", &host, &path, None).as_bytes())
+        .map_err(|e| e.to_string())?;
     let mut head = Vec::new();
     let mut started = false;
     let mut parser = SseParser::default();
@@ -362,13 +461,20 @@ fn stream_once(n: &Net, id: u64, since: &str) -> Result<(), String> {
         let k = match s.read(&mut buf) {
             Ok(0) => return Ok(()),
             Ok(k) => k,
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => continue,
+            Err(e)
+                if e.kind() == std::io::ErrorKind::WouldBlock
+                    || e.kind() == std::io::ErrorKind::TimedOut =>
+            {
+                continue
+            }
             Err(e) => return Err(e.to_string()),
         };
         let mut data: Vec<u8>;
         if !started {
             head.extend_from_slice(&buf[..k]);
-            let Some(he) = find_head_end(&head) else { continue };
+            let Some(he) = find_head_end(&head) else {
+                continue;
+            };
             let (st, chunked) = parse_head(&String::from_utf8_lossy(&head[..he]));
             if !(200..300).contains(&st) {
                 return Err(format!("stream HTTP {st}"));
@@ -399,28 +505,61 @@ pub fn model_label(raw: &str) -> String {
         return rest.to_string();
     }
     if let Some(rest) = raw.strip_prefix("llama-cpp-local/") {
-        return format!("local {}", rest.trim_start_matches('/').trim_start_matches("models/"));
+        return format!(
+            "local {}",
+            rest.trim_start_matches('/').trim_start_matches("models/")
+        );
     }
     raw.to_string()
 }
 
 pub fn refresh_agent(net: &Net) {
     net.spawn(|n| {
-        let model = get(&format!("{}/api/model/current", n.api), 6).ok().and_then(|m| m["model"].as_str().map(model_label));
+        let model = get(&format!("{}/api/model/current", n.api), 6)
+            .ok()
+            .and_then(|m| m["model"].as_str().map(model_label));
         let health = match get(&format!("{}/api/health", n.api), 6) {
-            Ok(h) => Some(if h["healthy"] == true { "healthy".to_string() } else { h["health"]["status"].as_str().unwrap_or("degraded").to_string() }),
+            Ok(h) => Some(if h["healthy"] == true {
+                "healthy".to_string()
+            } else {
+                h["health"]["status"]
+                    .as_str()
+                    .unwrap_or("degraded")
+                    .to_string()
+            }),
             Err(_) => Some("down".to_string()),
         };
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
-        let sessions = get(&format!("{}/api/sessions?limit=20", n.api), 6).ok().map(|v| {
-            let ss = v["sessions"].as_array().cloned().unwrap_or_default();
-            let recent = ss.iter().filter(|s| s["lastMessageAt"].as_str().and_then(parse_iso).is_some_and(|t| now - t < 3600)).count();
-            (recent, ss.len())
-        });
-        let running = get(&format!("{}/api/missions", n.api), 6)
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        let sessions = get(&format!("{}/api/sessions?limit=20", n.api), 6)
             .ok()
-            .map(|v| v["missions"].as_array().map(|a| a.iter().filter(|m| m["status"] == "running").count()).unwrap_or(0));
-        n.send(Msg::Agent { model, health, sessions, running });
+            .map(|v| {
+                let ss = v["sessions"].as_array().cloned().unwrap_or_default();
+                let recent = ss
+                    .iter()
+                    .filter(|s| {
+                        s["lastMessageAt"]
+                            .as_str()
+                            .and_then(parse_iso)
+                            .is_some_and(|t| now - t < 3600)
+                    })
+                    .count();
+                (recent, ss.len())
+            });
+        let running = get(&format!("{}/api/missions", n.api), 6).ok().map(|v| {
+            v["missions"]
+                .as_array()
+                .map(|a| a.iter().filter(|m| m["status"] == "running").count())
+                .unwrap_or(0)
+        });
+        n.send(Msg::Agent {
+            model,
+            health,
+            sessions,
+            running,
+        });
     });
     net.spawn(|n| {
         if let Ok(v) = get(&format!("{}/v1/status", n.s22d), 8) {
@@ -446,10 +585,16 @@ pub fn radio_badge(v: &Value, now: f64) -> Option<&'static str> {
     if !(rs.starts_with("home") || rs.starts_with("roam")) {
         return None;
     }
-    let nr_recent = v["nr_last_seen"].as_f64().is_some_and(|t| (now - t).abs() < 120.0);
+    let nr_recent = v["nr_last_seen"]
+        .as_f64()
+        .is_some_and(|t| (now - t).abs() < 120.0);
     match reg["act"].as_str().unwrap_or("") {
         "nr" | "5g" | "nr5g" => Some("5G"),
-        "lte" | "lte_ca" | "4g" => Some(if v["radio"]["nr_nsa"] == true || nr_recent { "5G" } else { "4G" }),
+        "lte" | "lte_ca" | "4g" => Some(if v["radio"]["nr_nsa"] == true || nr_recent {
+            "5G"
+        } else {
+            "4G"
+        }),
         "umts" | "wcdma" | "hspa" | "3g" => Some("3G"),
         "gsm" | "gprs" | "edge" | "2g" => Some("2G"),
         _ => None,
@@ -463,8 +608,19 @@ pub fn parse_iso(s: &str) -> Option<i64> {
         return None;
     }
     let n = |a: usize, l: usize| s.get(a..a + l)?.parse::<i64>().ok();
-    let (y, mo, d, h, mi, se) = (n(0, 4)?, n(5, 2)?, n(8, 2)?, n(11, 2)?, n(14, 2)?, n(17, 2)?);
-    let (y2, m2) = if mo <= 2 { (y - 1, mo + 9) } else { (y, mo - 3) };
+    let (y, mo, d, h, mi, se) = (
+        n(0, 4)?,
+        n(5, 2)?,
+        n(8, 2)?,
+        n(11, 2)?,
+        n(14, 2)?,
+        n(17, 2)?,
+    );
+    let (y2, m2) = if mo <= 2 {
+        (y - 1, mo + 9)
+    } else {
+        (y, mo - 3)
+    };
     let era = y2.div_euclid(400);
     let yoe = y2 - era * 400;
     let doy = (153 * m2 + 2) / 5 + d - 1;
@@ -475,7 +631,10 @@ pub fn parse_iso(s: &str) -> Option<i64> {
 
 pub fn fetch_history(net: &Net) {
     net.spawn(|n| {
-        if let Ok(v) = get(&format!("{}/api/sessions/{}?limit=30", n.api, urlenc(&n.session)), 10) {
+        if let Ok(v) = get(
+            &format!("{}/api/sessions/{}?limit=30", n.api, urlenc(&n.session)),
+            10,
+        ) {
             let lines: Vec<(bool, String)> = v["messages"]
                 .as_array()
                 .map(|a| {
@@ -500,7 +659,8 @@ pub fn fetch_history(net: &Net) {
 
 pub fn fetch_phone(net: &Net) {
     net.spawn(|n| {
-        let st = get(&format!("{}/status", n.phoned), 20).unwrap_or_else(|e| json!({"ok": false, "error": e}));
+        let st = get(&format!("{}/status", n.phoned), 20)
+            .unwrap_or_else(|e| json!({"ok": false, "error": e}));
         let sms = get(&format!("{}/sms/inbox?limit=20", n.phoned), 20).unwrap_or(Value::Null);
         let calls = get(&format!("{}/calls", n.phoned), 20).unwrap_or(Value::Null);
         n.send(Msg::Phone(st, sms, calls));
@@ -509,13 +669,23 @@ pub fn fetch_phone(net: &Net) {
 
 pub fn answer_prompt(net: &Net, id: String, value: String) {
     net.spawn(move |n| {
-        let _ = http("POST", &format!("{}/api/chat/answer", n.api), Some(&json!({"promptId": id, "value": value, "selected": [value]})), Duration::from_secs(10));
+        let _ = http(
+            "POST",
+            &format!("{}/api/chat/answer", n.api),
+            Some(&json!({"promptId": id, "value": value, "selected": [value]})),
+            Duration::from_secs(10),
+        );
     });
 }
 
 pub fn cancel_turn(net: &Net) {
     net.spawn(|n| {
-        let _ = http("POST", &format!("{}/api/chat/cancel", n.api), Some(&json!({"sessionId": n.session})), Duration::from_secs(10));
+        let _ = http(
+            "POST",
+            &format!("{}/api/chat/cancel", n.api),
+            Some(&json!({"sessionId": n.session})),
+            Duration::from_secs(10),
+        );
     });
 }
 
@@ -560,14 +730,34 @@ mod tests {
         assert!(p.feed(b"event: content_delta\r\ndata: {\"tok").is_empty());
         let v = p.feed("en\":\"Γειά\"}\r\n\r\n".as_bytes());
         assert_eq!(v.len(), 1);
-        assert_eq!(decode(&v[0]), Some(ChatEvent::Delta { token: "Γειά".into(), replace: false }));
+        assert_eq!(
+            decode(&v[0]),
+            Some(ChatEvent::Delta {
+                token: "Γειά".into(),
+                replace: false
+            })
+        );
     }
 
     #[test]
     fn snapshot_and_prompt_decode() {
-        let s = RawEvent { event: None, data: r#"{"done":true,"completed":{"reply":"ok"}}"#.into() };
-        assert_eq!(decode(&s), Some(ChatEvent::Snapshot { done: true, pending: false, reply: Some("ok".into()), live: None }));
-        let p = RawEvent { event: Some("user_prompt_requested".into()), data: r#"{"promptId":"p1","question":"Q?","options":["a",{"label":"b"}]}"#.into() };
+        let s = RawEvent {
+            event: None,
+            data: r#"{"done":true,"completed":{"reply":"ok"}}"#.into(),
+        };
+        assert_eq!(
+            decode(&s),
+            Some(ChatEvent::Snapshot {
+                done: true,
+                pending: false,
+                reply: Some("ok".into()),
+                live: None
+            })
+        );
+        let p = RawEvent {
+            event: Some("user_prompt_requested".into()),
+            data: r#"{"promptId":"p1","question":"Q?","options":["a",{"label":"b"}]}"#.into(),
+        };
         match decode(&p) {
             Some(ChatEvent::Prompt(pr)) => assert_eq!(pr.options, vec!["a", "b"]),
             other => panic!("{other:?}"),
