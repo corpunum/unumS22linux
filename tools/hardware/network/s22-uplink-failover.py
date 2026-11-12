@@ -678,15 +678,16 @@ def selftest(cfg: dict, seconds: int) -> tuple[dict, int]:
     samples: list[dict] = []
     share_ok, error, main_ip = False, None, None
     try:
+        # The main line's address first, before the phone shares: it does not depend on the share.
+        r = run(['ip', '-j', 'rule', 'show', 'priority', str(RULE_PRIO)], check=False)
+        try:
+            marked = bool(json.loads(r.stdout or '[]'))
+        except ValueError:
+            marked = False
+        m = first_trace(cfg, MARK if marked else 0)   # over table 178 only when its rule exists
+        main_ip = m['ip'] if m and m['ip'] else None
         share_ok, _ = share(cfg, True)
         if share_ok:
-            r = run(['ip', '-j', 'rule', 'show', 'priority', str(RULE_PRIO)], check=False)
-            try:
-                marked = bool(json.loads(r.stdout or '[]'))
-            except ValueError:
-                marked = False
-            m = first_trace(cfg, MARK if marked else 0)   # over table 178 only when its rule exists
-            main_ip = m['ip'] if m and m['ip'] else None
             ensure_via_path(cfg, ST_MARK, ST_TABLE, ST_RULE_PRIO)
             start = now()
             for i in range(seconds // 5 + 1):

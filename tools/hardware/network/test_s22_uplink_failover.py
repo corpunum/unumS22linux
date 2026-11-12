@@ -962,6 +962,12 @@ class Selftest(Base):
         self.assertEqual(self.http_calls, [])
         self.assertEqual(self.posts[-1][2], {'on': False})
 
+    def test_main_ip_is_learned_even_when_the_phone_refuses_the_share(self):
+        self.post_result = (403, {'ok': False})
+        res, rc = self.run_self()
+        self.assertEqual((rc, res['share_ok'], res['main_ip_known']), (1, False, True))
+        self.assertEqual(len(self.main_calls), 1)
+
     def test_fewer_than_three_samples_is_not_ok(self):
         res, _ = self.m.selftest(self.cfg, 5)
         self.assertEqual(len(res['samples']), 2)
