@@ -103,7 +103,7 @@ pub fn defs() -> Vec<DevCap> {
         c("screen_timeout.get", Read, 10, "Screen-off timeouts in seconds (unlocked, locked; 0 = never).", json!({}), &[]),
         c("screen_timeout.set", Set, 10, "Set the screen-off timeout: value = seconds while unlocked, locked = seconds on the lock screen (0-3600, 0 = never).", json!({"value": {"type": "integer", "minimum": 0, "maximum": 3600}, "locked": {"type": "integer", "minimum": 0, "maximum": 3600}}), &[]),
         c("camera.capture", Action, 330, "Take a photo (sensor rear or front, default rear); it lands in the gallery.", json!({"sensor": {"type": "string", "enum": ["rear", "front"]}}), &[]),
-        c("speak", Action, 200, "Say a text out loud on the phone's speaker (the owner's voice), then back to the resting mute.", json!({"text": {"type": "string", "minLength": 1, "maxLength": 1000}}), &["text"]),
+        c("speak", Action, 200, "Say a text out loud on the phone's speaker (the owner's voice) at level 1-8 (default 4) for this one utterance; the resting mute comes back by itself, errors included.", json!({"text": {"type": "string", "minLength": 1, "maxLength": 1000}, "level": {"type": "integer", "minimum": 1, "maximum": 8}}), &["text"]),
         c("task.submit", Action, 40, "Give the phone's own agent (its local model) a task. Answers with the task's session id, and the reply when it is ready within ~30 s; otherwise poll task.get.", json!({"text": {"type": "string", "minLength": 1, "maxLength": 4000}}), &["text"]),
         c("task.get", Read, 15, "The latest reply of a task started with task.submit (session from its answer).", json!({"session": {"type": "string", "maxLength": 80}}), &["session"]),
         c("audio.listen", Action, 260, "Listen to the room for a few seconds (default 20, max 120) and answer with the transcript (on-phone ASR). Shows a banner on the screen while recording; no audio is kept. OFF unless the owner switched it on on the phone.", json!({"seconds": {"type": "integer", "minimum": 3, "maximum": 120}}), &[]),
@@ -598,11 +598,14 @@ async fn run(app: &Shared, cap: &DevCap, a: &Args) -> ApiResult<Out> {
             if !(1..=1000).contains(&text.chars().count()) {
                 return Err(ApiError::bad_request("text must be 1-1000 characters"));
             }
+            // One call, no state left behind: the level applies to this playback only (s22-say restores
+            // the amps on exit), so the caller never juggles volume.set. Capped at 8 of 10.
+            let level = a.int("level", 1, 8)?.unwrap_or(4);
             let sock = cfg.touch_sock.clone();
             let r = blocking(move || {
                 crate::real::touch::request(
                     &sock,
-                    &json!({"cmd": "tts", "text": text, "play": true}),
+                    &json!({"cmd": "tts", "text": text, "play": true, "level": level}),
                     Duration::from_secs(190),
                 )
                 .map_err(ApiError::upstream)
@@ -611,19 +614,9 @@ async fn run(app: &Shared, cap: &DevCap, a: &Args) -> ApiResult<Out> {
             if r["ok"] != json!(true) {
                 return Err(ApiError::upstream(format!("touchd tts: {}", r["error"])));
             }
-            // s22-say plays at the speech level; 0 (the resting mute) plays silently.
-            let level = app.b.audio.level();
-            let audible = level != Some(0);
-            let mut o = out(
-                json!({"spoken": true, "played": r["played"], "audible": audible, "level": level, "engine": r["engine"], "ms": r["ms"]}),
-            )?;
-            if !audible {
-                o.note = Some(
-                    "the speech level is 0 (muted), so nothing was audible; volume.set raises it"
-                        .into(),
-                );
-            }
-            Ok(o)
+            out(
+                json!({"spoken": true, "played": r["played"], "level": level, "engine": r["engine"], "ms": r["ms"]}),
+            )
         }
         "audio.listen" => {
             // The owner's switch binds every caller (the chroot agent via loopback too), not only remote ones.

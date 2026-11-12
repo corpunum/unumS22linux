@@ -920,6 +920,13 @@ class Daemon:
                **({} if ok else {'error': 'render_failed', 'tail': (r.stdout + r.stderr)[-400:]})}
         if ok and play:
             penv = {k: v for k, v in os.environ.items() if k != 'S22_SAY_OUT'}
+            # "level" 1-10: this one playback only (s22-say raises the muted amps and restores them on exit,
+            # errors included); /run/s22-say.level and the resting mute are never touched.
+            lv = req.get('level')
+            if lv is not None:
+                if not (isinstance(lv, int) and not isinstance(lv, bool) and 1 <= lv <= 10):
+                    return {'ok': False, 'error': 'bad_level', 'range': [1, 10]}
+                penv['S22_SAY_LEVEL'] = str(lv)
             t1 = time.monotonic()
             try:
                 p = subprocess.run([SAY, '--out', out, '--wav', f'{RUN_IN}/tts/{name}'], env=penv,

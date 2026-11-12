@@ -513,6 +513,11 @@
       "args": {
         "additionalProperties": false,
         "properties": {
+          "level": {
+            "maximum": 8,
+            "minimum": 1,
+            "type": "integer"
+          },
           "text": {
             "maxLength": 1000,
             "minLength": 1,
@@ -526,7 +531,7 @@
       },
       "available": true,
       "confirm": "none",
-      "description": "Say a text out loud on the phone's speaker (the owner's voice), then back to the resting mute.",
+      "description": "Say a text out loud on the phone's speaker (the owner's voice) at level 1-8 (default 4) for this one utterance; the resting mute comes back by itself, errors included.",
       "effect": "action",
       "id": "speak",
       "reason": null,

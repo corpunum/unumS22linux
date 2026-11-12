@@ -205,6 +205,18 @@ class TtsPlayTest(unittest.TestCase):
         td.RUN, td.subprocess.run = self.orig
         self.tmp.cleanup()
 
+    def test_level_applies_to_this_playback_only(self):
+        r = self.d.cmd_tts({'text': 'hi', 'play': True, 'level': 4})
+        self.assertTrue(r['played'])
+        render_env, play_env = self.calls[0][1], self.calls[1][1]
+        self.assertEqual(play_env.get('S22_SAY_LEVEL'), '4')
+        self.assertNotIn('S22_SAY_LEVEL', render_env)
+        self.calls.clear()
+        self.d.cmd_tts({'text': 'hi', 'play': True})
+        self.assertNotIn('S22_SAY_LEVEL', self.calls[1][1], 'no level: the resting behaviour')
+        for bad in (0, 11, '5', True):
+            self.assertEqual(self.d.cmd_tts({'text': 'hi', 'play': True, 'level': bad})['error'], 'bad_level', bad)
+
     def test_render_only_by_default(self):
         r = self.d.cmd_tts({'text': 'hello'})
         self.assertTrue(r['ok']); self.assertFalse(r['played']); self.assertEqual(len(self.calls), 1)

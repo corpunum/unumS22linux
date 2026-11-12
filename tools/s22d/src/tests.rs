@@ -2008,20 +2008,40 @@ mod p2_tests {
             .await;
         assert_eq!(s, StatusCode::OK, "{v}");
         assert_eq!(v["state"]["spoken"], true);
-        *h.fake.audio.lock().unwrap() = Some(0);
-        let (_, v0) = h
-            .send("POST", "/v1/device/speak", Some(json!({"text": "x"})))
-            .await;
-        assert_eq!(v0["state"]["audible"], false);
-        assert!(v0["note"].as_str().unwrap().contains("muted"));
+        assert_eq!(v["state"]["level"], 4, "a sensible default level");
         let req = seen.recv_timeout(Duration::from_secs(2)).unwrap();
         assert_eq!(
             (
                 req["cmd"].as_str(),
                 req["text"].as_str(),
-                req["play"].as_bool()
+                req["play"].as_bool(),
+                req["level"].as_u64()
             ),
-            (Some("tts"), Some("Dinner is ready"), Some(true))
+            (Some("tts"), Some("Dinner is ready"), Some(true), Some(4))
+        );
+        let (_, v6) = h
+            .send(
+                "POST",
+                "/v1/device/speak",
+                Some(json!({"text": "x", "level": 6})),
+            )
+            .await;
+        assert_eq!(v6["state"]["level"], 6);
+        assert_eq!(
+            seen.recv_timeout(Duration::from_secs(2)).unwrap()["level"],
+            6
+        );
+        let (s, v) = h
+            .send(
+                "POST",
+                "/v1/device/speak",
+                Some(json!({"text": "x", "level": 10})),
+            )
+            .await;
+        assert_eq!(
+            (s, code(&v)),
+            (StatusCode::BAD_REQUEST, "bad_request"),
+            "capped at 8"
         );
         let (s, v) = h
             .send("POST", "/v1/device/speak", Some(json!({"text": ""})))
