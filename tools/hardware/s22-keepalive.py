@@ -41,8 +41,8 @@ check is skipped, so the guard never cuts a sentence off (2026-10-21).
 Model pin (config "pin_model": true): OpenUnum's default model must stay
 the pinned one (default openai/gpt-6-luna; or model.provider/model/routing
 from the pinned copy /srv/s22/state/keepalive/openunum.pinned.json). While
-OpenUnum runs, a drift is undone through its API (POST /api/model/switch,
-which also saves and re-baselines config_drift); the file itself is only
+OpenUnum runs, a drift is undone through its API (POST /api/model/switch, owner-only, so sent by s22-touchd
+with the owner's paired credential; at most once per pin_retry_s; it also saves and re-baselines config_drift); the file itself is only
 patched while OpenUnum is stopped, right before keepalive starts it, because
 the running server rewrites openunum.json from memory after every turn.
 
@@ -498,6 +498,27 @@ def pin_config_file(path: Path, pin: dict, allow=()) -> str:
     return 'restored'
 
 
+TOUCHD_SOCK = Path('/mnt/omarchy-trial/run/s22-touch/ctl.sock')
+
+
+def touchd_model_pin(pin: dict, timeout: float = 30) -> dict:
+    """Ask s22-touchd to restore the pin with the owner's paired device credential (model switches are
+    owner-only in OpenUnum). touchd checks that this caller runs in the native root (SO_PEERCRED), switches
+    only on a real drift, at most once per 10 min, and logs it. keepalive never reads the credential."""
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    with s:
+        s.connect(str(TOUCHD_SOCK))
+        s.sendall((json.dumps({'cmd': 'model_pin', 'provider': pin['provider'], 'model': pin['model']}) + '\n').encode())
+        data = b''
+        while not data.endswith(b'\n'):
+            chunk = s.recv(65536)
+            if not chunk:
+                break
+            data += chunk
+    return json.loads(data.decode() or '{}')
+
+
 def api_json(method: str, path: str, body: dict | None = None, timeout: float = 15) -> dict:
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(OPENUNUM_API + path, data=data, method=method,
@@ -510,7 +531,7 @@ def api_json(method: str, path: str, body: dict | None = None, timeout: float = 
 
 class Keepalive:
     def __init__(self, cfg: dict, state: Path = STATE, services: dict | None = None,
-                 api=api_json, config_path: Path = OPENUNUM_CONFIG):
+                 api=api_json, config_path: Path = OPENUNUM_CONFIG, owner_switch=touchd_model_pin):
         self.cfg = cfg
         self.state = state
         self.state.mkdir(parents=True, exist_ok=True)
@@ -519,6 +540,7 @@ class Keepalive:
             services, self.skipped = build_services(cfg)
         self.services = services
         self.api = api
+        self.owner_switch = owner_switch
         self.config_path = config_path
         self.pin_next_try = 0.0
         self.bad_since: dict[str, float | None] = {n: None for n in self.services}
@@ -625,9 +647,8 @@ class Keepalive:
         return result
 
     def pin_via_api(self, now: float) -> str:
-        """OpenUnum is up: undo a default-model drift with its own switch API."""
-        if now < self.pin_next_try:
-            return 'wait'
+        """OpenUnum is up: undo a default-model drift. The switch is owner-only, so it goes through s22-touchd
+        and the owner's paired credential; at most one attempt per pin_retry_s (default 10 min)."""
         pin = load_pin(self.cfg)
         try:
             cur = self.api('GET', '/api/model/current')
@@ -637,14 +658,15 @@ class Keepalive:
             return 'ok'
         if allowed_choice(cur, self.cfg.get('pin_allow')):
             return 'owner_choice'
+        if now < self.pin_next_try:
+            return 'wait'
+        self.pin_next_try = now + float(self.cfg['pin_retry_s'])   # success or not: no switch storms
         try:
-            out = self.api('POST', '/api/model/switch', {'provider': pin['provider'], 'model': pin['model']})
+            out = self.owner_switch(pin)
             ok = out.get('ok', True) is not False and pin_matches(out, pin)
         except Exception as e:  # noqa: BLE001
             out, ok = {'error': f'{type(e).__name__}: {e}'}, False
-        if not ok:                             # e.g. route blocked: do not hammer the API
-            self.pin_next_try = now + float(self.cfg['pin_retry_s'])
-        self.log(event='model_pin', via='api', result='restored' if ok else 'failed',
+        self.log(event='model_pin', via='touchd', result='restored' if ok else 'failed',
                  was={'provider': cur.get('provider'), 'model': cur.get('model')}, answer=out)
         return 'restored' if ok else 'failed'
 

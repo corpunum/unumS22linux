@@ -80,6 +80,7 @@ PIN_FILE = Path('/srv/s22/state/keepalive/openunum.pinned.json')   # s22-keepali
 # there is no retry loop and no fallback to anything that claims to be the owner.
 OWNER_SESSION = Path('/srv/s22/state/owner-session')
 OWNER_PAIR_LABEL = 's22-touchd'
+PIN_SWITCH_MIN_S = 600          # keepalive's pin may switch at most once per 10 min
 OWNER_REFUSALS = ('model_change_owner_only', 'owner_proof_required', 'owner_only', 'owner_session_invalid')
 MODEL_CHOICES = {'luna': ('openai', 'openai/gpt-6-luna'),
                  # what s22-llama-ondemand actually serves on :8090 (keepalive service_defs.llama_backend)
@@ -605,6 +606,7 @@ class Daemon:
     def __init__(self, gestures: bool = True, ui: bool = True):
         self.gestures_on, self.ui_on = gestures, ui
         self.stopping = threading.Event()
+        self.pin_last: float | None = None       # cmd_model_pin rate limit (monotonic)
         self.ui_proc: subprocess.Popen | None = None
         self.ui_starts: list[float] = []
         self.ui_running_backend = 'quickshell'
@@ -812,6 +814,32 @@ class Daemon:
             os.replace(tmp, PIN_FILE)
         log(event='model', choice=choice, current=cur)
         return {'ok': True, 'current': cur, 'pinned': PIN_FILE.exists()}
+
+    def cmd_model_pin(self, req: dict) -> dict:
+        """s22-keepalive's model pin (the owner's own phone default): switch back to {provider, model} with the
+        owner credential. Native-root peers only, only when the current model differs, at most once per
+        PIN_SWITCH_MIN_S, and every enforced switch is logged."""
+        if req.get('_native') is not True:
+            return {'ok': False, 'error': 'owner_only', 'message': 'the model pin is enforced from the native root only'}
+        provider, model = req.get('provider'), req.get('model')
+        if not (isinstance(provider, str) and isinstance(model, str) and 0 < len(provider) <= 80 and 0 < len(model) <= 300):
+            return {'ok': False, 'error': 'bad_pin'}
+        cur = openunum('GET', '/api/model/current')
+        if cur.get('provider') == provider and cur.get('model') in (model, f'{provider}/{model}'):
+            return {'ok': True, 'result': 'already', 'current': cur}
+        now = time.monotonic()
+        if self.pin_last is not None and now - self.pin_last < PIN_SWITCH_MIN_S:
+            return {'ok': False, 'error': 'rate_limited', 'retry_in_s': round(PIN_SWITCH_MIN_S - (now - self.pin_last))}
+        self.pin_last = now
+        out = openunum('POST', '/api/model/switch', {'provider': provider, 'model': model}, owner=True)
+        if owner_refused(out):
+            log(event='model_pin', result='repair_needed', was=cur, want={'provider': provider, 'model': model})
+            return {'ok': False, 'error': 'repair_needed', 'answer': out}
+        after = openunum('GET', '/api/model/current')
+        ok = after.get('provider') == provider
+        log(event='model_pin', result='enforced' if ok else 'failed', was={'provider': cur.get('provider'),
+            'model': cur.get('model')}, now={'provider': after.get('provider'), 'model': after.get('model')})
+        return dict(after, ok=ok, result='enforced' if ok else 'failed')
 
     def cmd_pair(self, req: dict) -> dict:
         """`pair CODE`: redeem a one-time owner pairing code for a device credential (stored 0600, never
@@ -1059,6 +1087,7 @@ COMMANDS = {
     'gesture': Daemon.cmd_gesture,
     'model': Daemon.cmd_model,
     'pair': Daemon.cmd_pair,
+    'model_pin': Daemon.cmd_model_pin,
     'brightness': Daemon.cmd_brightness,
     'tts': Daemon.cmd_tts,
     'filler': Daemon.cmd_filler,

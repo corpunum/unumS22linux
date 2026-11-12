@@ -489,6 +489,31 @@ class OwnerPairTest(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertIn('paired', self.d.cmd_pair({'arg': 'status'}))
 
+    def test_model_pin_chroot_caller_still_gets_owner_only(self):
+        self.fake(lambda m, p: {'ok': True})
+        r = self.d.cmd_model_pin({'provider': 'openai', 'model': 'openai/gpt-6-luna', '_native': False})
+        self.assertEqual(r['error'], 'owner_only')
+        self.assertEqual(self.calls, [])
+
+    def test_model_pin_switches_only_on_drift_once_per_ten_minutes_with_the_credential(self):
+        cur = {'provider': 'llama-cpp-local', 'model': 'x'}
+
+        def answers(m, p):
+            if m == 'POST':
+                cur.update(provider='openai', model='openai/gpt-6-luna')
+                return {'ok': True}
+            return dict(cur)
+        self.fake(answers)
+        pin = {'provider': 'openai', 'model': 'openai/gpt-6-luna', '_native': True}
+        self.assertEqual(self.d.cmd_model_pin(pin)['result'], 'enforced')
+        self.assertEqual(self.d.cmd_model_pin(pin)['result'], 'already')        # no drift: no switch
+        cur.update(provider='llama-cpp-local', model='x')                      # drift again within 10 min
+        self.assertEqual(self.d.cmd_model_pin(pin)['error'], 'rate_limited')
+        posts = [c for c in self.calls if c[0] == 'POST']
+        self.assertEqual(posts, [('POST', '/api/model/switch', {'provider': 'openai', 'model': 'openai/gpt-6-luna'}, True)])
+        self.d.pin_last -= td.PIN_SWITCH_MIN_S
+        self.assertEqual(self.d.cmd_model_pin(pin)['result'], 'enforced')
+
     def test_openunum_sends_the_header_only_on_owner_calls(self):
         import http.server
         seen = []

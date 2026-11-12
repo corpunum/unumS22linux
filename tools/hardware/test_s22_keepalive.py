@@ -2,6 +2,7 @@
 """Host tests for tools/hardware/s22-keepalive.py (restart policy and mute guard)."""
 import importlib.util
 import json
+import socket
 import tempfile
 import unittest
 from importlib.machinery import SourceFileLoader
@@ -323,7 +324,8 @@ class ModelPinTest(unittest.TestCase):
     def keepalive(self, api, **cfg):
         svc = FakeService('openunum')
         k = mod.Keepalive(dict(mod.DEFAULTS, pin_model=True, pin_source=str(self.dir / 'none'), **cfg),
-                          state=self.dir, services={'openunum': svc}, api=api, config_path=self.conf)
+                          state=self.dir, services={'openunum': svc}, api=api, config_path=self.conf,
+                          owner_switch=lambda pin: api('POST', '/api/model/switch', {'provider': pin['provider'], 'model': pin['model']}))
         k.mute_check = lambda reason: {}
         return k, svc
 
@@ -347,7 +349,7 @@ class ModelPinTest(unittest.TestCase):
         with mock.patch.object(mod, 'ps_lines', return_value=[]):
             self.assertEqual(k.check_once(now=1020)['model_pin'], 'ok')
         log = (self.dir / 'keepalive.jsonl').read_text()
-        self.assertIn('"via": "api"', log)
+        self.assertIn('"via": "touchd"', log)
 
     def test_owner_choice_of_local_model_is_kept(self):
         calls = []
@@ -372,6 +374,42 @@ class ModelPinTest(unittest.TestCase):
             self.assertEqual(k.check_once(now=1000)['model_pin'], 'failed')
             self.assertEqual(k.check_once(now=1100)['model_pin'], 'wait')
             self.assertEqual(k.check_once(now=1601)['model_pin'], 'failed')
+
+    def test_successful_switch_also_waits_ten_minutes_before_the_next(self):
+        current = {'provider': 'x', 'model': 'y'}
+        posts = []
+
+        def api(m, p, b=None):
+            if m == 'POST':
+                posts.append(b)
+                return {'provider': 'openai', 'model': 'openai/gpt-6-luna'}   # restored, then drifts again
+            return dict(current)
+        k, _ = self.keepalive(api)
+        with mock.patch.object(mod, 'ps_lines', return_value=[]):
+            self.assertEqual(k.check_once(now=1000)['model_pin'], 'restored')
+            self.assertEqual(k.check_once(now=1300)['model_pin'], 'wait')
+            self.assertEqual(k.check_once(now=1601)['model_pin'], 'restored')
+        self.assertEqual(len(posts), 2)
+
+    def test_default_owner_switch_talks_to_touchd_model_pin(self):
+        import tempfile as tf, threading as th
+        with tf.TemporaryDirectory() as d:
+            path = Path(d) / 'ctl.sock'
+            srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            srv.bind(str(path)); srv.listen(1)
+            got = []
+
+            def serve():
+                c, _ = srv.accept()
+                with c:
+                    got.append(json.loads(c.recv(65536).decode()))
+                    c.sendall(b'{"ok": true, "provider": "openai", "model": "openai/gpt-6-luna"}\n')
+            th.Thread(target=serve, daemon=True).start()
+            with mock.patch.object(mod, 'TOUCHD_SOCK', path):
+                out = mod.touchd_model_pin({'provider': 'openai', 'model': 'openai/gpt-6-luna'})
+            srv.close()
+        self.assertEqual(got, [{'cmd': 'model_pin', 'provider': 'openai', 'model': 'openai/gpt-6-luna'}])
+        self.assertTrue(out['ok'])
 
     def test_file_pinned_before_restart_only_when_stopped(self):
         k, svc = self.keepalive(lambda *a, **kw: {})
