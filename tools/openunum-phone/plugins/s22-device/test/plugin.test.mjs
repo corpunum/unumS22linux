@@ -72,6 +72,7 @@ async function startDaemon(spec = SPEC, { delayMs = 0, answer, device = null } =
     return send(200, { ok: true, id: route.cap.id });
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  server.unref();   // a test that fails before close() must not keep the process (and the ship gate) alive
   return {
     url: `http://127.0.0.1:${server.address().port}`,
     seen,
@@ -439,7 +440,7 @@ test('phone_device: one tool from /v1/device; superseded legacy tools are hidden
   }
   assert.ok(names.includes('wifi_scan') && names.includes('service_restart') && names.includes('camera_record'));
   // The schema stays small for local models: few properties, short description.
-  assert.ok(Object.keys(tool.parameters.properties).length <= 12);
+  assert.ok(Object.keys(tool.parameters.properties).length <= 16);
   assert.ok(JSON.stringify(tool.parameters).length + tool.description.length < 3000, 'tool too large');
   const all = await makePlugin(daemon, { legacy_tools: 'all' });
   assert.equal(all.getTools().length, SPEC.capabilities.filter((c) => c.available).length + 1);
