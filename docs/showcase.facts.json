@@ -1,0 +1,138 @@
+{
+  "name": "unumS22linux",
+  "repo": "corpunum/unumS22linux",
+  "oneLiner": "A Galaxy S22 that boots its own Linux from the RECOVERY partition, with AI agents writing the drivers and our own Rust touch shell on the display.",
+  "license": "Apache-2.0",
+  "version": "main@425f3371",
+  "updated": "2026-11-12",
+  "measured": [
+    {
+      "metric": "Tap to page, Rust touch shell",
+      "value": "12 ms",
+      "method": "Touch-up to page (framebuffer change), p50, Settings tile, 60 ms hold, same phone and session as the baseline (STATUS.md, evidence/fastshell-20261021)",
+      "date": "2026-10-21",
+      "baseline": "63 ms",
+      "sample": "Quickshell baseline measured the same way"
+    },
+    {
+      "metric": "Tap to page, earlier spike baseline",
+      "value": "120 ms",
+      "method": "Spike metric counted from touch-down, includes the 60 ms hold (evidence/fastshell-20261021/README.md)",
+      "date": "2026-10-21"
+    },
+    {
+      "metric": "Desktop frame rate before the touch shell",
+      "value": "3 frames/s",
+      "method": "Hyprland on llvmpipe, about 680 ms per frame (STATUS.md)",
+      "date": "2026-10-09"
+    },
+    {
+      "metric": "Touch shell idle cost",
+      "value": "0.4 %",
+      "method": "Idle CPU of the Rust shell (STATUS.md)",
+      "date": "2026-10-21"
+    },
+    {
+      "metric": "Touch shell memory",
+      "value": "11 MB",
+      "method": "RSS of the Rust shell (STATUS.md)",
+      "date": "2026-10-21"
+    },
+    {
+      "metric": "5G download",
+      "value": "97 Mbit/s",
+      "method": "Measured over rmnet0, 15 MB ranged GET (STATUS.md, evidence/modem-5g-20261021)",
+      "date": "2026-10-22"
+    },
+    {
+      "metric": "Tailscale ping over mobile",
+      "value": "35-56 ms",
+      "method": "tailscale ping from the rig, direct path with no relay (STATUS.md)",
+      "date": "2026-10-22"
+    },
+    {
+      "metric": "Failover from Wi-Fi to mobile data",
+      "value": "3 s",
+      "method": "Wi-Fi drops, including dialing the data call (STATUS.md)",
+      "date": "2026-10-22"
+    },
+    {
+      "metric": "Keyword spotting on the NPU",
+      "value": "0.34 ms",
+      "method": "DS-CNN-L body on the NPU, p50 (STATUS.md, evidence/npu-accept-20261022)",
+      "date": "2026-10-22"
+    },
+    {
+      "metric": "Face parsing on the NPU",
+      "value": "3.7 ms",
+      "method": "Face parsing of a real photo on the NPU (STATUS.md)",
+      "date": "2026-10-22"
+    },
+    {
+      "metric": "Battery draw, suspended",
+      "value": "36 mA",
+      "method": "s22-autosleep, 20 minute run, 89 % of the time asleep (STATUS.md)",
+      "date": "2026-10-22",
+      "baseline": "192 mA"
+    },
+    {
+      "metric": "Battery drain rate, suspended",
+      "value": "1.1 %/h",
+      "method": "s22-autosleep, 20 minute run (STATUS.md)",
+      "date": "2026-10-22",
+      "baseline": "5.8 %/h"
+    },
+    {
+      "metric": "Mic hears own speaker",
+      "value": "1000x",
+      "method": "Graph playback to graph capture, 1 kHz test tone, noise ratio written as about 1000x (STATUS.md)",
+      "date": "2026-10-21"
+    },
+    {
+      "metric": "Camera tap to picture",
+      "value": "2.1 s",
+      "method": "Hold to capture, 4-frame burst stacked, processed picture shown (STATUS.md)",
+      "date": "2026-10-22"
+    }
+  ],
+  "constants": [
+    {
+      "value": "3 s",
+      "what": "Power key hold that falls back to the old shell (STATUS.md)"
+    },
+    {
+      "value": "1 kHz",
+      "what": "test tone frequency used in the audio loopback check (STATUS.md)"
+    },
+    {
+      "value": "2B",
+      "what": "parameter size of the resident local model that runs on the GPU (STATUS.md)"
+    },
+    {
+      "value": "4B",
+      "what": "parameter size of the local model that runs on the CPU (STATUS.md)"
+    }
+  ],
+  "links": [
+    {
+      "label": "Current status",
+      "url": "STATUS.md"
+    },
+    {
+      "label": "Experiment log",
+      "url": "EXPERIMENTS.md"
+    },
+    {
+      "label": "Contributing",
+      "url": "CONTRIBUTING.md"
+    },
+    {
+      "label": "Porting guide",
+      "url": "docs/PORTING.md"
+    }
+  ],
+  "quickstart": {
+    "lang": "sh",
+    "code": "export PATH=$HOME/.cargo/bin:$PATH\ncd tools/unum-fastshell\ncargo test --offline --release\ncargo run --release -- dump /tmp/shots"
+  }
+}

@@ -18,7 +18,7 @@ They did most of it. Agents (Claude, GPT Luna through my framework
 `/init`, the boot handoff, the persistence layer and the drivers glue. **Other agents reviewed
 every step**, adversarially, before anything touched the phone. Every claim below has a log, a
 measurement or a screenshot behind it, and the failures are written down too: the
-[experiment log](EXPERIMENTS.md) is over 3,400 lines long.
+[experiment log](EXPERIMENTS.md) runs to thousands of lines.
 
 Today the phone boots from its RECOVERY partition into Linux and runs **our own Rust touch shell**
 that draws straight to the display. It talks through its own speaker in English and Greek, takes
@@ -69,10 +69,10 @@ Two days of agent work, every item measured on the phone:
 | ✅ **AI** | Stock Samsung NPU models (`.nnc`) run on the NPU through ENN (16/17 stock models, e.g. face parsing in 3.7 ms); our own TFLite models are compiled on the phone with Samsung's NPU compiler (keyword spotting in 0.34 ms, verified against the CPU); local 2B model on the GPU (Samsung's Vulkan driver in an isolated runtime) and 4B on the CPU; OpenUnum agent with GPT Luna by default and the local model as offline fallback |
 | ✅ **Phone stack** | SIM and SMS ready through our own modem daemon (`s22-phoned`, outbound off by default) |
 | ✅ **Voice** | The phone talks through its own speaker (English + two Greek voices); push-to-talk or the Talk button; while the agent thinks it plays short "hmm, let me check…" clips and speaks its thinking |
-| ✅ **Touch UI** | Our own Rust shell drawing straight to the display: a tap opens a page in ~9–12 ms (the old shell: 63 ms), 11 MB of memory; home, agent chat with streaming, phone, files, camera, settings, EN/GR keyboard, lock, agent cards, 5G/4G badge. Samsung's GPU driver can also draw to the screen with zero copy |
+| ✅ **Touch UI** | Our own Rust shell drawing straight to the display: a tap opens a page in ~12 ms (the old shell: 63 ms), 11 MB of memory; home, agent chat with streaming, phone, files, camera, settings, EN/GR keyboard, lock, agent cards, 5G/4G badge. Samsung's GPU driver can also draw to the screen with zero copy |
 | 🟡 **Bluetooth** | Controller comes up by itself after boot; no pairing or audio yet |
 | 🟡 **Sensors** | Accelerometer, gyro, magnetometer and light frames read; no calibration or auto-rotate |
-| ✅ **Camera** | Rear and front cameras through our own capture path (no Android camera stack). Photos are processed by our own software ISP (demosaic, white balance, stock colour matrix, multi-frame noise reduction); the shell's Camera page takes and shows them in ~2 s. Short videos under 1 frame/s |
+| ✅ **Camera** | Rear and front cameras through our own capture path (no Android camera stack). Photos are processed by our own software ISP (demosaic, white balance, stock colour matrix, multi-frame noise reduction); the shell's Camera page takes and shows them in ~2 s. Video records at 29.7 fps (MJPEG, 382×510; no H.264 encoder on the phone) |
 | ✅ **Audio** | Speaker and microphone work, both directly and through Samsung's DSP graph (the phone's mic hears its own speaker: a 1 kHz test tone at ~1000× the noise floor); earpiece and calls not yet |
 | 🟡 **GPS** | The GNSS chip runs under Linux with Samsung's own engine and tracks real satellites (indoors so far: 1–2 satellites, no position fix yet) |
 | ✅ **Battery / suspend** | Locked, the phone suspends to RAM by itself (`s22-autosleep`) and still answers SSH over Wi-Fi/Tailscale: **36 mA (1.1 %/h) instead of 192 mA (5.8 %/h)** measured; wakes on Wi-Fi and the RTC alarm (Power key and incoming SMS not yet tested physically) |
@@ -140,6 +140,23 @@ used (agents reusing the phone's own vendor drivers, with a review loop before a
 phone), and per-subsystem playbooks. Addresses (the phone's ssh target, the rig's tailnet IP) are not in
 the code: copy [s22-local.env.example](s22-local.env.example) to an untracked local config. Our Rust touch shell also runs on other Linux phones:
 [tools/unum-fastshell/PORTING.md](tools/unum-fastshell/PORTING.md).
+
+## Try it in one minute
+
+```sh
+export PATH=$HOME/.cargo/bin:$PATH
+cd tools/unum-fastshell
+cargo test --offline --release
+cargo run --release -- dump /tmp/shots
+```
+
+## Learn more
+
+- [Current status](STATUS.md)
+- [Experiment log](EXPERIMENTS.md)
+- [Contributing](CONTRIBUTING.md)
+- [Porting guide](docs/PORTING.md)
+- License: [Apache-2.0](LICENSE)
 
 ---
 
