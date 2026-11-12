@@ -67,18 +67,21 @@ corpunum-82.
 The phone is on the rig's USB most of the time, so the robust path is **USB networking**, not Wi-Fi hotspot
 (AP mode on this Wi-Fi chip is unproven and shares the BT/Wi-Fi rail).
 
-- Phone: a USB NCM gadget with `usb0 192.168.77.1/30`. When `uplink.share on`, the phone enables NAT
-  (iptables MASQUERADE) from usb0 to rmnet (LTE). Checked 11-12: the kernel has
-  `CONFIG_USB_CONFIGFS_NCM`/`RNDIS`, `CONFIG_NF_NAT` and `IP_NF_TARGET_MASQUERADE`, but configfs is not
-  mounted and no iptables/nft userspace is installed. Phase 4 therefore starts with a proof: bring the
-  gadget up beside Samsung's USB stack without breaking charging or the current USB role, then install
-  the NAT userspace. Mobile data comes up through netpolicy's existing `failover` mode.
-- Rig: s-infra or the owner configure a second default route via usb0 with a higher metric (for example
-  NetworkManager `ipv4.route-metric 900`), so it is used only when the main uplink is gone. The rig's
-  watcher calls `uplink.share on` when its main uplink fails (ping check), and `off` when it returns.
-  Rig-side changes need sudo, so they go through corpunum-82.
-- Guards: share only while the battery is above 30 % or the phone is on USB power; a data cap per day
-  (default 2 GB, from rmnet counters), then `uplink.share` turns itself off and texts the owner.
+**As built (11-12, see `docs/P4_UPLINK_FAILOVER_PLAN.md`):** the first path is **Wi-Fi/LAN**, not
+USB. The phone was not plugged into the rig, and the owner doesn't want to plug and unplug; USB is an
+optional later upgrade that also survives a dead router. (The phone already exposes a CDC-ECM gadget,
+configfs `g1`.) The LAN path covers "router up, internet down", which is the common case.
+
+- Phone: `uplink.share on` (`tools/hardware/network/s22-uplink-share.py`) forwards and NATs only the
+  rig's LAN address out over rmnet0 (policy table 177, legacy iptables; the kernel has no nftables).
+  netpolicy's mobile mode is `always` while sharing and is restored afterwards.
+- Guards: refused at 40 % battery or less and after 2 GB in a day; a watchdog stops sharing at 6 h,
+  40 % or the cap; a failed enable, and `sweep` at s22d start, turn forwarding off again. There is an
+  audit line per enable and disable.
+- **Rig: a metric-900 backup route does not fail over.** The DHCP default route on `eno1` (metric 100)
+  survives an internet outage, so a 900 route is never used. The rig's watcher (root, through
+  corpunum-82) adds `default via <phone> metric 50` while the main uplink fails its pings, and deletes it
+  when the uplink is back, calling `uplink.share on`/`off` around that.
 - Tailscale keeps working over the backup link, so the rig and phone keep talking.
 
 ## 6. Rig side (s-openunum)
