@@ -21,6 +21,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -41,6 +42,11 @@ MIN_BATTERY = 40                  # stop at <= 40 %
 CAP_BYTES = 2 * 1000 ** 3         # 2 GB a day
 MAX_S = 6 * 3600                  # off after 6 h
 UP_WAIT_S = 60
+PROBE_TARGETS = ('1.1.1.1', '1.0.0.1')   # data-path check: an HTTP answer through the mobile interface
+VERIFY_N = 3                      # consecutive good rounds `on` needs
+VERIFY_GAP_S = 4
+VERIFY_FIRST_TRIES = 4            # rounds allowed to get the first good one
+WATCH_FAILS = 3                   # consecutive bad watch rounds before sharing stops
 
 
 def now() -> float:
@@ -52,6 +58,53 @@ def run(argv: list[str], check: bool = True) -> subprocess.CompletedProcess:
     if check and r.returncode != 0:
         raise RuntimeError(f'{" ".join(argv[-6:])}: rc={r.returncode} {r.stderr.strip()[:200]}')
     return r
+
+
+def pause(seconds: float) -> None:
+    time.sleep(seconds)
+
+
+def data_probe(iface: str, target: str) -> bool:
+    """True only if an HTTP answer comes back through iface (a bare TCP connect proves nothing: a SIM
+    without allowance still completes handshakes)."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, iface.encode())
+            s.settimeout(4)
+            s.connect((target, 80))
+            s.sendall(f'GET / HTTP/1.0\r\nHost: {target}\r\n\r\n'.encode())
+            got = b''
+            while len(got) < 12:
+                chunk = s.recv(64)
+                if not chunk:
+                    break
+                got += chunk
+            return len(got) >= 12 and got.startswith(b'HTTP/')
+    except Exception:  # noqa: BLE001 - any failure means no data
+        return False
+
+
+def data_round(iface: str) -> bool:
+    return any(data_probe(iface, t) for t in PROBE_TARGETS)
+
+
+def data_ok(iface: str) -> tuple[bool, str]:
+    for i in range(VERIFY_FIRST_TRIES):
+        if i:
+            pause(VERIFY_GAP_S)
+        if data_round(iface):
+            break
+    else:
+        return False, 'no data'
+    for k in range(1, VERIFY_N):
+        pause(VERIFY_GAP_S)
+        if not data_round(iface):
+            return False, f'data stopped after {k * VERIFY_GAP_S} s'
+    return True, 'ok'
+
+
+def datacheck_skipped() -> bool:
+    return bool(os.environ.get('S22_SHARE_NO_DATACHECK'))
 
 
 def read_json(p: Path) -> dict:
@@ -197,6 +250,7 @@ def on() -> dict:
     conf = read_json(NETPOLICY)
     st = {'on': False, 'prev_mode': conf.get('mobile_mode'), 'since': now(), 'rig_set': True}
     write_json(STATE, st)                     # from here on, `off`/`sweep` know what to restore
+    skipped = datacheck_skipped()
     try:
         conf['mobile_mode'] = 'always'
         write_json(NETPOLICY, conf)
@@ -205,6 +259,10 @@ def on() -> dict:
             if now() > deadline:
                 raise RuntimeError('mobile data did not come up within 60 s')
             time.sleep(2)
+        if not skipped:
+            good, why = data_ok(DEV)
+            if not good:
+                raise RuntimeError(f'mobile data carries no traffic ({why}); check the SIM data allowance')
         teardown()                            # a clean slate, also after a crash
         run(['ip', 'route', 'replace', 'default', 'dev', DEV, 'table', TABLE])
         run(['ip', 'rule', 'add', 'from', r, 'lookup', TABLE, 'priority', PRIO])
@@ -220,7 +278,7 @@ def on() -> dict:
     except Exception as e:
         off(reason=f'enable failed: {e}'[:200])
         raise
-    audit('enable', battery=b, bytes_today=used_today(st))
+    audit('enable', battery=b, bytes_today=used_today(st), **({'datacheck': 'skipped'} if skipped else {}))
     spawn_watchdog()
     return status()
 
@@ -254,6 +312,12 @@ def watch(interval: float = 30.0, once: bool = False) -> dict:
         why = check_guards(st)
         if why:
             return off(reason=why)
+        if not datacheck_skipped():
+            fails = 0 if data_round(DEV) else int(st.get('data_fails', 0)) + 1
+            if fails >= WATCH_FAILS:
+                return off(reason='no data')
+            st.update(data_fails=fails, data_checked=round(now()))
+            write_json(STATE, st)
         if once:
             return status()
         time.sleep(interval)
@@ -280,6 +344,7 @@ def status() -> dict:
     fwd = FORWARD.read_text().strip() == '1' if FORWARD.exists() else None
     return {'ok': True, 'on': bool(st.get('on')), 'since': st.get('since'), 'forwarding': fwd,
             'rig_configured': rig_ok, 'battery': battery(), 'bytes_today': used_today(st),
+            'data_fails': int(st.get('data_fails', 0)), 'data_checked': st.get('data_checked'),
             'cap_bytes': CAP_BYTES, 'max_s': MAX_S, 'min_battery': MIN_BATTERY}
 
 

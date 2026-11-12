@@ -60,6 +60,13 @@ class Base(unittest.TestCase):
                 raise RuntimeError(f'{joined}: rc=1 boom')
             return R()
         m.run = run
+        self.probes, self.pauses, self.answers = [], [], []
+
+        def data_probe(iface, target):
+            self.probes.append((iface, target))
+            return self.answers.pop(0) if len(self.answers) > 1 else (self.answers[0] if self.answers else True)
+        m.data_probe = data_probe
+        m.pause = self.pauses.append
 
     def tearDown(self):
         os.environ.pop('S22_SHARE_NO_WATCHDOG', None)
@@ -70,6 +77,14 @@ class Base(unittest.TestCase):
         d.mkdir(parents=True, exist_ok=True)
         (d / 'rx_bytes').write_text(str(n // 2))
         (d / 'tx_bytes').write_text(str(n - n // 2))
+
+    def rounds(self, *flags):
+        """Script the probe: one entry per round (a bad round fails both targets); the last one repeats."""
+        self.answers = [x for f in flags for x in ([True] if f else [False] * len(self.m.PROBE_TARGETS))]
+        if not flags[-1]:
+            self.answers = self.answers[:-len(self.m.PROBE_TARGETS)] + [False]
+        else:
+            self.answers = self.answers[:-1] + [True]
 
     def audit(self):
         return [json.loads(l) for l in self.m.AUDIT.read_text().splitlines()] if self.m.AUDIT.exists() else []
@@ -119,6 +134,88 @@ class OnOffTest(Base):
             with self.assertRaises(RuntimeError):
                 self.m.on()
         self.assertFalse(any('-N' in c for c in self.cmds))
+
+
+class DataCheckTest(Base):
+    def assert_nothing_left(self):
+        self.assertEqual(self.m.FORWARD.read_text().strip(), '0')
+        self.assertFalse(self.m.STATE.exists())
+        self.assertNotIn('mobile_mode', json.loads(self.m.NETPOLICY.read_text()), 'previous mode restored')
+        self.assertFalse(any('rule' in c and 'add' in c or '-N' in c for c in self.cmds), 'no rule, no chain')
+        self.assertEqual(self.chains, set())
+
+    def test_on_refuses_when_no_round_is_ever_good_and_leaves_nothing(self):
+        self.rounds(False)
+        with self.assertRaises(RuntimeError) as cm:
+            self.m.on()
+        self.assertIn('mobile data carries no traffic (no data)', str(cm.exception))
+        self.assertIn('check the SIM data allowance', str(cm.exception))
+        self.assert_nothing_left()
+        self.assertTrue(self.audit()[-1]['reason'].startswith('enable failed'))
+        self.assertEqual(len(self.pauses), self.m.VERIFY_FIRST_TRIES - 1)
+
+    def test_on_refuses_when_the_first_round_is_good_and_a_later_one_bad(self):
+        self.rounds(True, False)
+        with self.assertRaises(RuntimeError) as cm:
+            self.m.on()
+        self.assertIn('data stopped after 4 s', str(cm.exception))
+        self.assert_nothing_left()
+
+    def test_on_succeeds_after_verify_n_good_rounds_with_gaps(self):
+        self.rounds(True)
+        self.assertTrue(self.m.on()['on'])
+        self.assertEqual(self.pauses, [self.m.VERIFY_GAP_S] * (self.m.VERIFY_N - 1))
+        self.assertEqual(len(self.probes), self.m.VERIFY_N)
+
+    def test_the_probe_is_bound_to_the_mobile_interface(self):
+        self.m.on()
+        self.assertTrue(self.probes)
+        self.assertEqual({i for i, _ in self.probes}, {'rmnet0'})
+        self.assertNotIn('wlan0', {i for i, _ in self.probes})
+        self.assertTrue({t for _, t in self.probes} <= set(self.m.PROBE_TARGETS))
+
+    def test_watch_turns_off_after_three_bad_rounds_and_not_after_two(self):
+        self.m.on()
+        self.rounds(False)
+        for n in (1, 2):
+            self.assertTrue(self.m.watch(once=True)['on'])
+            self.assertEqual(self.m.status()['data_fails'], n)
+        out = self.m.watch(once=True)
+        self.assertEqual((out['on'], out['reason']), (False, 'no data'))
+        self.assertEqual(self.m.FORWARD.read_text().strip(), '0')
+
+    def test_a_good_round_resets_the_count(self):
+        self.m.on()
+        self.rounds(False)
+        self.m.watch(once=True)
+        self.m.watch(once=True)
+        self.rounds(True)
+        self.m.watch(once=True)
+        self.assertEqual(self.m.status()['data_fails'], 0)
+        self.rounds(False)
+        self.assertTrue(self.m.watch(once=True)['on'], 'two more bad rounds are not three in a row')
+
+    def test_status_reports_data_fails_and_last_check(self):
+        s = self.m.status()
+        self.assertEqual((s['data_fails'], s['data_checked']), (0, None))
+        self.m.on()
+        self.rounds(False)
+        self.m.watch(once=True)
+        s = self.m.status()
+        self.assertEqual(s['data_fails'], 1)
+        self.assertIsInstance(s['data_checked'], int)
+
+    def test_the_skip_switch_skips_on_and_watch_and_is_audited(self):
+        os.environ['S22_SHARE_NO_DATACHECK'] = '1'
+        try:
+            self.rounds(False)
+            self.assertTrue(self.m.on()['on'])
+            for _ in range(4):
+                self.assertTrue(self.m.watch(once=True)['on'])
+        finally:
+            os.environ.pop('S22_SHARE_NO_DATACHECK', None)
+        self.assertEqual(self.probes, [])
+        self.assertEqual(self.audit()[0]['datacheck'], 'skipped')
 
 
 class GuardTest(Base):
