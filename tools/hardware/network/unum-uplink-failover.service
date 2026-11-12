@@ -23,6 +23,7 @@ ProtectKernelModules=yes
 ProtectControlGroups=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 LockPersonality=yes
+TimeoutStopSec=150
 
 [Install]
 WantedBy=multi-user.target

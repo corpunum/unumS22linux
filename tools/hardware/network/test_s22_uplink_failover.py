@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Hardware-free tests for s22-uplink-failover (run, tcp_probe and the HTTP calls are faked; the route table,
-rule list, table 178 and DNS are stateful). Run: python3 tools/hardware/network/test_s22_uplink_failover.py"""
+"""Hardware-free tests for s22-uplink-failover (run, tcp_probe, trace_probe, pause and the HTTP calls are faked; the route table,
+rule list, tables 178/179/180 and DNS are stateful). Run: python3 tools/hardware/network/test_s22_uplink_failover.py"""
 import importlib.machinery
 import importlib.util
 import json
@@ -17,7 +17,16 @@ ROUTE = ['ip', 'route', 'replace', 'default', 'via', GW, 'dev', 'eno1', 'metric'
 ROUTE_DEL = ['ip', 'route', 'del', 'default', 'via', GW, 'dev', 'eno1', 'metric', '50']
 RULE_ADD = ['ip', 'rule', 'add', 'fwmark', '0x178', 'lookup', '178', 'priority', '1178']
 ROUTE_GET = ['ip', '-j', 'route', 'get']
+VIA_ROUTE = ['ip', 'route', 'replace', 'default', 'via', GW, 'dev', 'eno1', 'table', '179']
+VIA_RULE_ADD = ['ip', 'rule', 'add', 'fwmark', '0x179', 'lookup', '179', 'priority', '1179']
+VIA_RULE_DEL = ['ip', 'rule', 'del', 'fwmark', '0x179', 'lookup', '179', 'priority', '1179']
+VIA_FLUSH = ['ip', 'route', 'flush', 'table', '179']
+NM_CHECK = ['nmcli', 'networking', 'connectivity', 'check']
 DNS = ['1.0.0.1', '149.112.112.112']
+ST_RULE_ADD = ['ip', 'rule', 'add', 'fwmark', '0x17a', 'lookup', '180', 'priority', '1180']
+ST_RULE_DEL = ['ip', 'rule', 'del', 'fwmark', '0x17a', 'lookup', '180', 'priority', '1180']
+MAIN_IP, VIA_IP = '198.51.100.9', '203.0.113.7'   # documentation ranges: fake public addresses
+OK_RAW = b'HTTP/1.1 200 OK\r\nServer: x\r\n\r\nfl=1\nip=203.0.113.7\ncolo=ATH\nhttp=http/1.1\n'
 
 
 def load():
@@ -33,7 +42,7 @@ class Base(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = root = Path(self.tmp.name)
         self.m = m = load()
-        m.STATE, m.AUDIT = root / 'state.json', root / 'audit.jsonl'
+        m.STATE, m.AUDIT, m.LOCK = root / 'state.json', root / 'audit.jsonl', root / 'lock'
         self.tok = root / 'token'
         self.tok.write_text(TOKEN + '\n')
         self.tok.chmod(0o600)
@@ -46,9 +55,15 @@ class Base(unittest.TestCase):
         self.status = {'on': True}         # None -> the status GET raises
         self.fail = []                      # argv prefixes that make `run` return rc=1
         self.routes = [{'dst': 'default', 'gateway': MAIN, 'dev': 'eno1', 'metric': 100}]
-        self.rules, self.table, self.dns, self.tcp_calls = [], [], None, []
+        self.tabs = {'178': [], '179': [], '180': []}
+        self.rules, self.dns, self.tcp_calls = [], None, []
+        self.http_ok, self.http_calls, self.pauses = True, [], []
+        self.http_seq = []                  # consumed first by the phone-path trace, then http_ok applies
+        self.main_calls, self.main_trace_ok, self.main_ip, self.via_ip = [], True, MAIN_IP, VIA_IP
+        self.raises = []                    # argv prefixes that make `run` raise OSError
         m.now = lambda: self.clock
         m.run, m.http_post, m.http_get, m.tcp_probe = self.frun, self.post, self.get, self.tcp
+        m.trace_probe, m.pause = self.trace, self.pause
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -56,6 +71,8 @@ class Base(unittest.TestCase):
     def frun(self, argv, check=True):
         self.cmds.append(argv)
         rc, out = 0, ''
+        if any(argv[:len(p)] == p for p in self.raises):
+            raise OSError('boom')
         if any(argv[:len(p)] == p for p in self.fail):
             rc = 1
         elif argv[0] == 'ping':
@@ -65,20 +82,23 @@ class Base(unittest.TestCase):
         elif argv[:4] == ['ip', '-j', 'route', 'get']:
             out = '[{}]'
         elif argv[:4] == ['ip', '-j', 'rule', 'show']:
-            out = json.dumps(self.rules)
+            out = json.dumps([r for r in self.rules if str(r['priority']) == argv[5]])
         elif argv[:3] == ['ip', 'route', 'replace'] and 'table' in argv:
-            self.table = [argv[5]]
+            self.tabs[argv[-1]] = [argv[5]]
         elif argv[:3] == ['ip', 'route', 'replace']:
             self.routes = [r for r in self.routes if r['gateway'] != argv[5]]
             self.routes.append({'dst': 'default', 'gateway': argv[5], 'dev': argv[7], 'metric': int(argv[9])})
         elif argv[:3] == ['ip', 'route', 'del']:
             self.routes = [r for r in self.routes if r['gateway'] != argv[5]]
         elif argv[:3] == ['ip', 'route', 'flush']:
-            self.table = []
+            self.tabs[argv[-1]] = []
         elif argv[:3] == ['ip', 'rule', 'add']:
-            self.rules.append({'priority': 1178, 'fwmark': '0x178', 'table': '178'})
-        elif argv[:3] == ['ip', 'rule', 'del'] and self.rules:
-            self.rules.pop()
+            self.rules.append({'priority': int(argv[-1]), 'fwmark': argv[4], 'table': argv[6]})
+        elif argv[:3] == ['ip', 'rule', 'del']:
+            for r in self.rules:
+                if str(r['priority']) == argv[-1]:
+                    self.rules.remove(r)
+                    break
         elif argv[:3] == ['resolvectl', 'dns', 'eno1'] and len(argv) == 3:
             out = 'Link 2 (eno1): ' + ' '.join(self.dns or [])
         elif argv[:2] == ['resolvectl', 'dns']:
@@ -106,6 +126,24 @@ class Base(unittest.TestCase):
     def tcp(self, dev, target):
         self.tcp_calls.append((dev, target))
         return self.tcp_ok
+
+    def trace(self, dev, target, mark):
+        if mark in (0x178, 0):   # main line (or unmarked)
+            self.main_calls.append((dev, target, mark))
+            return {'ip': self.main_ip, 'colo': 'FRA'} if self.main_trace_ok else None
+        self.http_calls.append((dev, target, mark))
+        ok = self.http_seq.pop(0) if self.http_seq else self.http_ok
+        return {'ip': self.via_ip, 'colo': 'ATH'} if ok else None
+
+    table = property(lambda self: self.tabs['178'], lambda self, v: self.tabs.__setitem__('178', v))
+    via_table = property(lambda self: self.tabs['179'], lambda self, v: self.tabs.__setitem__('179', v))
+
+    def pause(self, seconds):
+        self.pauses.append(seconds)
+        self.clock += seconds
+
+    def via_rules(self):
+        return [r for r in self.rules if r['priority'] == 1179]
 
     def write_conf(self, **kw):
         c = {'phone_gw': GW, 'api': 'http://phone.example:8767', 'token_file': str(self.tok), **kw}
@@ -154,7 +192,7 @@ class Probe(Base):  # change 1
     def test_rule_is_not_added_twice(self):
         self.step(10)
         self.assertEqual(self.cmds.count(RULE_ADD), 1)
-        self.assertEqual(len(self.rules), 1)
+        self.assertEqual([r['priority'] for r in self.rules if r['priority'] == 1178], [1178])
 
     def test_tcp_alone_counts_as_main_up(self):
         self.tcp_ok = True
@@ -681,6 +719,786 @@ class Config(Base):
         self.assertNotIn('token', self.state())
 
 
+class ViaPath(Base):
+    def test_via_rule_is_not_added_twice(self):
+        self.step(3)
+        self.step(10)   # failover: several path checks re-assert the path
+        self.assertEqual(self.cmds.count(VIA_RULE_ADD), 1)
+        self.assertEqual(len(self.via_rules()), 1)
+        self.assertIn(VIA_ROUTE, self.cmds)
+        self.assertEqual((self.m.VIA_MARK, self.m.VIA_TABLE, self.m.VIA_RULE_PRIO), (0x179, 179, 1179))
+
+    def test_dead_phone_path_changes_no_route_or_dns_sends_off_and_respects_retry_gap(self):
+        self.http_ok = False
+        st = self.step(3)
+        self.assertEqual(st['mode'], 'normal')
+        self.assertFalse(self.phone_route())
+        self.assertNotIn(ROUTE, self.cmds)
+        self.assertFalse([c for c in self.cmds if c[:2] == ['resolvectl', 'dns']])
+        self.assertIsNone(self.dns)
+        self.assertEqual((len(self.ons()), len(self.offs())), (1, 1))
+        self.assertEqual(self.posts[-1][2], {'on': False})
+        ev = self.events()[-1]
+        self.assertEqual((ev['event'], ev['reason']), ('failover_refused', 'phone_path_dead'))
+        self.assertEqual(len(self.http_calls), 6)   # 3 tries x 2 verify targets
+        self.assertEqual(self.pauses, [8, 8])
+        self.assertEqual((ev['stage'], ev['tries'], ev['hold']), ('first', 3, 3))
+        self.assertEqual((self.via_rules(), self.via_table), ([], []))
+        self.step(4)   # 52 s after the attempt: still inside the 60 s gap
+        self.assertEqual(len(self.ons()), 1)
+        self.step(1)
+        self.assertEqual(len(self.ons()), 2)
+
+    def test_verification_succeeds_on_a_later_try_and_reports_probes_and_held(self):
+        self.reconf(verify_targets=['1.1.1.1'])
+        self.http_seq = [False, False]
+        st = self.step(3)
+        self.assertEqual(st['mode'], 'failover')
+        self.assertTrue(self.phone_route())
+        self.assertEqual(self.pauses, [8, 8, 8, 8])   # 2 between failed tries, 2 between hold probes
+        self.assertEqual((self.events()[-1]['verify_probes'], self.events()[-1]['held']), (5, 3))
+        self.assertNotIn('verify_tries_used', self.events()[-1])
+        self.assertEqual(self.http_calls[0], ('eno1', '1.1.1.1', 0x179))
+        self.assertLess(self.cmds.index(VIA_ROUTE), self.cmds.index(ROUTE))
+        self.assertEqual(self.dns, DNS)
+
+    def test_connect_only_result_is_not_enough_to_enter_failover(self):
+        self.tcp_ok = True       # a bare TCP connect succeeds, but no HTTP data flows
+        self.http_ok = False
+        self.assertEqual(self.m.probe_via_phone(self.cfg, {}), False)
+        self.ping_ok = self.tcp_ok = False
+        self.assertEqual(self.step(3)['mode'], 'normal')
+        self.assertFalse(self.phone_route())
+        self.assertEqual(self.events()[-1]['reason'], 'phone_path_dead')
+
+    def test_path_that_holds_enters_failover_and_reports_probes_and_held(self):
+        st = self.step(3)
+        self.assertEqual(st['mode'], 'failover')
+        self.assertEqual((self.events()[-1]['verify_probes'], self.events()[-1]['held']), (3, 3))
+        self.assertEqual(len(self.http_calls), 3)
+        self.assertEqual(self.pauses, [8, 8])
+
+    def test_path_that_answers_once_and_then_dies_is_refused_with_stage_hold(self):
+        self.http_seq = [True, False]
+        self.http_ok = False
+        st = self.step(3)
+        self.assertEqual(st['mode'], 'normal')
+        self.assertFalse(self.phone_route())
+        self.assertNotIn(ROUTE, self.cmds)
+        self.assertFalse([c for c in self.cmds if c[:2] == ['resolvectl', 'dns']])
+        self.assertIsNone(self.dns)
+        self.assertEqual(self.posts[-1][2], {'on': False})
+        self.assertEqual(len(self.offs()), 1)
+        ev = self.events()[-1]
+        self.assertEqual((ev['event'], ev['reason'], ev['stage']), ('failover_refused', 'phone_path_dead', 'hold'))
+        self.assertEqual(self.pauses, [8])   # no restart after a path that worked and then died
+        self.assertEqual((self.via_rules(), self.via_table), ([], []))
+
+    def test_path_that_dies_on_the_last_hold_probe_is_refused_with_stage_hold(self):
+        self.http_seq = [True, True, False]
+        self.http_ok = False
+        self.assertEqual(self.step(3)['mode'], 'normal')
+        self.assertEqual(self.events()[-1]['stage'], 'hold')
+        self.assertEqual(len(self.http_calls), 4)   # two answered at once, the failing one tried both targets
+
+    def test_path_that_never_answers_is_refused_with_stage_first(self):
+        self.http_ok = False
+        self.step(3)
+        self.assertEqual(self.events()[-1]['stage'], 'first')
+        self.assertNotIn(ROUTE, self.cmds)
+
+    def test_hold_pauses_use_verify_gap_s(self):
+        self.reconf(verify_gap_s=7, verify_hold=4)
+        self.step(3)
+        self.assertEqual(self.pauses, [7, 7, 7])
+        self.assertEqual(self.events()[-1]['verify_probes'], 4)
+        self.reconf(verify_gap_s=0, verify_hold=1)
+        self.pauses.clear()
+        self.assertEqual(self.m.verify_phone_path(self.cfg, {}), (1, 'ok'))
+        self.assertEqual(self.pauses, [])
+
+    def test_probe_via_phone_uses_verify_targets_and_never_the_main_targets(self):
+        self.reconf(targets=['9.9.9.9'], verify_targets=['1.0.0.1'])
+        self.http_ok = False
+        self.m.probe_via_phone(self.cfg, {})
+        self.assertEqual(self.http_calls, [('eno1', '1.0.0.1', 0x179)])
+        self.http_calls.clear()
+        self.reconf()
+        self.http_ok = True
+        self.m.probe_via_phone(self.cfg, {})
+        self.assertEqual({c[1] for c in self.http_calls}, {'1.1.1.1'})
+        self.http_calls.clear()
+        self.http_ok = False
+        self.m.probe_via_phone(self.cfg, {})
+        self.assertEqual([c[1] for c in self.http_calls], ['1.1.1.1', '1.0.0.1'])
+        self.assertNotIn('9.9.9.9', [c[1] for c in self.http_calls])
+
+    def test_failover_is_left_after_three_dead_path_checks_with_new_defaults(self):
+        self.step(3)
+        self.http_ok = False
+        self.step(2)                      # two dead checks
+        self.assertEqual((self.state()['mode'], self.state()['path_fails']), ('failover', 2))
+        self.assertTrue(self.phone_route())
+        st = self.step(1)                 # third dead check reaches the default limit of 3
+        self.assertEqual(st['mode'], 'normal')
+        self.assertFalse(self.phone_route())
+        self.assertIsNone(self.dns)
+        self.assertEqual(self.events()[-1]['reason'], 'phone_path_dead')
+        self.assertEqual(len(self.offs()), 1)
+        self.assertEqual(st['last_try'], self.clock)
+        self.assertEqual((self.via_rules(), self.via_table), ([], []))
+
+    def test_one_dead_check_then_a_good_one_resets_the_counter(self):
+        self.reconf(path_fail_limit=3)
+        self.step(3)
+        self.http_ok = False
+        self.step(2)
+        self.assertEqual(self.state()['path_fails'], 2)
+        self.http_ok = True
+        self.step(1)
+        self.assertEqual(self.state()['path_fails'], 0)
+        self.http_ok = False
+        self.step(2)                      # two more dead checks: still below the limit of 3
+        self.assertEqual(self.state()['mode'], 'failover')
+
+    def test_path_check_runs_at_most_every_path_check_s(self):
+        self.reconf(path_check_s=25)
+        self.step(3)
+        n = len(self.http_calls)
+        self.step(1)
+        self.assertEqual(len(self.http_calls), n)
+        self.step(2)
+        self.assertEqual(len(self.http_calls), n + 1)
+
+    def test_via_path_is_kept_during_failover_and_cleaned_on_leave(self):
+        self.reconf(up_after=1, min_failover_s=0)
+        self.step(3)
+        self.step(2)
+        self.assertEqual((len(self.via_rules()), self.via_table), (1, [GW]))
+        self.ping_ok = True
+        self.assertEqual(self.step()['mode'], 'normal')
+        self.assertEqual((self.via_rules(), self.via_table), ([], []))
+        self.assertIn(VIA_RULE_DEL, self.cmds)
+        self.assertIn(VIA_FLUSH, self.cmds)
+
+    def test_via_path_is_cleaned_on_sweep(self):
+        self.step(3)
+        self.assertTrue(self.via_rules() and self.via_table)
+        self.m.sweep(self.cfg)
+        self.assertEqual((self.via_rules(), self.via_table), ([], []))
+        self.assertIn(VIA_FLUSH, self.cmds)
+
+    def test_connectivity_check_is_issued_on_leave_and_on_sweep(self):
+        self.reconf(up_after=1, min_failover_s=0)
+        self.step(3)
+        self.assertNotIn(NM_CHECK, self.cmds)
+        self.ping_ok = True
+        self.step()
+        self.assertEqual(self.cmds.count(NM_CHECK), 1)
+        self.m.sweep(self.cfg)
+        self.assertEqual(self.cmds.count(NM_CHECK), 2)
+
+    def test_connectivity_check_failure_is_ignored(self):
+        self.fail = [NM_CHECK]
+        self.m.sweep(self.cfg)
+        self.assertEqual(self.state()['mode'], 'normal')
+
+    def test_via_path_is_removed_in_normal_mode(self):
+        self.m.write_json(self.m.STATE, {'mode': 'normal'})
+        self.rules.append({'priority': 1179})
+        self.ping_ok = True
+        self.step()
+        self.assertEqual(self.via_rules(), [])
+
+
+class Selftest(Base):
+    def run_self(self, seconds=40):
+        res, rc = self.m.selftest(self.cfg, seconds)
+        return res, rc
+
+    def test_all_pass_run(self):
+        self.ping_ok = True
+        res, rc = self.run_self(40)
+        self.assertEqual(rc, 0)
+        self.assertTrue(res['ok'] and res['share_ok'])
+        self.assertEqual((res['passed'], res['failed'], res['first_fail_t']), (9, 0, None))
+        self.assertEqual([x['t'] for x in res['samples']], [0, 5, 10, 15, 20, 25, 30, 35, 40])
+        self.assertEqual([p[2]['on'] for p in self.posts], [True, False])
+        self.assertEqual(self.posts[0][3], 100)
+        self.assertEqual((self.via_rules(), self.via_table), ([], []))
+        self.assertEqual(self.events()[-1], {**self.events()[-1], 'event': 'selftest', 'passed': 9, 'failed': 0})
+
+    def test_run_failing_from_second_sample_sets_first_fail_and_still_cleans_up(self):
+        self.http_seq = [True]
+        self.http_ok = False
+        res, rc = self.run_self(40)
+        self.assertEqual(rc, 1)
+        self.assertFalse(res['ok'])
+        self.assertEqual((res['passed'], res['failed'], res['first_fail_t']), (1, 8, 5))
+        self.assertIn(ST_RULE_DEL, self.cmds)
+        self.assertEqual(self.tabs['180'], [])
+        self.assertEqual([r for r in self.rules if r['priority'] == 1180], [])
+        self.assertEqual(self.posts[-1][2], {'on': False})
+
+    def test_refused_while_failover_is_active(self):
+        self.m.write_json(self.m.STATE, {'mode': 'failover'})
+        res, rc = self.run_self()
+        self.assertEqual(rc, 1)
+        self.assertIn('error', res)
+        self.assertEqual((self.posts, self.cmds), ([], []))
+
+    def test_never_touches_default_route_or_dns(self):
+        self.run_self(10)
+        for c in self.cmds:
+            self.assertNotEqual(c[0], 'resolvectl')
+            self.assertFalse(c[:3] in (['ip', 'route', 'replace'], ['ip', 'route', 'del']) and 'metric' in c, c)
+        self.assertNotIn(ROUTE, self.cmds)
+        self.assertTrue(self.routes == [{'dst': 'default', 'gateway': MAIN, 'dev': 'eno1', 'metric': 100}])
+
+    def test_share_refused_fails_without_probing_and_still_shares_off(self):
+        self.post_result = (403, {'ok': False})
+        res, rc = self.run_self()
+        self.assertEqual((rc, res['ok'], res['share_ok'], res['samples']), (1, False, False, []))
+        self.assertEqual(self.http_calls, [])
+        self.assertEqual(self.posts[-1][2], {'on': False})
+
+    def test_fewer_than_three_samples_is_not_ok(self):
+        res, _ = self.m.selftest(self.cfg, 5)
+        self.assertEqual(len(res['samples']), 2)
+        self.assertFalse(res['ok'])
+
+    def test_samples_spanning_under_15_s_are_not_ok(self):
+        res, rc = self.m.selftest(self.cfg, 10)   # 3 good samples at 0, 5, 10 s: span 10 s
+        self.assertEqual((len(res['samples']), res['failed']), (3, 0))
+        self.assertFalse(res['ok'])
+        self.assertEqual(rc, 1)
+        res, rc = self.m.selftest(self.cfg, 15)   # span exactly 15 s is enough
+        self.assertTrue(res['ok'])
+
+    def test_cli_default_seconds_is_40(self):
+        import contextlib
+        import io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = self.m.main(['--config', str(self.conf), 'selftest'])
+        self.assertEqual((rc, len(json.loads(out.getvalue())['samples'])), (0, 9))
+
+    def test_cli_seconds_range_and_exit_code(self):
+        import contextlib
+        import io
+        for bad in ('9', '121'):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                self.m.main(['--config', str(self.conf), 'selftest', '--seconds', bad])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = self.m.main(['--config', str(self.conf), 'selftest', '--seconds', '10'])
+        self.assertEqual(rc, 1)   # a 10 s run spans under 15 s, so it can never be ok
+        self.assertEqual(json.loads(out.getvalue())['passed'], 3)
+
+
+class NewConfig(Base):
+    def test_new_ints_defaults_and_ranges(self):
+        c = self.cfg
+        self.assertEqual((c['verify_tries'], c['verify_hold'], c['verify_gap_s'], c['path_check_s'],
+                          c['path_fail_limit']), (3, 3, 8, 10, 3))
+        good = {'verify_tries': (1, 10), 'verify_hold': (1, 10), 'verify_gap_s': (0, 30), 'path_check_s': (5, 300),
+                'path_fail_limit': (1, 10)}
+        for k, (lo, hi) in good.items():
+            for v in (lo, hi):
+                self.write_conf(**{k: v})
+                self.assertEqual(self.m.load_config(self.conf)[k], v)
+            for v in (lo - 1, hi + 1, 1.5, '3', None, True):
+                self.write_conf(**{k: v})
+                with self.assertRaises(self.m.ConfigError, msg=f'{k}={v!r}'):
+                    self.m.load_config(self.conf)
+
+    def test_verify_targets_default_and_validation(self):
+        self.assertEqual(self.cfg['verify_targets'], ['1.1.1.1', '1.0.0.1'])
+        self.write_conf(verify_targets=['1.0.0.1'])
+        self.assertEqual(self.m.load_config(self.conf)['verify_targets'], ['1.0.0.1'])
+        for v in ([], 'x', '1.1.1.1', ['nope'], [None], None, 5, ['2001:db8::1'], ['1.1.1.1', '2001:db8::1']):
+            self.write_conf(verify_targets=v)
+            with self.assertRaisesRegex(self.m.ConfigError, 'verify_targets', msg=repr(v)):
+                self.m.load_config(self.conf)
+
+
+class ParseTrace(Base):
+    def test_200_with_colo_is_parsed_with_ip(self):
+        self.assertEqual(self.m.parse_trace(OK_RAW), {'ip': VIA_IP, 'colo': 'ATH'})
+
+    def test_200_without_ip_line_gives_empty_ip(self):
+        raw = b'HTTP/1.0 200 OK\r\n\r\ncolo=FRA\n'
+        self.assertEqual(self.m.parse_trace(raw), {'ip': '', 'colo': 'FRA'})
+
+    def test_carrier_portal_302_does_not_count(self):
+        raw = b'HTTP/1.1 302 Found\r\nLocation: http://portal.invalid/\r\n\r\ncolo=ATH\nip=203.0.113.7\n'
+        self.assertIsNone(self.m.parse_trace(raw))
+        self.assertIsNone(self.m.parse_trace(raw.replace(b'302 Found', b'301 Moved')))
+
+    def test_200_without_colo_or_with_empty_colo_does_not_count(self):
+        self.assertIsNone(self.m.parse_trace(b'HTTP/1.1 200 OK\r\n\r\n<html>welcome</html>'))
+        self.assertIsNone(self.m.parse_trace(b'HTTP/1.1 200 OK\r\n\r\nip=203.0.113.7\ncolo=\n'))
+
+    def test_short_reads_and_garbage_are_none(self):
+        for raw in (b'', b'HTTP/1.1 2', b'HTTP/1.1 200 OK', b'HTTP/1.1 200 OK\r\n', b'\x00\xff\xfe garbage',
+                    b'SSH-2.0-OpenSSH\r\n\r\ncolo=ATH\n', b'HTTP/2 200\r\n\r\ncolo=ATH\n'):
+            self.assertIsNone(self.m.parse_trace(raw), raw)
+
+    def test_trace_probe_is_verified_https_on_443_with_device_and_mark(self):
+        import types
+        log = []
+
+        class Sock:
+            def __init__(self, *a):
+                log.append(('socket', a))
+                self.sent, self.chunks = b'', [OK_RAW, b'']
+
+            def setsockopt(self, lvl, opt, val):
+                log.append(('opt', opt, val))
+
+            def settimeout(self, t):
+                log.append(('timeout', t))
+
+            def connect(self, addr):
+                log.append(('connect', addr))
+
+            def sendall(self, data):
+                log.append(('send', data))
+
+            def recv(self, n):
+                return self.chunks.pop(0)
+
+            def close(self):
+                pass
+
+        class Ctx:
+            def wrap_socket(self, sock, server_hostname):
+                log.append(('tls', server_hostname))
+                return sock
+        fake_sock = types.SimpleNamespace(AF_INET=2, SOCK_STREAM=1, SOL_SOCKET=1, SO_BINDTODEVICE=25, SO_MARK=36,
+                                          socket=Sock)
+        m = load()
+        m.socket, m.ssl = fake_sock, types.SimpleNamespace(create_default_context=lambda: Ctx())
+        self.assertEqual(m.trace_probe('eno1', '1.1.1.1', 0x17a), {'ip': VIA_IP, 'colo': 'ATH'})
+        self.assertIn(('opt', 25, b'eno1'), log)
+        self.assertIn(('opt', 36, 0x17a), log)
+        self.assertIn(('connect', ('1.1.1.1', 443)), log)
+        self.assertIn(('tls', '1.1.1.1'), log)
+        self.assertIn(('send', b'GET /cdn-cgi/trace HTTP/1.0\r\nHost: 1.1.1.1\r\n\r\n'), log)
+        self.assertEqual(log[0], ('socket', (2, 1)))   # IPv4 only
+        log.clear()
+        m.trace_probe('eno1', '1.1.1.1', 0)
+        self.assertNotIn(36, [x[1] for x in log if x[0] == 'opt'])   # mark 0: no SO_MARK
+
+
+class WrongWay(Base):
+    def test_main_ip_is_learned_over_the_main_marked_path_at_the_keepalive_cadence(self):
+        self.ping_ok = True
+        self.step()
+        self.assertEqual(self.state()['main_ip'], MAIN_IP)
+        self.assertEqual(self.main_calls, [('eno1', '1.1.1.1', 0x178)])
+        self.step(29)        # inside 300 s
+        self.assertEqual(len(self.main_calls), 1)
+        self.step(1)
+        self.assertEqual(len(self.main_calls), 2)
+
+    def test_first_answering_verify_target_is_used_for_learning(self):
+        calls = []
+        self.m.trace_probe = lambda d, t, mk: calls.append(t) or (None if t == '1.1.1.1' else {'ip': MAIN_IP, 'colo': 'x'})
+        self.m.first_trace(self.cfg, 0x178)
+        self.assertEqual(calls, ['1.1.1.1', '1.0.0.1'])
+
+    def test_main_ip_is_not_learned_when_the_main_line_is_down(self):
+        self.step(2)
+        self.assertEqual(self.main_calls, [])
+
+    def test_trace_through_phone_with_unknown_main_ip_counts(self):
+        self.assertTrue(self.m.probe_via_phone(self.cfg, {}))
+
+    def test_trace_with_different_ip_counts(self):
+        self.assertTrue(self.m.probe_via_phone(self.cfg, {'main_ip': MAIN_IP}))
+
+    def test_trace_whose_ip_equals_main_ip_does_not_count_and_is_audited_once_per_10_minutes(self):
+        self.via_ip = MAIN_IP
+        st = {'main_ip': MAIN_IP}
+        for _ in range(5):
+            self.assertFalse(self.m.probe_via_phone(self.cfg, st))
+        self.assertEqual(self.names().count('via_path_wrong_way'), 1)
+        self.clock += 600
+        self.assertFalse(self.m.probe_via_phone(self.cfg, st))
+        self.assertEqual(self.names().count('via_path_wrong_way'), 2)
+
+    def test_wrong_way_path_refuses_failover(self):
+        self.m.write_json(self.m.STATE, {'mode': 'normal', 'main_ip': MAIN_IP})
+        self.via_ip = MAIN_IP
+        st = self.step(3)
+        self.assertEqual(st['mode'], 'normal')
+        self.assertFalse(self.phone_route())
+        self.assertEqual(self.events()[-1]['reason'], 'phone_path_dead')
+        self.assertEqual(self.names().count('via_path_wrong_way'), 1)
+
+    def test_wrong_way_during_failover_counts_as_failed_check(self):
+        self.m.write_json(self.m.STATE, {'mode': 'normal', 'main_ip': MAIN_IP})
+        self.step(3)
+        self.assertEqual(self.state()['mode'], 'failover')
+        self.via_ip = MAIN_IP
+        self.step(3)
+        self.assertEqual(self.state()['mode'], 'normal')
+        self.assertEqual(self.events()[-1]['reason'], 'phone_path_dead')
+
+    def test_carrier_portal_302_does_not_count_through_probe_via_phone(self):
+        portal = b'HTTP/1.1 302 Found\r\nLocation: http://portal.invalid/\r\n\r\ncolo=ATH\n'
+        self.m.trace_probe = lambda d, t, mk: self.m.parse_trace(portal)
+        self.assertFalse(self.m.probe_via_phone(self.cfg, {}))
+        self.step(3)
+        self.assertEqual(self.state()['mode'], 'normal')
+
+
+class Stopping(Base):
+    def test_pause_waits_on_the_stop_event(self):
+        import types
+        m = load()
+        waited = []
+        m.STOP = types.SimpleNamespace(wait=waited.append, is_set=lambda: False)
+        m.pause(3)
+        self.assertEqual(waited, [3])
+
+    def test_stop_set_during_the_hold_gives_reason_stopping_share_off_and_no_route(self):
+        def pause(seconds):
+            self.pauses.append(seconds)
+            if len(self.pauses) == 2:
+                self.m.STOP.set()
+        self.m.pause = pause
+        st = self.step(3)
+        self.assertEqual(st['mode'], 'normal')
+        ev = self.events()[-1]
+        self.assertEqual((ev['event'], ev['reason']), ('failover_refused', 'stopping'))
+        self.assertEqual(len(self.offs()), 1)
+        self.assertFalse(self.phone_route())
+        self.assertNotIn(ROUTE, self.cmds)
+        self.assertEqual((self.via_rules(), self.via_table), ([], []))
+        self.assertEqual(len(self.http_calls), 2)   # no probe after the pause that saw STOP
+
+    def test_stop_already_set_means_no_probe_at_all(self):
+        self.m.STOP.set()
+        self.assertEqual(self.m.verify_phone_path(self.cfg, {}), (0, 'stopping'))
+        self.assertEqual(self.http_calls, [])
+
+    def test_stop_set_between_first_pause_and_probe_probes_nothing_more(self):
+        self.http_ok = False
+
+        def pause(seconds):
+            self.m.STOP.set()
+        self.m.pause = pause
+        self.assertEqual(self.m.verify_phone_path(self.cfg, {}), (1, 'stopping'))
+
+
+class VerifyStages(Base):
+    def test_returns_tuple_and_no_function_attribute(self):
+        self.assertEqual(self.m.verify_phone_path(self.cfg, {}), (3, 'ok'))
+        self.assertFalse(hasattr(self.m.verify_phone_path, 'stage'))
+
+    def test_setup_stage_when_via_path_cannot_be_made(self):
+        self.fail = [VIA_ROUTE]
+        self.assertEqual(self.m.verify_phone_path(self.cfg, {}), (0, 'setup'))
+        self.fail = []
+        self.http_ok = False
+        self.assertEqual(self.m.verify_phone_path(self.cfg, {}), (3, 'first'))
+        self.http_seq, self.http_ok = [True, False], False
+        self.assertEqual(self.m.verify_phone_path(self.cfg, {}), (2, 'hold'))
+
+    def test_setup_failure_is_refused_as_phone_path_dead_with_stage_setup(self):
+        self.fail = [VIA_ROUTE]
+        self.assertEqual(self.step(3)['mode'], 'normal')
+        ev = self.events()[-1]
+        self.assertEqual((ev['reason'], ev['stage']), ('phone_path_dead', 'setup'))
+        self.assertEqual(len(self.offs()), 1)
+
+
+class VerifyingFlag(Base):
+    def test_verifying_is_written_before_share_on_and_cleared_after(self):
+        seen = {}
+        orig_post = self.post
+
+        def post(url, token, payload, timeout):
+            if payload['on']:
+                seen['at_on'] = self.state()
+            return orig_post(url, token, payload, timeout)
+        self.m.http_post = post
+        orig_trace = self.trace
+
+        def trace(dev, target, mark):
+            seen.setdefault('at_probe', self.state())
+            return orig_trace(dev, target, mark)
+        self.m.trace_probe = trace
+        st = self.step(3)
+        self.assertTrue(seen['at_on']['verifying'])
+        self.assertFalse(seen['at_on']['sharing'])
+        self.assertEqual((seen['at_probe']['verifying'], seen['at_probe']['sharing']), (True, True))
+        self.assertEqual((st['mode'], self.state()['verifying'], self.state()['sharing']), ('failover', False, True))
+
+    def test_verifying_is_cleared_on_refusal_paths(self):
+        for setup in (lambda: setattr(self, 'http_ok', False), lambda: setattr(self, 'post_result', (403, {})),
+                      lambda: setattr(self, 'fail', [ROUTE])):
+            self.tmp.cleanup()
+            self.setUp()
+            setup()
+            self.step(3)
+            self.assertEqual((self.state()['verifying'], self.state()['sharing'], self.state()['mode']),
+                             (False, False, 'normal'))
+
+    def test_verifying_is_cleared_when_an_exception_propagates(self):
+        self.m.verify_phone_path = lambda cfg, st: 1 / 0
+        self.step(2)
+        self.step()
+        self.assertEqual(self.state()['verifying'], False)
+
+    def test_status_command_shows_verifying(self):
+        import contextlib
+        import io
+        seen = []
+        orig_trace = self.trace
+
+        def trace(dev, target, mark):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.m.main(['--config', str(self.conf), 'status'])
+            seen.append(json.loads(out.getvalue()).get('verifying'))
+            return orig_trace(dev, target, mark)
+        self.m.trace_probe = trace
+        self.step(3)
+        self.assertEqual(set(seen), {True})
+
+
+class LastLook(Base):
+    def test_main_back_during_verification_refuses_without_route(self):
+        def pause(seconds):
+            self.pauses.append(seconds)
+            self.ping_ok = True   # the main line recovers while the phone path is being verified
+        self.m.pause = pause
+        st = self.step(3)
+        self.assertEqual((st['mode'], st['fails']), ('normal', 0))
+        ev = self.events()[-1]
+        self.assertEqual((ev['event'], ev['reason']), ('failover_refused', 'main_back'))
+        self.assertFalse(self.phone_route())
+        self.assertNotIn(ROUTE, self.cmds)
+        self.assertEqual([p[2]['on'] for p in self.posts], [True, False])
+        self.assertEqual((self.via_rules(), self.via_table), ([], []))
+        self.assertEqual((self.state()['verifying'], self.state()['sharing']), (False, False))
+        self.assertIsNone(self.dns)
+
+    def test_last_look_uses_the_main_probe_and_runs_right_before_the_route(self):
+        self.step(3)
+        probes = [i for i, c in enumerate(self.cmds) if c[0] == 'ping']
+        self.assertLess(probes[-1], self.cmds.index(ROUTE))
+        self.assertGreaterEqual(len(probes), 4)   # 3 loop probes + the last look
+
+
+class BroadCleanup(Base):
+    def test_non_runtimeerror_after_share_ok_still_shares_off_and_cleans_up(self):
+        self.raises = [ROUTE]
+        st = self.step(3)
+        self.assertEqual(st['mode'], 'normal')
+        self.assertEqual([p[2]['on'] for p in self.posts], [True, False])
+        self.assertEqual((self.via_rules(), self.via_table), ([], []))
+        ev = self.events()[-1]
+        self.assertEqual((ev['event'], ev['reason']), ('failover_refused', 'error'))
+        self.assertFalse(self.phone_route())
+
+    def test_exception_inside_verification_is_cleaned_up_too(self):
+        def boom(cfg, st):
+            raise ValueError('x')
+        self.m.verify_phone_path = boom
+        self.assertEqual(self.step(3)['mode'], 'normal')
+        self.assertEqual([p[2]['on'] for p in self.posts], [True, False])
+        self.assertEqual(self.events()[-1]['reason'], 'error')
+
+
+class SelftestIsolation(Base):
+    def test_constants(self):
+        self.assertEqual((self.m.ST_MARK, self.m.ST_TABLE, self.m.ST_RULE_PRIO), (0x17a, 180, 1180))
+
+    def test_selftest_uses_mark_table_and_rule_of_its_own(self):
+        res, rc = self.m.selftest(self.cfg, 40)
+        self.assertEqual(rc, 0)
+        self.assertEqual({c[2] for c in self.http_calls}, {0x17a})
+        self.assertIn(ST_RULE_ADD, self.cmds)
+        self.assertIn(['ip', 'route', 'replace', 'default', 'via', GW, 'dev', 'eno1', 'table', '180'], self.cmds)
+        self.assertIn(ST_RULE_DEL, self.cmds)
+        self.assertFalse([c for c in self.cmds if '179' in c or '1179' in c])
+        self.assertEqual((self.tabs['180'], self.tabs['179']), ([], []))
+
+    def test_daemon_normal_mode_cleanup_does_not_remove_rule_1180(self):
+        self.rules.append({'priority': 1180, 'fwmark': '0x17a', 'table': '180'})
+        self.tabs['180'] = [GW]
+        self.ping_ok = True
+        self.step(3)
+        self.assertEqual([r['priority'] for r in self.rules if r['priority'] == 1180], [1180])
+        self.assertEqual(self.tabs['180'], [GW])
+        self.assertIn(VIA_RULE_DEL, self.cmds)
+
+    def test_main_ip_learned_unmarked_without_rule_1178_and_marked_with_it(self):
+        self.m.selftest(self.cfg, 10)
+        self.assertEqual(self.main_calls, [('eno1', '1.1.1.1', 0)])
+        self.main_calls.clear()
+        self.rules.append({'priority': 1178, 'fwmark': '0x178', 'table': '178'})
+        self.m.selftest(self.cfg, 10)
+        self.assertEqual(self.main_calls, [('eno1', '1.1.1.1', 0x178)])
+
+    def test_json_has_main_ip_known_and_ip_differs_but_never_the_addresses(self):
+        res, rc = self.m.selftest(self.cfg, 40)
+        self.assertTrue(res['main_ip_known'])
+        self.assertTrue(all(x['ip_differs'] is True for x in res['samples']))
+        text = json.dumps(res)
+        self.assertNotIn(MAIN_IP, text)
+        self.assertNotIn(VIA_IP, text)
+
+    def test_unknown_main_ip_gives_null_ip_differs_and_can_still_be_ok(self):
+        self.main_trace_ok = False
+        res, rc = self.m.selftest(self.cfg, 40)
+        self.assertEqual((res['main_ip_known'], rc, res['ok']), (False, 0, True))
+        self.assertTrue(all(x['ip_differs'] is None for x in res['samples']))
+
+    def test_wrong_way_samples_make_selftest_fail(self):
+        self.via_ip = MAIN_IP
+        res, rc = self.m.selftest(self.cfg, 40)
+        self.assertEqual((rc, res['ok'], res['passed']), (1, False, 0))
+        self.assertTrue(all(x['ip_differs'] is False and x['ok'] is False for x in res['samples']))
+
+    def test_share_off_is_skipped_when_the_daemon_went_into_failover_meanwhile(self):
+        orig = self.post
+
+        def post(url, token, payload, timeout):
+            r = orig(url, token, payload, timeout)
+            if payload['on']:
+                self.m.write_json(self.m.STATE, {'mode': 'failover'})
+            return r
+        self.m.http_post = post
+        self.m.selftest(self.cfg, 10)
+        self.assertEqual([p[2]['on'] for p in self.posts], [True])
+        self.assertIn(ST_RULE_DEL, self.cmds)   # its own path is still removed
+
+    def test_share_off_is_skipped_when_the_daemon_is_verifying(self):
+        orig = self.post
+
+        def post(url, token, payload, timeout):
+            if payload['on']:
+                self.m.write_json(self.m.STATE, {'mode': 'normal', 'verifying': True})
+            return orig(url, token, payload, timeout)
+        self.m.http_post = post
+        self.m.selftest(self.cfg, 10)
+        self.assertEqual([p[2]['on'] for p in self.posts], [True])
+
+    def test_refused_while_daemon_is_verifying(self):
+        self.m.write_json(self.m.STATE, {'mode': 'normal', 'verifying': True})
+        res, rc = self.m.selftest(self.cfg, 10)
+        self.assertEqual((rc, self.posts), (1, []))
+
+
+class Locking(Base):
+    def run_main(self, *args):
+        import contextlib
+        import io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = self.m.main(['--config', str(self.conf), *args])
+        return rc, json.loads(out.getvalue())
+
+    def failing_lock(self):
+        import contextlib
+
+        @contextlib.contextmanager
+        def lock(wait_s):
+            raise self.m.LockBusy('held')
+            yield
+        self.m.hold_lock = lock
+
+    def test_sweep_reports_a_json_error_when_the_lock_cannot_be_had(self):
+        self.failing_lock()
+        rc, out = self.run_main('sweep')
+        self.assertEqual((rc, out['ok']), (1, False))
+        self.assertIn('lock', out['error'])
+        self.assertEqual((self.posts, self.cmds), ([], []))
+
+    def test_selftest_reports_a_json_error_when_the_lock_cannot_be_had(self):
+        self.failing_lock()
+        rc, out = self.run_main('selftest')
+        self.assertEqual((rc, out['ok']), (1, False))
+        self.assertEqual((self.posts, self.cmds), ([], []))
+
+    def test_real_flock_contention_fails_then_succeeds_after_release(self):
+        import fcntl
+        self.m.LOCK_WAIT_S = 0.3
+        fd = os.open(self.m.LOCK, os.O_RDWR | os.O_CREAT)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            rc, out = self.run_main('sweep')
+            self.assertEqual((rc, out['ok']), (1, False))
+        finally:
+            os.close(fd)
+        rc, out = self.run_main('sweep')
+        self.assertEqual((rc, out['mode']), (0, 'normal'))
+
+    def test_wait_is_up_to_120_seconds(self):
+        self.assertEqual(self.m.LOCK_WAIT_S, 120)
+        self.assertEqual(str(self.m.LOCK), str(self.root / 'lock'))   # overridden by the tests
+
+    def test_daemon_holds_the_lock_around_each_once(self):
+        import fcntl
+        held = []
+
+        def fake_once(cfg):
+            fd = os.open(self.m.LOCK, os.O_RDWR | os.O_CREAT)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                held.append(False)
+            except OSError:
+                held.append(True)
+            finally:
+                os.close(fd)
+            self.m.STOP.set()
+        self.m.once = fake_once
+        self.m.loop(self.cfg)
+        self.assertEqual(held, [True])
+        # and it is released again afterwards
+        fd = os.open(self.m.LOCK, os.O_RDWR)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        os.close(fd)
+
+    def test_busy_lock_skips_the_daemon_iteration_and_audits(self):
+        self.failing_lock()
+        calls = []
+        self.m.once = lambda cfg: calls.append(1)
+        self.m.STOP.set()
+        self.m.loop(self.cfg)
+        self.assertEqual(calls, [])
+
+    def test_selftest_installs_term_hup_int_handlers_that_raise_and_restores_them(self):
+        import signal
+        before = {s: signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)}
+        seen = {}
+
+        def fake_selftest(cfg, seconds):
+            for sg in before:
+                seen[sg] = signal.getsignal(sg)
+            return {'ok': True}, 0
+        self.m.selftest = fake_selftest
+        self.run_main('selftest')
+        for sg, h in seen.items():
+            with self.assertRaises(SystemExit):
+                h(sg, None)
+        self.assertEqual({s: signal.getsignal(s) for s in before}, before)
+
+    def test_signal_during_selftest_still_cleans_up(self):
+        def pause(seconds):
+            raise SystemExit(143)
+        self.m.pause = pause
+        with self.assertRaises(SystemExit):
+            self.m.selftest(self.cfg, 40)
+        self.assertEqual([p[2]['on'] for p in self.posts], [True, False])
+        self.assertEqual(self.tabs['180'], [])
+
+
 class Unit(unittest.TestCase):  # change 12
     def test_unit_hardening(self):
         u = (HERE / 'unum-uplink-failover.service').read_text()
@@ -691,6 +1509,7 @@ class Unit(unittest.TestCase):  # change 12
         self.assertEqual(sorted(fam), ['AF_INET', 'AF_INET6', 'AF_NETLINK', 'AF_UNIX'])
         self.assertIn('/etc/unum/s22-device.token', u.splitlines()[0] + u.splitlines()[1])
         self.assertIn('ExecStopPost=', u)
+        self.assertIn('TimeoutStopSec=150\n', u)
 
 
 if __name__ == '__main__':

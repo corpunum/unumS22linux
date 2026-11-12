@@ -99,6 +99,24 @@ the sketch above in these points:
   Tailscale path over the LAN warm (the relay is unreachable in an outage) and notices early when the phone
   is unreachable or no longer has this rig configured.
 
+### After the failed stage 1 (2026-11-12): the phone path is proven before the route is touched
+
+Stage 1 switched the rig onto a phone whose SIM had no data allowance (EXPERIMENTS.md, 2026-11-12 afternoon):
+the carrier passed traffic for 1–3 s, then answered handshakes and dropped the rest. The rig was offline for
+5 minutes. Since then, on both sides:
+
+- **Phone (`uplink.share on`):** refuses (409) unless a certificate-verified HTTPS trace over the mobile
+  link succeeds in 4 rounds, 8 s apart; the watchdog stops a share after 3 dead rounds.
+- **Rig, before the switch:** a second marked path through the phone (`fwmark 0x179`, table 179, rule 1179)
+  carries the same verified HTTPS trace; it must succeed 3 times, 8 s apart, and its public address must
+  differ from the main line's (learned in normal mode), so a probe that leaked out the main line cannot pass.
+  A last look at the main line just before the route change refuses with `main_back` if it recovered.
+- **Rig, during failover:** the path is checked every 10 s; 3 dead checks in a row end the failover.
+- **Why TLS:** plain HTTP could be answered by a carrier portal; the certificate of the target cannot.
+- **`selftest [--seconds N]`:** for a rig whose main line is fine: share on, its own marked path (0x17a,
+  table 180), a trace every 5 s, share off; it never touches the default route or DNS. This replaces the
+  hand bench. The daemon, `selftest` and `sweep` share a lock, and stopping the unit interrupts a wait.
+
 ### Install and rollback: `install-uplink-failover.sh`
 
 `sudo sh tools/hardware/network/install-uplink-failover.sh install <checkout> <config.json> <token-file>`
