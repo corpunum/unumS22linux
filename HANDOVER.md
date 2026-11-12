@@ -87,6 +87,39 @@ and writable. The kernel has no PID or user namespaces.
 - Smoke test from the rig: `curl -H "Authorization: Bearer $(cat ~/.config/unum/s22-device.token)" http://<phone tailnet IP>:8767/v1/device`.
 - Not done yet: touch-shell toggles for the switch file (U-d775e6d0), P4 uplink failover (U-fe741e10), and the rig-side tools (s-openunum, U-c8028189).
 
+## Session state (2026-11-12 10:43 EET, s-s22linux, before a context compaction)
+**Live on the phone today (all in the queued unumship chain, tip 946d11ee, 22 commits; only b0aef9aa had shipped):**
+owner pairing for the model toggle; keepalive model pin through touchd; guardian and keepalive respawn each
+other; fast-voice turns.jsonl; SMS bridge (allowlisted senders only, every command two-step with a YES code);
+s22d remote device API on the tailnet (:8767, rig only); speak with a per-utterance level; task.submit/get;
+audio.listen (OFF, owner switch); Settings → Rig access switches; uplink.share (proof passed);
+OpenUnum and the Lightpanda proxy as the unprivileged user `unumagent`.
+
+**Open, in order:**
+1. Shipping: confirm the chain's CI in `~/.local/share/unumship/ci/unumS22linux.json`; if it has not shipped
+   by 11:30 EET on 11-12, tell corpunum-82.
+2. Idle battery run (approved for the night of 11-12, avoid 00:20–01:00 EET): on the phone
+   `setsid sh /srv/s22/state/drain-run.sh 7200 </dev/null >/dev/null 2>&1 &`, plus a rig-side
+   `sleep 8100; ssh ... 'echo 0 > /sys/class/power_supply/battery/batt_slate_mode'` failsafe. Keep the phone
+   quiet for the 2 h. Figure = raw_soc drop / hours from `/srv/s22/state/drain-20261112/sample.csv`
+   (move the old directory aside first; the working figure on 11-12 was 3.2 %/h).
+3. Two-step SMS has not been tried with a real text yet: the owner's next SMS is the live test
+   (look for `bridge_confirm_requested` / `bridge_confirm_redeemed` in the OpenUnum log).
+4. P4 rig side (U-fe741e10): the failover unit in `docs/P4_UPLINK_FAILOVER_PLAN.md` (root, through
+   corpunum-82; routes via the phone must use `dev eno1`, metric 50).
+5. P5 with s-openunum (U-c8028189, U-d02f41d8): rig device tools; the rig's token is
+   `~/.config/unum/s22-device.token`.
+6. Smaller: fast-voice turn log unverified until the next call; voxcpm timeout seen once (U-cec2cfe2);
+   optional root cause of the kernel .rodata shift.
+
+**Timers that lived only in the session:** none are running now. (The rig-side charging failsafe for the
+11-12 drain run fired and finished; the phone's charging input is on, `batt_slate_mode` 0.)
+
+**Working rules added 11-12** (ONBOARDING is the source): this session orchestrates and delegates to
+subagents with an explicit model (haiku routine, sonnet build, opus review); times in messages come from
+`date`; full suites and release builds run under `lease.sh run heavy-cpu --`; restart a keepalive service
+once and batch deploys (its backoff doubles); never put a service's process name on an ssh command line.
+
 ## Open work (UnumHub)
 - `U-fd91ceec`: done 11-12 (cache verified, power fix, kernel flashed).
 - `U-920ae886`: umbrella item for drivers, local inference speed and TTS (`docs/GAP-PLAN-20261104.md`).
