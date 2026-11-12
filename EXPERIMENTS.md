@@ -3449,10 +3449,14 @@ Details: `evidence/npu-custom-20261022/README.md`. Tools: `tools/hardware/npu/nn
   `{"mode_select":75}` ok at 12:55:23 UTC → GET 75, registered `home_3gpp`/lte. **The phone is back on 75.**
   Restore, if ever needed: `sh /srv/s22/state/modesel.sh set 75` (then `get`). phoned now accepts a SET of `(08,0A)`
   for exactly these two bodies (`MODE_SELECT_SET_BODIES`); device backup `s22-phoned.bak-20261112-modesel`.
-- **Reading:** a handshake that is answered while payload and ICMP are dropped, starting a moment after the data
-  session is set up, in both radio modes, is what a carrier-side block looks like (allowance used up, plan lapsed
-  or data barred). On 10-21 the same SIM carried 97 Mbit/s. Not proven: the SIM's balance has to be checked by the
-  owner. If the SIM has data, the next suspect is the phone side (the kernel rebuilt on 11-12).
+- **Cause, proven:** the SIM (Vodafone CU prepaid) has no data allowance. The carrier's own texts were in the
+  phone's inbox: on 11-10 07:46 UTC "DATA CONTROL" was activated, and on 11-10, 11-11 and again at 12:32:53 UTC
+  today (3 s after data came up) CUinfo wrote that the MB from bundles and bonus are used up. A balance query
+  (free SMS `Y` to 1252, owner-approved, 12:59 UTC) answered: balance -2.16 euro, no bundle for talk, SMS or MB.
+  With Data Control the carrier answers TCP handshakes and drops everything else; the first 1–3 s of a session
+  pass before the block applies. Nothing is wrong with the kernel, the modem or the firewall rules.
+  phoned sends that one balance text (`CARRIER_BALANCE_SMS`); every other text to a short number stays refused.
+- **Lesson:** read the phone's SMS inbox first when mobile data misbehaves.
 - **Why the morning proof passed:** it lasted 5 s (one curl), inside the window in which traffic still passes.
 - **Consequence for the rig daemon:** it now has to see several HTTP exchanges through the phone, spread over
   seconds, before it touches the default route, and it keeps checking the path during failover.

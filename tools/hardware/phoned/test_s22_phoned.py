@@ -284,6 +284,20 @@ class GateTest(unittest.TestCase):
     def allow(self, *nums):
         Path(self.tmp.name, "allowlist").write_text("# owner\n" + "\n".join(nums) + "\n")
 
+    def test_only_the_exact_carrier_balance_text_may_go_to_a_short_number(self):
+        Path(self.tmp.name, "tx_enabled").write_text("")
+        for to, text in (("1252", "A 1234567890123"), ("1252", "y"), ("1252", "Y "), ("1253", "Y"), ("112", "Y")):
+            code, res = self.ph.send_sms(to, text)
+            self.assertEqual((code, res["status"]), (403, "refused"), (to, text))
+            self.assertIn("short number", res["error"])
+        code, res = self.ph.send_sms("1252", "Y")
+        self.assertNotIn("short number", res.get("error") or "")
+        self.assertNotIn("allowlist", res.get("error") or "")
+        Path(self.tmp.name, "tx_enabled").unlink()
+        code, res = self.ph.send_sms("1252", "Y")
+        self.assertEqual(code, 403)
+        self.assertIn("tx disabled", res["error"])
+
     def test_tx_disabled_then_allowlist(self):
         code, body = self.ph.send_sms("+306912345678", "hi")
         self.assertEqual((code, body["status"]), (403, "refused"))

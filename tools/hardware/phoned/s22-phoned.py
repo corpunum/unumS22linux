@@ -89,6 +89,10 @@ IPC_GET_ALLOWLIST = {(0x08, 0x0A), (0x0D, 0x04)}
 # Preferred network type SET (stock IpcTxNetSetPreferredNetType): only these two exact bodies.
 # 75 = NR|LTE|WCDMA|GSM (the CP default), 11 = LTE|WCDMA|GSM (no 5G leg; see EXPERIMENTS.md 2026-11-12).
 MODE_SELECT_SET_BODIES = {b'{"mode_select":75}', b'{"mode_select":11}'}
+# Vodafone GR prepaid: a free SMS "Y" to 1252 returns the balance (money, minutes, SMS, MB). Owner-approved
+# 2026-11-12. Exactly this number with exactly this text; any other text to 1252 (top-ups, bundle purchases)
+# stays refused like every short number.
+CARRIER_BALANCE_SMS = ("1252", "Y")
 
 NAMES = {
     PWR_PHONE_STATE: "PWR_PHONE_STATE", (1, 1): "PWR_PHONE_PWR_UP",
@@ -1508,7 +1512,11 @@ class Phone:
         text = str(text or "")
         if not text:
             return 400, {"ok": False, "status": "refused", "error": "empty text", "id": None, "parts": 0}
-        n, err = self.gate(to, "sms")
+        if (normalize_number(to), text) == CARRIER_BALANCE_SMS:
+            # The one short number that may be texted: the carrier's free balance query (read-only).
+            n, err = CARRIER_BALANCE_SMS[0], (None if self.tx_enabled() else "refused: tx disabled (no tx_enabled file)")
+        else:
+            n, err = self.gate(to, "sms")
         mid = self.new_id("out")
         if err is None:
             try:
