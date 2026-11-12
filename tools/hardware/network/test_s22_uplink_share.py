@@ -158,7 +158,7 @@ class DataCheckTest(Base):
         self.rounds(True, False)
         with self.assertRaises(RuntimeError) as cm:
             self.m.on()
-        self.assertIn('data stopped after 4 s', str(cm.exception))
+        self.assertIn('data stopped after 8 s', str(cm.exception))
         self.assert_nothing_left()
 
     def test_on_succeeds_after_verify_n_good_rounds_with_gaps(self):
@@ -251,6 +251,32 @@ class GuardTest(Base):
         self.assertFalse(self.m.STATE.exists())
         self.assertEqual(self.audit()[-1]['reason'], 'sweep')
         self.assertFalse(self.m.sweep()['swept'], 'nothing left')
+
+
+class ParseTrace(unittest.TestCase):
+    OK = b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nfl=1\nh=1.1.1.1\nip=203.0.113.7\ncolo=ATH\nhttp=http/1.0\n'
+
+    def setUp(self):
+        self.pt = load().parse_trace
+
+    def test_200_with_colo_and_ip(self):
+        self.assertEqual(self.pt(self.OK), {'ip': '203.0.113.7', 'colo': 'ATH'})
+
+    def test_http10_and_missing_ip(self):
+        r = self.pt(b'HTTP/1.0 200 OK\r\n\r\ncolo=FRA\n')
+        self.assertEqual(r, {'ip': '', 'colo': 'FRA'})
+
+    def test_portal_redirect_is_none(self):
+        raw = b'HTTP/1.1 302 Found\r\nLocation: http://203.0.113.9/topup\r\n\r\ncolo=ATH\n'
+        self.assertIsNone(self.pt(raw))
+
+    def test_200_without_colo_is_none(self):
+        self.assertIsNone(self.pt(b'HTTP/1.1 200 OK\r\n\r\n<html>top up at 203.0.113.9</html>'))
+        self.assertIsNone(self.pt(b'HTTP/1.1 200 OK\r\n\r\nip=203.0.113.7\ncolo=\n'))
+
+    def test_truncated_or_garbage_is_none(self):
+        for raw in (b'', b'HTTP/1.1', b'HTTP/1.1 200', b'\x00\xff\xfe garbage', b'SSH-2.0-x\r\n\r\ncolo=ATH'):
+            self.assertIsNone(self.pt(raw))
 
 
 if __name__ == '__main__':

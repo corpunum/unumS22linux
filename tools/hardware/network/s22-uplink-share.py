@@ -22,6 +22,7 @@ import ipaddress
 import json
 import os
 import socket
+import ssl
 import subprocess
 import sys
 import time
@@ -43,9 +44,9 @@ CAP_BYTES = 2 * 1000 ** 3         # 2 GB a day
 MAX_S = 6 * 3600                  # off after 6 h
 UP_WAIT_S = 60
 PROBE_TARGETS = ('1.1.1.1', '1.0.0.1')   # data-path check: an HTTP answer through the mobile interface
-VERIFY_N = 3                      # consecutive good rounds `on` needs
-VERIFY_GAP_S = 4
-VERIFY_FIRST_TRIES = 4            # rounds allowed to get the first good one
+VERIFY_N = 4                      # consecutive good rounds `on` needs
+VERIFY_GAP_S = 8
+VERIFY_FIRST_TRIES = 3            # rounds allowed to get the first good one
 WATCH_FAILS = 3                   # consecutive bad watch rounds before sharing stops
 
 
@@ -64,22 +65,45 @@ def pause(seconds: float) -> None:
     time.sleep(seconds)
 
 
+def parse_trace(raw: bytes) -> dict | None:
+    """Parse a /cdn-cgi/trace answer. None unless the status is HTTP/1.x 200 and the body has a colo= line
+    (a carrier top-up portal answering port 80 with a redirect or a page has neither)."""
+    head, _, body = raw.partition(b'\r\n\r\n')
+    if not _:
+        head, _, body = raw.partition(b'\n\n')
+    lines = head.decode('latin-1').splitlines()
+    parts = lines[0].split() if lines else []
+    if len(parts) < 2 or parts[0] not in ('HTTP/1.0', 'HTTP/1.1') or parts[1] != '200':
+        return None
+    kv = {}
+    for line in body.decode('latin-1').splitlines():
+        k, eq, v = line.strip().partition('=')
+        if eq:
+            kv.setdefault(k, v)
+    if not kv.get('colo'):
+        return None
+    return {'ip': kv.get('ip', ''), 'colo': kv['colo']}
+
+
 def data_probe(iface: str, target: str) -> bool:
-    """True only if an HTTP answer comes back through iface (a bare TCP connect proves nothing: a SIM
-    without allowance still completes handshakes)."""
+    """True only if a genuine /cdn-cgi/trace answer comes back through iface over verified TLS. A bare TCP
+    connect proves nothing (a SIM without allowance still completes handshakes), and plain HTTP could be
+    answered by the carrier's own portal; the certificate check (IP SAN of the target) rules that out."""
     try:
+        ctx = ssl.create_default_context()
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, iface.encode())
             s.settimeout(4)
-            s.connect((target, 80))
-            s.sendall(f'GET / HTTP/1.0\r\nHost: {target}\r\n\r\n'.encode())
-            got = b''
-            while len(got) < 12:
-                chunk = s.recv(64)
-                if not chunk:
-                    break
-                got += chunk
-            return len(got) >= 12 and got.startswith(b'HTTP/')
+            s.connect((target, 443))
+            with ctx.wrap_socket(s, server_hostname=target) as tls:
+                tls.sendall(f'GET /cdn-cgi/trace HTTP/1.0\r\nHost: {target}\r\n\r\n'.encode())
+                raw = b''
+                while len(raw) < 4096:
+                    chunk = tls.recv(4096 - len(raw))
+                    if not chunk:
+                        break
+                    raw += chunk
+            return parse_trace(raw) is not None
     except Exception:  # noqa: BLE001 - any failure means no data
         return False
 
