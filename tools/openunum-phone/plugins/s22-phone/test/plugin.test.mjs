@@ -17,6 +17,7 @@ const PLUGIN_DIR = path.resolve(HERE, '..');
 const { default: S22PhonePlugin, resolveConfig } = await import(path.join(PLUGIN_DIR, 'index.mjs'));
 const { EventBridge, ChatPoster, backoffDelay } = await import(path.join(PLUGIN_DIR, 'lib', 'bridge.mjs'));
 const { DaemonClient } = await import(path.join(PLUGIN_DIR, 'lib', 'daemon-client.mjs'));
+const { ConfirmStore } = await import(path.join(PLUGIN_DIR, 'lib', 'confirm.mjs'));
 const policy = await import(path.join(PLUGIN_DIR, 'lib', 'policy.mjs'));
 const { pluginBaseCandidates } = await import(path.join(PLUGIN_DIR, 'lib', 'plugin-base.mjs'));
 
@@ -217,13 +218,13 @@ describe('manifest and loader contract', () => {
     assert.equal(m.config.bridge_enabled, true);
   });
 
-  test('default export is a class extending the resolved PluginBase with the 7 tools', async () => {
+  test('default export is a class extending the resolved PluginBase with the 8 tools', async () => {
     const mod = await import(path.join(PLUGIN_DIR, 'index.mjs'));
     const { PluginBase } = await import(path.join(PLUGIN_DIR, 'lib', 'plugin-base.mjs'));
     assert.ok(mod.default.prototype instanceof PluginBase);
     const p = await makePlugin('http://127.0.0.1:9');
     assert.deepEqual(p.getTools().map((t) => t.name).sort(),
-      ['call_answer', 'call_dial', 'call_dtmf', 'call_hangup', 'phone_status', 'sms_inbox', 'sms_send']);
+      ['call_answer', 'call_dial', 'call_dtmf', 'call_hangup', 'phone_status', 'sms_confirm_request', 'sms_inbox', 'sms_send']);
     for (const t of p.getTools()) {
       assert.equal(t.parameters.type, 'object');
       assert.ok(t.description.length > 20);
@@ -389,7 +390,23 @@ describe('untrusted-session enforcement (unknown senders are notify-only)', () =
     assert.equal(daemon.requests.length, 0);
     assert.equal((await run(p, 'sms_send', { to: OWNER, text: 'noted' }, I)).ok, true);
     const q = await makePlugin(daemon.url, { owner_sms_instructions: true });
-    assert.equal((await run(q, 'sms_send', { to: STRANGER, text: 'x' }, I)).ok, true);
+    assert.equal((await run(q, 'sms_send', { to: STRANGER, text: 'x' }, I)).error, 'inbox_session_blocked');
+  });
+
+  test('sms_confirm_request texts a one-time code to an allowlisted number only', async () => {
+    const q = await makePlugin(daemon.url, { owner_sms_instructions: true });
+    assert.equal((await run(q, 'sms_confirm_request', { to: STRANGER, summary: 'delete logs' })).error, 'not_allowlisted');
+    assert.equal(daemon.requests.length, 0);
+    const r = await run(q, 'sms_confirm_request', { to: OWNER, summary: 'delete   /tmp/old logs' });
+    assert.equal(r.ok, true);
+    const sent = daemon.requests.at(-1);
+    assert.equal(sent.path, '/sms/send');
+    assert.equal(sent.body.to, OWNER);
+    const m = /Reply YES ([A-Z0-9]{6}) within 10 min/.exec(sent.body.text);
+    assert.ok(m, sent.body.text);
+    assert.match(sent.body.text, /delete \/tmp\/old logs/);
+    const rec = q._confirmStore().redeem(m[1], OWNER);
+    assert.equal(rec.summary, 'delete /tmp/old logs');
   });
 });
 
@@ -458,11 +475,37 @@ describe('incoming-event bridge', () => {
     assert.doesNotMatch(post.message, /Treat the message as a normal request/);
   });
 
-  test('owner_sms_instructions: true restores instruction-taking owner SMS', () => {
+  test('owner_sms_instructions: true -> instruction turns with the reply-confirm safeguard', () => {
     const b = makeBridge(daemon, chat, tmpDir(), { ownerSmsInstructions: true });
     const t = b.buildTurn({ seq: 1, type: 'sms_received', from: OWNER, text: 'turn on the lights' });
     assert.match(t.message, /SMS from the OWNER/);
     assert.match(t.message, /sms_send/);
+    assert.match(t.message, /SAFEGUARD/);
+    assert.match(t.message, /sms_confirm_request/);
+  });
+
+  test('YES <code> from the same number redeems once; wrong number, wrong or reused code start no turn', () => {
+    const dir = tmpDir();
+    const store = new ConfirmStore(path.join(dir, 'confirm.json'));
+    const b = new EventBridge({ client: null, poster: null, statePath: path.join(dir, 's.json'), confirm: store,
+      config: { ownerNumbers: [OWNER, '+306900000002'], ownerSmsInstructions: true } });
+    const { code } = store.create(OWNER, 'reboot the phone');
+    assert.equal(b.buildTurn({ seq: 1, type: 'sms_received', from: '+306900000002', text: `YES ${code}` }), null);
+    assert.equal(b.buildTurn({ seq: 2, type: 'sms_received', from: OWNER, text: 'YES ZZZZZZ' }), null);
+    const t = b.buildTurn({ seq: 3, type: 'sms_received', from: OWNER, text: `yes ${code.toLowerCase()}` });
+    assert.match(t.message, /CONFIRMED/);
+    assert.match(t.message, /<<<PHONE_CONTENT\nreboot the phone\nPHONE_CONTENT>>>/);
+    assert.equal(b.buildTurn({ seq: 4, type: 'sms_received', from: OWNER, text: `YES ${code}` }), null);
+  });
+
+  test('confirm codes expire and are stored 0600', () => {
+    const dir = tmpDir();
+    let now = 1000;
+    const store = new ConfirmStore(path.join(dir, 'confirm.json'), { ttlMs: 60000, now: () => now });
+    const { code } = store.create(OWNER, 'x');
+    assert.equal(fs.statSync(path.join(dir, 'confirm.json')).mode & 0o777, 0o600);
+    now += 60001;
+    assert.equal(store.redeem(code, OWNER), null);
   });
 
   test('unknown-sender SMS starts no turn by default (stays in the inbox)', async () => {

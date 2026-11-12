@@ -4,7 +4,7 @@
   "type": "tool",
   "entrypoint": "index.mjs",
   "description": "Samsung S22 native-Linux phone: SMS and call tools over the s22-phoned daemon, plus a bridge that turns incoming SMS and calls into agent turns.",
-  "capabilities": ["sms_send", "sms_inbox", "call_dial", "call_answer", "call_hangup", "call_dtmf", "phone_status", "phone_event_bridge"],
+  "capabilities": ["sms_send", "sms_confirm_request", "sms_inbox", "call_dial", "call_answer", "call_hangup", "call_dtmf", "phone_status", "phone_event_bridge"],
   "dependencies": [],
   "config": {
     "daemon_url": "http://127.0.0.1:8095",
@@ -24,6 +24,7 @@
     "answer_unknown_calls": false,
     "owner_sms_instructions": false,
     "notify_unknown_senders": false,
+    "confirm_ttl_s": 600,
     "max_sms_chars": 1000,
     "data_dir": ""
   }

@@ -13,8 +13,9 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { anySignal } from './daemon-client.mjs';
+import { CONFIRM_RE } from './confirm.mjs';
 import {
-  isOwner, ownerSmsPrompt, allowlistedSmsPrompt, untrustedSmsPrompt, ownerCallPrompt, untrustedCallPrompt
+  isOwner, ownerSmsPrompt, allowlistedSmsPrompt, confirmedSmsPrompt, untrustedSmsPrompt, ownerCallPrompt, untrustedCallPrompt
 } from './policy.mjs';
 
 export function backoffDelay(attempt, initialMs, maxMs, rand = Math.random) {
@@ -72,7 +73,8 @@ export class ChatPoster {
 }
 
 export class EventBridge {
-  constructor({ client, poster, statePath, config = {}, log = {}, rand = Math.random } = {}) {
+  constructor({ client, poster, statePath, config = {}, log = {}, rand = Math.random, confirm = null } = {}) {
+    this.confirm = confirm;
     this.client = client;
     this.poster = poster;
     this.statePath = statePath;
@@ -282,6 +284,16 @@ export class EventBridge {
       const from = String(pick(ev, 'from', 'number', 'sender') ?? '');
       const msg = { from, text: pick(ev, 'text', 'body') ?? '', ts: pick(ev, 'ts'), id: pick(ev, 'id') };
       if (isOwner(from, owners)) {
+        const yes = CONFIRM_RE.exec(String(msg.text));
+        if (yes && this.cfg.ownerSmsInstructions && this.confirm) {
+          const rec = this.confirm.redeem(yes[1], from);
+          if (!rec) {
+            this.log.info('bridge_confirm_unknown', { seq: ev.seq });     // wrong, expired or used code: no turn
+            return null;
+          }
+          this.log.info('bridge_confirm_redeemed', { seq: ev.seq });
+          return { sessionId: this.cfg.sessionId, trusted: true, message: confirmedSmsPrompt({ from, code: rec.code, summary: rec.summary }) };
+        }
         return { sessionId: this.cfg.sessionId, trusted: true,
                  message: this.cfg.ownerSmsInstructions ? ownerSmsPrompt(msg) : allowlistedSmsPrompt(msg) };
       }
@@ -304,7 +316,7 @@ export class EventBridge {
     if (!ev.__seen) { this._remember(ev); Object.defineProperty(ev, '__seen', { value: true }); }
     const turn = this.buildTurn(ev);
     if (!turn) {
-      if (ev?.type === 'sms_received') this.log.info('bridge_sms_not_allowlisted', { seq: ev.seq });  // no number, no text
+      if (ev?.type === 'sms_received' && !isOwner(String(pick(ev, 'from', 'number', 'sender') ?? ''), this.cfg.ownerNumbers)) this.log.info('bridge_sms_not_allowlisted', { seq: ev.seq });  // no number, no text
       return { outcome: 'skipped' };
     }
     const res = await this.poster.post(turn.sessionId, turn.message, signal);
