@@ -611,9 +611,19 @@ async fn run(app: &Shared, cap: &DevCap, a: &Args) -> ApiResult<Out> {
             if r["ok"] != json!(true) {
                 return Err(ApiError::upstream(format!("touchd tts: {}", r["error"])));
             }
-            out(
-                json!({"spoken": true, "played": r["played"], "engine": r["engine"], "ms": r["ms"]}),
-            )
+            // s22-say plays at the speech level; 0 (the resting mute) plays silently.
+            let level = app.b.audio.level();
+            let audible = level != Some(0);
+            let mut o = out(
+                json!({"spoken": true, "played": r["played"], "audible": audible, "level": level, "engine": r["engine"], "ms": r["ms"]}),
+            )?;
+            if !audible {
+                o.note = Some(
+                    "the speech level is 0 (muted), so nothing was audible; volume.set raises it"
+                        .into(),
+                );
+            }
+            Ok(o)
         }
         "audio.listen" => {
             // The owner's switch binds every caller (the chroot agent via loopback too), not only remote ones.

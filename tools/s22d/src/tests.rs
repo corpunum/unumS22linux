@@ -2008,6 +2008,12 @@ mod p2_tests {
             .await;
         assert_eq!(s, StatusCode::OK, "{v}");
         assert_eq!(v["state"]["spoken"], true);
+        *h.fake.audio.lock().unwrap() = Some(0);
+        let (_, v0) = h
+            .send("POST", "/v1/device/speak", Some(json!({"text": "x"})))
+            .await;
+        assert_eq!(v0["state"]["audible"], false);
+        assert!(v0["note"].as_str().unwrap().contains("muted"));
         let req = seen.recv_timeout(Duration::from_secs(2)).unwrap();
         assert_eq!(
             (
