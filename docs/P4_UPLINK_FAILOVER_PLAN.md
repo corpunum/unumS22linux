@@ -22,7 +22,7 @@ through corpunum-82.
 ## Phone side (mine): `uplink.share {on}` in s22d
 
 `on`:
-1. Guards: battery at least 30 % or on external power; today's rmnet bytes under the 2 GB/day cap.
+1. Guards: battery at least 30 % or on external power; today's rmnet bytes under the daily cap (10 GB since 2026-11-12, was 2 GB).
 2. Mobile data up (netpolicy `always` while sharing; the previous mode is saved).
 3. `ip_forward=1`. Policy routing sends forwarded packets from the rig's LAN address to LTE:
    `ip rule add from <rig-lan> lookup 177`, and `ip route add default dev <rmnet> table 177`.
@@ -86,7 +86,7 @@ the sketch above in these points:
   `uplink.share on` (100 s timeout; any uncertain answer is followed by `off`). Then the metric-50 route and
   `resolvectl dns eno1 <public resolvers>`, because the router's resolver is dead in an outage.
 - **In failover:** the route is re-asserted every cycle; the phone's `uplink.status` is polled every 30 s
-  and the rig stands down when the phone stopped sharing (6 h, 2 GB, battery) or is unreachable 3 times.
+  and the rig stands down when the phone stopped sharing (6 h, daily cap, battery) or is unreachable 3 times.
 - **Leaving:** 6 good probes in a row and at least 5 minutes in failover; repeat failovers within an hour
   back off (60 s doubling to 900 s).
 - **Normal mode** deletes the phone route every cycle, so a stale route cannot outlive a crash.

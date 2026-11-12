@@ -633,7 +633,7 @@
       },
       "available": true,
       "confirm": "none",
-      "description": "Lend the phone's mobile data to the rig while its internet is down (on), or stop (off). Only the rig is forwarded; refused at 40 % battery or less or after 2 GB today; stops by itself after 6 h.",
+      "description": "Lend the phone's mobile data to the rig while its internet is down (on), or stop (off). Only the rig is forwarded; refused at 40 % battery or less or after today's data cap (cap_bytes in uplink.status); stops by itself after 6 h.",
       "effect": "set",
       "id": "uplink.share",
       "reason": null,

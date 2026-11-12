@@ -218,6 +218,19 @@ class DataCheckTest(Base):
         self.assertEqual(self.audit()[0]['datacheck'], 'skipped')
 
 
+class SmsStateTest(Base):
+    def test_status_reports_the_sms_pause_and_its_reason(self):
+        self.m.SMS_PAUSED = Path(self.tmp.name) / 'sms_paused'
+        self.assertEqual(self.m.status()['sms'], {'paused': False})
+        self.m.SMS_PAUSED.write_text('no SMS bundle\n')
+        self.assertEqual(self.m.status()['sms'], {'paused': True, 'reason': 'no SMS bundle'})
+        self.m.SMS_PAUSED.write_text('')
+        self.assertEqual(self.m.status()['sms'], {'paused': True, 'reason': 'paused'})
+
+    def test_daily_cap_is_ten_gb(self):
+        self.assertEqual(self.m.CAP_BYTES, 10 * 1000 ** 3)
+
+
 class GuardTest(Base):
     def test_battery_at_40_refuses_and_stops(self):
         self.m.BATTERY.write_text('40\n')

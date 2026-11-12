@@ -4,7 +4,7 @@
 Hub U-fe741e10, rules from corpunum-82 (2026-11-12, docs/P4_UPLINK_FAILOVER_PLAN.md):
 * only the rig: forwarding and NAT for one source address (the rig's LAN IP, from the private
   /srv/s22/state/uplink-share.json {"rig": "<ip>"}), everything else that would be forwarded is dropped;
-* guards: battery above 40 %, at most 2 GB a day (rmnet0 bytes while sharing), off after 6 h;
+* guards: battery above 40 %, at most 10 GB a day (rmnet0 bytes while sharing), off after 6 h;
 * an audit line per enable and disable (/srv/s22/state/audit/uplink-share.jsonl);
 * forwarding off again afterwards whatever happens: a failed `on` runs `off`; a watchdog enforces the
   guards; `sweep` (run at s22d start) undoes what a reboot or a dead watchdog left behind.
@@ -33,6 +33,7 @@ STATE = Path(os.environ.get('S22_SHARE_STATE', '/srv/s22/state/uplink-share/stat
 USAGE = Path(os.environ.get('S22_SHARE_USAGE', '/srv/s22/state/uplink-share/usage.json'))
 AUDIT = Path(os.environ.get('S22_SHARE_AUDIT', '/srv/s22/state/audit/uplink-share.jsonl'))
 NETPOLICY = Path(os.environ.get('S22_NETPOLICY_CONF', '/srv/s22/state/netpolicy/config.json'))
+SMS_PAUSED = Path(os.environ.get('S22_SMS_PAUSED', '/srv/s22/state/phoned/sms_paused'))
 NP_STATUS = Path(os.environ.get('S22_NETPOLICY_STATUS', '/run/s22-netpolicy/status.json'))
 BATTERY = Path(os.environ.get('S22_BATTERY', '/sys/class/power_supply/battery/capacity'))
 NET = Path(os.environ.get('S22_SYS_NET', '/sys/class/net'))
@@ -40,7 +41,7 @@ FORWARD = Path(os.environ.get('S22_IP_FORWARD', '/proc/sys/net/ipv4/ip_forward')
 IPT = ['chroot', '/mnt/omarchy-trial', 'iptables-legacy']
 DEV, TABLE, PRIO = 'rmnet0', '177', '1177'
 MIN_BATTERY = 40                  # stop at <= 40 %
-CAP_BYTES = 2 * 1000 ** 3         # 2 GB a day
+CAP_BYTES = 10 * 1000 ** 3        # 10 GB a day (owner 2026-11-12: unlimited data bundle until 2026-12-12)
 MAX_S = 6 * 3600                  # off after 6 h
 UP_WAIT_S = 60
 PROBE_TARGETS = ('1.1.1.1', '1.0.0.1')   # data-path check: an HTTP answer through the mobile interface
@@ -270,7 +271,7 @@ def on() -> dict:
     if 0 <= b <= MIN_BATTERY:
         raise RuntimeError(f'battery {b} % (sharing needs more than {MIN_BATTERY} %)')
     if used_today() >= CAP_BYTES:
-        raise RuntimeError('the 2 GB daily cap is used up')
+        raise RuntimeError(f'the {CAP_BYTES // 1000 ** 3} GB daily cap is used up')
     conf = read_json(NETPOLICY)
     st = {'on': False, 'prev_mode': conf.get('mobile_mode'), 'since': now(), 'rig_set': True}
     write_json(STATE, st)                     # from here on, `off`/`sweep` know what to restore
@@ -359,6 +360,15 @@ def sweep() -> dict:
     return {'ok': True, 'swept': False, 'on': False}
 
 
+def sms_state() -> dict:
+    """phoned's owner switch: outbound SMS refused while the file exists; its text says why."""
+    try:
+        why = SMS_PAUSED.read_text().strip()[:120]
+    except OSError:
+        return {'paused': False}
+    return {'paused': True, 'reason': why or 'paused'}
+
+
 def status() -> dict:
     st = read_json(STATE)
     try:
@@ -368,7 +378,7 @@ def status() -> dict:
     fwd = FORWARD.read_text().strip() == '1' if FORWARD.exists() else None
     return {'ok': True, 'on': bool(st.get('on')), 'since': st.get('since'), 'forwarding': fwd,
             'rig_configured': rig_ok, 'battery': battery(), 'bytes_today': used_today(st),
-            'data_fails': int(st.get('data_fails', 0)), 'data_checked': st.get('data_checked'),
+            'data_fails': int(st.get('data_fails', 0)), 'data_checked': st.get('data_checked'), 'sms': sms_state(),
             'cap_bytes': CAP_BYTES, 'max_s': MAX_S, 'min_battery': MIN_BATTERY}
 
 

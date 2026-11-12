@@ -108,7 +108,7 @@ pub fn defs() -> Vec<DevCap> {
         c("task.get", Read, 15, "The latest reply of a task started with task.submit (session from its answer).", json!({"session": {"type": "string", "maxLength": 80}}), &["session"]),
         c("audio.listen", Action, 260, "Listen to the room for a few seconds (default 20, max 120) and answer with the transcript (on-phone ASR). Shows a banner on the screen while recording; no audio is kept. OFF unless the owner switched it on on the phone.", json!({"seconds": {"type": "integer", "minimum": 3, "maximum": 120}}), &[]),
         c("uplink.status", Read, 15, "Whether the phone is lending its mobile data to the rig (internet sharing), today's shared bytes and the guards.", json!({}), &[]),
-        c("uplink.share", Set, 100, "Lend the phone's mobile data to the rig while its internet is down (on), or stop (off). Only the rig is forwarded; refused at 40 % battery or less or after 2 GB today; stops by itself after 6 h.", on(), &["on"]),
+        c("uplink.share", Set, 100, "Lend the phone's mobile data to the rig while its internet is down (on), or stop (off). Only the rig is forwarded; refused at 40 % battery or less or after today's data cap (cap_bytes in uplink.status); stops by itself after 6 h.", on(), &["on"]),
         c("screenshot", Action, 15, "Save a screenshot of the shell to the gallery (as Power + Volume down). The screen must be on.", json!({}), &[]),
     ]
 }
