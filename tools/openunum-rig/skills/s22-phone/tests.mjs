@@ -18,6 +18,7 @@ fs.mkdirSync(privDir, { mode: 0o700 })
 fs.chmodSync(privDir, 0o700)
 Object.assign(process.env, { S22_PHONE_TEST: '1', S22_DEVICE_TOKEN_FILE: tokenFile, S22_PHONE_PRIVATE_DIR: privDir })
 
+const SESSION = `device:task:${Date.now()}`
 let reqs = [], handler = null, taskPolls = 0, passed = 0
 const outputs = []
 const JPEG = Buffer.from('fake-jpeg-bytes-0123456789')
@@ -30,14 +31,14 @@ const server = http.createServer((req, res) => {
     const send = (code, o) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)) }
     if (handler) return handler(r, send, res)
     const cap = r.url.replace('/v1/device/', '')
-    if (r.method === 'GET') return send(200, { capabilities: [{ id: 'speak', available: true, switch: 'on' }, { id: 'audio.listen', available: false }] })
+    if (r.method === 'GET') return send(200, { capabilities: [{ id: 'speak', available: true, switched_on: true, switch: 'on' }, { id: 'audio.listen', available: false, switched_on: false }] })
     switch (cap) {
       case 'device.status': return send(200, { ok: true, cap, state: { battery: 81, charging: true, screen: 'off', wifi: 'up' } })
       case 'camera.capture': return send(200, { ok: true, cap, artifact: { mime: 'image/jpeg', base64: JPEG.toString('base64'), bytes: JPEG.length } })
       case 'audio.listen': return send(200, { ok: true, cap, state: { transcript: 'hello room' } })
       case 'speak': return send(200, { ok: true, cap, state: {} })
-      case 'task.submit': return send(200, { ok: true, cap, state: { id: 't1' } })
-      case 'task.get': taskPolls++; return send(200, { ok: true, cap, state: taskPolls >= 3 ? { reply: 'done it' } : {} })
+      case 'task.submit': return send(200, { ok: true, cap, state: { session: SESSION, done: false, reply: null } })
+      case 'task.get': taskPolls++; return send(200, { ok: true, cap, state: { session: r.body.session, reply: taskPolls >= 3 ? 'done it' : null } })
       case 'uplink.status': return send(200, { ok: true, cap, state: { up: 'wifi' } })
       case 'haptic.play': return send(200, { ok: true, cap, state: {} })
     }
@@ -62,7 +63,7 @@ try {
 
   r = await run({ action: 'catalog' })
   assert.equal(reqs[0].method, 'GET'); assert.equal(reqs[0].url, '/v1/device'); assert.equal(reqs[0].auth, `Bearer ${TOKEN}`)
-  assert.deepEqual(r.capabilities.map((c) => [c.id, c.available]), [['speak', true], ['audio.listen', false]]); ok('catalog')
+  assert.deepEqual(r.capabilities.map((c) => [c.id, c.available, c.switched_on]), [['speak', true, true], ['audio.listen', false, false]]); ok('catalog (switched_on)')
 
   r = await run({ action: 'photo', sensor: 'front' })
   assert.equal(reqs[0].url, '/v1/device/camera.capture'); assert.deepEqual(reqs[0].body, { sensor: 'front' })
@@ -121,25 +122,26 @@ try {
   // task
   taskPolls = 0
   r = await run({ action: 'task', text: 'what time', wait_s: 5, _poll_ms: 10 })
-  assert.deepEqual(r, { ok: true, id: 't1', reply: 'done it', done: true })
+  assert.deepEqual(r, { ok: true, session: SESSION, reply: 'done it', done: true })
   assert.equal(reqs[0].url, '/v1/device/task.submit'); assert.deepEqual(reqs[0].body, { text: 'what time' })
-  assert.deepEqual(reqs.slice(1).map((q) => [q.url, q.body.id]), [['/v1/device/task.get', 't1'], ['/v1/device/task.get', 't1'], ['/v1/device/task.get', 't1']])
-  r = await run({ action: 'task', text: 'x', wait_s: 0 }); assert.deepEqual(r, { ok: true, id: 't1', reply: null, done: false }); assert.equal(reqs.length, 1)
+  assert.deepEqual(reqs.slice(1).map((q) => [q.url, q.body.session]), [['/v1/device/task.get', SESSION], ['/v1/device/task.get', SESSION], ['/v1/device/task.get', SESSION]])
+  r = await run({ action: 'task', text: 'x', wait_s: 0 }); assert.deepEqual(r, { ok: true, session: SESSION, reply: null, done: false }); assert.equal(reqs.length, 1)
   taskPolls = 10
-  r = await run({ action: 'task_get', id: 't1' }, undefined); assert.equal(r.reply, 'done it'); assert.deepEqual(reqs[0].body, { id: 't1' }); ok('task polling, task_get')
+  r = await run({ action: 'task_get', session: SESSION }); assert.equal(r.reply, 'done it'); assert.equal(r.session, SESSION); assert.deepEqual(reqs[0].body, { session: SESSION })
+  r = await run({ action: 'task_get', session: SESSION }, undefined); assert.equal(r.code, 'owner_only'); assert.equal(reqs.length, 0); ok('task polling (session shape), task_get owner-only')
 
   // validation: no request on bad args
   const bad = [
     { action: 'photo', sensor: 'side' }, { action: 'listen', seconds: 2 }, { action: 'listen', seconds: 121 }, { action: 'listen', seconds: '9' },
     { action: 'say' }, { action: 'say', text: '' }, { action: 'say', text: 'x'.repeat(1001) }, { action: 'say', text: 'x', level: 9 }, { action: 'say', text: 'x', level: 0 },
     { action: 'task', text: '' }, { action: 'task', text: 'x'.repeat(4001) }, { action: 'task', text: 'x', wait_s: 301 },
-    { action: 'task_get' }, { action: 'task_get', id: {} }, { action: 'haptic', pattern: 'zap' }, { action: 'haptic' }, { action: 'forget' }, { action: 'nope' }, {}, null,
+    { action: 'task_get' }, { action: 'task_get', id: 't1' }, { action: 'task_get', session: 't1' }, { action: 'task_get', session: 'device:task:' }, { action: 'task_get', session: 'device:task:12a' }, { action: 'task_get', session: 'device:task:1/../x' }, { action: 'task_get', session: 'device:task:' + '1'.repeat(21) }, { action: 'task_get', session: {} }, { action: 'haptic', pattern: 'zap' }, { action: 'haptic' }, { action: 'forget' }, { action: 'nope' }, {}, null,
   ]
   for (const b of bad) { r = await run(b); assert.equal(r.ok, false); assert.equal(r.code, 'bad_request'); assert.equal(reqs.length, 0, JSON.stringify(b)) }
   assert.match((await run({ action: 'nope' })).error, /status, catalog, photo/); ok('argument validation')
 
   // owner gating
-  const gated = [{ action: 'photo' }, { action: 'listen' }, { action: 'say', text: 'x' }, { action: 'task', text: 'x' }, { action: 'catalog' }, { action: 'haptic', pattern: 'tick' }]
+  const gated = [{ action: 'photo' }, { action: 'listen' }, { action: 'say', text: 'x' }, { action: 'task', text: 'x' }, { action: 'task_get', session: SESSION }, { action: 'catalog' }, { action: 'haptic', pattern: 'tick' }]
   const nonOwner = [undefined, {}, { turn: {} }, { turn: { ownerProven: false } }, { turn: { ownerProven: 'true' } }, { turn: { ownerProven: 1 } }, { owner: true }]
   for (const g of gated) {
     for (const c of nonOwner) { r = await run(g, c); assert.equal(r.code, 'owner_only', JSON.stringify([g, c])); assert.equal(reqs.length, 0) }
@@ -147,7 +149,7 @@ try {
     r = await run({ ...g, _poll_ms: 5, wait_s: 0 }, OWNER); assert.equal(r.ok, true, JSON.stringify([g, r])); assert.ok(reqs.length >= 1)
     if (g.action === 'photo') fs.unlinkSync(r.path)
   }
-  for (const g of [{ action: 'status' }, { action: 'uplink' }, { action: 'task_get', id: 'a' }]) { r = await run(g, undefined); assert.equal(r.ok, true); assert.equal(reqs.length, 1) }
+  for (const g of [{ action: 'status' }, { action: 'uplink' }]) { r = await run(g, undefined); assert.equal(r.ok, true); assert.equal(reqs.length, 1) }
   ok('owner gating')
 
   // paused / forbidden never reach the server
@@ -164,6 +166,65 @@ try {
   r = await run({ action: 'uplink' }); assert.equal(r.ok, false); assert.equal(JSON.stringify(r).includes(TOKEN), false)
   handler = (q, send) => send(200, { ok: true, state: { echo: TOKEN } })
   r = await run({ action: 'status' }); assert.equal(JSON.stringify(r).includes(TOKEN), false); handler = null; ok('needs_confirmation hint, token scrubbed')
+
+  // redirects never followed
+  handler = (q, send, res) => { res.writeHead(307, { Location: '/v1/device/uplink.share' }); res.end() }
+  r = await run({ action: 'status' }); assert.equal(r.ok, false); assert.equal(r.code, 'bad_response')
+  assert.equal(reqs.some((q) => q.url.includes('uplink.share')), false); assert.equal(reqs.length, 1); handler = null; ok('redirect refused, uplink.share never requested')
+
+  // size limits
+  handler = (q, send, res) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.write('{"ok":true,"state":{"x":"'); res.end('a'.repeat(3 * 1024 * 1024)) }
+  r = await run({ action: 'status' }); assert.equal(r.code, 'too_large')
+  handler = (q, send, res) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.write('{"ok":true,"state":{"x":"'); const iv = setInterval(() => res.write('a'.repeat(65536)), 1); res.on('close', () => clearInterval(iv)) }
+  r = await run({ action: 'uplink' }); assert.equal(r.code, 'too_large')
+  handler = (q, send) => send(200, { ok: true, state: { x: 'a'.repeat(300 * 1024) } })
+  r = await run({ action: 'status' }); assert.equal(r.code, 'too_large')
+  const bigImg = Buffer.alloc(25 * 1024 * 1024, 1)
+  handler = (q, send) => send(200, { ok: true, artifact: { mime: 'image/jpeg', base64: bigImg.toString('base64') } })
+  r = await run({ action: 'photo' }); assert.equal(r.code, 'too_large'); assert.equal(fs.readdirSync(privDir).length, 0)
+  handler = (q, send, res) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.write('{"ok":true,"artifact":{"mime":"image/jpeg","base64":"'); res.end('A'.repeat(33 * 1024 * 1024) + '"}}') }
+  r = await run({ action: 'photo' }); assert.equal(r.code, 'too_large'); assert.equal(fs.readdirSync(privDir).length, 0)
+  handler = null; ok('too_large: 256 KB (streamed and content-length), photo 32 MB response and 24 MB image')
+
+  // mime lookup cannot hit the prototype
+  for (const m of ['constructor', '__proto__', 'IMAGE/PNG']) {
+    handler = (q, send) => send(200, { ok: true, artifact: { mime: m, base64: JPEG.toString('base64') } })
+    r = await run({ action: 'photo' }); assert.equal(r.ok, true)
+    assert.equal(r.mime, m.toLowerCase()); assert.match(r.path, m === 'IMAGE/PNG' ? /\.png$/ : /\.bin$/); fs.unlinkSync(r.path)
+  }
+  handler = null; ok('mime: own-property lookup only, normalised mime returned')
+
+  // untrusted phone text is truncated
+  handler = (q, send) => send(200, { ok: true, state: { transcript: 'T'.repeat(5000) } })
+  r = await run({ action: 'listen' }); assert.equal(r.transcript.length, 2000)
+  handler = (q, send) => send(500, { ok: false, code: 'boom', error: 'E'.repeat(5000) })
+  r = await run({ action: 'uplink' }); assert.equal(r.error.length, 2000)
+  handler = (q, send) => send(200, { ok: true, state: { session: SESSION, reply: 'R'.repeat(5000) } })
+  r = await run({ action: 'task', text: 'x', wait_s: 0 }); assert.equal(r.reply.length, 2000); assert.equal(r.done, true)
+  handler = (q, send) => send(200, { ok: true, state: { wifi: 'up', blob: 'B'.repeat(3000), more: 'C'.repeat(3000) } })
+  r = await run({ action: 'status' }); assert.equal(r.state, undefined); assert.equal(r.state_text.length, 4000)
+  handler = null
+  r = await run({ action: 'status' }); assert.equal(typeof r.state, 'object'); assert.equal(r.state_text, undefined); ok('phone text truncated (2000 / 4000, state object only when it fits)')
+
+  // base url validation
+  for (const bad of ['ftp://127.0.0.1:1', 'http://u:p@127.0.0.1:1', 'http://127.0.0.1:1/x', 'http://127.0.0.1:1/?q=1', 'http://127.0.0.1:1/#h', 'not a url', 'file:///etc/passwd']) {
+    process.env.S22_DEVICE_URL = bad; r = await run({ action: 'status' })
+    assert.equal(r.ok, false); assert.match(r.code, /^(config|not_configured)$/, bad); assert.equal(reqs.length, 0)
+  }
+  process.env.S22_DEVICE_URL = 'ftp://127.0.0.1:1'; assert.equal((await run({ action: 'status' })).code, 'config')
+  process.env.S22_DEVICE_URL = base + '/'; r = await run({ action: 'status' }); assert.equal(r.ok, true)
+  process.env.S22_DEVICE_URL = base; ok('bad base urls refused (config)')
+
+  // symlinked token file, symlinked parent of private dir
+  const realTok = path.join(work, 'real-token'); fs.writeFileSync(realTok, TOKEN, { mode: 0o600 })
+  const linkTok = path.join(work, 'link-token'); fs.symlinkSync(realTok, linkTok)
+  process.env.S22_DEVICE_TOKEN_FILE = linkTok
+  r = await run({ action: 'status' }); assert.equal(r.code, 'insecure_token'); assert.equal(reqs.length, 0)
+  process.env.S22_DEVICE_TOKEN_FILE = tokenFile
+  const realParent = path.join(work, 'rp'); fs.mkdirSync(realParent); const linkParent = path.join(work, 'lp'); fs.symlinkSync(realParent, linkParent)
+  process.env.S22_PHONE_PRIVATE_DIR = path.join(linkParent, 'priv')
+  r = await run({ action: 'photo' }); assert.equal(r.code, 'insecure_dir'); assert.equal(reqs.length, 0)
+  process.env.S22_PHONE_PRIVATE_DIR = privDir; ok('symlinked token file and symlinked private-dir path refused')
 
   // token file mode and config
   fs.chmodSync(tokenFile, 0o644)

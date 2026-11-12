@@ -5,17 +5,27 @@
 // The token is only ever sent as the Authorization header: no child processes, no argv, no logs.
 // Captures are stored in ~/.openunum/private/s22/ (env S22_PHONE_PRIVATE_DIR overrides, for tests).
 import fs from 'node:fs/promises'
+import { realpathSync, constants as FS } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
 
 const ACTIONS = ['status', 'catalog', 'photo', 'forget', 'listen', 'say', 'task', 'task_get', 'uplink', 'haptic', 'sms', 'call']
 // Owner gate: these act on the owner's surroundings or the phone's agent and need a proven owner turn.
-const OWNER_ONLY = ['photo', 'listen', 'say', 'task', 'catalog', 'haptic']
-const OWNER_MSG = "camera, listening and speaking need an owner turn (paired chat) or the owner's approval of this one action"
+// task_get too: session ids are guessable timestamps.
+const OWNER_ONLY = ['photo', 'listen', 'say', 'task', 'task_get', 'catalog', 'haptic']
+const OWNER_MSG = "this action needs an owner-proven chat turn (paired browser or owner token); automatic callers get status, uplink and forget only"
 const isOwner = (context) => context?.turn?.ownerProven === true
 const PAUSED = 'calls and SMS are paused on this phone (no bundle; owner 2026-11-12)'
 const MIME_EXT = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic' }
+
+const MAX_PHOTO = 32 * 1024 * 1024, MAX_OTHER = 256 * 1024, MAX_IMAGE = 24 * 1024 * 1024
+const SESSION_RE = /^device:task:\d{1,20}$/
+// Text from the phone is untrusted data: cap what goes back to the model.
+const trunc = (v, n = 2000) => { const s = typeof v === 'string' ? v : JSON.stringify(v); return s.length > n ? s.slice(0, n) : s }
+const txt = (v) => (v === undefined || v === null ? undefined : trunc(v))
+// Raw phone JSON: an object when it fits in 4000 chars, else a truncated string.
+const lim = (o) => { const j = JSON.stringify(o ?? null); return j.length <= 4000 ? { value: o } : { text: j.slice(0, 4000) } }
 
 const fail = (code, error, extra = {}) => ({ ok: false, code, error, ...extra })
 const isInt = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi
@@ -31,14 +41,26 @@ async function loadConfig() {
   if (!base) {
     try { base = (await fs.readFile(path.join(cfgDir, 's22-device.url'), 'utf8')).split('\n')[0].trim() } catch { base = '' }
   }
-  if (!/^https?:\/\/[^\s/]+/.test(base)) throw new Refuse('not_configured', 'phone URL not configured (env S22_DEVICE_URL or ~/.config/unum/s22-device.url)')
-  base = base.replace(/\/+$/, '')
+  let u
+  try { u = new URL(base) } catch { u = null }
+  if (!u) throw new Refuse('not_configured', 'phone URL not configured (env S22_DEVICE_URL or ~/.config/unum/s22-device.url)')
+  if ((u.protocol !== 'http:' && u.protocol !== 'https:') || u.pathname !== '/' || u.search || u.hash || u.username || u.password) {
+    throw new Refuse('config', 'phone URL must be http(s)://host[:port] only (no path, query, fragment or credentials)')
+  }
+  base = u.origin
   const tokenFile = process.env.S22_DEVICE_TOKEN_FILE || path.join(cfgDir, 's22-device.token')
-  let st
-  try { st = await fs.lstat(tokenFile) } catch { throw new Refuse('not_configured', 'phone token file not found (~/.config/unum/s22-device.token)') }
-  if (!st.isFile()) throw new Refuse('insecure_token', 'token file must be a regular file')
-  if ((st.mode & 0o077) !== 0) throw new Refuse('insecure_token', 'token file must be mode 0600 (chmod 600); refusing to use it')
-  const token = (await fs.readFile(tokenFile, 'utf8')).trim()
+  let fh, token
+  try {
+    try { fh = await fs.open(tokenFile, FS.O_RDONLY | FS.O_NOFOLLOW) } catch (e) {
+      if (e && e.code === 'ENOENT') throw new Refuse('not_configured', 'phone token file not found (~/.config/unum/s22-device.token)')
+      throw new Refuse('insecure_token', 'token file cannot be opened safely (symlink or unreadable)')
+    }
+    const st = await fh.stat()
+    if (!st.isFile()) throw new Refuse('insecure_token', 'token file must be a regular file')
+    if (st.uid !== process.getuid()) throw new Refuse('insecure_token', 'token file is not owned by the current user')
+    if ((st.mode & 0o077) !== 0) throw new Refuse('insecure_token', 'token file must be mode 0600 (chmod 600); refusing to use it')
+    token = (await fh.readFile('utf8')).trim()
+  } finally { await fh?.close() }
   if (!token) throw new Refuse('not_configured', 'token file is empty')
   return { base, token }
 }
@@ -48,16 +70,35 @@ function testing(args) {
 }
 
 // One HTTP call; returns {status, body} or throws Refuse for transport problems.
-async function http(cfg, method, urlPath, body, timeoutMs) {
+// No redirects (the bearer token must not travel on); body read through a counting reader.
+async function http(cfg, method, urlPath, body, timeoutMs, maxBytes = MAX_OTHER) {
   const headers = { Authorization: `Bearer ${cfg.token}` }
-  const init = { method, headers, signal: AbortSignal.timeout(timeoutMs) }
+  const init = { method, headers, signal: AbortSignal.timeout(timeoutMs), redirect: 'error' }
   if (method === 'POST') { headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body || {}) }
+  const big = new Refuse('too_large', `phone answer larger than ${Math.round(maxBytes / 1024)} KB`)
   let res, text
   try {
     res = await fetch(cfg.base + urlPath, init)
-    text = await res.text()
+    if (res.status >= 300 && res.status < 400) { await res.body?.cancel(); throw new Refuse('bad_response', 'phone answered with a redirect') }
+    const cl = Number(res.headers.get('content-length'))
+    if (Number.isFinite(cl) && cl > maxBytes) { await res.body?.cancel(); throw big }
+    const chunks = []
+    let n = 0
+    if (res.body) {
+      const reader = res.body.getReader()
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        n += value.length
+        if (n > maxBytes) { await reader.cancel().catch(() => {}); throw big }
+        chunks.push(value)
+      }
+    }
+    text = Buffer.concat(chunks).toString('utf8')
   } catch (e) {
+    if (e instanceof Refuse) throw e
     if (e && (e.name === 'TimeoutError' || e.name === 'AbortError')) throw new Refuse('timeout', `phone did not answer within ${Math.round(timeoutMs / 1000)} s`)
+    if (/redirect/i.test(String(e?.cause?.message ?? e?.message))) throw new Refuse('bad_response', 'phone answered with a redirect')
     throw new Refuse('unreachable', 'phone API unreachable')
   }
   let parsed
@@ -67,11 +108,11 @@ async function http(cfg, method, urlPath, body, timeoutMs) {
 }
 
 // Calls a capability; returns the success body or an error object {ok:false,...}.
-async function cap(cfg, id, body, timeoutMs) {
-  const { status, body: b } = await http(cfg, 'POST', `/v1/device/${id}`, body, timeoutMs)
+async function cap(cfg, id, body, timeoutMs, maxBytes) {
+  const { status, body: b } = await http(cfg, 'POST', `/v1/device/${id}`, body, timeoutMs, maxBytes)
   if (status >= 200 && status < 300 && b.ok === true) return b
-  const code = typeof b.code === 'string' ? b.code : `http_${status}`
-  const out = fail(code, typeof b.error === 'string' ? b.error : `phone answered HTTP ${status}`)
+  const code = typeof b.code === 'string' ? trunc(b.code, 64) : `http_${status}`
+  const out = fail(code, typeof b.error === 'string' ? trunc(b.error) : `phone answered HTTP ${status}`)
   if (code === 'needs_confirmation' || code === 'owner_denied') out.hint = 'do not retry; the owner decides on the phone'
   return out
 }
@@ -107,8 +148,8 @@ function validate(action, a) {
       return { text: a.text, wait_s }
     }
     case 'task_get':
-      if (!(typeof a.id === 'string' && a.id.length >= 1 && a.id.length <= 200) && !isInt(a.id, 0, Number.MAX_SAFE_INTEGER)) throw new Refuse('bad_request', 'id must be a task id (string or integer)')
-      return { id: a.id }
+      if (typeof a.session !== 'string' || !SESSION_RE.test(a.session)) throw new Refuse('bad_request', 'session must look like device:task:<digits> (from task)')
+      return { session: a.session }
     case 'haptic':
       if (!['tick', 'buzz', 'stop'].includes(a.pattern)) throw new Refuse('bad_request', "pattern must be 'tick', 'buzz' or 'stop'")
       return { pattern: a.pattern }
@@ -123,16 +164,18 @@ async function doStatus(cfg, a, t) {
   const s = st(b)
   const network = {}
   for (const [k, v] of Object.entries(s)) if (/net|wifi|cell|signal|ssid|uplink/i.test(k)) network[k] = v
-  return { ok: true, battery: s.battery, charging: s.charging, screen: s.screen, network, state: s }
+  const L = lim(s), N = lim(network)
+  return { ok: true, battery: s.battery, charging: s.charging, screen: s.screen, network: N.text ?? N.value, ...(L.text === undefined ? { state: s } : { state_text: L.text }) }
 }
 
 async function doCatalog(cfg, a, t) {
   const { status, body } = await http(cfg, 'GET', '/v1/device', null, t(20000))
-  if (status < 200 || status >= 300) return fail(typeof body.code === 'string' ? body.code : `http_${status}`, typeof body.error === 'string' ? body.error : `phone answered HTTP ${status}`)
+  if (status < 200 || status >= 300) return fail(typeof body.code === 'string' ? body.code : `http_${status}`, typeof body.error === 'string' ? trunc(body.error) : `phone answered HTTP ${status}`)
   const raw = pick(body.capabilities, body.caps, body.catalog, [])
   const list = Array.isArray(raw) ? raw : Object.entries(raw).map(([id, v]) => (isObj(v) ? { id, ...v } : { id, available: v }))
   const capabilities = list.filter(isObj).map((c) => {
     const o = { id: c.id ?? c.cap ?? c.name, available: c.available }
+    if (c.switched_on !== undefined) o.switched_on = c.switched_on
     if (c.switch !== undefined) o.switch = c.switch
     if (c.switches !== undefined) o.switches = c.switches
     return o
@@ -145,25 +188,31 @@ async function doCatalog(cfg, a, t) {
 async function privateDir(create) {
   const dir = path.resolve(process.env.S22_PHONE_PRIVATE_DIR || path.join(os.homedir(), '.openunum', 'private', 's22'))
   if (create) await fs.mkdir(dir, { recursive: true, mode: 0o700 })
+  let real
+  try { real = realpathSync(dir) } catch { real = null }
   let s
   try { s = await fs.lstat(dir) } catch { throw new Refuse('not_found', 'private capture dir does not exist') }
   if (s.isSymbolicLink() || !s.isDirectory()) throw new Refuse('insecure_dir', 'private capture dir must be a real directory, not a symlink')
   if (s.uid !== process.getuid()) throw new Refuse('insecure_dir', 'private capture dir is not owned by the current user')
   if ((s.mode & 0o077) !== 0) throw new Refuse('insecure_dir', 'private capture dir must be mode 0700 (no group/other access)')
+  if (real !== dir) throw new Refuse('insecure_dir', 'private capture dir path must not pass through symlinks')
   return dir
 }
 
 async function doPhoto(cfg, a, t, v) {
   const dir = await privateDir(true)
-  const b = await cap(cfg, 'camera.capture', { sensor: v.sensor }, t(330000))
+  const b = await cap(cfg, 'camera.capture', { sensor: v.sensor }, t(330000), MAX_PHOTO)
   if (!b.ok) return b
   const art = b.artifact
   if (!isObj(art) || typeof art.base64 !== 'string' || typeof art.mime !== 'string') return fail('bad_response', 'phone answered without a photo artifact')
+  if (Math.floor(art.base64.length * 3 / 4) > MAX_IMAGE) return fail('too_large', 'photo larger than 24 MB')
   const buf = Buffer.from(art.base64, 'base64')
+  if (buf.length > MAX_IMAGE) return fail('too_large', 'photo larger than 24 MB')
+  const mime = trunc(art.mime.trim().toLowerCase(), 100)
   if (!buf.length) return fail('bad_response', 'photo artifact is empty')
-  const file = path.join(dir, `photo-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${MIME_EXT[art.mime.toLowerCase()] || 'bin'}`)
+  const file = path.join(dir, `photo-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${Object.hasOwn(MIME_EXT, mime) ? MIME_EXT[mime] : 'bin'}`)
   await fs.writeFile(file, buf, { mode: 0o600, flag: 'wx' })
-  return { ok: true, path: file, mime: art.mime, bytes: buf.length, sha256: crypto.createHash('sha256').update(buf).digest('hex'), sensor: v.sensor }
+  return { ok: true, path: file, mime, bytes: buf.length, sha256: crypto.createHash('sha256').update(buf).digest('hex'), sensor: v.sensor }
 }
 
 async function doForget(cfg, a, t, v) {
@@ -185,45 +234,49 @@ async function doListen(cfg, a, t, v) {
   }
   const r = res(b), s = st(b)
   const transcript = pick(s.transcript, r.transcript, s.text, r.text, typeof b.result === 'string' ? b.result : undefined, '')
-  return { ok: true, transcript, seconds: v.seconds }
+  return { ok: true, transcript: trunc(transcript ?? ''), seconds: v.seconds }
 }
 
 async function doSay(cfg, a, t, v) {
   const b = await cap(cfg, 'speak', v, t(200000))
-  return b.ok ? { ok: true, spoken: true, state: st(b) } : b
+  if (!b.ok) return b
+  const L = lim(st(b))
+  return { ok: true, spoken: true, ...(L.text === undefined ? { state: st(b) } : { state_text: L.text }) }
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+const replyOf = (x) => txt(pick(st(x).reply, res(x).reply))
+
 async function doTask(cfg, a, t, v) {
   const b = await cap(cfg, 'task.submit', { text: v.text }, t(40000))
   if (!b.ok) return b
-  const get = (x) => pick(st(x).id, res(x).id, st(x).task_id, res(x).task_id)
-  const reply = (x) => pick(st(x).reply, res(x).reply)
-  const id = get(b)
-  let rep = reply(b)
-  if (rep === undefined && id === undefined) return fail('bad_response', 'phone returned neither a task id nor a reply')
+  const session = st(b).session
+  if (typeof session !== 'string' || !SESSION_RE.test(session)) return fail('bad_response', 'phone returned no valid task session')
+  let rep = replyOf(b)
   const pollMs = testing(a) && isInt(a._poll_ms, 1, 5000) ? a._poll_ms : 5000
   const deadline = Date.now() + v.wait_s * 1000
   while (rep === undefined && Date.now() + pollMs <= deadline) {
     await sleep(pollMs)
-    const g = await cap(cfg, 'task.get', { id }, t(40000))
+    const g = await cap(cfg, 'task.get', { session }, t(40000))
     if (!g.ok) return g
-    rep = reply(g)
+    rep = replyOf(g)
   }
-  return { ok: true, id: id ?? null, reply: rep ?? null, done: rep != null }
+  return { ok: true, session, reply: rep ?? null, done: rep !== undefined }
 }
 
 async function doTaskGet(cfg, a, t, v) {
-  const g = await cap(cfg, 'task.get', { id: v.id }, t(40000))
+  const g = await cap(cfg, 'task.get', { session: v.session }, t(40000))
   if (!g.ok) return g
-  const rep = pick(st(g).reply, res(g).reply)
-  return { ok: true, id: v.id, reply: rep ?? null, done: rep != null }
+  const rep = replyOf(g)
+  return { ok: true, session: v.session, reply: rep ?? null, done: rep !== undefined }
 }
 
 async function doUplink(cfg, a, t) {
   const b = await cap(cfg, 'uplink.status', {}, t(30000))
-  return b.ok ? { ok: true, state: st(b), result: b.result } : b
+  if (!b.ok) return b
+  const L = lim(st(b)), R = lim(b.result)
+  return { ok: true, ...(L.text === undefined ? { state: st(b) } : { state_text: L.text }), ...(R.text === undefined ? { result: b.result } : { result_text: R.text }) }
 }
 
 async function doHaptic(cfg, a, t, v) {
