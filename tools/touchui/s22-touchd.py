@@ -74,6 +74,13 @@ BACKENDS = ('quickshell', 'unum-shell', 'fastshell')
 SHELL_SOCK = RUN / 'shell.sock'                         # unum-shell's control socket (same dir as ctl.sock)
 OPENUNUM_API = 'http://127.0.0.1:18880'
 PIN_FILE = Path('/srv/s22/state/keepalive/openunum.pinned.json')   # s22-keepalive pin_source
+# Owner pairing (OpenUnum hub U-a51b0e20): the owner redeems a one-time code ONCE with `s22-touchd pair CODE` (native root); the
+# device credential lives here (root-only, 0600) and goes out as X-OpenUnum-Owner-Session on owner-only writes
+# (model switch). When OpenUnum refuses it (expired after 30 days, revoked) the shell says "re-pair needed";
+# there is no retry loop and no fallback to anything that claims to be the owner.
+OWNER_SESSION = Path('/srv/s22/state/owner-session')
+OWNER_PAIR_LABEL = 's22-touchd'
+OWNER_REFUSALS = ('model_change_owner_only', 'owner_proof_required', 'owner_only', 'owner_session_invalid')
 MODEL_CHOICES = {'luna': ('openai', 'openai/gpt-6-luna'),
                  # what s22-llama-ondemand actually serves on :8090 (keepalive service_defs.llama_backend)
                  'local': ('llama-cpp-local', '/models/gemma-4-E2B-it-qat-q4_0-heretic-Q4_0_PURE.gguf')}
@@ -460,16 +467,64 @@ def amp_values() -> list[int | None] | None:
     return vals
 
 
-def openunum(method: str, path: str, body: dict | None = None, timeout: float = 15) -> dict:
+def owner_credential() -> dict | None:
+    """The stored device credential, or None (not paired, unreadable, or past its expiry)."""
+    try:
+        doc = json.loads(OWNER_SESSION.read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(doc, dict) or not doc.get('credential'):
+        return None
+    exp = doc.get('expiresAt') or ''
+    if exp and exp < time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()):
+        return None
+    return doc
+
+
+def openunum(method: str, path: str, body: dict | None = None, timeout: float = 15,
+             owner: bool = False) -> dict:
+    """JSON call to the phone's OpenUnum. owner=True adds the paired device credential when there is one.
+    HTTP errors come back as their JSON body plus 'status' (so a 403 refusal can be told apart)."""
+    import urllib.error
     import urllib.request
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(OPENUNUM_API + path, data=data, method=method,
-                                 headers={'content-type': 'application/json'})
+    headers = {'content-type': 'application/json'}
+    cred = owner_credential() if owner else None
+    if cred:
+        headers[cred.get('header') or 'x-openunum-owner-session'] = cred['credential']
+    req = urllib.request.Request(OPENUNUM_API + path, data=data, method=method, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode() or '{}')
+    except urllib.error.HTTPError as e:
+        try:
+            doc = json.loads(e.read().decode() or '{}')
+        except ValueError:
+            doc = {}
+        doc = doc if isinstance(doc, dict) else {}
+        doc.setdefault('ok', False)
+        doc.setdefault('error', f'http_{e.code}')
+        doc['status'] = e.code
+        return doc
     except Exception as e:  # noqa: BLE001 - reported to the caller
         return {'ok': False, 'error': f'{type(e).__name__}: {e}'}
+
+
+def peer_is_native(conn: socket.socket) -> bool:
+    """True when the socket peer runs in the native root, not inside the Arch chroot. The chroot is where
+    OpenUnum and its agent shells live: they may use ctl.sock for display, camera and so on, but never borrow
+    the owner credential (the owner gate is the point). The native fastshell and root ssh are native."""
+    try:
+        pid = struct.unpack('3i', conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize('3i')))[0]
+        return pid > 0 and os.readlink(f'/proc/{pid}/root') == '/'
+    except (OSError, struct.error):
+        return False
+
+
+def owner_refused(out: dict) -> bool:
+    err = out.get('error')
+    err = err.get('code') if isinstance(err, dict) else err
+    return out.get('status') in (401, 403) and (err in OWNER_REFUSALS or 'owner' in str(err or ''))
 
 
 def display_state() -> str:
@@ -738,7 +793,13 @@ class Daemon:
         if choice not in MODEL_CHOICES:
             return {'ok': False, 'error': 'bad_choice', 'choices': sorted(MODEL_CHOICES)}
         provider, model = MODEL_CHOICES[choice]
-        out = openunum('POST', '/api/model/switch', {'provider': provider, 'model': model})
+        if req.get('_native') is not True:
+            return {'ok': False, 'error': 'owner_only', 'message': 'model changes come from the touch shell only'}
+        out = openunum('POST', '/api/model/switch', {'provider': provider, 'model': model}, owner=True)
+        if owner_refused(out):
+            log(event='model', choice=choice, result='repair_needed', paired=owner_credential() is not None)
+            return {'ok': False, 'error': 'repair_needed', 'message': 're-pair needed: as native root run `s22-touchd pair CODE` '
+                    'with a code from `node scripts/owner-pair-code.mjs --label s22-touchd`', 'answer': out}
         cur = openunum('GET', '/api/model/current')
         if cur.get('provider') != provider:
             return {'ok': False, 'error': 'switch_failed', 'answer': out, 'current': cur}
@@ -751,6 +812,39 @@ class Daemon:
             os.replace(tmp, PIN_FILE)
         log(event='model', choice=choice, current=cur)
         return {'ok': True, 'current': cur, 'pinned': PIN_FILE.exists()}
+
+    def cmd_pair(self, req: dict) -> dict:
+        """`pair CODE`: redeem a one-time owner pairing code for a device credential (stored 0600, never
+        returned). `pair status`: whether a credential is stored and when it expires. `pair forget`: delete it."""
+        arg = str(req.get('arg') or 'status').strip()
+        if arg == 'status':
+            cred = owner_credential()
+            return {'ok': True, 'paired': cred is not None,
+                    'expiresAt': cred.get('expiresAt') if cred else None, 'label': OWNER_PAIR_LABEL}
+        if req.get('_native') is not True:
+            return {'ok': False, 'error': 'owner_only', 'message': 'pair from the native root only'}
+        if arg == 'forget':
+            OWNER_SESSION.unlink(missing_ok=True)
+            log(event='pair', result='forgotten')
+            return {'ok': True, 'paired': False}
+        if not (4 <= len(arg) <= 128) or not all(c.isalnum() or c in '-_' for c in arg):
+            return {'ok': False, 'error': 'bad_code'}
+        out = openunum('POST', '/api/owner/pair/device', {'code': arg, 'label': OWNER_PAIR_LABEL})
+        cred = out.get('credential')
+        if not out.get('ok') or not cred:
+            log(event='pair', result='refused', error=out.get('error'), status=out.get('status'))
+            return {'ok': False, 'error': out.get('error') or 'pair_failed', 'status': out.get('status')}
+        doc = {'credential': cred, 'header': out.get('header') or 'x-openunum-owner-session',
+               'expiresAt': out.get('expiresAt'), 'label': OWNER_PAIR_LABEL, 'pairedAt': time.time()}
+        OWNER_SESSION.parent.mkdir(parents=True, exist_ok=True)
+        tmp = OWNER_SESSION.with_suffix('.tmp')
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, 'w') as f:
+            json.dump(doc, f)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, OWNER_SESSION)
+        log(event='pair', result='paired', expiresAt=doc['expiresAt'])
+        return {'ok': True, 'paired': True, 'expiresAt': doc['expiresAt']}
 
     def cmd_brightness(self, req: dict) -> dict:
         """Set or read the panel backlight. The touch shell runs in the chroot, whose /sys is
@@ -880,7 +974,9 @@ class Daemon:
                         break
                     data += chunk
                 req = json.loads(data.decode() or '{}')
-                resp = self.handle(req if isinstance(req, dict) else {})
+                req = {k: v for k, v in req.items() if not str(k).startswith('_')} if isinstance(req, dict) else {}
+                req['_native'] = peer_is_native(conn)     # set here only; a client cannot claim it
+                resp = self.handle(req)
             except (ValueError, OSError) as e:
                 resp = {'ok': False, 'error': f'bad_request: {e}'}
             try:
@@ -962,6 +1058,7 @@ COMMANDS = {
     'camera_capture': Daemon.cmd_camera,
     'gesture': Daemon.cmd_gesture,
     'model': Daemon.cmd_model,
+    'pair': Daemon.cmd_pair,
     'brightness': Daemon.cmd_brightness,
     'tts': Daemon.cmd_tts,
     'filler': Daemon.cmd_filler,
@@ -989,7 +1086,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--no-gestures', action='store_true')
     ap.add_argument('--no-ui', action='store_true', help='do not supervise the Quickshell touch shell')
-    ap.add_argument('ctl', nargs='*', help='client mode: power | display on|off|toggle | status | gesture NAME | ui FN ARGS...')
+    ap.add_argument('ctl', nargs='*', help='client mode: power | display on|off|toggle | status | gesture NAME | ui FN ARGS... | pair CODE|status|forget')
     a = ap.parse_args(argv)
     if a.ctl:
         cmd, rest = a.ctl[0], a.ctl[1:]
@@ -1002,8 +1099,8 @@ def main(argv=None) -> int:
             req['args'] = rest
         elif cmd == 'model':
             req['arg'] = rest[0] if rest else 'current'
-        elif cmd == 'brightness':
-            req['arg'] = rest[0] if rest else 'get'
+        elif cmd in ('brightness', 'pair'):
+            req['arg'] = rest[0] if rest else ('get' if cmd == 'brightness' else 'status')
         elif cmd == 'status':
             req['fresh'] = True
         print(json.dumps(request(req)))

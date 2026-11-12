@@ -12,6 +12,7 @@ Runs INSIDE the Arch chroot (as /usr/local/bin/s22-ui). Talks to s22-touchd on
   s22-ui display on|off|toggle|status             (off = lock cover + DPMS off)
   s22-ui status                                   (mute state, display, keepalive)
   s22-ui model current|luna|local
+  s22-ui pair status                              (owner pairing; CODE/forget only natively: s22-touchd pair)
   s22-ui brightness [N]                           (read, or set the backlight to N)
   s22-ui tts [--engine E] [--play] [--filler [--for QUESTION]] [--out O] TEXT
                                                   (render speech to a WAV; --play also speaks it; --filler plays a
@@ -129,6 +130,8 @@ def main(argv: list[str]) -> dict:
         return request({'cmd': 'status', 'fresh': '--fresh' in rest})
     if cmd == 'model':
         return request({'cmd': 'model', 'arg': rest[0] if rest else 'current'})
+    if cmd == 'pair':
+        return request({'cmd': 'pair', 'arg': rest[0] if rest else 'status'})
     if cmd == 'brightness':
         return request({'cmd': 'brightness', 'arg': rest[0] if rest else 'get'})
     if cmd == 'tts':

@@ -137,6 +137,20 @@ class SocketTest(unittest.TestCase):
         self.assertEqual(self.calls[-1], ('switcher',))
         self.assertFalse(td.request({'cmd': 'gesture', 'name': 'x'})['ok'])
 
+    def test_native_flag_comes_from_the_peer_not_the_request(self):
+        seen = []
+        td.COMMANDS['probe'] = lambda d, req: (seen.append(req.get('_native')), {'ok': True})[1]
+        orig = td.peer_is_native
+        try:
+            td.peer_is_native = lambda conn: False
+            td.request({'cmd': 'probe', '_native': True})
+            td.peer_is_native = orig
+            td.request({'cmd': 'probe'})
+        finally:
+            td.peer_is_native = orig
+            del td.COMMANDS['probe']
+        self.assertEqual(seen, [False, os.readlink('/proc/self/root') == '/'])
+
     def test_model_rejects_unknown_choice(self):
         r = td.request({'cmd': 'model', 'arg': 'gpt-evil'})
         self.assertEqual(r['error'], 'bad_choice')
@@ -396,6 +410,114 @@ class CameraPhotoTest(unittest.TestCase):
         d = td.Daemon.__new__(td.Daemon)
         Path(td.CAMERA).write_text('x')
         self.assertEqual(td.Daemon.cmd_camera(d, {'sensor': 'side'})['error'], 'bad_sensor')
+
+class OwnerPairTest(unittest.TestCase):
+    """The device credential: redeemed once, stored 0600, sent only on owner writes, never returned."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.saved = (td.OWNER_SESSION, td.PIN_FILE, td.openunum, td.log)
+        td.OWNER_SESSION, td.PIN_FILE = root / 'owner-session', root / 'pin.json'
+        td.log = lambda **k: None
+        self.calls = []
+        self.d = td.Daemon(gestures=False, ui=False)
+
+    def tearDown(self):
+        td.OWNER_SESSION, td.PIN_FILE, td.openunum, td.log = self.saved
+        self.tmp.cleanup()
+
+    def fake(self, answers):
+        def openunum(method, path, body=None, timeout=15, owner=False):
+            self.calls.append((method, path, body, owner))
+            return answers(method, path)
+        td.openunum = openunum
+
+    def test_pair_stores_the_credential_0600_and_never_returns_it(self):
+        self.fake(lambda m, p: {'ok': True, 'credential': 'SECRET', 'header': 'x-openunum-owner-session',
+                                'expiresAt': '2099-01-01T00:00:00.000Z'})
+        r = self.d.cmd_pair({'arg': 'abcd-1234', '_native': True})
+        self.assertEqual(r, {'ok': True, 'paired': True, 'expiresAt': '2099-01-01T00:00:00.000Z'})
+        self.assertNotIn('SECRET', json.dumps(r))
+        self.assertEqual(self.calls[0][:3], ('POST', '/api/owner/pair/device', {'code': 'abcd-1234', 'label': 's22-touchd'}))
+        self.assertEqual(td.OWNER_SESSION.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(td.owner_credential()['credential'], 'SECRET')
+        st = self.d.cmd_pair({'arg': 'status'})
+        self.assertTrue(st['paired'])
+        self.assertNotIn('SECRET', json.dumps(st))
+
+    def test_refused_code_stores_nothing_and_bad_codes_never_leave(self):
+        self.fake(lambda m, p: {'ok': False, 'error': 'pair_code_invalid', 'status': 403})
+        self.assertEqual(self.d.cmd_pair({'arg': 'abcd-1234', '_native': True})['error'], 'pair_code_invalid')
+        self.assertFalse(td.OWNER_SESSION.exists())
+        self.assertEqual(self.d.cmd_pair({'arg': '../x y', '_native': True})['error'], 'bad_code')
+        self.assertEqual(len(self.calls), 1)
+
+    def test_expired_credential_counts_as_unpaired(self):
+        td.OWNER_SESSION.write_text(json.dumps({'credential': 'OLD', 'expiresAt': '2000-01-01T00:00:00Z'}))
+        self.assertIsNone(td.owner_credential())
+        self.assertFalse(self.d.cmd_pair({'arg': 'status'})['paired'])
+
+    def test_model_switch_is_an_owner_write_and_a_refusal_says_re_pair_once(self):
+        self.fake(lambda m, p: {'ok': False, 'error': 'model_change_owner_only', 'status': 403} if m == 'POST'
+                  else {'provider': 'openai', 'model': 'openai/gpt-6-luna'})
+        r = self.d.cmd_model({'arg': 'local', '_native': True})
+        self.assertEqual(r['error'], 'repair_needed')
+        self.assertIn('re-pair needed', r['message'])
+        self.assertEqual([c for c in self.calls if c[0] == 'POST'], [('POST', '/api/model/switch',
+                         {'provider': 'llama-cpp-local', 'model': td.MODEL_CHOICES['local'][1]}, True)])
+        self.assertEqual(len(self.calls), 1)          # no retry, no follow-up read
+        self.assertFalse(td.PIN_FILE.exists())
+
+    def test_model_switch_with_a_credential_pins_as_before(self):
+        cur = {'provider': 'openai', 'model': 'openai/gpt-6-luna'}
+
+        def answers(m, p):
+            if m == 'POST':
+                cur.update(provider='llama-cpp-local', model=td.MODEL_CHOICES['local'][1])
+                return {'ok': True}
+            return dict(cur)
+        self.fake(answers)
+        r = self.d.cmd_model({'arg': 'local', '_native': True})
+        self.assertTrue(r['ok'] and r['pinned'])
+
+    def test_chroot_peers_cannot_switch_models_or_pair(self):
+        self.fake(lambda m, p: {'ok': True})
+        self.assertEqual(self.d.cmd_model({'arg': 'local'})['error'], 'owner_only')
+        self.assertEqual(self.d.cmd_pair({'arg': 'abcd-1234'})['error'], 'owner_only')
+        self.assertEqual(self.d.cmd_pair({'arg': 'forget', '_native': False})['error'], 'owner_only')
+        self.assertEqual(self.calls, [])
+        self.assertIn('paired', self.d.cmd_pair({'arg': 'status'}))
+
+    def test_openunum_sends_the_header_only_on_owner_calls(self):
+        import http.server
+        seen = []
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                seen.append(self.headers.get('x-openunum-owner-session'))
+                self.send_response(403)
+                self.send_header('content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(b'{"ok": false, "error": "model_change_owner_only"}')
+
+            def log_message(self, *a):
+                pass
+        srv = http.server.HTTPServer(('127.0.0.1', 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        api, td.openunum = td.OPENUNUM_API, self.saved[2]
+        td.OPENUNUM_API = f'http://127.0.0.1:{srv.server_address[1]}'
+        try:
+            td.OWNER_SESSION.write_text(json.dumps({'credential': 'CRED', 'expiresAt': '2099-01-01T00:00:00Z'}))
+            out = td.openunum('POST', '/api/model/switch', {}, owner=True)
+            td.openunum('POST', '/api/other', {})
+        finally:
+            td.OPENUNUM_API = api
+            srv.shutdown()
+        self.assertEqual(seen, ['CRED', None])
+        self.assertEqual((out['status'], out['error']), (403, 'model_change_owner_only'))
+        self.assertTrue(td.owner_refused(out))
+
 
 if __name__ == '__main__':
     unittest.main()
