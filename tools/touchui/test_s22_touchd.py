@@ -149,7 +149,7 @@ class SocketTest(unittest.TestCase):
         finally:
             td.peer_is_native = orig
             del td.COMMANDS['probe']
-        self.assertEqual(seen, [False, os.readlink('/proc/self/root') == '/'])
+        self.assertEqual(seen, [False, os.getuid() == 0 and os.readlink('/proc/self/root') == '/'])
 
     def test_model_rejects_unknown_choice(self):
         r = td.request({'cmd': 'model', 'arg': 'gpt-evil'})

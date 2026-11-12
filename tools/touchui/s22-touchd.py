@@ -80,6 +80,7 @@ PIN_FILE = Path('/srv/s22/state/keepalive/openunum.pinned.json')   # s22-keepali
 # there is no retry loop and no fallback to anything that claims to be the owner.
 OWNER_SESSION = Path('/srv/s22/state/owner-session')
 OWNER_PAIR_LABEL = 's22-touchd'
+AGENT_GID = 1500                # group of the chroot user 'unumagent' (tools/hardware/openunum-agent-user.sh)
 PIN_SWITCH_MIN_S = 600          # keepalive's pin may switch at most once per 10 min
 OWNER_REFUSALS = ('model_change_owner_only', 'owner_proof_required', 'owner_only', 'owner_session_invalid')
 MODEL_CHOICES = {'luna': ('openai', 'openai/gpt-6-luna'),
@@ -516,8 +517,8 @@ def peer_is_native(conn: socket.socket) -> bool:
     OpenUnum and its agent shells live: they may use ctl.sock for display, camera and so on, but never borrow
     the owner credential (the owner gate is the point). The native fastshell and root ssh are native."""
     try:
-        pid = struct.unpack('3i', conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize('3i')))[0]
-        return pid > 0 and os.readlink(f'/proc/{pid}/root') == '/'
+        pid, uid, _gid = struct.unpack('3i', conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize('3i')))
+        return pid > 0 and uid == 0 and os.readlink(f'/proc/{pid}/root') == '/'
     except (OSError, struct.error):
         return False
 
@@ -992,7 +993,13 @@ class Daemon:
         except FileNotFoundError:
             pass
         srv.bind(str(tmp))
-        os.chmod(tmp, 0o600)
+        # The phone's OpenUnum runs as its own unprivileged user (AGENT_GID) since 2026-11-12: its tools
+        # reach this socket through the group. Owner-only commands stay native-root only (peer_is_native).
+        try:
+            os.chown(tmp, 0, AGENT_GID)
+            os.chmod(tmp, 0o660)
+        except OSError:
+            os.chmod(tmp, 0o600)
         srv.listen(8)
         os.replace(tmp, SOCK)
         srv.settimeout(1.0)

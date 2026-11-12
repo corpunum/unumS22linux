@@ -65,6 +65,7 @@ import fcntl
 import json
 import os
 import socket
+import stat
 import subprocess
 import sys
 import time
@@ -488,10 +489,21 @@ def pin_config_file(path: Path, pin: dict, allow=()) -> str:
     new = apply_pin(doc, pin)
     tmp = path.with_name(path.name + '.keepalive-tmp')
     try:
-        tmp.write_text(json.dumps(new, indent=2))
-        st = path.stat()
-        os.chown(tmp, st.st_uid, st.st_gid)
-        os.chmod(tmp, st.st_mode & 0o7777)
+        # The directory belongs to the agent's user (not root) since 2026-11-12, and keepalive is root: never
+        # follow a link the agent could have planted. lstat the target, create the temp file exclusively
+        # without following links, and hand it to the same owner.
+        st = os.lstat(path)
+        if not stat.S_ISREG(st.st_mode):
+            return 'error: config is not a regular file'
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, 'w') as f:
+            f.write(json.dumps(new, indent=2))
+            os.fchown(f.fileno(), st.st_uid, st.st_gid)
+            os.fchmod(f.fileno(), st.st_mode & 0o7777)
         os.replace(tmp, path)
     except OSError as e:
         return f'error: {type(e).__name__}: {e}'

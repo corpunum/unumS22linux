@@ -411,6 +411,20 @@ class ModelPinTest(unittest.TestCase):
         self.assertEqual(got, [{'cmd': 'model_pin', 'provider': 'openai', 'model': 'openai/gpt-6-luna'}])
         self.assertTrue(out['ok'])
 
+    def test_pin_never_writes_through_a_planted_link(self):
+        victim = self.dir / 'victim.json'
+        victim.write_text('{"audio.listen": false}')
+        self.conf.write_text(json.dumps({'model': {'provider': 'x', 'model': 'y'}, 'audio.listen': True}))
+        (self.conf.with_name(self.conf.name + '.keepalive-tmp')).symlink_to(victim)
+        self.assertEqual(mod.pin_config_file(self.conf, self.PIN), 'restored')
+        self.assertEqual(victim.read_text(), '{"audio.listen": false}', 'the link target is untouched')
+        self.assertEqual(json.loads(self.conf.read_text())['model']['provider'], 'openai')
+        real = self.dir / 'real.json'
+        real.write_text(self.conf.read_text())
+        self.conf.unlink()
+        self.conf.symlink_to(real)
+        self.assertTrue(mod.pin_config_file(self.conf, {'provider': 'p', 'model': 'm'}).startswith('error'))
+
     def test_file_pinned_before_restart_only_when_stopped(self):
         k, svc = self.keepalive(lambda *a, **kw: {})
         svc.is_running = svc.is_healthy = False

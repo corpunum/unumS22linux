@@ -65,8 +65,19 @@ and writable. The kernel has no PID or user namespaces.
   switches protect against the rig and against honest mistakes, not against the phone's agent.
 - Mitigation shipped the same day: every SMS command is two-step (the phone texts a one-time code to the
   real number; the agent only sees confirmed commands).
-- Real fix, open: run the phone's OpenUnum as a non-root user without capabilities, with the credential and
-  switches in a root-only directory, and test it adversarially (see UnumHub).
+- **Real fix, live since 2026-11-12 08:22 UTC (hub U-8cdacbb0):** the phone's OpenUnum runs as the chroot
+  user `unumagent` (1500:1500) with no capabilities, an empty bounding set and no_new_privs
+  (`tools/hardware/s22-openunum.sh`). It owns `/root/.openunum`; `/root` is 0711 and root's; plugin code
+  stays root-owned; `/srv/s22/state` is 0700 root. touchd's `ctl.sock` is 0660 root:1500, and owner-only
+  commands need a native peer with uid 0.
+  - Prove it any time: `sh /srv/s22/hardware/bin/openunum-agent-user check` runs 12 attacks as that user
+    (credential and switches via /proc, s22d's memory, ip_forward, iptables, ssh keys, plugin code, mknod,
+    su, model switch, pairing): all must say DENIED, and 4 normal things must say WORKS.
+  - Deploying plugin files: copy them as root (`tar --no-same-owner`), or re-run
+    `openunum-agent-user apply` while OpenUnum is held and stopped.
+  - Emergency: `touch /srv/s22/state/openunum/run-as-root` makes the launcher start it as root again.
+  - Still open: root daemons that write into the agent's tree (s22d's gallery copy) follow paths the agent
+    controls; keepalive's config pin no longer does. The Lightpanda proxy still runs as root in the chroot.
 
 ## Phone as an OpenUnum device (2026-11-12, design docs/PHONE_AS_DEVICE_DESIGN.md)
 - s22d's remote listener runs on the phone's tailnet address, port 8767, only while `/srv/s22/state/s22d/remote.json` (0600) exists. That file pins the rig by tailnet `Node.StableID` and holds only the SHA-256 of its bearer token. The token itself lives on the rig at `~/.config/unum/s22-device.token` (0600). To revoke, delete the peer from remote.json and restart s22d.
