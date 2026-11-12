@@ -76,8 +76,9 @@ and writable. The kernel has no PID or user namespaces.
   - Deploying plugin files: copy them as root (`tar --no-same-owner`), or re-run
     `openunum-agent-user apply` while OpenUnum is held and stopped.
   - Emergency: `touch /srv/s22/state/openunum/run-as-root` makes the launcher start it as root again.
-  - Still open: root daemons that write into the agent's tree (s22d's gallery copy) follow paths the agent
-    controls; keepalive's config pin no longer does. The Lightpanda proxy still runs as root in the chroot.
+  - Also closed the same day: s22d's gallery copy opens every path component with O_NOFOLLOW and creates
+    the file exclusively (a planted link cannot redirect root's write); the Lightpanda proxy runs as
+    `unumagent` too (keepalive `lightpanda_proxy` argv uses setpriv).
 
 ## Phone as an OpenUnum device (2026-11-12, design docs/PHONE_AS_DEVICE_DESIGN.md)
 - s22d's remote listener runs on the phone's tailnet address, port 8767, only while `/srv/s22/state/s22d/remote.json` (0600) exists. That file pins the rig by tailnet `Node.StableID` and holds only the SHA-256 of its bearer token. The token itself lives on the rig at `~/.config/unum/s22-device.token` (0600). To revoke, delete the peer from remote.json and restart s22d.

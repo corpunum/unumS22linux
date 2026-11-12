@@ -309,8 +309,7 @@ impl CameraClient {
         }
         let ext = img.extension().and_then(|e| e.to_str()).unwrap_or("png");
         let dst = dir.join(format!("cam-{stamp}-{sensor}.{ext}"));
-        std::fs::create_dir_all(dir)
-            .and_then(|_| std::fs::copy(img, &dst))
+        copy_nofollow(img, &dst)
             .map(|_| Some(dst))
             .map_err(|e| format!("gallery copy failed: {e}"))
     }
@@ -431,8 +430,7 @@ impl CameraClient {
             return Ok(None);
         }
         let dst = dir.join(format!("vid-{stamp}-{sensor}.avi"));
-        std::fs::create_dir_all(dir)
-            .and_then(|_| std::fs::copy(video, &dst))
+        copy_nofollow(video, &dst)
             .map(|_| Some(dst))
             .map_err(|e| format!("gallery copy failed: {e}"))
     }
@@ -608,6 +606,73 @@ impl Camera for CameraClient {
         self.prune_recordings();
         Ok(result)
     }
+}
+
+/// Copy `src` to `dst` as root into a directory tree another user owns (the gallery belongs to the
+/// phone's unprivileged agent since 2026-11-12). No component of the destination may be a symbolic link:
+/// every directory is opened with `O_NOFOLLOW` from `/` down (missing ones are created and given their
+/// parent's owner), and the file is created with `O_EXCL | O_NOFOLLOW` and handed to the directory's
+/// owner. A planted link therefore cannot make root write anywhere else.
+pub(crate) fn copy_nofollow(src: &Path, dst: &Path) -> std::io::Result<()> {
+    use std::ffi::CString;
+    use std::io::{Error, ErrorKind};
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+    use std::os::unix::ffi::OsStrExt;
+    let bad = |m: &str| Error::new(ErrorKind::InvalidInput, m.to_string());
+    if !dst.is_absolute() {
+        return Err(bad("destination must be absolute"));
+    }
+    let name = dst.file_name().ok_or_else(|| bad("no file name"))?;
+    let dir = dst.parent().ok_or_else(|| bad("no directory"))?;
+    let cstr = |b: &std::ffi::OsStr| CString::new(b.as_bytes()).map_err(|_| bad("NUL in path"));
+    let dflags = libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC;
+    let owner = |fd: &OwnedFd| -> std::io::Result<(u32, u32)> {
+        let mut st: libc::stat = unsafe { std::mem::zeroed() };
+        if unsafe { libc::fstat(fd.as_raw_fd(), &mut st) } != 0 {
+            return Err(Error::last_os_error());
+        }
+        Ok((st.st_uid, st.st_gid))
+    };
+    let root = unsafe { libc::open(c"/".as_ptr(), dflags) };
+    if root < 0 {
+        return Err(Error::last_os_error());
+    }
+    let mut cur = unsafe { OwnedFd::from_raw_fd(root) };
+    for comp in dir.components() {
+        let std::path::Component::Normal(part) = comp else {
+            if matches!(comp, std::path::Component::RootDir) {
+                continue;
+            }
+            return Err(bad("destination must not contain . or .."));
+        };
+        let p = cstr(part)?;
+        let mut fd = unsafe { libc::openat(cur.as_raw_fd(), p.as_ptr(), dflags) };
+        if fd < 0 && Error::last_os_error().kind() == ErrorKind::NotFound {
+            let (uid, gid) = owner(&cur)?;
+            if unsafe { libc::mkdirat(cur.as_raw_fd(), p.as_ptr(), 0o755) } != 0 {
+                return Err(Error::last_os_error());
+            }
+            fd = unsafe { libc::openat(cur.as_raw_fd(), p.as_ptr(), dflags) };
+            if fd >= 0 {
+                unsafe { libc::fchown(fd, uid, gid) };
+            }
+        }
+        if fd < 0 {
+            return Err(Error::last_os_error());
+        }
+        cur = unsafe { OwnedFd::from_raw_fd(fd) };
+    }
+    let (uid, gid) = owner(&cur)?;
+    let n = cstr(name)?;
+    let fflags = libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC;
+    let fd = unsafe { libc::openat(cur.as_raw_fd(), n.as_ptr(), fflags, 0o644 as libc::c_uint) };
+    if fd < 0 {
+        return Err(Error::last_os_error());
+    }
+    let mut out = unsafe { std::fs::File::from_raw_fd(fd) };
+    std::io::copy(&mut std::fs::File::open(src)?, &mut out)?;
+    unsafe { libc::fchown(out.as_raw_fd(), uid, gid) };
+    Ok(())
 }
 
 #[cfg(test)]
@@ -895,6 +960,38 @@ esac
         let cam = CameraClient::new(Arc::new(Config::rooted(t.path())), Arc::new(SysRunner));
         assert_eq!(cam.capture(&req("rear")).unwrap_err().code, "unavailable");
         assert!(cam.availability().is_some());
+    }
+
+    #[test]
+    fn gallery_copy_refuses_planted_links() {
+        let t = Tmp::new();
+        let src = t.write("src.jpg", "PHOTO");
+        let victim = t.path().join("victim");
+        std::fs::create_dir_all(&victim).unwrap();
+        // a real directory tree works, creating what is missing
+        let ok = t.path().join("home/assets/generated/cam-1-rear.jpg");
+        std::fs::create_dir_all(t.path().join("home")).unwrap();
+        copy_nofollow(&src, &ok).unwrap();
+        assert_eq!(std::fs::read_to_string(&ok).unwrap(), "PHOTO");
+        assert!(copy_nofollow(&src, &ok).is_err(), "never overwrites");
+        // a directory component swapped for a link
+        std::os::unix::fs::symlink(&victim, t.path().join("home/linked")).unwrap();
+        assert!(copy_nofollow(&src, &t.path().join("home/linked/cam-2-rear.jpg")).is_err());
+        assert!(
+            std::fs::read_dir(&victim).unwrap().next().is_none(),
+            "nothing written through the link"
+        );
+        // the file name itself planted as a link
+        std::os::unix::fs::symlink(
+            victim.join("x"),
+            t.path().join("home/assets/generated/cam-3-rear.jpg"),
+        )
+        .unwrap();
+        assert!(
+            copy_nofollow(&src, &t.path().join("home/assets/generated/cam-3-rear.jpg")).is_err()
+        );
+        assert!(!victim.join("x").exists());
+        assert!(copy_nofollow(&src, &t.path().join("home/../x.jpg")).is_err());
     }
 
     #[test]
