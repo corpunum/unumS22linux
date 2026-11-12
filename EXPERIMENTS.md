@@ -3431,3 +3431,28 @@ Details: `evidence/npu-custom-20261022/README.md`. Tools: `tools/hardware/npu/nn
 - **Incident:** my read-only `gst-inspect-1.0 x264enc` probe (12:27) is stuck unkillable in the kernel (CMA) and is
   what keeps the phone hot with load ~15; a reboot is needed. Details: `evidence/shell-phase2-20261022/README.md`.
 
+
+### 2026-11-12 (afternoon) — Rig failover stage 1 failed: mobile data goes dead 1–3 s after it comes up
+
+- **What ran:** the rig's default route was switched to the phone for 5 minutes (12:32:55–12:37:51 UTC,
+  `unum-uplink-failover` + `s22-uplink-cut-test.sh probe 240`). The route, the DNS switch and the 5-minute hold
+  worked. Nothing got through the phone: the trading engine's four polls failed, and the rig was offline.
+- **Phone counters for the window:** rmnet0 sent about 8.2 MB and received under 0.4 MB. A bench with one /32 route
+  (12:42 UTC): 57 rig packets accepted and NATed, 16 replies; on the rig the TCP handshake completed in ~100 ms and
+  the TLS ClientHello was never acknowledged (7 retransmits).
+- **Phone-own probe** (`/srv/s22/state/lte-probe.sh`: ping, ping 500 B and an HTTP GET bound to rmnet0, one round per
+  ~4 s, share on): the first round passes (ping ok, HTTP 301), every later round fails. TCP connects are still answered
+  in 30–70 ms, but no payload and no ICMP come back. Radio is fine (RSRP -94 dBm, home network, B3+B20+n78).
+- **5G is not the cause.** The first run looked like it (`nr_nsa` turned true exactly when data died), so the
+  preferred network type was changed as a test: GET `(08,0A)` = 75 (gsm, wcdma, lte, nr) at 12:51:58 UTC → SET
+  `{"mode_select":11}` ok → GET 11 → 32 rounds in 2 min 8 s with `nr=False`: 1 pass, 31 fail → SET
+  `{"mode_select":75}` ok at 12:55:23 UTC → GET 75, registered `home_3gpp`/lte. **The phone is back on 75.**
+  Restore, if ever needed: `sh /srv/s22/state/modesel.sh set 75` (then `get`). phoned now accepts a SET of `(08,0A)`
+  for exactly these two bodies (`MODE_SELECT_SET_BODIES`); device backup `s22-phoned.bak-20261112-modesel`.
+- **Reading:** a handshake that is answered while payload and ICMP are dropped, starting a moment after the data
+  session is set up, in both radio modes, is what a carrier-side block looks like (allowance used up, plan lapsed
+  or data barred). On 10-21 the same SIM carried 97 Mbit/s. Not proven: the SIM's balance has to be checked by the
+  owner. If the SIM has data, the next suspect is the phone side (the kernel rebuilt on 11-12).
+- **Why the morning proof passed:** it lasted 5 s (one curl), inside the window in which traffic still passes.
+- **Consequence for the rig daemon:** it now has to see several HTTP exchanges through the phone, spread over
+  seconds, before it touches the default route, and it keeps checking the path during failover.

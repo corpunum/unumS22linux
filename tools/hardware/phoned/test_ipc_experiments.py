@@ -101,6 +101,16 @@ class ExperimentalIpcTest(unittest.TestCase):
         for args in ((256, 1, 3, ''), (13, 20, 3, '{bad'), (13, 20, 3, 'xy')):
             self.assertEqual(self.ph.ipc_send(*args)[0], 400)
         self.assertEqual(self.log.rows, [])
+    def test_preferred_network_type_set_allows_only_the_two_known_bodies(self):
+        for bad in ('{"mode_select":0}', '{"mode_select": 11}', '{"mode_select":11,"x":1}', '0b', '{"mode_select":64}'):
+            self.assertEqual(self.ph.ipc_send(8, 10, 3, bad)[0], 403, bad)
+        (code, result), raw = self.transact((8, 10, 3, '{"mode_select":11}'))
+        self.assertEqual(code, 200)
+        self.assertEqual(raw[7:], b'{"mode_select":11}')
+        self.ph.last_ipc_send = None
+        (code, _), raw = self.transact((8, 10, 3, '{"mode_select":75}'))
+        self.assertEqual((code, raw[7:]), (200, b'{"mode_select":75}'))
+
     def test_cooldown_offline_and_busy_do_not_send(self):
         self.ph.last_ipc_send = time.monotonic()
         self.assertEqual(self.ph.ipc_send(13, 20, 3, '{}')[0], 429)

@@ -86,6 +86,9 @@ DATA_CALL_ACTIVE, DATA_CALL_RELEASED = 1, 3   # observed GPRS_CALL_STATUS data_c
 NET_SYS = "/sys/class/net"
 DATA_SET_ALLOWLIST = {(0x0D, i) for i in (0x01, 0x03, 0x04, 0x14, 0x1B, 0x1D)}
 IPC_GET_ALLOWLIST = {(0x08, 0x0A), (0x0D, 0x04)}
+# Preferred network type SET (stock IpcTxNetSetPreferredNetType): only these two exact bodies.
+# 75 = NR|LTE|WCDMA|GSM (the CP default), 11 = LTE|WCDMA|GSM (no 5G leg; see EXPERIMENTS.md 2026-11-12).
+MODE_SELECT_SET_BODIES = {b'{"mode_select":75}', b'{"mode_select":11}'}
 
 NAMES = {
     PWR_PHONE_STATE: "PWR_PHONE_STATE", (1, 1): "PWR_PHONE_PWR_UP",
@@ -1965,6 +1968,7 @@ class Phone:
             return 400, {"ok": False, "error": str(e)}
         cmd = (group, index)
         allowed = ((cmd in DATA_SET_ALLOWLIST and typ == SET) or
+                   (cmd == (0x08, 0x0A) and typ == SET and data in MODE_SELECT_SET_BODIES) or
                    (cmd == CFG_JSON_CMD_LIST and typ == GET and data == CFG_JSON_CMD_LIST_BODY) or
                    (cmd in IPC_GET_ALLOWLIST and typ == GET and not data))
         if not allowed:
