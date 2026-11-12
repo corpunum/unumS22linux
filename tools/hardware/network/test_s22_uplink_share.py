@@ -81,8 +81,9 @@ class OnOffTest(Base):
         self.assertTrue(r['on'] and r['forwarding'])
         flat = [' '.join(c) for c in self.cmds]
         self.assertIn(f'ip rule add from {self.RIG} lookup 177 priority 1177', flat)
-        rules = [c for c in flat if '-A S22SHARE' in c]
-        self.assertTrue(all(self.RIG in c or '-i wlan0 -j DROP' in c for c in rules), rules)
+        rules = [c for c in flat if '-A S22SHARE ' in c]
+        self.assertTrue(all(self.RIG in c for c in rules[:-1]), rules)
+        self.assertTrue(rules[-1].endswith('-A S22SHARE -j DROP'), 'everything else is dropped, on any interface')
         self.assertTrue(any(c.endswith(f'-s {self.RIG} -o rmnet+ -j MASQUERADE') for c in flat))
         self.assertEqual(json.loads(self.m.NETPOLICY.read_text())['mobile_mode'], 'always')
         self.assertEqual(self.m.FORWARD.read_text().strip(), '1')

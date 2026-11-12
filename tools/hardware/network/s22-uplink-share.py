@@ -3,7 +3,7 @@
 
 Hub U-fe741e10, rules from corpunum-82 (2026-11-12, docs/P4_UPLINK_FAILOVER_PLAN.md):
 * only the rig: forwarding and NAT for one source address (the rig's LAN IP, from the private
-  /srv/s22/state/uplink-share.json {"rig": "<ip>"}), everything else forwarded from wlan0 is dropped;
+  /srv/s22/state/uplink-share.json {"rig": "<ip>"}), everything else that would be forwarded is dropped;
 * guards: battery above 40 %, at most 2 GB a day (rmnet0 bytes while sharing), off after 6 h;
 * an audit line per enable and disable (/srv/s22/state/audit/uplink-share.jsonl);
 * forwarding off again afterwards whatever happens: a failed `on` runs `off`; a watchdog enforces the
@@ -129,7 +129,7 @@ def forwarding_rules(r: str) -> list[list[str]]:
     return [
         ['-t', 'filter', '-A', 'S22SHARE', '-s', r, '-o', 'rmnet+', '-j', 'ACCEPT'],
         ['-t', 'filter', '-A', 'S22SHARE', '-d', r, '-i', 'rmnet+', '-m', 'state', '--state', 'ESTABLISHED,RELATED', '-j', 'ACCEPT'],
-        ['-t', 'filter', '-A', 'S22SHARE', '-i', 'wlan0', '-j', 'DROP'],
+        ['-t', 'filter', '-A', 'S22SHARE', '-j', 'DROP'],      # nothing else is forwarded, whatever the interface
         ['-t', 'nat', '-A', 'S22SHARE_NAT', '-s', r, '-o', 'rmnet+', '-j', 'MASQUERADE'],
     ]
 

@@ -67,7 +67,7 @@ export function ownerSmsPrompt({ from, text, ts, id }) {
   return [
     `[s22-phone] SMS from the OWNER (${from}) received ${when(ts)}${id != null ? ` (sms id ${id})` : ''}.`,
     'This is the owner texting you from their phone. Treat the message as a normal request from the owner and act on it with your usual judgement.',
-    'SAFEGUARD (SMS sender IDs can be spoofed): if it asks for anything destructive or irreversible (deleting files or data, payments or purchases, configuration or model changes, shutdown or reboot, messages or calls to anyone else), do NOT do it yet.',
+    'The owner confirmed this message with a one-time code, so it really comes from their phone. Still: if it asks for anything destructive or irreversible (deleting files or data, payments or purchases, configuration or model changes, shutdown or reboot, messages or calls to anyone else, sending photos, recordings or files anywhere), do NOT do it yet.',
     `Instead call sms_confirm_request with to: "${from}" and a one-line summary of exactly what you would do. It texts the owner a code; act only when a later turn says the owner CONFIRMED that code.`,
     `When you are done, reply to the owner by SMS with the sms_send tool (to: "${from}"). Keep SMS replies short and plain text.`,
     '',

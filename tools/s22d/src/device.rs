@@ -628,6 +628,13 @@ async fn run(app: &Shared, cap: &DevCap, a: &Args) -> ApiResult<Out> {
             let on = a
                 .bool("on")?
                 .ok_or_else(|| ApiError::bad_request("on is required"))?;
+            // The owner's switch binds every caller for switching it ON (off is always allowed).
+            if on && !crate::remote::switch_on(&cfg.switches_path, "uplink.share") {
+                return Err(ApiError::denied(
+                    "capability_off",
+                    "internet sharing is switched off on the phone",
+                ));
+            }
             out(blocking(move || uplink(&cfg, if on { "on" } else { "off" })).await?)
         }
         "audio.listen" => {

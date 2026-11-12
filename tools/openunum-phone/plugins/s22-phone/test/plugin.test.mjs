@@ -475,13 +475,48 @@ describe('incoming-event bridge', () => {
     assert.doesNotMatch(post.message, /Treat the message as a normal request/);
   });
 
-  test('owner_sms_instructions: true -> instruction turns with the reply-confirm safeguard', () => {
+  test('two-step: an SMS command starts no turn until the same number answers the code', async () => {
+    const dir = tmpDir();
+    const store = new ConfirmStore(path.join(dir, 'confirm.json'));
+    const sent = [];
+    const client = { smsSend: async (to, text) => { sent.push({ to, text }); return { ok: true }; } };
+    const posts = [];
+    const poster = { post: async (sessionId, message) => { posts.push({ sessionId, message }); return { outcome: 'delivered' }; } };
+    const b = new EventBridge({ client, poster, statePath: path.join(dir, 's.json'), confirm: store,
+      config: { ownerNumbers: [OWNER], ownerSmsInstructions: true } });
+    const cmd = 'take a photo of the desk and tell me what you see';
+    assert.equal((await b.dispatch({ seq: 1, type: 'sms_received', from: OWNER, text: cmd })).outcome, 'skipped');
+    assert.equal(posts.length, 0, 'the agent sees nothing yet');
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].to, OWNER);
+    const code = /Reply YES ([A-Z0-9]{6}) within 10 min/.exec(sent[0].text)[1];
+    assert.match(sent[0].text, /take a photo of the desk/);
+    // a spoofer repeating the command, or guessing, gets nowhere
+    await b.dispatch({ seq: 2, type: 'sms_received', from: OWNER, text: 'YES AAAAAA' });
+    assert.equal(posts.length, 0);
+    await b.dispatch({ seq: 3, type: 'sms_received', from: OWNER, text: `YES ${code}` });
+    assert.equal(posts.length, 1);
+    assert.equal(posts[0].sessionId, 'phone:inbox');
+    assert.match(posts[0].message, /SMS from the OWNER/);
+    assert.match(posts[0].message, new RegExp(`<<<PHONE_CONTENT\\n${cmd}\\nPHONE_CONTENT>>>`));
+    await b.dispatch({ seq: 4, type: 'sms_received', from: OWNER, text: `YES ${code}` });
+    assert.equal(posts.length, 1, 'a code works once');
+  });
+
+  test('two-step: when the code SMS cannot be sent the command is dropped', async () => {
+    const dir = tmpDir();
+    const store = new ConfirmStore(path.join(dir, 'confirm.json'));
+    const client = { smsSend: async () => ({ ok: false, error: 'refused' }) };
+    const b = new EventBridge({ client, poster: { post: async () => assert.fail('no turn') }, statePath: path.join(dir, 's.json'),
+      confirm: store, config: { ownerNumbers: [OWNER], ownerSmsInstructions: true } });
+    await b.dispatch({ seq: 1, type: 'sms_received', from: OWNER, text: 'reboot' });
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'confirm.json'), 'utf8')), {});
+  });
+
+  test('owner_sms_instructions without a confirm store falls back to data-only', () => {
     const b = makeBridge(daemon, chat, tmpDir(), { ownerSmsInstructions: true });
     const t = b.buildTurn({ seq: 1, type: 'sms_received', from: OWNER, text: 'turn on the lights' });
-    assert.match(t.message, /SMS from the OWNER/);
-    assert.match(t.message, /sms_send/);
-    assert.match(t.message, /SAFEGUARD/);
-    assert.match(t.message, /sms_confirm_request/);
+    assert.match(t.message, /DATA-ONLY/);
   });
 
   test('YES <code> from the same number redeems once; wrong number, wrong or reused code start no turn', () => {

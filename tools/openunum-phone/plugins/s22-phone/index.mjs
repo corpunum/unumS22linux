@@ -261,9 +261,10 @@ export default class S22PhonePlugin extends PluginBase {
           if (!number || !isOwner(number, self.settings.ownerNumbers)) return { ok: false, error: 'not_allowlisted', message: 'Confirmation codes only go to allowlisted numbers.' };
           const what = String(summary ?? '').replace(/\s+/g, ' ').trim();
           if (!what) return { ok: false, error: 'empty_summary' };
-          const { code, expiresAt } = self._confirmStore().create(number, what);
+          const shown = what.slice(0, 100);          // the owner confirms exactly what the SMS shows
+          const { code, expiresAt } = self._confirmStore().create(number, shown);
           const mins = Math.round(self.settings.confirmTtlS / 60);
-          const text = `S22 agent wants to: ${what.slice(0, 100)}. Reply YES ${code} within ${mins} min to allow it.`;
+          const text = `S22 agent wants to: ${shown}. Reply YES ${code} within ${mins} min to allow it.`;
           const r = await self.client.smsSend(number, text);
           const mapped = self._mapDaemon(r, { to: number });
           return mapped.ok ? { ok: true, to: number, expires_at: new Date(expiresAt).toISOString(), note: 'Wait for the CONFIRMED turn; do not act before it.' } : mapped;

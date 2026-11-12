@@ -52,6 +52,22 @@ Private access details (tailnet name, SSH options, allowlists) live in an untrac
 | Kernel | 11-12: the close_range fix is flashed (build-id f95682b4, RECOVERY 19aa0293…). Subprocess capture no longer hangs. Rollback and the build recipe are in FLASH_LOG.md. To rebuild, use `tools/hardware/build-recovery-kernel.sh` with `KMAKE_FLAGS="ARCH=arm64 LLVM=1"`. |
 | s22d | 0.3.0, the 11-11 build (camera ISP fix); it includes torch. |
 
+## CORRECTION 2026-11-12 10:15 EET: the chroot is NOT a security boundary
+Statements written earlier today (in this file, in commit messages and in code comments) that the Arch chroot
+"cannot see" `/srv/s22/state/owner-session`, `device-switches.json` or `uplink-share.json` are **wrong against
+an adversarial process**. Proven on the phone: the phone's OpenUnum runs as uid 0 with all capabilities, no
+seccomp and `/proc` mounted, so from inside the chroot `/proc/<native pid>/root/srv/s22/state/...` is readable
+and writable. The kernel has no PID or user namespaces.
+- What still holds: other tailnet nodes, callers without the rig's token and unknown SMS senders are refused
+  in code (tests in `tools/s22d/src/tests.rs`, `plugins/s22-phone/test`).
+- What does not: anything that steers the phone's own agent (a prompt injection) can reach the mic switch,
+  the camera, the owner credential and the uplink. touchd's native-root peer check and the Rig access
+  switches protect against the rig and against honest mistakes, not against the phone's agent.
+- Mitigation shipped the same day: every SMS command is two-step (the phone texts a one-time code to the
+  real number; the agent only sees confirmed commands).
+- Real fix, open: run the phone's OpenUnum as a non-root user without capabilities, with the credential and
+  switches in a root-only directory, and test it adversarially (see UnumHub).
+
 ## Phone as an OpenUnum device (2026-11-12, design docs/PHONE_AS_DEVICE_DESIGN.md)
 - s22d's remote listener runs on the phone's tailnet address, port 8767, only while `/srv/s22/state/s22d/remote.json` (0600) exists. That file pins the rig by tailnet `Node.StableID` and holds only the SHA-256 of its bearer token. The token itself lives on the rig at `~/.config/unum/s22-device.token` (0600). To revoke, delete the peer from remote.json and restart s22d.
 - Remote callers get `/v1/device` only, limited to `REMOTE_CAPS` in `tools/s22d/src/remote.rs`, each behind `/srv/s22/state/device-switches.json`. A missing entry means on, except `audio.listen`, which stays off until the owner switches it on.

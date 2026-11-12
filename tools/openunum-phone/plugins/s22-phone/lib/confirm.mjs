@@ -45,14 +45,14 @@ export class ConfirmStore {
   }
 
   /** Register a pending action for `to`; returns { code, expiresAt }. */
-  create(to, summary) {
+  create(to, summary, { kind = 'action', maxChars = 300 } = {}) {
     const d = this._live(this._load());
     const keys = Object.keys(d);
     if (keys.length >= this.max) delete d[keys.sort((a, b) => d[a].createdAt - d[b].createdAt)[0]];
     let code;
     do { code = newCode(this.rand); } while (d[code]);
     const expiresAt = this.now() + this.ttlMs;
-    d[code] = { to, summary: String(summary).slice(0, 300), createdAt: this.now(), expiresAt };
+    d[code] = { to, kind, summary: String(summary).slice(0, maxChars), createdAt: this.now(), expiresAt };
     this._save(d);
     return { code, expiresAt };
   }

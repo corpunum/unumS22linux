@@ -2287,6 +2287,40 @@ mod uplink_tests {
     }
 
     #[tokio::test]
+    async fn the_owner_switch_stops_local_callers_too_but_off_still_works() {
+        let tmp = Tmp::new();
+        let tool = tmp.write(
+            "bin/share.py",
+            "import json,sys\nprint(json.dumps({'ok': True, 'cmd': sys.argv[1]}))\n",
+        );
+        let sw = tmp.write("switches.json", r#"{"uplink.share": false}"#);
+        let h = H::with(move |c| {
+            c.uplink_tool = tool;
+            c.switches_path = sw;
+        });
+        std::mem::forget(tmp);
+        let (s, v) = h
+            .send("POST", "/v1/device/uplink.share", Some(json!({"on": true})))
+            .await;
+        assert_eq!(
+            (s, code(&v)),
+            (StatusCode::FORBIDDEN, "capability_off"),
+            "{v}"
+        );
+        let (s, v) = h
+            .send(
+                "POST",
+                "/v1/device/uplink.share",
+                Some(json!({"on": false})),
+            )
+            .await;
+        assert_eq!(
+            (s, v["state"]["cmd"].as_str()),
+            (StatusCode::OK, Some("off"))
+        );
+    }
+
+    #[tokio::test]
     async fn a_guard_refusal_is_final() {
         let h = with_tool("import json\nprint(json.dumps({'ok': False, 'error': 'battery 38 % (sharing needs more than 40 %)'}))\n");
         let (s, v) = h

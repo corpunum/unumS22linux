@@ -291,11 +291,18 @@ export class EventBridge {
             this.log.info('bridge_confirm_unknown', { seq: ev.seq });     // wrong, expired or used code: no turn
             return null;
           }
-          this.log.info('bridge_confirm_redeemed', { seq: ev.seq });
-          return { sessionId: this.cfg.sessionId, trusted: true, message: confirmedSmsPrompt({ from, code: rec.code, summary: rec.summary }) };
+          this.log.info('bridge_confirm_redeemed', { seq: ev.seq, kind: rec.kind });
+          // kind 'command': the owner's own SMS, now proven to come from the real number -> the instruction turn.
+          // kind 'action': an action the agent asked to confirm (sms_confirm_request).
+          return { sessionId: this.cfg.sessionId, trusted: true,
+                   message: rec.kind === 'command'
+                     ? ownerSmsPrompt({ from, text: rec.summary, ts: msg.ts, id: msg.id })
+                     : confirmedSmsPrompt({ from, code: rec.code, summary: rec.summary }) };
         }
-        return { sessionId: this.cfg.sessionId, trusted: true,
-                 message: this.cfg.ownerSmsInstructions ? ownerSmsPrompt(msg) : allowlistedSmsPrompt(msg) };
+        // Two-step (corpunum-82, 2026-11-12): sender IDs can be spoofed and the agent is powerful, so NO SMS
+        // text reaches the agent as an instruction until the real number has answered a one-time code.
+        if (this.cfg.ownerSmsInstructions && this.confirm) return { confirmFirst: msg };
+        return { sessionId: this.cfg.sessionId, trusted: true, message: allowlistedSmsPrompt(msg) };
       }
       // Senders off the allowlist start no turn (the SMS stays in the inbox, readable with sms_inbox) unless the
       // owner turned notify_unknown_senders on.
@@ -312,6 +319,27 @@ export class EventBridge {
     return null;
   }
 
+  // Text the sender a one-time code for their command. No turn starts; the command waits in the confirm store.
+  async _askToConfirm(ev, msg) {
+    const text = String(msg.text ?? '').trim();
+    if (!text) return { outcome: 'skipped' };
+    const { code } = this.confirm.create(msg.from, text, { kind: 'command', maxChars: 1000 });
+    const flat = text.replace(/\s+/g, ' ');
+    const preview = flat.length > 70 ? `${flat.slice(0, 70)}...` : flat;
+    const mins = Math.round((this.confirm.ttlMs || 600000) / 60000);
+    let r;
+    try {
+      r = await this.client.smsSend(msg.from, `S22: run "${preview}"? Reply YES ${code} within ${mins} min. If you did not send it, ignore this.`);
+    } catch (err) { r = { ok: false, error: String(err?.message || err) }; }
+    const sent = r && r.ok !== false && r.status !== 'refused';
+    if (sent) this.log.info('bridge_confirm_requested', { seq: ev.seq });
+    else {
+      this.confirm.redeem(code, msg.from);            // the code never reached the owner: drop it
+      this.log.error('bridge_confirm_send_failed', { seq: ev.seq, error: r?.error || r?.status });
+    }
+    return { outcome: 'skipped' };
+  }
+
   async dispatch(ev, signal) {
     if (!ev.__seen) { this._remember(ev); Object.defineProperty(ev, '__seen', { value: true }); }
     const turn = this.buildTurn(ev);
@@ -319,6 +347,7 @@ export class EventBridge {
       if (ev?.type === 'sms_received' && !isOwner(String(pick(ev, 'from', 'number', 'sender') ?? ''), this.cfg.ownerNumbers)) this.log.info('bridge_sms_not_allowlisted', { seq: ev.seq });  // no number, no text
       return { outcome: 'skipped' };
     }
+    if (turn.confirmFirst) return this._askToConfirm(ev, turn.confirmFirst);
     const res = await this.poster.post(turn.sessionId, turn.message, signal);
     if (res.outcome === 'delivered' || res.outcome === 'delivered_unknown') {
       this.stats.turnsPosted += 1;
