@@ -99,6 +99,14 @@ the sketch above in these points:
   Tailscale path over the LAN warm (the relay is unreachable in an outage) and notices early when the phone
   is unreachable or no longer has this rig configured.
 
+### Install and rollback: `install-uplink-failover.sh`
+
+`sudo sh tools/hardware/network/install-uplink-failover.sh install <checkout> <config.json> <token-file>`
+copies the daemon, the cut-test script, the config, a root-only token copy and the unit; it enables nothing.
+`sudo sh /usr/local/lib/unum/install-uplink-failover.sh rollback` (a copy is installed there, so rollback
+needs no checkout) stops the unit, removes any cut rule, sweeps routes and DNS, and deletes the files; the
+audit log stays. Installed disabled on the rig on 2026-11-12 by corpunum-82; `once` showed mode normal.
+
 ### Proving it without unplugging anything: `s22-uplink-cut-test.sh`
 
 Run as root on the rig, only while the daemon is active (it refuses otherwise). It loads an nftables
