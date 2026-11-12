@@ -95,24 +95,26 @@ s22d remote device API on the tailnet (:8767, rig only); speak with a per-uttera
 audio.listen (OFF, owner switch); Settings → Rig access switches; uplink.share (proof passed);
 OpenUnum and the Lightpanda proxy as the unprivileged user `unumagent`.
 
-**Open, in order:**
-1. Shipping: done. Everything up to the P4 failover daemon is on main and CI is green (2026-11-12 13:37 EET,
-   tip 37629037). The chain had been stuck for hours because a failing s22-device plugin test left its fake
-   server open, so the gate hung until its timeout. Before queuing, run `sh tools/ci/ship-gate.sh` in the
-   worktree; s-infra is switching the unumship gate to that script.
-2. Idle battery run (approved for the night of 11-12, avoid 00:20–01:00 EET): on the phone
+**Open, in order (updated 2026-11-12 17:14 EET):**
+1. Shipping: run `sh tools/ci/ship-gate.sh` in the worktree before queuing (a hanging node test once stalled
+   the gate for hours); unumship's gate is that script now.
+2. Idle battery run (approved for the night of 11-12, avoid 00:20–01:00 and 23:05–23:25 EET): on the phone
    `setsid sh /srv/s22/state/drain-run.sh 7200 </dev/null >/dev/null 2>&1 &`, plus a rig-side
    `sleep 8100; ssh ... 'echo 0 > /sys/class/power_supply/battery/batt_slate_mode'` failsafe. Keep the phone
    quiet for the 2 h. Figure = raw_soc drop / hours from `/srv/s22/state/drain-20261112/sample.csv`
    (move the old directory aside first; the working figure on 11-12 was 3.2 %/h).
-3. Two-step SMS has not been tried with a real text yet: the owner's next SMS is the live test
-   (look for `bridge_confirm_requested` / `bridge_confirm_redeemed` in the OpenUnum log).
-4. P4 rig side (U-fe741e10): built, reviewed twice by Opus, on main, NOT installed. corpunum-82 has the
-   sudo install (disabled), the rollback and the two-stage simulated cut test
-   (`tools/hardware/network/s22-uplink-cut-test.sh`); see `docs/P4_UPLINK_FAILOVER_PLAN.md`, "Rig failover as
-   built". Open: the test itself (trader flat or paused), then the decision to enable the unit.
-5. P5 with s-openunum (U-c8028189, U-d02f41d8): rig device tools; the rig's token is
-   `~/.config/unum/s22-device.token`.
+3. SIM (Vodafone CU prepaid): data bundles until 2026-12-12 (hub U-ea52645f: renew by 12-08), voice 0, SMS 0.
+   Outbound SMS is paused on the phone (`/srv/s22/state/phoned/sms_paused`; remove the file to resume); the
+   two-step SMS confirm therefore cannot send its codes. SMS and calls are also switched off for the rig in
+   `/srv/s22/state/device-switches.json`. Balance: phoned sends exactly "Y" to 1252 (free). When mobile data
+   misbehaves, read the phone's SMS inbox first (EXPERIMENTS 2026-11-12 afternoon).
+4. P4 (U-fe741e10): the daemon proves the phone path (verified HTTPS, other public IP) before and during
+   failover; the phone refuses to share without working data. Installed on the rig, unit DISABLED; selftest
+   passed both ways. Stage 1 redo 2026-11-12 17:47 EET; stage 2 (true cut) not yet; then the decision to enable.
+   Share cap 10 GB/day.
+5. P5 (U-c8028189): `tools/openunum-rig/skills/s22-phone/` (managed skill; corpunum-82 approves after
+   s-openunum's review; photo/listen/say need `context.turn.ownerProven`, which ships 11-13). Phone URL file
+   `~/.config/unum/s22-device.url` (0600) exists.
 6. Smaller: fast-voice turn log unverified until the next call; voxcpm timeout seen once (U-cec2cfe2);
    optional root cause of the kernel .rodata shift.
 
