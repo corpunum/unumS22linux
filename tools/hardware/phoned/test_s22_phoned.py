@@ -220,6 +220,7 @@ def gen_pending(ok):
 
 
 def mkphone(tmp, **kw):
+    kw.setdefault("policy_clock", lambda: time.time() // 86400 * 86400 + 10 * 3600)
     ph = P.Phone(tmp, **kw)
     ph.defer = lambda fn, *a: ph._deferred.append((fn, a))
     ph._deferred = []
@@ -331,6 +332,7 @@ class GateTest(unittest.TestCase):
 
     def test_s22d_grant_is_one_shot_kind_bound_and_expires(self):
         Path(self.tmp.name, "tx_enabled").touch()
+        Path(self.tmp.name, "calls_enabled").touch()
         n = "+306912345678"
         g = self.grant(n, "dial")
         self.assertIn("allowlist", self.ph.send_sms(n, "x")[1]["error"])   # wrong kind
@@ -351,6 +353,7 @@ class GateTest(unittest.TestCase):
 
     def test_emergency_always_refused(self):
         Path(self.tmp.name, "tx_enabled").touch()
+        Path(self.tmp.name, "calls_enabled").touch()
         self.allow("112", "+30112", "911", "166")
         for n in ("112", "911", "166", "+30112", "999"):
             code, body = self.ph.dial(n)
@@ -361,6 +364,7 @@ class GateTest(unittest.TestCase):
 
     def test_rate_limit(self):
         Path(self.tmp.name, "tx_enabled").touch()
+        Path(self.tmp.name, "calls_enabled").touch()
         self.allow("+306912345678")
         self.assertEqual(self.ph.dial("+306912345678")[0], 200)
         code, body = self.ph.dial("+306912345678")
@@ -401,6 +405,7 @@ class GateTest(unittest.TestCase):
 
     def test_dial_and_dtmf_frames(self):
         Path(self.tmp.name, "tx_enabled").touch()
+        Path(self.tmp.name, "calls_enabled").touch()
         self.allow("+306912345678")
         self.assertEqual(self.ph.dial("+306912345678")[0], 200)
         cmd, typ, data = self.ph.link.sent[-1]
@@ -514,6 +519,8 @@ class E2ETest(unittest.TestCase):
         code, body = self.call("POST", "/sms/send", {"to": "+306912345678", "text": "hi"})
         self.assertEqual((code, body["status"]), (403, "refused"))
         Path(self.state, "tx_enabled").touch()
+        Path(self.state, "calls_enabled").touch()
+        self.d.phone.alerts.clock = lambda: time.time() // 86400 * 86400 + 10 * 3600
         Path(self.state, "allowlist").write_text("+306912345678\n")
         seq0 = self.call("GET", "/events")[1]["seq"]
         code, body = self.call("POST", "/sms/send", {"to": "+306912345678", "text": "Γειά! " + "x" * 100})
@@ -662,6 +669,131 @@ class SimStoreFake(FakeLink):
                 self.slots.pop(idx, None)
                 p.gen = {"ok": True, "code": 0x8000}
         return p
+
+
+class AlertPolicyTest(unittest.TestCase):
+    N = "+305550000001"                     # fictional
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.t = time.time() // 86400 * 86400 + 10 * 3600          # 10:00 UTC = 12:00 or 13:00 Athens
+        self.ph = mkphone(self.tmp.name, max_sms_per_hour=100, policy_clock=lambda: self.t)
+        self.ok = True
+        self.ph.attach(FakeLink({P.SMS_SEND_MSG: lambda d: self._ack(), P.SMS_SVC_CENTER_ADDR: lambda d: None}))
+        self.ph.sim = "READY"
+        self.ph.smsc_raw = P.encode_smsc("+305550000000")
+        Path(self.tmp.name, "tx_enabled").touch()
+        Path(self.tmp.name, "allowlist").write_text(self.N + "\n")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _ack(self):
+        return GateTest._sms_ok(self) if self.ok else gen_pending(False)
+
+    def at_hour(self, h):                    # a time that is hour h in Athens, today
+        import datetime, zoneinfo
+        z = zoneinfo.ZoneInfo("Europe/Athens")
+        d = datetime.datetime.fromtimestamp(self.t, z).replace(hour=h, minute=30, second=0)
+        self.t = d.timestamp()
+
+    def send(self, text, **kw):
+        return self.ph.send_sms(self.N, text, **kw)
+
+    def test_quiet_hours_block_unless_critical(self):
+        for h, blocked in ((22, False), (23, True), (3, True), (6, True), (7, False), (12, False)):
+            self.at_hour(h)
+            self.ph.alerts.sent.clear()
+            code, res = self.send(f"msg {h}")
+            self.assertEqual(code == 403, blocked, h)
+            if blocked:
+                self.assertIn("quiet hours", res["error"])
+                self.assertTrue(self.send(f"crit {h}", critical=True)[1]["ok"], h)
+
+    def test_daily_cap_of_five(self):
+        for i in range(5):
+            self.assertTrue(self.send(f"alert {i}")[1]["ok"])
+            self.t += 61
+        code, res = self.send("alert 6")
+        self.assertEqual((code, res["status"]), (429, "refused"))
+        self.assertIn("daily", res["error"])
+        self.assertEqual(code, self.send("alert 7", critical=True)[0], "critical does not lift the cap")
+        self.t += 86400
+        self.assertTrue(self.send("alert 8")[1]["ok"])
+
+    def test_dedupe_for_30_minutes(self):
+        self.assertTrue(self.send("disk full")[1]["ok"])
+        self.t += 29 * 60
+        code, res = self.send("disk full")
+        self.assertEqual(code, 429)
+        self.assertIn("duplicate", res["error"])
+        self.assertTrue(self.send("disk full ")[0] == 429, "whitespace does not make it new")
+        self.assertTrue(self.send("disk almost full")[1]["ok"])
+        self.t += 2 * 60
+        self.assertTrue(self.send("disk full")[1]["ok"])
+
+    def test_refusals_do_not_use_a_daily_slot(self):
+        self.send("x")                       # one sent
+        self.send("x")                       # duplicate: refused
+        self.assertEqual(self.ph.alerts.status()["sent_24h"], 1)
+
+    def test_three_consecutive_failures_halt_until_the_owner_deletes_the_file(self):
+        self.ok = False
+        for i in range(3):
+            self.assertEqual(self.send(f"f{i}")[0], 502)
+        self.assertTrue(Path(self.tmp.name, "alert_halt").is_file())
+        self.ok = True
+        n = len(self.ph.link.sent)
+        code, res = self.send("after halt", critical=True)
+        self.assertEqual(code, 403)
+        self.assertIn("halted", res["error"])
+        self.assertEqual(len(self.ph.link.sent), n, "nothing transmitted while halted")
+        ph2 = mkphone(self.tmp.name, policy_clock=lambda: self.t)     # a restart does not clear it
+        self.assertTrue(ph2.alerts.halted())
+        Path(self.tmp.name, "alert_halt").unlink()
+        self.assertTrue(self.send("back")[1]["ok"])
+
+    def test_a_success_resets_the_failure_count(self):
+        self.ok = False
+        self.send("a"); self.send("b")
+        self.ok = True
+        self.assertTrue(self.send("c")[1]["ok"])
+        self.ok = False
+        self.send("d"); self.send("e")
+        self.assertFalse(Path(self.tmp.name, "alert_halt").exists())
+
+    def test_modem_down_counts_as_a_failure_but_a_gate_refusal_does_not(self):
+        self.ph.sim = "LOCKED"
+        for i in range(3):
+            self.assertEqual(self.send(f"m{i}")[0], 503)
+        self.assertTrue(Path(self.tmp.name, "alert_halt").exists())
+
+    def test_failure_streak_and_window_survive_a_restart(self):
+        self.send("one")
+        self.ok = False
+        self.send("f1"); self.send("f2")
+        ph2 = mkphone(self.tmp.name, policy_clock=time.time)    # outbox stamps are real time
+        self.assertEqual(ph2.alerts.failures, 2)
+        self.assertEqual(ph2.alerts.status()["sent_24h"], 1)
+        code, res = ph2.send_sms(self.N, "one", critical=True)
+        self.assertIn("duplicate", res["error"])
+
+    def test_balance_query_is_exempt_and_not_counted(self):
+        self.ph.alerts.sent.clear()
+        self.at_hour(2)
+        self.assertNotIn("quiet", self.ph.send_sms("1252", "Y")[1].get("error") or "")
+        self.assertEqual(self.ph.alerts.status()["sent_24h"], 0)
+
+    def test_policy_file_overrides_and_bad_values_are_ignored(self):
+        Path(self.tmp.name, "alert_policy.json").write_text(json.dumps({"max_per_day": 1, "dedupe_s": "x"}))
+        self.assertTrue(self.send("a")[1]["ok"])
+        self.assertIn("daily", self.send("b")[1]["error"])
+        self.assertEqual(self.ph.alerts.cfg()["dedupe_s"], 1800)
+
+    def test_calls_need_calls_enabled_as_well_as_tx(self):
+        self.assertIn("calls disabled", self.ph.dial(self.N)[1]["error"])
+        self.assertEqual(self.ph.link.sent, [])
+        self.assertFalse(self.ph.status()["calls_enabled"])
 
 
 class SimSweepTest(unittest.TestCase):

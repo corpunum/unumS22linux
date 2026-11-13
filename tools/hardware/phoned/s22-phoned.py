@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import datetime
 import http.client
 import http.server
 import importlib.machinery
@@ -45,6 +46,7 @@ import sys
 import threading
 import time
 import urllib.parse
+import zoneinfo
 from pathlib import Path
 
 # ---------------------------------------------------------------- constants
@@ -850,6 +852,102 @@ class RateLimit:
             return True
 
 
+class AlertPolicy:
+    """Alert SMS policy (2026-11-13). Applies to every outbound text except the carrier balance query.
+
+    Optional state-dir/alert_policy.json overrides the defaults (tz, quiet_start, quiet_end, max_per_day,
+    dedupe_s, max_failures). Quiet hours wrap midnight and are bypassed only by a message flagged critical.
+    State is rebuilt from the outbox at startup; state-dir/alert_halt persists a trip until it is deleted.
+    """
+    DEFAULTS = {"tz": "Europe/Athens", "quiet_start": 23, "quiet_end": 7, "max_per_day": 5,
+                "dedupe_s": 1800, "max_failures": 3}
+
+    def __init__(self, state_dir, clock=time.time):
+        self.dir, self.clock, self.lock = Path(state_dir), clock, threading.Lock()
+        self.sent = []          # [(ts, text)] accepted (reserved, sent or queued), oldest first
+        self.failures = 0       # consecutive send failures
+
+    @staticmethod
+    def is_failure(rec):
+        err = rec.get("error") or ""
+        return rec.get("status") == "failed" or (rec.get("status") == "refused" and err.startswith(("modem", "sim")))
+
+    def cfg(self):
+        c = dict(self.DEFAULTS)
+        try:
+            raw = json.loads((self.dir / "alert_policy.json").read_text())
+            for k, v in raw.items():
+                if k in c and type(v) is type(c[k]) and (k == "tz" or v >= 0):
+                    c[k] = v
+        except (OSError, ValueError, AttributeError):
+            pass
+        return c
+
+    def rebuild(self, recs):
+        horizon = self.clock() - 86400
+        self.sent, self.failures = [], 0
+        for rec in sorted(recs, key=lambda r: r.get("ts", 0)):
+            if rec.get("to") == CARRIER_BALANCE_SMS[0]:
+                continue
+            if rec.get("status") in ("sent", "queued"):
+                self.failures = 0
+                if rec.get("ts", 0) > horizon:
+                    self.sent.append((rec["ts"], rec.get("text", "").strip()))
+            elif self.is_failure(rec):
+                self.failures += 1
+
+    def halted(self):
+        return (self.dir / "alert_halt").is_file()
+
+    def in_quiet(self, c):
+        t = self.clock()
+        try:
+            h = datetime.datetime.fromtimestamp(t, zoneinfo.ZoneInfo(c["tz"])).hour
+        except Exception:  # noqa: BLE001  missing tzdata: the phone's local time
+            h = time.localtime(t).tm_hour
+        a, b = c["quiet_start"], c["quiet_end"]
+        return a <= h or h < b if a > b else a <= h < b
+
+    def reserve(self, text, critical=False):
+        """(error-or-None, ticket). A ticket must be given to finish()."""
+        text, t, c = text.strip(), self.clock(), self.cfg()
+        with self.lock:
+            if self.halted():
+                return "refused: alerts halted after repeated send failures (delete alert_halt to re-enable)", None
+            if not critical and self.in_quiet(c):
+                return "refused: quiet hours (only critical messages are sent)", None
+            self.sent = [x for x in self.sent if x[0] > t - 86400]
+            if any(x[1] == text and x[0] > t - c["dedupe_s"] for x in self.sent):
+                return "refused: duplicate alert text within the dedupe window", None
+            if len(self.sent) >= c["max_per_day"]:
+                return "refused: daily rate limit (alerts per 24 h)", None
+            ticket = (t, text)
+            self.sent.append(ticket)
+            return None, ticket
+
+    def finish(self, ticket, outcome):
+        """outcome: 'ok' (sent/queued), 'fail' (a send failure), 'release' (never reached the radio)."""
+        c = self.cfg()
+        with self.lock:
+            if outcome != "ok" and ticket in self.sent:
+                self.sent.remove(ticket)
+            if outcome == "ok":
+                self.failures = 0
+            elif outcome == "fail":
+                self.failures += 1
+                if self.failures >= c["max_failures"]:
+                    try:
+                        (self.dir / "alert_halt").write_text(f"{self.failures} consecutive send failures\n")
+                    except OSError:
+                        pass
+
+    def status(self):
+        c = self.cfg()
+        with self.lock:
+            return {"halted": self.halted(), "failures": self.failures, "sent_24h": len(self.sent),
+                    "max_per_day": c["max_per_day"], "quiet_now": self.in_quiet(c)}
+
+
 def is_emergency(number):
     digits = re.sub(r"\D", "", normalize_number(number))
     return digits in EMERGENCY or len(digits) < MIN_DIGITS
@@ -1119,7 +1217,7 @@ class Phone:
     def __init__(self, state_dir, simulate=False, max_sms_per_hour=10, max_dials_per_hour=5,
                  reassembly_timeout=600.0, modem_state_path=MODEM_STATE_PATH, radio_normal=False,
                  smsc=None, req_timeout=8.0, send_ack_timeout=20.0, ip_runner=None,
-                 net_sys=NET_SYS, data_timeout=30.0, lte_attach=None, lte_attach_apn=None):
+                 net_sys=NET_SYS, data_timeout=30.0, lte_attach=None, lte_attach_apn=None, policy_clock=time.time):
         self.lte_attach_override = (lte_attach, lte_attach_apn)   # CLI overrides of lte-attach.json
         self.lte_attach_done = False        # attempted on this IPC link (= this modem start)
         self.lte_attach_status = None
@@ -1176,6 +1274,8 @@ class Phone:
         for rec in self.outbox.values():
             if rec.get("status") in ("sent", "queued") and rec.get("ts", 0) > cutoff:
                 self.sms_rate.take(rec["ts"])
+        self.alerts = AlertPolicy(self.dir, policy_clock)
+        self.alerts.rebuild(self.outbox.values())
         self.worker = threading.Thread(target=self._worker, name="phoned-worker", daemon=True)
 
     # -- plumbing
@@ -1503,12 +1603,14 @@ class Phone:
             return n, "refused: emergency or short number"
         if not self.tx_enabled():
             return n, "refused: tx disabled (no tx_enabled file)"
+        if kind == "dial" and not (self.dir / "calls_enabled").is_file():
+            return n, "refused: calls disabled (no calls_enabled file)"
         if n not in self.allowlist() and not self.take_grant(n, kind):
             return n, "refused: number not in allowlist"
         return n, None
 
     # -- SMS
-    def send_sms(self, to, text):
+    def send_sms(self, to, text, critical=False):
         text = str(text or "")
         if not text:
             return 400, {"ok": False, "status": "refused", "error": "empty text", "id": None, "parts": 0}
@@ -1532,24 +1634,31 @@ class Phone:
                 pdus = build_submit_pdus(n, text, ref=ref)
             except ValueError as e:
                 err = str(e)
+        ticket = None
+        if err is None and (n, text) != CARRIER_BALANCE_SMS:
+            err, ticket = self.alerts.reserve(text, critical)
         if err is None and (self.link is None or not self.link.is_open):
             err = "modem not open"
         if err is None and self.sim not in SIM_USABLE:
             err = f"sim not ready ({self.sim})"
         if err is None and not self.sms_rate.take():
             err = "refused: rate limit"
+        if ticket is not None and err is not None:
+            self.alerts.finish(ticket, "fail" if err.startswith(("modem", "sim")) else "release")
         rec = {"id": mid, "to": n, "text": text, "ts": now(), "parts": 0, "status": "refused",
                "delivered": None, "mrs": []}
         if err is not None:
             rec["error"] = err
             self.outbox.put(rec)
-            code = 429 if "rate" in err else 400 if "invalid" in err or "long" in err or "empty" in err else 403
+            code = 429 if "rate" in err or "duplicate" in err else 400 if "invalid" in err or "long" in err or "empty" in err else 403
             if err.startswith(("modem", "sim")):
                 code = 503
             return code, {"ok": False, "id": mid, "parts": 0, "status": "refused", "error": err}
         rec["parts"] = len(pdus)
         with self.send_lock:
             status, err = self._send_parts(pdus, rec)
+        if ticket is not None:
+            self.alerts.finish(ticket, "ok" if status in ("sent", "queued") else "fail")
         rec["status"] = status
         if err:
             rec["error"] = err
@@ -2185,7 +2294,8 @@ class Phone:
                     "ipc_open": bool(self.link and self.link.is_open), "sim": self.sim,
                     "pin_attempted": self.pin_attempted, "registration": self.registration,
                     "operator": self.operator, "signal": self.signal, "sms_ready": self.sms_ready,
-                    "tx_enabled": self.tx_enabled(), "calls": self.current_calls(),
+                    "tx_enabled": self.tx_enabled(), "calls_enabled": (self.dir / "calls_enabled").is_file(),
+                    "alerts": self.alerts.status(), "calls": self.current_calls(),
                     "sim_sweep": self.sweep_result, "lte_attach": self.lte_attach_status,
                     "radio": self.radio, "nr_last_seen": self.nr_last_seen,
                     "data_notifications": list(self.data_notifications),
@@ -2455,7 +2565,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 res = ph.enter_pin(body.get("pin"))
                 return self._send(200 if res["ok"] else 400 if "digits" in res.get("error", "") else 409, res)
             if route == ("POST", "/sms/send"):
-                return self._send(*ph.send_sms(body.get("to"), body.get("text")))
+                return self._send(*ph.send_sms(body.get("to"), body.get("text"), body.get("critical") is True))
             if route == ("POST", "/call/dial"):
                 return self._send(*ph.dial(body.get("number")))
             if route == ("POST", "/call/answer"):

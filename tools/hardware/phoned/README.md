@@ -45,6 +45,16 @@ All state lives in `/srv/s22/state/phoned/` (mode 0700):
 - `tx_enabled`: SMS send and dial are refused unless this file exists. It is absent by default.
 - `allowlist`: one E.164 number per line; `#` starts a comment. The destination must match an
   entry exactly after spaces, dashes and dots are removed and a leading `00` is turned into `+`.
+- `calls_enabled`: `POST /call/dial` additionally needs this file (absent by default). Removing `tx_enabled`
+  stops both SMS and calls; removing `calls_enabled` stops calls only.
+- Alert policy (every outbound SMS except the carrier balance query; `/status.alerts` shows it):
+  quiet hours 23:00-07:00 Europe/Athens refuse unless the request body has `"critical": true`; at most 5 per
+  rolling 24 h (critical does not lift this); identical text (trimmed) within 30 min is refused (429);
+  3 consecutive send failures (modem closed, SIM not ready, modem or network error) create `alert_halt`
+  and everything is refused, critical included, until the owner deletes that file. Refusals by a gate use no
+  slot. State is rebuilt from `outbox.jsonl` at start. Optional `alert_policy.json` overrides `tz`,
+  `quiet_start`, `quiet_end`, `max_per_day`, `dedupe_s`, `max_failures`.
+- `sms_paused` (owner switch, when the SIM has no SMS bundle) refuses every text but the balance query.
 - Emergency numbers (112, 911, 999, 100, 166, 199, …) and any number with fewer than 7 digits
   are always refused.
 - Rate limits: 10 SMS and 5 dials per hour. The SMS window is rebuilt from the outbox at startup.
