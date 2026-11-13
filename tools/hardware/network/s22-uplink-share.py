@@ -375,6 +375,20 @@ def rig_switched_off() -> list[str]:
     return sorted(k for k, v in read_json(SWITCHES).items() if v is False)
 
 
+def wlan0_ipv4() -> str | None:
+    """The phone's current wlan0 LAN IPv4 (what the rig routes the failover through), or None. Read-only."""
+    try:
+        r = run(['ip', '-j', '-4', 'addr', 'show', 'dev', 'wlan0'], check=False)
+        for iface in json.loads(r.stdout or '[]'):
+            for a in iface.get('addr_info') or []:
+                ip = ipaddress.ip_address(str(a.get('local')))
+                if ip.version == 4 and ip.is_private:
+                    return str(ip)
+    except (OSError, ValueError, TypeError, AttributeError, subprocess.SubprocessError):
+        pass
+    return None
+
+
 def status() -> dict:
     st = read_json(STATE)
     try:
@@ -383,7 +397,7 @@ def status() -> dict:
         rig_ok = False
     fwd = FORWARD.read_text().strip() == '1' if FORWARD.exists() else None
     return {'ok': True, 'on': bool(st.get('on')), 'since': st.get('since'), 'forwarding': fwd,
-            'rig_configured': rig_ok, 'battery': battery(), 'bytes_today': used_today(st),
+            'rig_configured': rig_ok, 'wlan0_ipv4': wlan0_ipv4(), 'battery': battery(), 'bytes_today': used_today(st),
             'data_fails': int(st.get('data_fails', 0)), 'data_checked': st.get('data_checked'), 'sms': sms_state(), 'rig_switched_off': rig_switched_off(),
             'cap_bytes': CAP_BYTES, 'max_s': MAX_S, 'min_battery': MIN_BATTERY}
 

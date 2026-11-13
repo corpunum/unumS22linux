@@ -12,6 +12,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 GW, MAIN = '192.168.77.50', '192.168.77.1'
+GW2, RIG_ADDR = '192.168.77.51', '192.168.77.10'   # GW2: the phone after a DHCP change
 TOKEN = 'fake-' + 'bearer-for-tests'   # not a secret; split so the secret scanner stays quiet
 ROUTE = ['ip', 'route', 'replace', 'default', 'via', GW, 'dev', 'eno1', 'metric', '50']
 ROUTE_DEL = ['ip', 'route', 'del', 'default', 'via', GW, 'dev', 'eno1', 'metric', '50']
@@ -52,7 +53,9 @@ class Base(unittest.TestCase):
         self.clock, self.cmds, self.posts, self.gets = 1000.0, [], [], []
         self.ping_ok, self.tcp_ok, self.post_result = False, False, (200, {'ok': True})
         self.off_raises = self.on_raises = False
-        self.status = {'on': True}         # None -> the status GET raises
+        self.reachable = {GW, GW2}          # neighbours that are REACHABLE
+        self.addrs = [{'local': RIG_ADDR, 'prefixlen': 24}]
+        self.status = {'on': True, 'wlan0_ipv4': GW}         # None -> the status GET raises
         self.fail = []                      # argv prefixes that make `run` return rc=1
         self.routes = [{'dst': 'default', 'gateway': MAIN, 'dev': 'eno1', 'metric': 100}]
         self.tabs = {'178': [], '179': [], '180': []}
@@ -79,6 +82,10 @@ class Base(unittest.TestCase):
             rc = 0 if self.ping_ok else 1
         elif argv[:4] == ['ip', '-j', 'route', 'show']:
             out = json.dumps(self.routes)
+        elif argv[:5] == ['ip', '-j', '-4', 'addr', 'show']:
+            out = json.dumps([{'addr_info': self.addrs}])
+        elif argv[:4] == ['ip', '-j', 'neigh', 'show']:
+            out = json.dumps([{'dst': argv[4], 'state': ['REACHABLE' if argv[4] in self.reachable else 'FAILED']}])
         elif argv[:4] == ['ip', '-j', 'route', 'get']:
             out = '[{}]'
         elif argv[:4] == ['ip', '-j', 'rule', 'show']:
@@ -283,10 +290,41 @@ class Failover(Base):
         self.m.share(self.cfg, True)
         self.m.share(self.cfg, False)
         self.assertEqual([p[3] for p in self.posts], [100, 20])
-        self.assertEqual(self.m.phone_status(self.cfg), {'on': True})
+        self.assertEqual(self.m.phone_status(self.cfg), {'on': True, 'wlan0_ipv4': GW})
         self.assertEqual(self.gets, [('http://phone.example:8767/v1/device/uplink.status', TOKEN, 10)])
         self.status = None
         self.assertIsNone(self.m.phone_status(self.cfg))
+
+    def test_resolve_follows_a_changed_phone_address(self):
+        self.status = {'on': True, 'wlan0_ipv4': GW2}
+        self.assertEqual(self.m.resolve_phone_gw(self.cfg), GW2)
+        self.assertEqual(self.cfg['phone_gw'], GW2)
+        ev = [e for e in self.events() if e['event'] == 'phone_gw_changed']
+        self.assertEqual(len(ev), 1)
+        self.assertEqual((ev[0]['configured'], ev[0]['resolved']), (GW, GW2))
+        self.m.resolve_phone_gw(self.cfg)   # same answer again: not logged again
+        self.assertEqual(len([e for e in self.events() if e['event'] == 'phone_gw_changed']), 1)
+
+    def test_resolve_falls_back_with_a_warning(self):
+        cases = [(None, 'phone_unreachable'), ({'on': True}, 'no_wlan0_ipv4'),
+                 ({'wlan0_ipv4': 'junk'}, 'not_an_ip'), ({'wlan0_ipv4': '1.1.1.1'}, 'not_private_ipv4'),
+                 ({'wlan0_ipv4': '10.9.9.9'}, 'off_subnet'), ({'wlan0_ipv4': RIG_ADDR}, 'own_address'),
+                 ({'wlan0_ipv4': '192.168.77.99'}, 'neighbour_not_reachable')]
+        for status, why in cases:
+            self.status = status
+            self.cfg.pop('_gw_noted', None)
+            self.assertEqual(self.m.resolve_phone_gw(self.cfg), GW, why)
+            self.assertEqual(self.events()[-1]['event'], 'phone_gw_fallback')
+            self.assertEqual(self.events()[-1].get("reason"), why, self.events()[-1])
+
+    def test_failover_uses_the_resolved_address(self):
+        self.status = {'on': True, 'wlan0_ipv4': GW2}
+        st = self.step(3)
+        self.assertEqual(st['mode'], 'failover')
+        self.assertEqual(st['phone_gw_live'], GW2)
+        self.assertEqual(self.tabs['179'], [GW2])
+        self.assertIn(['ip', 'route', 'replace', 'default', 'via', GW2, 'dev', 'eno1', 'metric', '50'], self.cmds)
+        self.assertNotIn(ROUTE, self.cmds)
 
     def test_no_path_to_phone_gw_is_refused(self):  # change 3
         self.fail = [ROUTE_GET]

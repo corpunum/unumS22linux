@@ -219,6 +219,19 @@ class DataCheckTest(Base):
 
 
 class SmsStateTest(Base):
+    def test_status_reports_the_wlan0_address(self):
+        self.assertIsNone(self.m.status()['wlan0_ipv4'])   # the fake run gives no output
+        real = self.m.run
+
+        class R:
+            returncode, stderr = 0, ''
+            stdout = json.dumps([{'addr_info': [{'local': '192.0.2.44', 'prefixlen': 24}]}])
+        self.m.run = lambda argv, check=True: R()
+        try:
+            self.assertEqual(self.m.status()['wlan0_ipv4'], '192.0.2.44')
+        finally:
+            self.m.run = real
+
     def test_status_reports_the_sms_pause_and_its_reason(self):
         self.m.SMS_PAUSED = Path(self.tmp.name) / 'sms_paused'
         self.assertEqual(self.m.status()['sms'], {'paused': False})

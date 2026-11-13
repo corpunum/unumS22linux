@@ -24,7 +24,10 @@ verification runs STATE carries verifying: true. SIGTERM interrupts the verifica
 
 once, sweep and selftest serialise with the daemon through /run/unum-uplink-failover.lock (wait up to 120 s).
 
-Config JSON: phone_gw, api, token_file (required; token default location /etc/unum/s22-device.token,
+Config JSON: phone_gw (optional override/fallback: the phone's wlan0 address is asked from the phone's
+uplink.status "wlan0_ipv4" at every failover/probe decision and used when it is a private IPv4 on dev's
+subnet that answers the neighbour table; any failure falls back to phone_gw with a warning in the audit
+log), api, token_file (required; token default location /etc/unum/s22-device.token,
 root:root 600); dev, targets, interval_s, down_after, up_after, min_failover_s, metric, failover_dns,
 keepalive_s (normal mode: ask the phone's uplink.status this often to keep the path warm; 0 = off),
 verify_targets (IPv4 only, probed through the phone over verified HTTPS, default 1.1.1.1 and 1.0.0.1),
@@ -230,6 +233,75 @@ def load_config(path: Path) -> dict:
             raise ConfigError(f'{k} must be an integer from {lo} to {hi}')
     cfg['phone_gw'] = str(gw)
     return cfg
+
+
+def _json_cmd(argv: list[str]) -> list:
+    try:
+        v = json.loads(run(argv, check=False).stdout or '[]')
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return []
+    return v if isinstance(v, list) else []
+
+
+def validate_phone_ip(cfg: dict, raw) -> tuple[str | None, str]:
+    """(address, '') when raw is a private IPv4 on dev's subnet, not the rig's own and REACHABLE; else (None, why)."""
+    try:
+        ip = ipaddress.ip_address(str(raw))
+    except ValueError:
+        return None, 'not_an_ip'
+    if ip.version != 4 or not ip.is_private:
+        return None, 'not_private_ipv4'
+    nets, own = [], set()
+    for iface in _json_cmd(['ip', '-j', '-4', 'addr', 'show', 'dev', cfg['dev']]):
+        for a in iface.get('addr_info') or []:
+            try:
+                nets.append(ipaddress.ip_interface(f"{a['local']}/{a['prefixlen']}").network)
+                own.add(ipaddress.ip_address(a['local']))
+            except (KeyError, ValueError, TypeError):
+                continue
+    if not any(ip in n for n in nets):
+        return None, 'off_subnet'
+    if ip in own:
+        return None, 'own_address'
+
+    def reachable() -> bool:
+        return any(isinstance(n, dict) and 'REACHABLE' in (n.get('state') or [])
+                   for n in _json_cmd(['ip', '-j', 'neigh', 'show', str(ip), 'dev', cfg['dev']]))
+    if reachable():
+        return str(ip), ''
+    run_ok(['ping', '-c1', '-W1', '-I', cfg['dev'], str(ip)])   # make the kernel (re)resolve the neighbour
+    return (str(ip), '') if reachable() else (None, 'neighbour_not_reachable')
+
+
+def resolve_phone_gw(cfg: dict) -> str:
+    """Set cfg['phone_gw'] to the phone's current wlan0 address; fall back to the configured one. Returns it."""
+    fallback = cfg.setdefault('phone_gw_cfg', cfg['phone_gw'])
+    ps = phone_status(cfg)
+    got, why = None, 'phone_unreachable'
+    if ps is not None:
+        got, why = (validate_phone_ip(cfg, ps['wlan0_ipv4']) if ps.get('wlan0_ipv4')
+                    else (None, 'no_wlan0_ipv4'))
+    gw = got or fallback
+    note = (gw, why)
+    if cfg.get('_gw_noted') != note:   # log on change only, not at every probe
+        cfg['_gw_noted'] = note
+        if got is None:
+            audit('phone_gw_fallback', reason=why, using=gw)
+        elif got != fallback:
+            audit('phone_gw_changed', configured=fallback, resolved=got)
+    cfg['phone_gw'] = gw
+    return gw
+
+
+def adopt_live_gw(cfg: dict, st: dict) -> None:
+    """After a restart the installed phone route is at the address the state remembers, not the configured one."""
+    try:
+        ip = ipaddress.ip_address(str(st.get('phone_gw_live')))
+    except ValueError:
+        return
+    if ip.version == 4 and ip.is_private:
+        cfg.setdefault('phone_gw_cfg', cfg['phone_gw'])
+        cfg['phone_gw'] = str(ip)
 
 
 def main_gateway(cfg: dict) -> str | None:
@@ -467,10 +539,13 @@ def fresh() -> dict:
 
 def sweep(cfg: dict) -> dict:
     """Tear everything down and tell the phone to stop sharing (idempotent, whatever STATE says)."""
+    old = read_json(STATE)  # dns_prev lives here: read it before the state is reset
+    adopt_live_gw(cfg, old)
     run_ok(route_argv(cfg, 'del'))
+    if cfg['phone_gw'] != cfg.get('phone_gw_cfg', cfg['phone_gw']):
+        run_ok(['ip', 'route', 'del', 'default', 'via', cfg['phone_gw_cfg'], 'dev', cfg['dev'], 'metric', str(cfg['metric'])])
     cleanup_probe_path()
     cleanup_via_path()
-    old = read_json(STATE)  # dns_prev lives here: read it before the state is reset
     restore_dns(cfg, old)
     ok, why = share(cfg, False)
     nm_recheck()
@@ -488,6 +563,7 @@ def leave_failover(cfg: dict, st: dict, reason: str) -> None:
     restore_dns(cfg, st)
     nm_recheck()
     ok, why = share(cfg, False)
+    st.pop('phone_gw_live', None)
     st.update(mode='normal', sharing=False, fails=0, oks=0, last_try=t,
               normal_since=t, status_fails=0, path_fails=0)
     audit('failover_off', reason=reason, ok=ok, detail=why)
@@ -526,6 +602,7 @@ def verify_phone_path(cfg: dict, st: dict) -> tuple[int, str]:
 
 def enter_failover(cfg: dict, st: dict, t: float) -> None:
     st['last_try'] = t
+    resolve_phone_gw(cfg)
     if not run_ok(['ip', '-j', 'route', 'get', cfg['phone_gw'], 'oif', cfg['dev']]):
         audit('failover_refused', reason='no_path')
         return
@@ -578,6 +655,7 @@ def _enter_failover(cfg: dict, st: dict, t: float) -> None:
         if st['last_failover'] and t - st['last_failover'] < FLAP_WINDOW_S:
             st['gap'] = min(st['gap'] * 2, GAP_MAX)
         t2 = now()   # the verification took a while: the first status/path checks are due from here
+        st['phone_gw_live'] = cfg['phone_gw']
         st.update(mode='failover', sharing=True, oks=0, failover_since=t, last_failover=t, status_at=t2,
                   status_fails=0, path_at=t2, path_fails=0)
         write_json(STATE, st)  # state first: the route exists now, a crash must not orphan it
@@ -616,6 +694,7 @@ def once(cfg: dict) -> dict:
     st.pop('note', None)
     t = now()
     if st['mode'] == 'failover':
+        adopt_live_gw(cfg, st)
         run_ok(route_argv(cfg, 'replace'))  # re-assert
         if t - st['status_at'] >= STATUS_S:
             st['status_at'] = t
@@ -629,6 +708,11 @@ def once(cfg: dict) -> dict:
                 return st
         if t - st['path_at'] >= cfg['path_check_s']:
             st['path_at'] = t
+            old_gw = cfg['phone_gw']
+            if resolve_phone_gw(cfg) != old_gw:   # the phone's DHCP address moved: follow it
+                run_ok(['ip', 'route', 'del', 'default', 'via', old_gw, 'dev', cfg['dev'], 'metric', str(cfg['metric'])])
+                run_ok(route_argv(cfg, 'replace'))
+                st['phone_gw_live'] = cfg['phone_gw']
             try:
                 ensure_via_path(cfg)
             except (RuntimeError, OSError, subprocess.SubprocessError):
@@ -639,6 +723,7 @@ def once(cfg: dict) -> dict:
                 write_json(STATE, st)
                 return st
     else:
+        adopt_live_gw(cfg, st)
         run_ok(route_argv(cfg, 'del'))  # the phone route must never exist in normal mode
         cleanup_via_path()  # no verification runs between iterations
         if st['dns_set']:
@@ -688,6 +773,7 @@ def selftest(cfg: dict, seconds: int) -> tuple[dict, int]:
         main_ip = m['ip'] if m and m['ip'] else None
         share_ok, _ = share(cfg, True)
         if share_ok:
+            resolve_phone_gw(cfg)
             ensure_via_path(cfg, ST_MARK, ST_TABLE, ST_RULE_PRIO)
             start = now()
             for i in range(seconds // 5 + 1):
