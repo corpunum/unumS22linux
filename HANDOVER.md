@@ -85,7 +85,8 @@ and writable. The kernel has no PID or user namespaces.
 - Remote callers get `/v1/device` only, limited to `REMOTE_CAPS` in `tools/s22d/src/remote.rs`, each behind `/srv/s22/state/device-switches.json`. A missing entry means on, except `audio.listen`, which stays off until the owner switches it on.
 - Captures come back in the response. Nothing is kept unless the request has `save: true`. Each capture is logged in `/srv/s22/state/audit/device-captures.jsonl` (who, what, size, sha256; never content).
 - Smoke test from the rig: `curl -H "Authorization: Bearer $(cat ~/.config/unum/s22-device.token)" http://<phone tailnet IP>:8767/v1/device`.
-- Not done yet: touch-shell toggles for the switch file (U-d775e6d0), P4 uplink failover (U-fe741e10), and the rig-side tools (s-openunum, U-c8028189).
+- Touch-shell toggles for the switch file exist: Settings -> Rig access (`tools/unum-fastshell/src/access.rs`), one row per switchable capability, listening off by default. Remote capabilities without a row (`call.hangup`, `haptic.play`, `task.get` and the read-only getters) are not switchable and stay on.
+- Not done yet: P4 uplink failover (U-fe741e10) and the rig-side tools (s-openunum, U-c8028189).
 
 ## Session state (2026-11-12 10:43 EET, s-s22linux, before a context compaction)
 **Live on the phone today (all in the queued unumship chain, tip 946d11ee, 22 commits; only b0aef9aa had shipped):**
@@ -134,3 +135,23 @@ once and batch deploys (its backoff doubles); never put a service's process name
 - `U-920ae886`: umbrella item for drivers, local inference speed and TTS (`docs/GAP-PLAN-20261104.md`).
 - `U-63d712a5` / `874d6f85`: "phone offline" items. The phone is reachable again, so the update plan in the owner's
   device-update brief can run.
+
+## 2026-11-13 update
+- **s22-phone skill:** installed via `SkillManager.registerSkillDirectory` (bundles have no HTTP or CLI route). corpunum-82 approved it; live battery test OK.
+- **Stage 2 failover:** passed after the rig's `phone_gw` was fixed. The phone's LAN address had changed, so corpunum-82 requested a DHCP reservation.
+- **Queued via unumship:**
+  - Branch `gw-resolve` (commit 49585a6a): the rig daemon resolves the phone's wlan0 address from `uplink.status` (`wlan0_ipv4`). Phone-side `s22-uplink-share` is deployed, with a `.bak` beside it. corpunum-82 installed the rig daemon.
+  - SMS alert policy from commit 02c5232d, deployed in phoned (backup `s22-phoned.bak`). AlertPolicy: 5/day, quiet hours 23-07 Europe/Athens except critical, 30-min dedupe, halt after 3 failures, calls need `calls_enabled`.
+  - Fail-closed state: `tx_enabled` removed, `sms_paused` kept. The owner has skipped SMS alerts for now. Re-enable only on corpunum-82's word. The owner-present test plan was in the s22-linux scratchpad (`sms-alert-test-plan.md`, may be gone; regenerate from the policy). uplink-share does NOT pause SMS; `sms_paused` is a separate owner switch.
+- **Modem voice:** call audio is broken (issue #63), so there are no modem voice calls or TTS yet.
+- **WhatsApp:** the Android-emulator route failed (number-entry screen ignored all input; windowed and noVNC also failed) and corpunum-82 dropped it. The owner registers WhatsApp on their own phone; corpunum-82 reads the SMS code from phoned.
+- **Cleanup:** `~/android-emu` (6.6 GB, AVD `wa-emu`) is kept; delete it on 2026-11-20 if unused. Capacity booking `R-2e16fb52f699` (rig:heavy-cpu, to 14:00 EET 11-13) can be cancelled or completed with `node ~/main/scripts/capacity.mjs complete R-2e16fb52f699 --as s-s22linux`.
+- **Savings mode until Thu 2026-11-19 10:00 EET:** event-only, no self-scheduled loops.
+
+## 2026-11-16 update
+- **Savings mode is over.** The orchestrator is now corpunum-86.
+- **U-8cdacbb0 done** (already implemented 11-12): agents run as the chroot user `unumagent` (uid 1500). Rollback: `/srv/s22/hardware/bin/openunum-agent-user rollback`.
+- **P3 s22d** (origin/main `ca4ddbc3`) is built and deployed. The `audio.listen` switch is off. Verified through the `:8767` `/v1/device` route; `/v1/capabilities` returns 404 for remote callers, so do not use it as a check. Rollback: `sh /srv/s22/hardware/install-s22d.sh --rollback`.
+- **U-2f819fe4:** the owner-present speak test is still waiting.
+- **U-fd91ceec:** the kernel flash is parked (flashing needs the orchestrator's go).
+- **Cleanup:** `~/android-emu` is to be deleted on 2026-11-20 if unused.
