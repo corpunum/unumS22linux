@@ -1,0 +1,50 @@
+[
+  {
+    "text": "unumS22linux",
+    "path": "name"
+  },
+  {
+    "text": "A Galaxy S22 that boots its own Linux. No Android underneath. AI agents wrote the drivers.",
+    "path": "hook"
+  },
+  {
+    "text": "A Galaxy S22 that boots its own Linux from the RECOVERY partition, with AI agents writing the drivers and our own Rust touch shell on the display.",
+    "path": "oneLiner"
+  },
+  {
+    "text": "120 ms",
+    "path": "measured.1.value"
+  },
+  {
+    "text": "2026-10-21",
+    "path": "measured.1.date"
+  },
+  {
+    "text": "12 ms",
+    "path": "measured.0.value"
+  },
+  {
+    "text": "2026-10-21",
+    "path": "measured.0.date"
+  },
+  {
+    "text": "Tap to page",
+    "path": "measured.1.metric"
+  },
+  {
+    "text": "earlier spike baseline",
+    "path": "measured.1.metric"
+  },
+  {
+    "text": "Rust touch shell",
+    "path": "measured.0.metric"
+  },
+  {
+    "text": "It is OpenUnum's phone: the OpenUnum agent runs on the phone itself, with the local model as offline fallback.",
+    "path": "openunumFit"
+  },
+  {
+    "text": "Animated story header: the sourced hook, one-liner and OpenUnum fit for unumS22linux, with a tap-to-page numbers row.",
+    "path": "alt (fact-composed)"
+  }
+]

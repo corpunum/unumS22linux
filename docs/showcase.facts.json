@@ -2,6 +2,8 @@
   "name": "unumS22linux",
   "repo": "corpunum/unumS22linux",
   "oneLiner": "A Galaxy S22 that boots its own Linux from the RECOVERY partition, with AI agents writing the drivers and our own Rust touch shell on the display.",
+  "hook": "A Galaxy S22 that boots its own Linux. No Android underneath. AI agents wrote the drivers.",
+  "openunumFit": "It is OpenUnum's phone: the OpenUnum agent runs on the phone itself, with the local model as offline fallback.",
   "license": "Apache-2.0",
   "version": "main@425f3371",
   "updated": "2026-11-12",

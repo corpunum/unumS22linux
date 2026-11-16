@@ -1,0 +1,20 @@
+{
+  "alt": "Animated story header: the sourced hook, one-liner and OpenUnum fit for unumS22linux, with a tap-to-page numbers row.",
+  "scenes": [
+    {"kind": "hook", "title": "name", "text": "hook"},
+    {"kind": "what", "text": "oneLiner"},
+    {
+      "kind": "numbers",
+      "rows": [
+        {
+          "label": {"path": "measured.1.metric", "part": "Tap to page"},
+          "aName": {"path": "measured.1.metric", "part": "earlier spike baseline"},
+          "bName": {"path": "measured.0.metric", "part": "Rust touch shell"},
+          "a": "measured.1",
+          "b": "measured.0"
+        }
+      ]
+    },
+    {"kind": "fit", "text": "openunumFit"}
+  ]
+}

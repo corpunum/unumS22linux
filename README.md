@@ -6,6 +6,8 @@
 
 <img src="docs/media/hero.svg" alt="Power on, unlocked Samsung bootloader, our kernel and init in the RECOVERY partition, a guardian as PID 1 with no Android services, Alpine and Arch Linux ARM, our own Rust touch shell with local AI models, and the OpenUnum agent running on the phone" width="900">
 
+<img src="docs/media/story-hero.gif" alt="unumS22linux: A Galaxy S22 that boots its own Linux. No Android underneath. AI agents wrote the drivers. Tap to page: earlier spike baseline 120 ms vs Rust touch shell 12 ms measured 2026-10-21. It is OpenUnum&#39;s phone: the OpenUnum agent runs on the phone itself, with the local model as offline fallback." width="900">
+
 </div>
 
 ## The story
@@ -157,6 +159,10 @@ cargo run --release -- dump /tmp/shots
 - [Contributing](CONTRIBUTING.md)
 - [Porting guide](docs/PORTING.md)
 - License: [Apache-2.0](LICENSE)
+
+## How it fits OpenUnum
+
+It is OpenUnum's phone: the OpenUnum agent runs on the phone itself, with the local model as offline fallback.
 
 ---
 
