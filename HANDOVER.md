@@ -153,5 +153,10 @@ once and batch deploys (its backoff doubles); never put a service's process name
 - **U-8cdacbb0 done** (already implemented 11-12): agents run as the chroot user `unumagent` (uid 1500). Rollback: `/srv/s22/hardware/bin/openunum-agent-user rollback`.
 - **P3 s22d** (origin/main `ca4ddbc3`) is built and deployed. The `audio.listen` switch is off. Verified through the `:8767` `/v1/device` route; `/v1/capabilities` returns 404 for remote callers, so do not use it as a check. Rollback: `sh /srv/s22/hardware/install-s22d.sh --rollback`.
 - **U-2f819fe4:** the owner-present speak test is still waiting.
-- **U-fd91ceec:** the kernel flash is parked (flashing needs the orchestrator's go).
+- **U-fd91ceec:** done 11-12, not parked. The close_range kernel flash (RECOVERY 19aa0293, build-id f95682b4) is recorded in FLASH_LOG.md. Nothing is parked on a flash now; any later flash still needs the orchestrator's go.
 - **Cleanup:** `~/android-emu` is to be deleted on 2026-11-20 if unused.
+
+## 2026-11-17 update
+- **U-fd91ceec reconciled:** done 11-12 per FLASH_LOG.md; the 11-16 "parked" line was stale. The hub item is already done.
+- **U-ea52645f:** SIM data bundle renewal, due_when set to 2026-12-01 (renew by 12-08).
+- **U-2f819fe4:** still blocked on the owner-present speak test.
