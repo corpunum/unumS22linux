@@ -95,6 +95,13 @@
       "value": "2.1 s",
       "method": "Hold to capture, 4-frame burst stacked, processed picture shown (STATUS.md)",
       "date": "2026-10-22"
+    },
+    {
+      "metric": "Video frame rate on the panel",
+      "value": "29.7 fps",
+      "method": "grep -o '29.7 fps' evidence/shell-phase2-20261022/README.md",
+      "date": "2026-10-22",
+      "sample": "MJPEG AVI 382x510, 7.23 s, 215 frames, JPEG 17 ms p50 on its own core, 2.5 MB, decodes with ffmpeg"
     }
   ],
   "constants": [
