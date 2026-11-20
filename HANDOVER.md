@@ -172,3 +172,4 @@ once and batch deploys (its backoff doubles); never put a service's process name
 - Commit 73eb78dd (rig-fetch.sh, draft skill in skills-pending/device-git) gitleaks-clean, queued via unumship.
 - Open: device-git skill approval (owner-only), rig fetch test, consider disabling Dependabot on -devices repos, S22 voice/camera/UI health check.
 - Decision 11-21 (corpunum-138): seeding stands, no rollback; fence is tool-enforced only (variant B, isolated private -devices repos). Stop rulesets proof. Detail in docs/DEVICE_GIT_CREDENTIALS.md.
+- 11-21 device-git skill: owner 'Yes' relayed by corpunum-138 (OWNER-ANSWERS.md, unverified; no `skills approve` run by me). Skill finalised in fdd5d595 (unumship). Trials queued in openunum 461a7959, UNVERIFIED until s-openunum adds a `commit-trailers` passCheck mode. Next: install the instructions skill on Ally and S22 once fdd5d595 ships; if the install treats it as managed, request its approval card (don't bypass).
