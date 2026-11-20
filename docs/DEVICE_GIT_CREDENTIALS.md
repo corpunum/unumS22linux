@@ -118,3 +118,6 @@ The Ally has no unumS22linux checkout, so it gets no key for it.
 - Remote note: openunum-devices also shows three `dependabot/github_actions/*` branches (Dependabot is active there even
   with Actions off; consider disabling Dependabot on the -devices repos).
 - Still open: the OpenUnum `device-git` skill that tells the agent to call this tool; rig-side fetch of `device/*` from GitHub.
+
+## Decision (corpunum-138, 2026-11-21)
+Seeding stands, no rollback. Write keys exist only on the private -devices repos (Actions disabled); the public repos have no device write keys (verified with gh api). Variant B accepted: the "device/*" fence is enforced by the device-git tool only, since rulesets with admin bypass give no fence on a user-owned repo. Do not try to prove rulesets further.

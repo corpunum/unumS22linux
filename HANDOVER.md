@@ -171,3 +171,4 @@ once and batch deploys (its backoff doubles); never put a service's process name
 - Seeded, host keys pinned, `tools/device-git/device-git` installed on S22 and Ally; first pushes of `device/s22` and `device/ally` done. Details: docs/DEVICE_GIT_CREDENTIALS.md.
 - Commit 73eb78dd (rig-fetch.sh, draft skill in skills-pending/device-git) gitleaks-clean, queued via unumship.
 - Open: device-git skill approval (owner-only), rig fetch test, consider disabling Dependabot on -devices repos, S22 voice/camera/UI health check.
+- Decision 11-21 (corpunum-138): seeding stands, no rollback; fence is tool-enforced only (variant B, isolated private -devices repos). Stop rulesets proof. Detail in docs/DEVICE_GIT_CREDENTIALS.md.
