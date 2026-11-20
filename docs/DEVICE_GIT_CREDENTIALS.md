@@ -58,7 +58,7 @@ that must stay short and reviewed.
   and small, so the same trick has little value there (use variant A for it).
 
 **Recommendation:** A for `unumS22linux` (public, low risk) and B for `openunum` (private, core, and the one the rig
-pushes to most). **Decided 2026-11-21 (corpunum-135):** B for `openunum` (private `corpunum/openunum-devices`, device keys only there, no rulesets on `openunum`); A for `unumS22linux` (repo-admin bypass, no deploy-key bypass), proven first on a throwaway repo. The orchestrator does the gh steps. Re-seed and clone wait for its word. If B is chosen
+pushes to most). **Decided 2026-11-21 (corpunum-135):** B for `openunum` (private `corpunum/openunum-devices`, device keys only there, no rulesets on `openunum`); unumS22linux changed to B as well by corpunum-137 (11-21): on a user account a write deploy key counts as repo admin, so with an admin bypass it pushed main, foo/x, tags and force pushes; without a bypass it pushed only device/*. The variant A fence does not work, and no rulesets exist anywhere. Repos: `corpunum/openunum-devices` and `corpunum/unumS22linux-devices` (private, Actions off, branch `base` only). The orchestrator does the gh steps. Re-seed and clone wait for its word. If B is chosen
 the keys already generated stay valid: they are added to the devices repo instead.
 
 ## Publish flow
@@ -72,7 +72,7 @@ the keys already generated stay valid: they are added to the devices repo instea
 | device | repo | visibility | public key |
 |---|---|---|---|
 | S22 | corpunum/openunum-devices (was openunum) | private | `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID8EPjwTwlSKQVdULTn4NniY1H9Nd0VgybA9KDXjRr6z deploy-s22-openunum` |
-| S22 | corpunum/unumS22linux | public | `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICy9GZFJBU+wpGJsdfIWqiVPrByZCPj4lAppzQjaNEjA deploy-s22-unumS22linux` |
+| S22 | corpunum/unumS22linux-devices (was unumS22linux) | private | `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICy9GZFJBU+wpGJsdfIWqiVPrByZCPj4lAppzQjaNEjA deploy-s22-unumS22linux` |
 | Ally | corpunum/openunum-devices (was openunum) | private | `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKql/jGOpAhW9MYTxUCQuI8RuNChXybjBDRWCX0KaneZ deploy-ally-openunum` |
 
 The repo `unumS22linux` is public: the S22 pushes there only `device/s22*` branches, and the repo's own rule
@@ -87,3 +87,18 @@ The Ally has no unumS22linux checkout, so it gets no key for it.
 - `device-git` skill/tool (status, commit with Scope, revert, `diff base`, `push`) is still to build; it owns
   `GIT_SSH_COMMAND` and the gitleaks check.
 - Rotation: regenerate yearly or on any suspicion; a rotation is delete key, generate, rig adds the new public key.
+
+## Seeded and tested 2026-11-21 (U-551cc9ec, GO from corpunum-137)
+- Ally: `~/openunum` re-seeded: `git init`, remote `devices` = openunum-devices, `base` = b980fd8e (the installed
+  sourceCommit), `device/ally` = base, working tree clean (90 release-excluded files marked skip-worktree; `RELEASE_METADATA.json`,
+  `VERSION`, `vendor/` in `.git/info/exclude`). Key `~/.config/unum-git/deploy_openunum`. A second remote `origin` is not set.
+- S22: `/opt/openunum` got remote `devices` (openunum-devices); `/opt/unumS22linux` is a clone of unumS22linux-devices
+  (`origin`, branch `device/s22` = `base` 67011ab9), owned by unumagent; keys in `/var/lib/unum-git` (uid 1500).
+  Git must run as the agent user (`setpriv --reuid 1500 ...`): as root git reports "dubious ownership".
+  Each repo has `core.sshCommand` pinning its own key; github.com's host key was accepted on first use (TOFU), not yet pinned.
+- Negative tests from the devices (no rulesets, as decided): pushes of `device/test-*`, `foo/x-*`, `main` and a tag all
+  SUCCEEDED from the Ally (openunum-devices) and from the S22 (both repos). Test refs were deleted afterwards; the remotes
+  hold only `base` again. So "device/* only" is the `device-git` tool's rule, not a server fence. The blast radius of a
+  leaked key is its one -devices repo, whose only protected content is a mirror.
+- Still open: pin the GitHub host key; the S22's `/opt/openunum` `device/s22` history is not yet pushed to
+  openunum-devices; the `device-git push` tool (enforces `device/*`, gitleaks); rig fetch of `device/*` from GitHub.
