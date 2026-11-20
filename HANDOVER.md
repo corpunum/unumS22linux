@@ -166,3 +166,8 @@ once and batch deploys (its backoff doubles); never put a service's process name
 - **OpenUnum updated** (go from corpunum-132): device-git `base` = b23b75ee (11 commits ahead of old base), `device/s22` = base + Lightpanda launcher (feef981e). Graceful-restart dry-run was clean (nothing in flight); restarted by killing the old PID, keepalive brought it back (pid 28872).
 - Trap: the chroot needs `PATH=/opt/node/bin:$PATH` for node; `/health` revision comes from the untracked `RELEASE_METADATA.json` (set to feef981e, takes effect on the next restart).
 - Not yet checked: voice, camera, UI.
+
+## 2026-11-21 update (s-s22linux resume, U-551cc9ec device-git)
+- Seeded, host keys pinned, `tools/device-git/device-git` installed on S22 and Ally; first pushes of `device/s22` and `device/ally` done. Details: docs/DEVICE_GIT_CREDENTIALS.md.
+- Commit 73eb78dd (rig-fetch.sh, draft skill in skills-pending/device-git) gitleaks-clean, queued via unumship.
+- Open: device-git skill approval (owner-only), rig fetch test, consider disabling Dependabot on -devices repos, S22 voice/camera/UI health check.
