@@ -9,7 +9,7 @@ triggers:
   - what differs from base
 ---
 
-# device-git (DRAFT, not approved, not active: skill approval is owner-only)
+# device-git
 
 Source design: `docs/DEVICE_GIT_CREDENTIALS.md` and `device-git-self-improve-20261013.md`. Tool: `device-git` (shell command on the device).
 

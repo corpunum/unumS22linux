@@ -4,6 +4,6 @@
   "type": "instructions",
   "risk": "medium",
   "description": "Commit own fixes on device/<name> with Scope and Why trailers and publish them with the device-git tool (device/* only, gitleaks first).",
-  "status": "draft-pending-owner-approval",
+  "status": "owner-approved-20261121",
   "requires": { "commands": ["device-git", "gitleaks"] }
 }
