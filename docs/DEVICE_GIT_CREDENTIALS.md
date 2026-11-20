@@ -34,6 +34,33 @@ bypass unless listed as a bypass actor (leave the bypass list empty):
 Verification the rig runs once per repo: push `device/test-<ts>` (must work), push to `main` and to `foo/x` (both
 refused), force push to an existing `device/*` (refused), then delete the test branch with the rig's own credentials.
 
+## Variants for the rig's own pushes (conflict found 2026-11-21)
+The "only device/*" ruleset above also blocks the rig's direct pushes to `main` (unumship, the main-branch policy),
+because a ruleset targets refs and actors, not the credential type. Two ways out:
+
+**A. Bypass for the rig, same repo.** Ruleset 2 (restrict create/update/delete outside `device/**`) and the main PR rule
+get a bypass list: the repository-admin role (the owner account the rig pushes with) and the unumship GitHub App,
+mode "always". Deploy keys are not admins and not that app, so they stay blocked; the bypass list is the only thing
+that must stay short and reviewed.
+- Pros: one repo, no mirror, device branches are visible next to main, normal PRs from `device/*` to `main`, nothing
+  new to sync.
+- Cons: the safety rests on the bypass list; anyone added to it (or a token of the admin account) removes the fence.
+  Rig pushes to main stay unreviewed, as today. Rulesets must be verified per repo, including after org or role
+  changes.
+
+**B. Separate devices repo.** The device keys get write on `corpunum/openunum-devices` only; no ruleset is needed on
+`openunum` and the rig's rules there are untouched. The rig pulls `device/*` from it and lands changes on `openunum`.
+- Pros: strongest isolation: a leaked key cannot touch `openunum` at all, whatever the rulesets say; no change to the
+  main-branch policy or unumship.
+- Cons: a repo that is a fork of your own repo cannot be created inside the same account, so it is a plain mirror
+  (shared history, no GitHub "PR into openunum": the rig cherry-picks and opens the PR from its own branch); one more
+  repo to keep in sync (the rig pushes new `base` into it); another private repo to protect; `unumS22linux` is public
+  and small, so the same trick has little value there (use variant A for it).
+
+**Recommendation:** A for `unumS22linux` (public, low risk) and B for `openunum` (private, core, and the one the rig
+pushes to most). **Decided 2026-11-21 (corpunum-135):** B for `openunum` (private `corpunum/openunum-devices`, device keys only there, no rulesets on `openunum`); A for `unumS22linux` (repo-admin bypass, no deploy-key bypass), proven first on a throwaway repo. The orchestrator does the gh steps. Re-seed and clone wait for its word. If B is chosen
+the keys already generated stay valid: they are added to the devices repo instead.
+
 ## Publish flow
 1. Device agent commits on `device/<name>` with `Scope:` and `Why:` trailers, tests pass, health ok.
 2. `device-git push` (tool, not raw git) pushes `device/<name>` (or a dated name after a rebase) with the repo key.
@@ -44,9 +71,9 @@ refused), force push to an existing `device/*` (refused), then delete the test b
 ## Repos and keys (public keys, safe to publish)
 | device | repo | visibility | public key |
 |---|---|---|---|
-| S22 | corpunum/openunum | private | `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID8EPjwTwlSKQVdULTn4NniY1H9Nd0VgybA9KDXjRr6z deploy-s22-openunum` |
+| S22 | corpunum/openunum-devices (was openunum) | private | `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID8EPjwTwlSKQVdULTn4NniY1H9Nd0VgybA9KDXjRr6z deploy-s22-openunum` |
 | S22 | corpunum/unumS22linux | public | `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICy9GZFJBU+wpGJsdfIWqiVPrByZCPj4lAppzQjaNEjA deploy-s22-unumS22linux` |
-| Ally | corpunum/openunum | private | `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKql/jGOpAhW9MYTxUCQuI8RuNChXybjBDRWCX0KaneZ deploy-ally-openunum` |
+| Ally | corpunum/openunum-devices (was openunum) | private | `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKql/jGOpAhW9MYTxUCQuI8RuNChXybjBDRWCX0KaneZ deploy-ally-openunum` |
 
 The repo `unumS22linux` is public: the S22 pushes there only `device/s22*` branches, and the repo's own rule
 (no hostnames, IPs or PII; gitleaks before every push) applies to the device tool too (run gitleaks in the push step).
