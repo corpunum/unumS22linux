@@ -160,3 +160,9 @@ once and batch deploys (its backoff doubles); never put a service's process name
 - **U-fd91ceec reconciled:** done 11-12 per FLASH_LOG.md; the 11-16 "parked" line was stale. The hub item is already done.
 - **U-ea52645f:** SIM data bundle renewal, due_when set to 2026-12-01 (renew by 12-08).
 - **U-2f819fe4:** still blocked on the owner-present speak test.
+
+## 2026-11-20 update (s-s22linux resume)
+- Health: phone reachable, OpenUnum healthy (only failed check: systemd_units_valid, expected in the chroot). `~/android-emu` already deleted.
+- **OpenUnum updated** (go from corpunum-132): device-git `base` = b23b75ee (11 commits ahead of old base), `device/s22` = base + Lightpanda launcher (feef981e). Graceful-restart dry-run was clean (nothing in flight); restarted by killing the old PID, keepalive brought it back (pid 28872).
+- Trap: the chroot needs `PATH=/opt/node/bin:$PATH` for node; `/health` revision comes from the untracked `RELEASE_METADATA.json` (set to feef981e, takes effect on the next restart).
+- Not yet checked: voice, camera, UI.
