@@ -1,0 +1,69 @@
+#!/bin/sh
+# device-git: publish a device's own commits to its private -devices repo. U-551cc9ec.
+# Usage: device-git status | push [<suffix>]
+#   push publishes HEAD to refs/heads/device/<name>[-<suffix>] ONLY; never main, tags, other branches, or force.
+# Per-repo git config (set once by the installer):
+#   devicegit.remote   remote name (default: devices, else origin)
+#   devicegit.key      path of the deploy private key (mode 600)
+#   devicegit.hosts    pinned known_hosts file
+#   devicegit.name     device name, e.g. s22 or ally (branch device/<name>)
+# Run it as the agent user. It scans the unpushed commits with gitleaks first and refuses on any finding.
+set -eu
+PATH="$PATH:${HOME:-/tmp}/.local/bin:/usr/local/bin"; export PATH
+die() { echo "device-git: $*" >&2; exit 1; }
+cfg() { git config --get "devicegit.$1" 2>/dev/null || true; }
+
+# The agent user may not own the work tree (rig-deployed files are root-owned); trust exactly this checkout.
+top=$(git rev-parse --show-toplevel 2>/dev/null || true)
+[ -n "$top" ] || top=$(pwd)
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0=$top
+export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+git rev-parse --git-dir >/dev/null 2>&1 || die "not inside a git repository"
+remote=$(cfg remote)
+if [ -z "$remote" ]; then
+  if git remote get-url devices >/dev/null 2>&1; then remote=devices; else remote=origin; fi
+fi
+key=$(cfg key); hosts=$(cfg hosts); name=$(cfg name)
+[ -n "$key" ] && [ -f "$key" ] || die "devicegit.key missing or not a file"
+[ -n "$hosts" ] && [ -f "$hosts" ] || die "devicegit.hosts missing (pinned known_hosts required)"
+[ -n "$name" ] || die "devicegit.name not set"
+case "$name" in *[!A-Za-z0-9._-]*|"") die "bad devicegit.name" ;; esac
+
+url=$(git remote get-url "$remote") || die "remote $remote missing"
+case "$url" in
+  git@github.com:corpunum/*-devices.git) ;;
+  *) die "remote url is not a corpunum/*-devices repo: refusing" ;;
+esac
+
+GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$hosts -o BatchMode=yes"
+export GIT_SSH_COMMAND
+
+cmd=${1:-status}
+case "$cmd" in
+  status)
+    branch=$(git branch --show-current)
+    echo "repo: $(pwd)  remote: $remote ($url)  branch: ${branch:-detached}"
+    git ls-remote --heads "$remote" 2>&1 | sed 's/^\(.\{12\}\)[^\t]*/\1/'
+    ;;
+  push)
+    suffix=${2:-}
+    case "$suffix" in *[!A-Za-z0-9._-]*) die "bad suffix" ;; esac
+    [ "$#" -le 2 ] || die "too many arguments"
+    target="device/$name${suffix:+-$suffix}"
+    branch=$(git branch --show-current)
+    [ "$branch" = "device/$name" ] || die "current branch is '$branch', expected device/$name"
+    git diff --quiet && git diff --cached --quiet || die "uncommitted changes: commit first"
+    command -v gitleaks >/dev/null 2>&1 || die "gitleaks not installed: refusing to push unscanned"
+    # What the remote does not have yet: fetch its refs, scan HEAD not reachable from any remote ref.
+    git fetch -q "$remote" "+refs/heads/*:refs/remotes/$remote/*" || die "fetch failed (host key or key problem)"
+    range=$(git rev-list --count HEAD --not --remotes="$remote")
+    if [ "$range" -gt 0 ]; then
+      gitleaks detect --no-banner --redact --exit-code 1 --log-opts="HEAD --not --remotes=$remote" \
+        || die "gitleaks found something in the unpushed commits: refusing"
+    fi
+    # Fast-forward only: a plain push, never forced, to exactly one device/* ref.
+    git push "$remote" "HEAD:refs/heads/$target"
+    echo "device-git: pushed $range commit(s) to $remote $target"
+    ;;
+  *) die "unknown command: $cmd (status | push [suffix])" ;;
+esac

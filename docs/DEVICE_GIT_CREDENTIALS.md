@@ -102,3 +102,19 @@ The Ally has no unumS22linux checkout, so it gets no key for it.
   leaked key is its one -devices repo, whose only protected content is a mirror.
 - Still open: pin the GitHub host key; the S22's `/opt/openunum` `device/s22` history is not yet pushed to
   openunum-devices; the `device-git push` tool (enforces `device/*`, gitleaks); rig fetch of `device/*` from GitHub.
+
+## Host key pinning, push tool, first push (2026-11-21, corpunum-137 order)
+- Host keys: `known_hosts` built from GitHub's published keys (`gh api meta`, 3 keys; the S22's earlier TOFU key matched the
+  published ED25519 fingerprint) is installed at `/var/lib/unum-git/known_hosts` (S22) and `~/.config/unum-git/known_hosts`
+  (Ally). The tool uses `StrictHostKeyChecking=yes` with that file.
+- Tool: `tools/device-git/device-git` (POSIX sh), installed at `/usr/local/bin` in the chroot and `~/.local/bin` on the Ally.
+  `status`, `push [suffix]`. It refuses unless: the remote url is `git@github.com:corpunum/*-devices.git`; the current branch
+  is `device/<name>`; the tree is clean; gitleaks is present; and gitleaks finds nothing in the commits the remote does
+  not have. It pushes `HEAD` to exactly `refs/heads/device/<name>[-suffix]`, never forced, never main or tags. Per-repo git
+  config: `devicegit.key|hosts|name|remote`. It trusts only its own checkout via `safe.directory` for that run.
+  gitleaks 8.30.1 (checksummed release) is installed on both devices.
+- First push: S22 `device/s22` (base + Lightpanda launcher, 1 commit) is on openunum-devices; Ally `device/ally` (= base)
+  too. `/opt/openunum/.git` on the S22 is now owned by uid 1500 so the agent can fetch and push; the work tree stays root-owned.
+- Remote note: openunum-devices also shows three `dependabot/github_actions/*` branches (Dependabot is active there even
+  with Actions off; consider disabling Dependabot on the -devices repos).
+- Still open: the OpenUnum `device-git` skill that tells the agent to call this tool; rig-side fetch of `device/*` from GitHub.
