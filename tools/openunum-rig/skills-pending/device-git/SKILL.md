@@ -32,4 +32,4 @@ Your install dir is a git repo. `base` is the upstream commit it was installed f
 - `device-git status` (shell) shows the remote and its branches, read-only. The agent-side `device-git push` is gone.
 
 ## After a new base
-The rig publishes new upstream commits to the `device/base` branch of the devices repo (the ruleset allows only `device/**`). Take them from there; the owner or installer re-seeds the clone when it must move.
+The rig publishes new upstream commits to the `device/base` branch of the devices repo (the ruleset allows only `device/**`). Never rebase onto `device/base` just because it exists on GitHub: first check that its tip equals the release SHA the rig delivered into the host-owned file on this device. If it differs, or the file is missing, stop and tell the owner; do not rebase. Another device's key can append to `device/**`, so GitHub alone is not trusted. The owner or installer re-seeds the clone when it must move.
