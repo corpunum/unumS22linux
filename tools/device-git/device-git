@@ -1,6 +1,6 @@
 #!/bin/sh
 # device-git: publish a device's own commits to its private -devices repo. U-551cc9ec.
-# Usage: device-git status | push [<suffix>]
+# Usage: device-git status   (read-only; publishing is done by device_commit's host-side push, U-2654d12c)
 #   push publishes HEAD to refs/heads/device/<name>[-<suffix>] ONLY; never main, tags, other branches, or force.
 # Per-repo git config (set once by the installer):
 #   devicegit.remote   remote name (default: devices, else origin)
@@ -46,6 +46,21 @@ case "$cmd" in
     git ls-remote --heads "$remote" 2>&1 | sed 's/^\(.\{12\}\)[^\t]*/\1/'
     ;;
   push)
+    die "push was removed from the agent shell (U-2654d12c): commit with the device_commit tool; it publishes through the host-side push" ;;
+  *) die "remote url is not a corpunum/*-devices repo: refusing" ;;
+esac
+
+GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$hosts -o BatchMode=yes"
+export GIT_SSH_COMMAND
+
+cmd=${1:-status}
+case "$cmd" in
+  status)
+    branch=$(git branch --show-current)
+    echo "repo: $(pwd)  remote: $remote ($url)  branch: ${branch:-detached}"
+    git ls-remote --heads "$remote" 2>&1 | sed 's/^\(.\{12\}\)[^\t]*/\1/'
+    ;;
+  push)
     suffix=${2:-}
     case "$suffix" in *[!A-Za-z0-9._-]*) die "bad suffix" ;; esac
     [ "$#" -le 2 ] || die "too many arguments"
@@ -65,5 +80,5 @@ case "$cmd" in
     git push "$remote" "HEAD:refs/heads/$target"
     echo "device-git: pushed $range commit(s) to $remote $target"
     ;;
-  *) die "unknown command: $cmd (status | push [suffix])" ;;
+  *) die "unknown command: $cmd (status)" ;;
 esac

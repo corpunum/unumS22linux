@@ -121,3 +121,6 @@ The Ally has no unumS22linux checkout, so it gets no key for it.
 
 ## Decision (corpunum-138, 2026-11-21)
 Seeding stands, no rollback. Write keys exist only on the private -devices repos (Actions disabled); the public repos have no device write keys (verified with gh api). Variant B accepted: the "device/*" fence is enforced by the device-git tool only, since rulesets with admin bypass give no fence on a user-owned repo. Do not try to prove rulesets further.
+
+## Rulesets and base sync (2026-11-21)
+Both `*-devices` repos carry a ruleset with an empty bypass list: only `refs/heads/device/**` is writable; tags, force pushes and deletes are denied, so even the admin token cannot push `base` or `meta`. A rig-side base sync therefore publishes to `device/base` (proposal, pending corpunum-138's pick) instead of `base`. Publishing from a device goes only through `device_commit`'s host-side push (`device-git-host-push`); the agent shell holds no key.
