@@ -125,6 +125,12 @@ Seeding stands, no rollback. Write keys exist only on the private -devices repos
 ## Rulesets and base sync (2026-11-21, decided by corpunum-138)
 Both `*-devices` repos carry a ruleset with an empty bypass list: only `refs/heads/device/**` is writable; tags, force pushes and deletes are denied, so even the admin token cannot push `base` or `meta`. Publishing from a device goes only through `device_commit`'s host-side push (`device-git-host-push`); the agent shell holds no key.
 - **Base sync:** the rig publishes new upstream commits to `device/base` (never `base`; no ruleset toggles).
-- **Guard 1 (devices never trust `device/base` blindly):** before rebasing onto it, a device checks that the `device/base` tip equals a release SHA the rig delivered over its own channel (ssh, into a host-owned file on the device), not taken from GitHub. On a mismatch the device stops and alerts.
+- **Guard 1 (BUILT 2026-11-26, devices never trust `device/base` blindly):** before rebasing onto it, a device checks that the `device/base` tip equals a release SHA the rig delivered over its own channel (ssh, into a host-owned file on the device), not taken from GitHub. On a mismatch the device stops and alerts.
 - **Guard 2 (rig-fetch alerts):** `rig-fetch.sh` raises an alert if `device/base` moved to a SHA the rig did not push, or if `device/<x>` holds commits whose audit trailer names a different host. (Implemented in `tools/device-git/rig-fetch.sh`; exit 3 on alert; test: `test-rig-fetch.sh`.)
 - **Residual risk:** every device key can write every `device/**` branch, and on `openunum-devices` the Ally and S22 share one repo. A device can therefore append commits to another device's branch or to `device/base` (non-fast-forward is denied, so it cannot rewrite). That is detectable by guards 1 and 2, not prevented. Separate repos per device would isolate them fully; that is an option for later.
+- **Base-publish job (built 2026-11-26):** `tools/device-git/base-publish.sh <upstream-ref> <remote> [device-list]` pushes
+  fast-forward only to `device/base`, appends `<repo> device/base <sha> <iso-time>` to `rig-pushed.txt` (guard 2 reads it),
+  then delivers the SHA per device (default ssh into a host-owned file; `DEVICE_DELIVER_CMD` overrides, tests use a stub).
+- **Guard 1 check (device, read-only):** `tools/device-git/guard1-check.sh <repo dir> <delivered-sha-file>` exits 0 on
+  match, else `ALERT guard1: ...` on stderr and exit 3 (mismatch, missing file, missing `device/base`).
+- Tests: `tools/device-git/test-base-publish.sh` (offline, local bare repos, stub deliver).
