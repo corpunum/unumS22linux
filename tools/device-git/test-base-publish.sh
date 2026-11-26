@@ -18,6 +18,7 @@ cat > "$T/deliver-stub.sh" <<'STUB'
 mkdir -p "$DELIVER_OUT" && printf '%s\n' "$3" > "$DELIVER_OUT/$1.$2"
 STUB
 chmod +x "$T/deliver-stub.sh"
+export GUARD1_OWNER_UID=$(id -u)
 export DEVICE_DELIVER_CMD="$T/deliver-stub.sh"
 printf 'dev-a\n# a comment line\ndev-b\n' > "$T/devices.txt"
 
@@ -68,11 +69,29 @@ NOLEAK_OUT="$NOLEAK_OUT
 $OUT
 $ERR"
 
+# 8. hardening: refused inputs, nothing pushed
+setup; git -C "$T/up" commit -q --allow-empty -m c1
+for bad in '*' '-oProxyCommand=x' 'a;b' 'a$b'; do
+  OUT=$(cd "$T/up" && DEVICE_LIST="$bad" sh "$HERE/base-publish.sh" main origin 2>"$T/err") && RC=0 || RC=$?; ERR=$(cat "$T/err")
+  [ "$RC" = 3 ] && [ "$(remote_base)" = "$C0" ] && [ ! -e "$T/rig/rig-pushed.txt" ] && [ ! -e "$T/delivered" ]; check "bad device name '$bad' refused before push" $?
+done
+printf 'dev-a\n-bad\n' > "$T/devbad.txt"
+pub main origin "$T/devbad.txt"
+[ "$RC" = 3 ] && [ "$(remote_base)" = "$C0" ] && [ ! -e "$T/delivered/dev-a.unumtest" ]; check "leading-dash name in list file refused, nothing delivered" $?
+for bad in "/x';id;'" "" "/a b" '/a$b'; do
+  OUT=$(cd "$T/up" && DEVICE_RELEASE_DIR="$bad" sh "$HERE/base-publish.sh" main origin "$T/devices.txt" 2>"$T/err") && RC=0 || RC=$?; ERR=$(cat "$T/err")
+  [ "$RC" != 0 ] && [ "$(remote_base)" = "$C0" ]; check "bad DEVICE_RELEASE_DIR '$bad' refused" $?
+done
+pub main origin "$T/nonexistent.txt"
+[ "$RC" != 0 ] && [ "$(remote_base)" = "$C0" ] && [ ! -e "$T/rig/rig-pushed.txt" ]; check "missing device list refused before push" $?
+: > "$T/empty.txt"; pub main origin "$T/empty.txt"
+[ "$RC" != 0 ] && [ "$(remote_base)" = "$C0" ] && [ ! -e "$T/rig/rig-pushed.txt" ]; check "empty device list refused before push" $?
+
 # guard 1 fixtures: a device repo with device/base at D0
 rm -rf "$T/dev"; git init -q "$T/dev"; git -C "$T/dev" commit -q --allow-empty -m d0
 D0=$(git -C "$T/dev" rev-parse HEAD); git -C "$T/dev" branch -q device/base
-mkdir -p "$T/rel"; printf '%s\n' "$D0" > "$T/rel/match.sha"
-printf '%s\n' "0123456789abcdef0123456789abcdef01234567" > "$T/rel/other.sha"
+mkdir -p "$T/rel"; chmod 755 "$T/rel"; printf '%s\n' "$D0" > "$T/rel/match.sha"
+printf '%s\n' "0123456789abcdef0123456789abcdef01234567" > "$T/rel/other.sha"; chmod 644 "$T/rel/match.sha" "$T/rel/other.sha"
 
 # 3. guard1 match
 guard "$T/dev" "$T/rel/match.sha"
@@ -97,6 +116,27 @@ $ERR"
 rm -rf "$T/dev2"; git init -q "$T/dev2"; git -C "$T/dev2" commit -q --allow-empty -m d0
 guard "$T/dev2" "$T/rel/match.sha"
 [ "$RC" = 3 ] && printf '%s' "$ERR" | grep -Eq '^ALERT guard1: device/base missing'; check "guard1 device/base missing (ALERT guard1, exit 3)" $?
+
+# 9. guard1 trust checks
+cp "$T/rel/match.sha" "$T/rel/ok.sha"; chmod 644 "$T/rel/ok.sha"
+guard "$T/dev" "$T/rel/ok.sha"; [ "$RC" = 0 ]; check "guard1 plain owned 0644 file accepted" $?
+ln -s match.sha "$T/rel/link.sha"
+guard "$T/dev" "$T/rel/link.sha"
+[ "$RC" = 3 ] && printf '%s' "$ERR" | grep -Eq '^ALERT guard1: '; check "guard1 symlinked file (exit 3)" $?
+for m in 664 646 666; do
+  cp "$T/rel/match.sha" "$T/rel/w$m.sha"; chmod $m "$T/rel/w$m.sha"
+  guard "$T/dev" "$T/rel/w$m.sha"
+  [ "$RC" = 3 ] && printf '%s' "$ERR" | grep -Eq '^ALERT guard1: '; check "guard1 file mode $m (exit 3)" $?
+done
+mkdir -p "$T/relw"; cp "$T/rel/match.sha" "$T/relw/m.sha"; chmod 777 "$T/relw"
+guard "$T/dev" "$T/relw/m.sha"; [ "$RC" = 3 ]; check "guard1 world-writable directory (exit 3)" $?
+GUARD1_OWNER_UID=4242424 guard "$T/dev" "$T/rel/ok.sha"; [ "$RC" = 3 ]; check "guard1 untrusted owner uid (exit 3)" $?
+printf '%s\n' "${D0:0:20} ${D0:20}" > "$T/rel/ws.sha"; chmod 644 "$T/rel/ws.sha"
+guard "$T/dev" "$T/rel/ws.sha"; [ "$RC" = 3 ]; check "guard1 inner whitespace (exit 3)" $?
+printf '%s\n' "${D0:0:12}" > "$T/rel/short.sha"; chmod 644 "$T/rel/short.sha"
+guard "$T/dev" "$T/rel/short.sha"; [ "$RC" = 3 ]; check "guard1 short sha (exit 3)" $?
+printf '%s\r\n' "$D0" > "$T/rel/crlf.sha"; chmod 644 "$T/rel/crlf.sha"
+guard "$T/dev" "$T/rel/crlf.sha"; [ "$RC" = 0 ]; check "guard1 trailing CRLF tolerated" $?
 
 # 7. no hostname or IP strings in any tool output or the rig state file
 if printf '%s\n' "$NOLEAK_OUT" | grep -Eq '([0-9]{1,3}\.){3}[0-9]{1,3}|@|ssh://|github\.com'; then fail "no hostname/IP in outputs"; else pass "no hostname/IP in outputs"; fi
